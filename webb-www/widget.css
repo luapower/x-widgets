@@ -1,0 +1,9 @@
+
+.x-widget, .x-widget * {
+	box-sizing: border-box;
+}
+
+.x-widget {
+	font-size: 14x;
+	font-family: widget, sans-serif;
+}

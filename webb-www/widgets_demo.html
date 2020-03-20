@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://pagecdn.io/lib/ace/1.4.8/ace.js"
+	crossorigin="anonymous"
+	integrity="sha256-+svOVB1WmhKhTy7N21gWvtyXn91qF0r52P2hIArRRug=">
+</script>
+<style>
+
+* { box-sizing: border-box; }
+
+@font-face {
+	font-family: "widget";
+	src: url("/OpenSans-Regular.ttf");
+}
+
+@font-face {
+	font-family: "widget";
+	src: url("/OpenSans-SemiBold.ttf");
+	font-weight: bold;
+}
+
+body {
+	font-family: widget, sans-serif;
+	font-size: 13px;
+	padding: 1em;
+}
+
+button {
+	white-space: nowrap;
+}
+
+a > button {
+	font-family: widget, sans-serif;
+	font-size: 100%;
+	text-decoration: none;
+	color: black;
+}
+
+h2 {
+	font-weight: normal;
+	margin-bottom: -4px;
+}
+
+/* main layout */
+
+#layout {
+	border-top: 1px solid #ccc;
+	border-bottom: 1px solid #ccc;
+	border-collapse: collapse;
+}
+
+.lb { border-left: 1px solid #ccc; }
+.lp { padding-left: 20px; }
+
+#code_td {
+	position: relative;
+}
+
+#help {
+	tab-size: 3;
+	-moz-tab-size: 3;
+}
+
+#code {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	border: 1px solid #ccc;
+	border-left: 0;
+}
+
+#code:focus {
+	outline: none;
+}
+
+/* demo list */
+
+#demo_list {
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+	cursor: default;
+}
+
+#demo_list li {
+	margin: 0;
+	padding: .2em;
+	padding-left: 1em;
+	padding-right: 1em;
+	margin-right: 1em;
+}
+
+#demo_list li:hover {
+	background-color: #666;
+	color: white;
+}
+
+#demo_list li.selected {
+	background-color: black;
+	color: white;
+}
+
+</style>
+
+<link rel="stylesheet" type="text/css" href="fontawesome.css">
+<link rel="stylesheet" type="text/css" href="widget.css">
+<link rel="stylesheet" type="text/css" href="grid.css">
+<link rel="stylesheet" type="text/css" href="menu.css">
+<link rel="stylesheet" type="text/css" href="button.css">
+<link rel="stylesheet" type="text/css" href="calendar.css">
+<link rel="stylesheet" type="text/css" href="input.css">
+<link rel="stylesheet" type="text/css" href="tooltip.css">
+<link rel="stylesheet" type="text/css" href="dropdown.css">
+<link rel="stylesheet" type="text/css" href="pagelist.css">
+
+<script src="glue.js"></script>
+<script src="divs.js"></script>
+<script src="rowset.js"></script>
+<script src="grid.js"></script>
+<script src="menu.js"></script>
+<script src="button.js"></script>
+<script src="calendar.js"></script>
+<script src="input.js"></script>
+<script src="dropdown.js"></script>
+<script src="pagelist.js"></script>
+
+</head>
+
+<body>
+
+<h2>WEBB.JS WIDGETS DEMO</h2>
+<table id=layout width=100% height=600 cellspacing=0>
+	<tr>
+		<td height=1>
+			<a href="https://github.com/luapower/webb/tree/master/webb-www" target=_blank>
+				<button>
+					<span class="fa fa-code-branch"></span> Code
+				</button>
+			</a>
+		</td>
+		<td class="main_td lb lp"><h3>#main</h3></td>
+		<td class="code_td lb">
+			<table width=100%>
+				<tr>
+					<td width=100%><h3>#code</h3></td>
+					<td><button id=run_button>Run Code</button></td>
+					<td><button id=reload_button>Reload</button></td>
+				</tr>
+			</table>
+		</td>
+		<td class="lp lb"><h3>#help</h3></td>
+	</tr>
+	<tr>
+		<td valign=top width=160>
+			<ul id=demo_list></ul>
+		</td>
+		<td class="main_td lb lp" valign=top width=34%>
+			<div id=main></div>
+		</td>
+		<td valign=top class="lb" id=code_td>
+			<aceeditor id=code></aceeditor>
+		</td>
+		<td class="lb lp" valign=top width=25%>
+			<pre id=help></pre>
+		</td>
+	</tr>
+</table>
+<div id=debugDiv></div>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_buttons>
+<help>
+button({
+	text: 'html text',
+	icon_classes: 'class1 class2',
+	primary: true,
+	click: function() {},
+})
+</help>
+
+<script>
+
+main.add(
+	button({
+		text: 'Click me!',
+		primary: true,
+		click: function() { print('clicked') },
+	}),
+	button({
+		text: 'Click&nbsp;<i>me</i>&nbsp;too!',
+		icon_classes: 'fa fa-biohazard',
+		click: function() { print('clicked') },
+	}),
+	button({
+		text: 'Multiline text<br>works too!',
+		icon_classes: 'fa fa-folder-open',
+		click: function() { print('clicked') },
+	})
+)
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_menus>
+<div>
+
+</div>
+<script>
+
+function act(a) { print(a.text) }
+
+m = menu({
+	actions: [
+		{text: 'Open', click: act, key: 'Ctrl+B', icon_class: 'fa fa-folder-open'},
+		{text: 'Close', enabled: false, icon_class: 'fa fa-window-close', click: act, separator: true},
+		{text: 'More', actions: [
+			{text: 'Check', checked: true},
+			{text: 'Check No Close', checked: true,
+				click: function(a) { print(a.checked); return false } },
+			{text: 'More Stuff', actions: [
+				{text: 'More Stuff 1 this is a very long item text'},
+				{text: 'More Stuff 2', click: act},
+			]},
+		]},
+		{text: 'Even More', actions: [
+			{text: 'Even More Stuff 1'},
+			{text: 'Even More Stuff 2'},
+		]},
+	],
+})
+
+b = button({
+	text: 'Click for menu',
+	primary: true,
+	click: function() { m.popup(0, 2, b) },
+})
+
+main.add(b)
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_input>
+<div>
+
+</div>
+<script>
+
+main.add(H.div({}, 'type in "Klaus" to validate: ', input({
+	value: '',
+	validate: function(v) {
+		return v == '' || v == 'Klaus' || 'You have to type in "Klaus" or leave empty.'
+	},
+})))
+
+main.add(H.div({}, 'type in "Klaus" to validate: ', input({
+	value: '',
+	validate: function(v) {
+		return v == '' || v == 'Klaus'
+			|| ('You have to type in "Klaus" or leave empty. <br>' +
+				'This error message is purposefully long to show that the default error box ' +
+				'wraps decently and stays centered.')
+	},
+})))
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_spin_input>
+<div>
+
+</div>
+<script>
+
+main.add(H.div({}, spin_input({value: 42})))
+main.add(H.div({}, spin_input({value: 42, button_style: 'up-down'})))
+main.add(H.div({}, spin_input({value: 42, button_style: 'left-right'})))
+main.add(H.div({}, spin_input({min: -2, max: 5, step: 1.5, button_placement: 'right'})))
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_dropdown>
+<div>
+
+</div>
+<script>
+
+main.add(H.p({}, 'wrap-to-fit: ', dropdown({picker: calendar(), style: 'min-width: 10em'})))
+main.add(H.p({}, 'grow-to-fit: ', dropdown({picker: calendar(), classes: 'x-dropdown-nowrap'})))
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_inline>
+<help>
+
+</help>
+<script>
+
+main.add(H.div({style: 'line-height: 2'},
+	'All ',
+	input({style: 'min-width: 4em', value: 'inputs'}),
+	'are baseline-aligned',
+	spin_input({style: 'min-width: 5em', value: 42}),
+	', including dropdowns ',
+	dropdown({picker: calendar()}),
+	', which can be made to wrap-to-fit or grow-to-fit, and even',
+	button({
+		text: 'buttons.',
+		primary: true,
+		click: function() { print('clicked') },
+	}),
+	'This stays true under different fonts, font sizes and line heights.'
+))
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_pagelist>
+<help>
+
+	<div>HEI</div>
+
+</help>
+<script>
+
+pages = H.div()
+pages.console = H.div({}, 'Console page contents.')
+pages.source = H.div({}, 'Source page contents.')
+
+main.add(pagelist({
+	items: [
+		'Elements',
+		{text: 'Console', page: pages.console},
+		{text: 'Sources', page: pages.source},
+		'Network',
+		'Performance',
+	],
+	selected: 3,
+	page_container: pages,
+}))
+
+main.add(pages)
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_calendar>
+<div>
+
+</div>
+<script>
+
+main.add(calendar())
+main.add(calendar({classes: 'popup'}))
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_grid>
+<script>
+
+var d = dropdown({
+	parent: dd2,
+	value: 'hello hello',
+	picker: grid({
+		dropdown_field: 'name',
+		rowset: rowset({
+			fields: [
+				{name: 'id', type: 'number'},
+				{name: 'name'},
+				{name: 'date', type: 'date'},
+			],
+			rows: [
+				{values: [1, 'Hey Dude', now()    ]},
+				{values: [2, 'Wasup', utctime()]},
+				{values: [3, '', 0]},
+			],
+		}),
+	}),
+})
+
+var data = {
+	fields: [
+		{name: 'id', type: 'number', align: 'right', editable: false, w: 50, min_w: 30},
+		{name: 'name', w: 100, min_w: 100, max_w: 200},
+		{name: 'parent_id', type: 'number', w: 100, min_w: 50,
+			allow_null: true, editable: false, focusable: false},
+		{name: 'comment', w: 200, allow_null: true},
+	],
+	rows: [
+		//{values: [0,'z',null]},
+		//{values: [1,'y',null]},
+		// {values: [2,'x',0]},
+		// {values: [3,'d',0]},
+		// {values: [4,'e',2]},
+		// {values: [5,'f',2]},
+		// {values: [6,'g very long long text to try out',5]},
+	],
+}
+
+for (var i = 0; i < 20; i++) {
+	data.rows.push({focusable: i % 2 == 0, values: [i, 'record '+i, floor((random() * i))]})
+}
+
+var d = rowset(data)
+
+var g1 = grid({
+	rowset: d,
+	parent: div1,
+	h: 100,
+	row_border_h: 1,
+	row_h: 24,
+	//row_border_h: 30,
+	//order_by: 'parent_id, name desc',
+})
+
+var g2 = grid({
+	rowset: d,
+	parent: div2,
+	h: 200,
+	row_h: 40,
+	//order_by: 'parent_id, name desc',
+})
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+
+<script>
+
+{
+
+	let editor = ace.edit(code, {
+		mode: 'ace/mode/javascript',
+		highlightActiveLine: false,
+		showGutter: false,
+		printMargin: false,
+		displayIndentGuides: false,
+		tabSize: 3,
+	})
+
+	function run_script() {
+		let s = editor.getSession().getValue()
+		main.innerHTML = ''
+		let f = eval('let f = function() {\n' + s + '}; f')
+		f()
+	}
+
+	let demos = {}
+	let sel_li
+	$('template').forEach(function(e) {
+		let name = e.attr('id').slice(('demo_').length)
+		let li = H('li', {}, name)
+		demo_list.add(li)
+		let t = window['demo_'+name].content
+		let h = t.$('help')[0]; h = h && h.innerHTML.trim() || ''
+		let s = t.$('script')[0]; s = s && s.innerHTML.trim() || ''
+		li.on('mousedown', function() {
+			if (sel_li) sel_li.class('selected', false)
+			li.class('selected', true)
+			sel_li = li
+			editor.getSession().setValue(s)
+			editor.initial_script = s
+			run_script()
+			help.innerHTML = h
+		})
+	})
+
+	run_button.on('click', function() {
+		run_script()
+	})
+
+	reload_button.on('click', function() {
+		editor.getSession().setValue(editor.initial_script)
+		run_script()
+	})
+
+	demo_list.first.fire(new MouseEvent('mousedown'))
+
+}
+
+</script>
+</body>
+</html>

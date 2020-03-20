@@ -1,0 +1,44 @@
+
+.x-pagelist {
+
+	/* layouting */
+	display: flex;
+	position: relative;
+
+	/* sizing for layout use */
+	margin: 0;
+	padding: 0;
+	border-bottom: 1px solid #ccc;
+
+}
+
+.x-pagelist-item {
+
+	/* sizing */
+	padding: .25em 1em;
+
+	/* styling */
+	color: #666;
+	cursor: default;
+}
+
+.x-pagelist-item:hover {
+	background-color: #eee;
+}
+
+.x-pagelist-item.selected {
+	color: black;
+}
+
+.x-pagelist-item.selected:focus {
+	outline: none;
+}
+
+.x-pagelist-selection-bar {
+	position: absolute;
+	bottom: 0;
+	height: 2px;
+	background-color: #66f;
+	transition: width .1s;
+	transition: left .1s;
+}

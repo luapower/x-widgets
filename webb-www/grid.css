@@ -1,0 +1,112 @@
+
+.grid-div {
+	display: inline-block;     /* required: don't expand to fit parent width */
+	overflow: hidden;          /* required: hide header trail */
+}
+
+.grid-div:focus {
+	outline: none;
+}
+
+.grid-div, .grid-div * {
+	box-sizing: border-box;    /* required: borders don't affect width */
+	padding: 0px;              /* required */
+	margin: 0px;               /* required */
+}
+
+.grid-header-table, .grid-rows-table {
+	position: relative;        /* required: make movable */
+	width: 0;                  /* required: expand up-to the sum of cell widths */
+	table-layout: fixed;       /* required */
+	border-collapse: collapse; /* required */
+}
+
+.grid-header-th-table {
+	width: 100%;               /* required: expand to fit column width */
+	table-layout: fixed;       /* required: don't expand based on content */
+}
+.grid-header-title-td {
+	overflow: hidden;          /* required: hide title under the sort icon */
+}
+.grid-header-sort-icon-td {
+	width: 10px;               /* required: leave the rest of the space to the title */
+}
+
+.grid-rows-view-div {
+	overflow: auto;            /* required: show scrollbars as needed */
+}
+
+.grid-rows-view-div {
+	position: relative;        /* required: anchor rows-div */
+}
+.grid-rows-div {
+	position: absolute;        /* required: keep at y=0 while scrolling */
+	overflow: hidden;          /* required: hide surplus bottom rows */
+}
+.grid-header-th {             /* default: header column style */
+	height: 2.5em;
+	vertical-align: bottom;
+	padding-bottom: .3em;
+	border-bottom: 1px solid #999;
+}
+
+.grid-div {
+	cursor: default;           /* required: don't show caret over text */
+}
+.grid-div.col-resize {
+	cursor: ew-resize;         /* default: column resizing cursor */
+}
+.grid-div:not(.col-resize) .grid-header-th {
+	cursor: pointer;           /* required: resizing area is underneath */
+}
+
+.grid-header-th, .grid-td {
+	white-space: nowrap;       /* required: height must be kept constant */
+	overflow: hidden;          /* required */
+}
+
+.grid-cell {
+	padding-left: .5em;        /* default */
+	padding-right: .5em;       /* default */
+}
+
+.grid-td {
+	border-bottom: 0px solid #ccc;
+	cursor: parent;           /* required: show cursor as set by parent */
+}
+
+.grid-sort-icon.fa-sort { color: #ccc; }
+
+/* cell & row states ------------------------------------------------------ */
+
+.grid-td.not-focusable              { color: #bbb; }
+.grid-td.read-only                  { color: #999; }
+.grid-tr:hover                      { background-color: #efefef; }
+.grid-td.focused                    { background-color: #666; color: white; }
+.grid-tr.focused                    { background-color: #333; color: white; }
+.grid-div.focused .grid-tr.focused  { background-color: #246; color: white; }
+.grid-div.focused .grid-td.focused  { background-color: #47a; }
+.grid-tr.new                        { background-color: #eef; }
+.grid-tr.new.focused                { background-color: #dde; }
+.grid-td.modified                   { background-color: #ddffdd; }
+.grid-tr.focused .grid-td.modified  { background-color: #cceecc; }
+.grid-td.invalid                    { background-color: #ffcccc; }
+.grid-tr.focused .grid-td.invalid   { background-color: #eebbbb; }
+
+/* editing ---------------------------------------------------------------- */
+
+.grid-error {
+	position: absolute;
+}
+
+.grid-input {
+	position: absolute;
+	border: 0;
+	font-size: inherit;
+	font-family: inherit;
+	cursor: initial;
+	color: inherit;
+	background: parent;
+	outline: 0;
+	box-shadow: inset 2px 2px 6px -2px rgba(0,0,0,0.75);
+}

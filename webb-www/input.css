@@ -1,0 +1,102 @@
+
+.x-input, .x-input * {
+	box-sizing: border-box;
+}
+
+.x-input {
+	/* layouting */
+	display: inline-flex;    /* the only way to get variable-width inputs */
+	align-items: baseline;   /* that are baseline-aligned */
+	position: relative;      /* anchor the error tooltip */
+
+	/* sizing */
+	width: 0;                /* don't set this, set min-width */
+	min-width: 10em;
+
+	/* sizing for inline use */
+	margin: .25em;
+	padding: 0;
+	border: 1px solid #999;
+	border-radius: .2em;
+	font-size: 100%;
+}
+
+.x-input-input {
+	/* defaults */
+	margin: 0;
+	border: 0;
+	padding: .25em;
+	font-size: inherit;
+	font-family: inherit;
+	height: 100%;            /* stretch vertically */
+	flex: auto;              /* stretch horizontally */
+	min-width: 0;            /* reset, let parent set this */
+}
+
+/* focus the outer div instead of the input */
+.x-input:focus-within {
+	box-shadow: 0 0 1px 1px #99f;
+}
+.x-input-input:focus {
+	outline: none;
+	background-color: #ffc;
+}
+
+.x-input-input.x-input-invalid {
+	background-color: #f33;
+	color: white;
+}
+
+/* error message tooltip */
+
+.x-input-error-ct {
+
+	/* positioning */
+	position: absolute;
+	z-index: 1;
+	bottom: 2.5em;                /* move above input */
+	left: 50%;                    /* anchor to parent's center */
+	transform: translateX(-50%);  /* center tooltip */
+
+	/* sizing */
+	width: 400px;
+	text-align: center;
+}
+
+.x-input-error {
+
+	/* layouting */
+	display: inline-block;
+
+	/* sizing */
+	padding: .5em;
+
+	/* styling */
+	color: white;
+	background-color: #f33;
+	border-radius: 5px;
+	border: 1px solid #ccc;
+}
+
+/* spin-input */
+
+.x-spin-input .x-input-input {
+	text-align: right;
+}
+
+.x-spin-input-button {
+	border-style: solid;
+	border-color: #999;
+	border-width: 0;
+	padding-left: .5em;
+	padding-right: .5em;
+}
+
+.x-spin-input-button-left  { border-right-width: 1px; }
+.x-spin-input-button-right { border-left-width : 1px; }
+
+.x-spin-input-button.fa-plus,
+.x-spin-input-button.fa-minus {
+	font-size: 70%;
+	align-self: center;
+}
