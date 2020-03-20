@@ -25,7 +25,10 @@ widgets data-driven.
 
 ## Styling
 
-
+Even though they're web components, the widgets don't use shadow DOMs so
+both their sub-elements and their styling are up for grabs. All widgets
+have the `.x-widget` class that you can set global styling like a custom
+font to.
 
 ## Web developers beware
 
