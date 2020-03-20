@@ -27,15 +27,16 @@ widgets data-driven.
 If you're a web developer (as opposed to say, a programmer), you might want
 to stay away from this library. This library's author doesn't have much
 respect for "design patterns", "best practices" and other such
-thinking-avoidance mechanisms often employed by web developers. If you're
-still not sure, here's a list to test the limits of your dogmatism:
+_thinking-avoidance mechanisms_ (yeah, you heard right) often employed by
+web developers. If you're still not sure, here's a list to
+<s>test the limits of your dogmatism</s> see how unprofessional I am:
 
-* this lib pollutes the global namespace with all sorts of functions.
-* this lib extends some built-in classes with new methods.
+* this lib pollutes the global namespace like it's London 1858.
+* this lib even extends built-in classes with new methods.
 * this lib only uses `===` when it's actually necessary.
 * this lib uses `<table>` for layouting. are you sick yet?
-* this lib uses snake case instead of hungarian notation.
-* this lib uses a "deployment system" whereby you open your file explorer
-and copy-paste a bunch of .css and .js files to your goddam app folder.
-
+* this lib uses snake case instead of your precious hungarian notation.
+* this lib does not even quote html attributes. why are you still reading?
+* this lib uses a "deployment system" whereby you open up your file explorer,
+and then you copy-paste a bunch of .css and .js files to your goddam www folder.
 
