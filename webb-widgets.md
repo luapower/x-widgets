@@ -19,9 +19,6 @@ Load `rowset.js` too if you want to use the widgets in data-driven mode.
 `rowset.js` contains the client-side row-set abstraction that makes the
 widgets data-driven.
 
-## Data-driven widgets
-
-
 ## Web developers beware
 
 If you're a web developer (as opposed to say, a programmer), you might want
