@@ -9,15 +9,14 @@ before anything, which also includes some quick-reference documentation.
 This library is designed for data-centric business-type apps with a focus
 on data entry and data navigation. It's designed for increased productivity
 on these tasks in an office setting with a big screen and a keyboard and
-mouse. ("keyboard & mouse"-first apps).
+mouse ("keyboard & mouse"-first apps).
 
 ## Loading
 
 Load the .css and .js files for the widgets that you need in your web app.
 
-Everything depends on `glue.js` and `divs.js` from [webb] so load those first.
+The dependencies are `glue.js` and `divs.js` from [webb] so load those first.
 Load `rowset.js` too if you want to use the widgets in data-driven mode.
-
 `glue.js` extends JavaScript with basic routines similar to [glue] from Lua.
 `divs.js` is a tiny jQuery-like library for DOM manipulation.
 `rowset.js` contains the client-side row-set abstraction that makes the
