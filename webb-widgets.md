@@ -12,7 +12,7 @@ on data entry and data navigation.
 Such apps need higher information density, higher signal-to-noise ratio,
 faster loading times and lower operational latencies than the usual
 consumer-centric web-apps, and as such, tend to favor tabbed and split-pane
-layouts over newspaper-type layouts, optimize for keyboard-based navigation,
+layouts over newspaper-type layouts, optimize for keyboard navigation,
 and are generally designed for an office setting with a big screen, a chair
 and a keyboard and mouse ("keyboard & mouse"-first apps).
 
