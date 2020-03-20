@@ -6,10 +6,20 @@ Data-driven web components in pure JavaScript.
 Better [check out the demo](http://luapower.com/widgets_demo.html)
 before anything, which also includes some quick-reference documentation.
 
-This library is designed for data-centric business-type apps with a focus
-on data entry and data navigation. It's designed for increased productivity
-on these tasks in an office setting with a big screen and a keyboard and
-mouse ("keyboard & mouse"-first apps).
+This library is designed for data-dense business-type apps with a focus
+on data entry and data navigation.
+
+Such apps need higher information density, higher signal-to-noise ratio,
+faster loading times and lower operational latencies than the usual
+consumer-centric web-apps, and as such, tend to favor tabbed and split-pane
+layouts over newspaper-type layouts, optimize for keyboard-based navigation,
+and are generally designed for an office setting with a big screen, a chair
+and a keyboard and mouse ("keyboard & mouse"-first apps).
+
+So what this means is: none of that responsive stuff here, keyboard is king,
+no touchy the screen, and no megabytes of polyfills to implement half a
+browser because you want to squeeze that last drop of the market or deliver
+a few more ads.
 
 ## Loading
 
