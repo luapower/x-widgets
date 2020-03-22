@@ -74,31 +74,12 @@ h2 {
 	outline: none;
 }
 
-/* demo list */
-
 #demo_list {
-	list-style-type: none;
-	margin: 0;
-	padding: 0;
-	cursor: default;
+	display: flex;
 }
 
-#demo_list li {
-	margin: 0;
-	padding: .2em;
-	padding-left: 1em;
-	padding-right: 1em;
-	margin-right: 1em;
-}
-
-#demo_list li:hover {
-	background-color: #666;
-	color: white;
-}
-
-#demo_list li.selected {
-	background-color: black;
-	color: white;
+#demo_list:focus {
+	outline: none;
 }
 
 </style>
@@ -110,7 +91,7 @@ h2 {
 <link rel="stylesheet" type="text/css" href="button.css">
 <link rel="stylesheet" type="text/css" href="calendar.css">
 <link rel="stylesheet" type="text/css" href="input.css">
-<link rel="stylesheet" type="text/css" href="tooltip.css">
+<link rel="stylesheet" type="text/css" href="listbox.css">
 <link rel="stylesheet" type="text/css" href="dropdown.css">
 <link rel="stylesheet" type="text/css" href="pagelist.css">
 
@@ -122,6 +103,7 @@ h2 {
 <script src="button.js"></script>
 <script src="calendar.js"></script>
 <script src="input.js"></script>
+<script src="listbox.js"></script>
 <script src="dropdown.js"></script>
 <script src="pagelist.js"></script>
 
@@ -152,8 +134,7 @@ h2 {
 		<td class="lp lb"><h3>#help</h3></td>
 	</tr>
 	<tr>
-		<td valign=top width=160>
-			<ul id=demo_list></ul>
+		<td valign=top width=160 id=demo_list_ct>
 		</td>
 		<td class="main_td lb lp" valign=top width=34%>
 			<div id=main></div>
@@ -285,7 +266,58 @@ main.add(H.div({}, spin_input({min: -2, max: 5, step: 1.5, button_placement: 'ri
 </template>
 
 <!----------------------------------------------------------------------></-->
-<template id=demo_dropdown>
+<template id=demo_listbox>
+<help>
+
+</help>
+<script>
+
+main.add(listbox({
+	items: [
+		'Apples',
+		'Bannanas',
+		'Something Else Entirely',
+	],
+	selected_index: 1,
+}))
+
+main.add(listbox({
+	items: [
+		'Works',
+		'Horizontally',
+		'Too',
+	],
+	selected_index: 2,
+	style: 'flex-direction: row',
+}))
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_dropdown_listbox>
+<help>
+
+</help>
+<script>
+
+main.add(dropdown({
+	picker: listbox({
+		items: [
+			'Apples',
+			'Bannanas',
+			'Something Else Entirely',
+		],
+		selected_index: 1,
+		style: 'display: inline-flex',
+	}),
+}))
+
+</script>
+</template>
+
+<!----------------------------------------------------------------------></-->
+<template id=demo_dropdown_calendar>
 <div>
 
 </div>
@@ -306,11 +338,21 @@ main.add(H.p({}, 'grow-to-fit: ', dropdown({picker: calendar(), classes: 'x-drop
 
 main.add(H.div({style: 'line-height: 2'},
 	'All ',
-	input({style: 'min-width: 4em', value: 'inputs'}),
+	input({
+			style: 'min-width: 4em; border: 0; border-bottom: 1px dashed black;',
+			value: 'inputs',
+	}),
 	'are baseline-aligned',
-	spin_input({style: 'min-width: 5em', value: 42}),
+	spin_input({
+		style: 'min-width: 5em; border: 0',
+		value: 42,
+	}),
 	', including dropdowns ',
-	dropdown({picker: calendar()}),
+	dropdown({
+		classes: 'x-dropdown-nowrap',
+		style: 'border: 0',
+		picker: calendar(),
+	}),
 	', which can be made to wrap-to-fit or grow-to-fit, and even',
 	button({
 		text: 'buttons.',
@@ -344,7 +386,7 @@ main.add(pagelist({
 		'Network',
 		'Performance',
 	],
-	selected: 3,
+	selected_index: 3,
 	page_container: pages,
 }))
 
@@ -361,7 +403,10 @@ main.add(pages)
 <script>
 
 main.add(calendar())
-main.add(calendar({classes: 'popup'}))
+main.add(calendar({
+	classes: 'popup',
+	value: now(),
+}))
 
 </script>
 </template>
@@ -370,6 +415,7 @@ main.add(calendar({classes: 'popup'}))
 <template id=demo_grid>
 <script>
 
+/*
 var d = dropdown({
 	parent: dd2,
 	value: 'hello hello',
@@ -389,6 +435,7 @@ var d = dropdown({
 		}),
 	}),
 })
+*/
 
 var data = {
 	fields: [
@@ -417,8 +464,7 @@ var d = rowset(data)
 
 var g1 = grid({
 	rowset: d,
-	parent: div1,
-	h: 100,
+	h: 200,
 	row_border_h: 1,
 	row_h: 24,
 	//row_border_h: 30,
@@ -427,11 +473,12 @@ var g1 = grid({
 
 var g2 = grid({
 	rowset: d,
-	parent: div2,
-	h: 200,
-	row_h: 40,
+	h: 300,
+	row_h: 30,
 	//order_by: 'parent_id, name desc',
 })
+
+main.add(g1, g2)
 
 </script>
 </template>
@@ -440,56 +487,57 @@ var g2 = grid({
 
 <script>
 
-{
+ace_editor = ace.edit(code, {
+	mode: 'ace/mode/javascript',
+	highlightActiveLine: false,
+	showGutter: false,
+	printMargin: false,
+	displayIndentGuides: false,
+	tabSize: 3,
+})
 
-	let editor = ace.edit(code, {
-		mode: 'ace/mode/javascript',
-		highlightActiveLine: false,
-		showGutter: false,
-		printMargin: false,
-		displayIndentGuides: false,
-		tabSize: 3,
-	})
+// disable Tab in the editor since we need to demo tab navigation.
+ace_editor.commands.removeCommand(ace_editor.commands.byName.indent)
+ace_editor.commands.removeCommand(ace_editor.commands.byName.outdent)
 
-	function run_script() {
-		let s = editor.getSession().getValue()
-		main.innerHTML = ''
-		let f = eval('let f = function() {\n' + s + '}; f')
-		f()
-	}
-
-	let demos = {}
-	let sel_li
-	$('template').forEach(function(e) {
-		let name = e.attr('id').slice(('demo_').length)
-		let li = H('li', {}, name)
-		demo_list.add(li)
-		let t = window['demo_'+name].content
-		let h = t.$('help')[0]; h = h && h.innerHTML.trim() || ''
-		let s = t.$('script')[0]; s = s && s.innerHTML.trim() || ''
-		li.on('mousedown', function() {
-			if (sel_li) sel_li.class('selected', false)
-			li.class('selected', true)
-			sel_li = li
-			editor.getSession().setValue(s)
-			editor.initial_script = s
-			run_script()
-			help.innerHTML = h
-		})
-	})
-
-	run_button.on('click', function() {
-		run_script()
-	})
-
-	reload_button.on('click', function() {
-		editor.getSession().setValue(editor.initial_script)
-		run_script()
-	})
-
-	demo_list.first.fire(new MouseEvent('mousedown'))
-
+function run_script() {
+	let s = ace_editor.getSession().getValue()
+	main.innerHTML = ''
+	let f = eval('let f = function() {\n' + s + '}; f')
+	f()
 }
+
+let demos = []
+
+$('template').forEach(function(e) {
+	let name = e.attr('id').slice(('demo_').length)
+	let t = window['demo_'+name].content
+	let h = t.$('help')[0]; h = h && h.innerHTML.trim() || ''
+	let s = t.$('script')[0]; s = s && s.innerHTML.trim() || ''
+	demos.push({text: name, help: h, code: s})
+})
+
+demo_list = listbox({items: demos, attrs: {id: 'demo_list'}})
+
+demo_list.on('selected', function(demo) {
+	ace_editor.getSession().setValue(demo.code)
+	ace_editor.initial_script = demo.code
+	run_script()
+	help.innerHTML = demo.help
+})
+
+run_button.on('click', function() {
+	run_script()
+})
+
+reload_button.on('click', function() {
+	acec_editor.getSession().setValue(editor.initial_script)
+	run_script()
+})
+
+demo_list_ct.add(demo_list)
+
+demo_list.selected_index = 6
 
 </script>
 </body>

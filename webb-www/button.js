@@ -4,31 +4,34 @@
 
 */
 
-button = component('x-button', HTMLButtonElement, 'button', function(e, t) {
+button = component('x-button', HTMLButtonElement, 'button', function(e) {
 
 	e.class('x-widget')
 	e.class('x-button')
-	e.icon_span = H.span({class: 'x-button-icon ' + (t.icon_classes || '')}, t.icon)
+
+	e.icon_span = H.span({class: 'x-button-icon'})
 	e.text_span = H.span({class: 'x-button-text'})
-
-	if (!(t.icon_classes || t.icon))
-		e.icon_span.hide() // can't use CSS because margins don't collapse with paddings.
-
 	e.add(e.icon_span, e.text_span)
 
-	function get_text() {
+	e.init = function() {
+
+		e.icon_span.add(e.icon)
+		e.icon_span.classes = e.icon_classes
+
+		// can't use CSS for this because margins don't collapse with paddings.
+		if (!(e.icon_classes || e.icon))
+			e.icon_span.hide()
+
+		e.on('click', e.click)
+	}
+
+	e.property('text', function() {
 		return e.text_span.innerHTML
-	}
-
-	function set_text(s) {
+	}, function(s) {
 		e.text_span.innerHTML = s
-	}
+	})
 
-	property(e, 'text', {get: get_text, set: set_text})
-
-	class_property(e, 'primary')
-
-	e.on('click', t.click)
+	e.css_property('primary')
 
 })
 

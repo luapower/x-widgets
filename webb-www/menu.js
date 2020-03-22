@@ -4,7 +4,7 @@
 
 */
 
-menu = component('x-menu', function(e, t) {
+menu = component('x-menu', function(e) {
 
 	function create_item(a) {
 		let check_div = H.div({class: 'x-menu-check-div fa fa-check'})

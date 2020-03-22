@@ -4,57 +4,51 @@
 
 */
 
-calendar = component('x-calendar', function(e, t) {
+calendar = component('x-calendar', function(e) {
+
+	e.class('x-widget')
+	e.class('x-calendar')
 
 	e.format = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
 
-	function init() {
-		create_view()
-	}
+	e.sel_day = H.div({class: 'x-calendar-sel-day'})
+	e.sel_day_suffix = H.div({class: 'x-calendar-sel-day-suffix'})
+	e.sel_month = input({classes: 'x-calendar-sel-month'})
+	e.sel_year = spin_input({
+			classes: 'x-calendar-sel-year',
+			validate: validate_year,
+			button_style: 'left-right',
+	})
+	e.sel_month.input.on('input', month_changed)
+	e.sel_year.input.on('input', year_changed)
+	e.header = H.div({class: 'x-calendar-header'},
+		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
+	e.weekview = H.table({class: 'x-calendar-weekview', tabindex: 0})
+	e.weekview.on('keydown', weekview_keydown)
+	e.weekview.on('wheel', weekview_wheel)
+	e.add(e.header, e.weekview)
 
 	// model
 
-	let value = now()
-
-	function get_value() { return value; }
-
-	function set_value(t) {
-		t = day(t != null ? t : now())
-		if (t != t)
-			return
-		value = t
-		update_view()
-		this.fire('value_changed', t) // dropdown protocol
-	}
-
-	property(e, 'value', {get: get_value, set: set_value})
+	let value = day(0)
+	e.late_property('value', function() {
+			return value
+	}, function(t) {
+			t = day(t)
+			if (t != t) // NaN
+				return
+			if (t === value)
+				return
+			value = t
+			this.fire('value_changed', t) // dropdown protocol
+			update_view()
+	})
 
 	// view
 
 	function validate_year(v) {
 		let y = Number(v)
 		return y >= 1970 && y <= 2200 || 'Year must be between 1970 and 2200'
-	}
-
-	function create_view() {
-		e.class('x-widget')
-		e.class('x-calendar')
-		e.sel_day = H.div({class: 'x-calendar-sel-day'})
-		e.sel_day_suffix = H.div({class: 'x-calendar-sel-day-suffix'})
-		e.sel_month = input({classes: 'x-calendar-sel-month'})
-		e.sel_year = spin_input({
-				classes: 'x-calendar-sel-year',
-				validate: validate_year,
-				button_style: 'left-right',
-		})
-		e.sel_month.input.on('input', month_changed)
-		e.sel_year.input.on('input', year_changed)
-		e.header = H.div({class: 'x-calendar-header'},
-			e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
-		e.weekview = H.table({class: 'x-calendar-weekview', tabindex: 0})
-		e.weekview.on('keydown', weekview_keydown)
-		e.weekview.on('wheel', weekview_wheel)
-		e.add(e.header, e.weekview)
 	}
 
 	function update_view() {
@@ -74,7 +68,7 @@ calendar = component('x-calendar', function(e, t) {
 		let today = day(now())
 		let this_month = month(d)
 		d = week(this_month)
-		e.weekview.innerHTML = ''
+		e.weekview.clear()
 		for (let week = 0; week <= weeks; week++) {
 			let tr = H.tr()
 			for (let weekday = 0; weekday < 7; weekday++) {
@@ -149,10 +143,10 @@ calendar = component('x-calendar', function(e, t) {
 		e.weekview.focus()
 	}
 
-	property(e, 'display_value', {get: function() {
+	e.property('display_value', function() {
 		_d.setTime(e.value)
 		return _d.toLocaleString(locale, e.format)
-	}})
+	})
 
 	e.pick_value = function(v) {
 		e.value = v
@@ -164,5 +158,4 @@ calendar = component('x-calendar', function(e, t) {
 		e.fire('value_picked')
 	}
 
-	init()
 })

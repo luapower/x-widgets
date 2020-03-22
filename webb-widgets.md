@@ -21,6 +21,12 @@ no touchy the screen, and no megabytes of polyfills to implement half a
 browser because you want to squeeze that last drop of the market or deliver
 a few more ads.
 
+## Browser Compatibility
+
+This will probably only work on desktop Firefox and Chrome/Edge for the
+forseable future. Something might be done for Safari and maybe mobile
+Chrome and Firefox too. Anything else is out.
+
 ## Loading
 
 Load the .css and .js files for the widgets that you need in your web app.
@@ -43,9 +49,9 @@ font to, without disturbing your other styles.
 
 If you're a web developer (as opposed to say, a programmer), you might want
 to stay away from this library. This library's author doesn't have much
-respect for "design patterns", "best practices" and other such
-_thinking-avoidance mechanisms_ (yeah, you heard right) often employed by
-web developers. If you're still not sure, here's a list to
+respect for "design patterns", "best practices", "code smells" and other
+such _thinking-avoidance mechanisms_ often employed by web developers.
+If you're still not sure, here's a list to
 <s>test the limits of your dogmatism</s> see how unprofessional I am:
 
 * this lib pollutes the global namespace like it's London 1858.
