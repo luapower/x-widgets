@@ -90,8 +90,13 @@
 	min-width: 80px;
 }
 
-.x-calendar-sel-month .x-input-input {
+.x-calendar-sel-month .x-dropdown-value {
 	text-align: center;
+}
+
+.x-input.x-calendar-sel-month .x-listbox {
+	display: flex;
+	width: 100%;
 }
 
 .x-input.x-calendar-sel-year {

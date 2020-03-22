@@ -4,6 +4,13 @@
 
 */
 
+function month_names() {
+	let a = []
+	for (let i = 0; i < 11; i++)
+		a.push(month_name(utctime(0, i), 'long'))
+	return a
+}
+
 calendar = component('x-calendar', function(e) {
 
 	e.class('x-widget')
@@ -13,13 +20,18 @@ calendar = component('x-calendar', function(e) {
 
 	e.sel_day = H.div({class: 'x-calendar-sel-day'})
 	e.sel_day_suffix = H.div({class: 'x-calendar-sel-day-suffix'})
-	e.sel_month = input({classes: 'x-calendar-sel-month'})
+	e.sel_month = dropdown({
+		classes: 'x-calendar-sel-month',
+		picker: listbox({
+			items: month_names(),
+		}),
+	})
 	e.sel_year = spin_input({
 			classes: 'x-calendar-sel-year',
 			validate: validate_year,
 			button_style: 'left-right',
 	})
-	e.sel_month.input.on('input', month_changed)
+	e.sel_month.on('value_picked', month_changed)
 	e.sel_year.input.on('input', year_changed)
 	e.header = H.div({class: 'x-calendar-header'},
 		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)

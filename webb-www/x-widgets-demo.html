@@ -85,27 +85,27 @@ h2 {
 </style>
 
 <link rel="stylesheet" type="text/css" href="fontawesome.css">
-<link rel="stylesheet" type="text/css" href="widget.css">
-<link rel="stylesheet" type="text/css" href="grid.css">
-<link rel="stylesheet" type="text/css" href="menu.css">
-<link rel="stylesheet" type="text/css" href="button.css">
-<link rel="stylesheet" type="text/css" href="calendar.css">
-<link rel="stylesheet" type="text/css" href="input.css">
-<link rel="stylesheet" type="text/css" href="listbox.css">
-<link rel="stylesheet" type="text/css" href="dropdown.css">
-<link rel="stylesheet" type="text/css" href="pagelist.css">
+<link rel="stylesheet" type="text/css" href="x-widget.css">
+<link rel="stylesheet" type="text/css" href="x-grid.css">
+<link rel="stylesheet" type="text/css" href="x-menu.css">
+<link rel="stylesheet" type="text/css" href="x-button.css">
+<link rel="stylesheet" type="text/css" href="x-calendar.css">
+<link rel="stylesheet" type="text/css" href="x-input.css">
+<link rel="stylesheet" type="text/css" href="x-listbox.css">
+<link rel="stylesheet" type="text/css" href="x-dropdown.css">
+<link rel="stylesheet" type="text/css" href="x-pagelist.css">
 
 <script src="glue.js"></script>
 <script src="divs.js"></script>
 <script src="rowset.js"></script>
-<script src="grid.js"></script>
-<script src="menu.js"></script>
-<script src="button.js"></script>
-<script src="calendar.js"></script>
-<script src="input.js"></script>
-<script src="listbox.js"></script>
-<script src="dropdown.js"></script>
-<script src="pagelist.js"></script>
+<script src="x-grid.js"></script>
+<script src="x-menu.js"></script>
+<script src="x-button.js"></script>
+<script src="x-calendar.js"></script>
+<script src="x-input.js"></script>
+<script src="x-listbox.js"></script>
+<script src="x-dropdown.js"></script>
+<script src="x-pagelist.js"></script>
 
 </head>
 
@@ -149,15 +149,18 @@ h2 {
 </table>
 <div id=debugDiv></div>
 
-<!----------------------------------------------------------------------></-->
+<!--------------------------------------------------------------------------->
+
 <template id=demo_buttons>
 <help>
+
 button({
 	text: 'html text',
 	icon_classes: 'class1 class2',
 	primary: true,
 	click: function() {},
 })
+
 </help>
 
 <script>
@@ -183,11 +186,12 @@ main.add(
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
-<template id=demo_menus>
-<div>
+<!--------------------------------------------------------------------------->
 
-</div>
+<template id=demo_menus>
+<help>
+
+</help>
 <script>
 
 function act(a) { print(a.text) }
@@ -223,11 +227,12 @@ main.add(b)
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
-<template id=demo_input>
-<div>
+<!--------------------------------------------------------------------------->
 
-</div>
+<template id=demo_input>
+<help>
+
+</help>
 <script>
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
@@ -250,11 +255,12 @@ main.add(H.div({}, 'type in "Klaus" to validate: ', input({
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
-<template id=demo_spin_input>
-<div>
+<!--------------------------------------------------------------------------->
 
-</div>
+<template id=demo_spin_input>
+<help>
+
+</help>
 <script>
 
 main.add(H.div({}, spin_input({value: 42})))
@@ -265,7 +271,8 @@ main.add(H.div({}, spin_input({min: -2, max: 5, step: 1.5, button_placement: 'ri
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
+<!--------------------------------------------------------------------------->
+
 <template id=demo_listbox>
 <help>
 
@@ -288,48 +295,14 @@ main.add(listbox({
 		'Too',
 	],
 	selected_index: 2,
-	style: 'flex-direction: row',
+	style: 'flex-direction: row; margin: 0 20px;',
 }))
 
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
-<template id=demo_dropdown_listbox>
-<help>
+<!--------------------------------------------------------------------------->
 
-</help>
-<script>
-
-main.add(dropdown({
-	picker: listbox({
-		items: [
-			'Apples',
-			'Bannanas',
-			'Something Else Entirely',
-		],
-		selected_index: 1,
-		style: 'display: inline-flex',
-	}),
-}))
-
-</script>
-</template>
-
-<!----------------------------------------------------------------------></-->
-<template id=demo_dropdown_calendar>
-<div>
-
-</div>
-<script>
-
-main.add(H.p({}, 'wrap-to-fit: ', dropdown({picker: calendar(), style: 'min-width: 10em'})))
-main.add(H.p({}, 'grow-to-fit: ', dropdown({picker: calendar(), classes: 'x-dropdown-nowrap'})))
-
-</script>
-</template>
-
-<!----------------------------------------------------------------------></-->
 <template id=demo_inline>
 <help>
 
@@ -365,7 +338,8 @@ main.add(H.div({style: 'line-height: 2'},
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
+<!--------------------------------------------------------------------------->
+
 <template id=demo_pagelist>
 <help>
 
@@ -395,11 +369,12 @@ main.add(pages)
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
-<template id=demo_calendar>
-<div>
+<!--------------------------------------------------------------------------->
 
-</div>
+<template id=demo_calendar>
+<help>
+
+</help>
 <script>
 
 main.add(calendar())
@@ -411,31 +386,13 @@ main.add(calendar({
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
-<template id=demo_grid>
-<script>
+<!--------------------------------------------------------------------------->
 
-/*
-var d = dropdown({
-	parent: dd2,
-	value: 'hello hello',
-	picker: grid({
-		dropdown_field: 'name',
-		rowset: rowset({
-			fields: [
-				{name: 'id', type: 'number'},
-				{name: 'name'},
-				{name: 'date', type: 'date'},
-			],
-			rows: [
-				{values: [1, 'Hey Dude', now()    ]},
-				{values: [2, 'Wasup', utctime()]},
-				{values: [3, '', 0]},
-			],
-		}),
-	}),
-})
-*/
+<template id=demo_grid>
+<help>
+
+</help>
+<script>
 
 var data = {
 	fields: [
@@ -483,7 +440,74 @@ main.add(g1, g2)
 </script>
 </template>
 
-<!----------------------------------------------------------------------></-->
+<!--------------------------------------------------------------------------->
+
+<template id=demo_dropdown_listbox>
+<help>
+
+</help>
+<script>
+
+main.add(dropdown({
+	picker: listbox({
+		items: [
+			'Apples',
+			'Bannanas',
+			'Something Else Entirely',
+		],
+		selected_index: 1,
+		style: 'display: inline-flex',
+	}),
+}))
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=demo_dropdown_calendar>
+<help>
+
+</help>
+<script>
+
+main.add(H.p({}, 'wrap-to-fit: ', dropdown({picker: calendar(), style: 'min-width: 10em'})))
+main.add(H.p({}, 'grow-to-fit: ', dropdown({picker: calendar(), classes: 'x-dropdown-nowrap'})))
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=demo_dropdown_grid>
+<help>
+
+</help>
+<script>
+
+main.add(dropdown({
+	value: 'hello hello',
+	picker: grid({
+		dropdown_field: 'name',
+		rowset: rowset({
+			fields: [
+				{name: 'id', type: 'number'},
+				{name: 'name'},
+				{name: 'date', type: 'date'},
+			],
+			rows: [
+				{values: [1, 'Hey Dude', now()    ]},
+				{values: [2, 'Wasup', utctime()]},
+				{values: [3, '', 0]},
+			],
+		}),
+	}),
+}))
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
 
 <script>
 
@@ -510,7 +534,10 @@ function run_script() {
 let demos = []
 
 $('template').forEach(function(e) {
-	let name = e.attr('id').slice(('demo_').length)
+	let id = e.attr('id')
+	if (!id.starts('demo'))
+		return
+	let name = id.replace('demo_', '')
 	let t = window['demo_'+name].content
 	let h = t.$('help')[0]; h = h && h.innerHTML.trim() || ''
 	let s = t.$('script')[0]; s = s && s.innerHTML.trim() || ''
@@ -537,7 +564,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.selected_index = 6
+demo_list.value = 1/0
 
 </script>
 </body>

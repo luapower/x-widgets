@@ -34,6 +34,8 @@ listbox = component('x-listbox', function(e) {
 		select_item_by_index(i)
 	})
 
+	alias(e, 'value', 'selected_index')
+
 	// controller
 
 	e.on('keydown', list_keydown)

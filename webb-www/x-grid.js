@@ -1079,5 +1079,13 @@ grid = component('x-grid', function(e) {
 		return row ? e.rowset.display_value(row.row, e.dropdown_field) : ''
 	})
 
+	e.pick_value = function(v) {
+		//
+	}
+
+	e.pick_near_value = function(delta) {
+		//
+	}
+
 })
 
