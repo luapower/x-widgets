@@ -32,6 +32,8 @@ dropdown = component('x-dropdown', function(e) {
 		if (!e.isConnected)
 			return
 		let v = e.picker.display_value
+		if (v === '')
+			v = '&nbsp;'
 		if (typeof(v) == 'string')
 			e.value_div.innerHTML = v
 		else
@@ -62,7 +64,7 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	function value_picked() {
-		e.open = false
+		e.close()
 		if (e.rowset) {
 			let err = e.rowset.set_value(e.value)
 			// TODO: show error
@@ -71,47 +73,55 @@ dropdown = component('x-dropdown', function(e) {
 
 	// controller
 
-	e.css_property('open', function(open) {
-		if (open) {
-			e.button.replace_class('fa-caret-down', 'fa-caret-up')
-			e.old_value = e.value
-			e.picker.class('x-dropdown-picker', true)
-			e.picker.y = e.clientHeight
-			e.picker.x = -e.clientLeft
-			e.add(e.picker)
-			e.picker.focus()
-		} else {
-			e.button.replace_class('fa-caret-down', 'fa-caret-up', false)
-			e.old_value = undefined
-			e.picker.remove()
-			e.focus()
+	e.late_property('isopen',
+		function() {
+			return e.hasclass('open')
+		},
+		function(open) {
+			if (open) {
+				e.button.replace_class('fa-caret-down', 'fa-caret-up')
+				e.old_value = e.value
+				e.picker.class('x-dropdown-picker', true)
+				e.picker.y = e.clientHeight
+				e.picker.x = -e.clientLeft
+				e.add(e.picker)
+				e.class('open')
+				e.picker.focus()
+			} else {
+				e.button.replace_class('fa-caret-down', 'fa-caret-up', false)
+				e.old_value = undefined
+				e.picker.remove()
+				e.class('open', false)
+				e.focus()
+			}
 		}
-	})
+	)
 
-	e.toggle_picker = function() {
-		e.open = !e.open
-	}
+	e.open   = function() { e.isopen = true }
+	e.close  = function() { e.isopen = false }
+	e.toggle = function() { e.isopen = !e.isopen }
+	e.cancel = function() { e.value = e.old_value }
 
 	// kb & mouse binding
 
 	function view_mousedown(ev) {
 		if (!e.picker.contains(ev.target)) {
-			e.toggle_picker()
+			e.toggle()
 			ev.preventDefault() // prevent focusing back this element.
 		}
 	}
 
 	function view_keydown(key) {
 		if (key == 'Enter') {
-			e.toggle_picker()
+			e.toggle()
 			return false
 		}
 		if (key == 'Escape') {
-			e.value = e.old_value
+			e.cancel()
 			return false
 		}
 		if (key == 'ArrowDown' || key == 'ArrowUp') {
-			if (!e.open) {
+			if (!e.isopen) {
 				e.picker.pick_near_value(key == 'ArrowDown' ? 1 : -1)
 				return false
 			}
@@ -119,7 +129,7 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	function view_wheel(dy) {
-		if (!e.open) {
+		if (!e.isopen) {
 			e.picker.pick_near_value(dy / 100)
 			return false
 		}
@@ -127,7 +137,7 @@ dropdown = component('x-dropdown', function(e) {
 
 	function document_mousedown(ev) {
 		if (!e.contains(ev.target))
-			e.open = false
+			e.close()
 	}
 
 })

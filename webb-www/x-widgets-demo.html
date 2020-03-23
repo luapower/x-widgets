@@ -22,7 +22,7 @@
 
 body {
 	font-family: widget, sans-serif;
-	font-size: 13px;
+	font-size: 12px;
 	padding: 1em;
 }
 
@@ -279,24 +279,28 @@ main.add(H.div({}, spin_input({min: -2, max: 5, step: 1.5, button_placement: 'ri
 </help>
 <script>
 
-main.add(listbox({
-	items: [
-		'Apples',
-		'Bananas',
-		'Something Else Entirely',
-	],
-	selected_index: 1,
-}))
+main.add(
+	listbox({
+		items: [
+			'Apples',
+			'Bananas',
+			'Something Else Entirely',
+		],
+		selected_index: 1,
+	})
+)
 
-main.add(listbox({
-	items: [
-		'Works',
-		'Horizontally',
-		'Too',
-	],
-	selected_index: 2,
-	style: 'flex-direction: row; margin: 0 20px;',
-}))
+main.add(
+	listbox({
+		items: [
+			'Works',
+			'Horizontally',
+			'Too',
+		],
+		selected_index: 2,
+		style: 'margin: 0 20px; flex-direction: row;',
+	})
+)
 
 </script>
 </template>
@@ -348,21 +352,23 @@ main.add(H.div({style: 'line-height: 2'},
 </help>
 <script>
 
-pages = H.div()
+pages = H.div({style: 'margin-top: 1em'})
 pages.console = H.div({}, 'Console page contents.')
 pages.source = H.div({}, 'Source page contents.')
 
-main.add(pagelist({
-	items: [
-		'Elements',
-		{text: 'Console', page: pages.console},
-		{text: 'Sources', page: pages.source},
-		'Network',
-		'Performance',
-	],
-	selected_index: 3,
-	page_container: pages,
-}))
+main.add(
+	pagelist({
+		items: [
+			'Elements',
+			{text: 'Console', page: pages.console},
+			{text: 'Sources', page: pages.source},
+			'Network',
+			'Performance',
+		],
+		selected_index: 3,
+		page_container: pages,
+	})
+)
 
 main.add(pages)
 
@@ -402,15 +408,7 @@ var data = {
 			allow_null: true, editable: false, focusable: false},
 		{name: 'comment', w: 200, allow_null: true},
 	],
-	rows: [
-		//{values: [0,'z',null]},
-		//{values: [1,'y',null]},
-		// {values: [2,'x',0]},
-		// {values: [3,'d',0]},
-		// {values: [4,'e',2]},
-		// {values: [5,'f',2]},
-		// {values: [6,'g very long long text to try out',5]},
-	],
+	rows: [],
 }
 
 for (var i = 0; i < 20; i++) {
@@ -448,17 +446,19 @@ main.add(g1, g2)
 </help>
 <script>
 
-main.add(dropdown({
-	picker: listbox({
-		items: [
-			'Apples',
-			'Bananas',
-			'Something Else Entirely',
-		],
-		selected_index: 1,
-		style: 'display: inline-flex',
-	}),
-}))
+main.add(
+	dropdown({
+		picker: listbox({
+			items: [
+				'Apples',
+				'Bananas',
+				'Something Else Entirely',
+			],
+			selected_index: 1,
+			style: 'display: inline-flex',
+		}),
+	})
+)
 
 </script>
 </template>
@@ -485,24 +485,26 @@ main.add(H.p({}, 'grow-to-fit: ', dropdown({picker: calendar(), classes: 'x-drop
 </help>
 <script>
 
-main.add(dropdown({
-	value: 'hello hello',
-	picker: grid({
-		dropdown_field: 'name',
-		rowset: rowset({
-			fields: [
-				{name: 'id', type: 'number'},
-				{name: 'name'},
-				{name: 'date', type: 'date'},
-			],
-			rows: [
-				{values: [1, 'Hey Dude', now()    ]},
-				{values: [2, 'Wasup', utctime()]},
-				{values: [3, '', 0]},
-			],
+main.add(
+	dropdown({
+		value: 'hello hello',
+		picker: grid({
+			dropdown_field: 'name',
+			rowset: rowset({
+				fields: [
+					{name: 'id', type: 'number'},
+					{name: 'name'},
+					{name: 'date', type: 'date'},
+				],
+				rows: [
+					{values: [1, 'Hey Dude', now()    ]},
+					{values: [2, 'Wasup', utctime()]},
+					{values: [3, '', 0]},
+				],
+			}),
 		}),
-	}),
-}))
+	})
+)
 
 </script>
 </template>
@@ -564,7 +566,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 1/0
+demo_list.value = 7
 
 </script>
 </body>

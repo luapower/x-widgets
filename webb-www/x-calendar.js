@@ -7,7 +7,7 @@
 function month_names() {
 	let a = []
 	for (let i = 0; i < 11; i++)
-		a.push(month_name(utctime(0, i), 'long'))
+		a.push(month_name(utctime(0, i), 'short'))
 	return a
 }
 
@@ -21,7 +21,7 @@ calendar = component('x-calendar', function(e) {
 	e.sel_day = H.div({class: 'x-calendar-sel-day'})
 	e.sel_day_suffix = H.div({class: 'x-calendar-sel-day-suffix'})
 	e.sel_month = dropdown({
-		classes: 'x-calendar-sel-month',
+		classes: 'x-calendar-sel-month x-dropdown-nowrap',
 		picker: listbox({
 			items: month_names(),
 		}),
@@ -111,8 +111,10 @@ calendar = component('x-calendar', function(e) {
 
 	function day_mousedown() {
 		e.value = this.date
+		e.sel_month.cancel()
+		e.weekview.focus()
 		e.fire('value_picked') // dropdown protocol
-		return false // prevent bubbling to dropdown.
+		return false // prevent bubbling up to dropdown.
 	}
 
 	function month_changed() {
@@ -129,6 +131,7 @@ calendar = component('x-calendar', function(e) {
 
 	function weekview_wheel(dy) {
 		e.value = day(e.value, 7 * dy / 100)
+		return false
 	}
 
 	function weekview_keydown(key) {

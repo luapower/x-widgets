@@ -14,8 +14,8 @@
 
 /* use the inline class for inline variable-width dropdowns. */
 .x-dropdown-nowrap {
-	width: auto;
-	min-width: 0;
+	width: auto;             /* shrink-wrap */
+	min-width: 0;            /* reset from x-input */
 }
 .x-dropdown-nowrap .x-dropdown-value {
 	white-space: nowrap;

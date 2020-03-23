@@ -5,7 +5,7 @@
 
 .x-calendar {
 	display: inline-block;
-	padding: 1.5em;
+	padding: 2em;
 }
 
 .x-calendar.popup {
@@ -25,11 +25,6 @@
 	font-weight: normal;
 }
 
-.x-calendar-day,
-.x-calendar-weekday {
-	padding: .2em;
-}
-
 .x-calendar-weekview:focus {
 	outline: none;
 }
@@ -41,12 +36,14 @@
 .x-calendar-day,
 .x-calendar-weekday {
 	text-align: right;
-	padding-left: .6em;
+}
+.x-calendar-day {
+	padding: .4em;
+	padding-left : .6em;
 	padding-right: .6em;
 }
-
 .x-calendar-weekday {
-	padding-left: 0;
+	padding: .4em 0;
 }
 
 .x-calendar-day                     { cursor: default; }
@@ -65,8 +62,7 @@
 
 .x-calendar-header {
 	display: flex;
-	#justify-content: space-between;
-	align-items: center;
+	align-items: center;     /* vertical align */
 }
 
 .x-calendar-sel-day {
@@ -74,6 +70,7 @@
 }
 
 .x-calendar-sel-day-suffix {
+	flex: 1;                 /* stretch to fill width */
 	font-size: 150%;
 	padding-left: .1em;
 	padding-top: .25em;
@@ -85,21 +82,16 @@
 	border: 0;
 }
 
-.x-input.x-calendar-sel-month {
-	flex: 1;
-	min-width: 80px;
-}
-
-.x-calendar-sel-month .x-dropdown-value {
-	text-align: center;
+.x-calendar-sel-month.x-input {
+	min-width: 5em;          /* limit shrinking */
+	margin: .25em;           /* separate from day suffix */
 }
 
 .x-input.x-calendar-sel-month .x-listbox {
-	display: flex;
 	width: 100%;
 }
 
 .x-input.x-calendar-sel-year {
-	min-width: 80px;
+	min-width: 6em;
 }
 

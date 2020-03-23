@@ -60,7 +60,9 @@ listbox = component('x-listbox', function(e) {
 	}
 
 	function item_mousedown() {
+		e.focus()
 		select_item(this, true)
+		return false // prevent bubbling up to dropdown.
 	}
 
 	function list_keydown(key) {
@@ -79,7 +81,6 @@ listbox = component('x-listbox', function(e) {
 			e.selected_index += d
 			return false
 		}
-
 		if (key == 'Enter') {
 			if (e.selected_item)
 				e.fire('value_picked') // dropdown protocol
