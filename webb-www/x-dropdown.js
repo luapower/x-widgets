@@ -35,6 +35,11 @@ dropdown = component('x-dropdown', function(e) {
 
 	e.attach = function(parent) {
 		update_view()
+		document.on('mousedown', document_mousedown)
+	}
+
+	e.detach = function() {
+		document.off('mousedown', document_mousedown)
 	}
 
 	// model
@@ -63,7 +68,7 @@ dropdown = component('x-dropdown', function(e) {
 	let focusing_picker
 	e.focus = function() {
 		if (e.isopen) {
-			focusing_picker = true
+			focusing_picker = true // barrier works because .focus() is synchronous.
 			e.picker.focus()
 			focusing_picker = false
 		} else
@@ -100,7 +105,6 @@ dropdown = component('x-dropdown', function(e) {
 	e.cancel = function() {
 		if (!e.isopen) return
 		e.value = e.cancel_value
-		e.cancel_value = null
 	}
 
 	// picker protocol
@@ -137,8 +141,11 @@ dropdown = component('x-dropdown', function(e) {
 			return false
 		}
 		if (key == 'Escape') {
-			e.cancel()
-			return false
+			if (e.isopen) {
+				e.cancel()
+				e.focus()
+				return false
+			}
 		}
 		if (key == 'ArrowDown' || key == 'ArrowUp') {
 			if (!e.isopen) {
@@ -155,12 +162,24 @@ dropdown = component('x-dropdown', function(e) {
 		}
 	}
 
-	function view_focusout() {
-		if (focusing_picker) {
-			focusing_picker = false
+	// auto-closing when clicking or tabbing outside the dropdown.
+
+	function view_focusout(ev) {
+		if (focusing_picker)
 			return
-		}
+		if (!e.isopen)
+			return
+		if (!ev.relatedTarget) // might've been focusing inside
+			return
+		if (e.contains(ev.relatedTarget)) // focusing inside
+			if (ev.relatedTarget != e)
+				return
 		e.cancel()
+	}
+
+	function document_mousedown(ev) {
+		if (!e.contains(ev.target))
+			e.cancel()
 	}
 
 })
