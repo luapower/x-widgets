@@ -1,0 +1,35 @@
+
+/* petrol dark theme ------------------------------------------------------ */
+
+.petrol {
+	color: white;
+	background-color: #2a303e;
+	box-shadow: 5px 5px 5px #999;
+	z-index: 1;
+}
+
+/* inputs */
+
+.petrol .x-input:focus-within,
+.petrol .x-input-input:focus,
+.petrol .x-dropdown.open {
+	background-color: #000;
+}
+
+/* calendars */
+
+.petrol .x-calendar-day.selected { background-color: #000; }
+.petrol .x-calendar-day:hover    { background-color: #111; }
+
+/* pickers of dropdowns */
+
+.petrol .x-dropdown .picker {
+	border: 1px solid #333;
+	box-shadow: 5px 5px 5px #000;
+}
+
+/* listboxes */
+
+.petrol .x-listbox-item:hover {
+	background-color: #111;
+}
