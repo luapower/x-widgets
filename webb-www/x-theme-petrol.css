@@ -65,7 +65,7 @@
 /* listboxes */
 
 .petrol .x-listbox-item.selected {
-	background-color: #000;
+	background-color: #666;
 }
 
 .petrol .x-listbox-item:hover {
