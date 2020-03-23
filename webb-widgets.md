@@ -16,7 +16,7 @@ layouts over newspaper-type layouts, optimize for keyboard navigation,
 and are generally designed for an office setting with a big screen, a chair
 and a keyboard and mouse ("keyboard & mouse"-first apps).
 
-So what this means is: none of that responsive stuff here, keyboard is king,
+So what this means is: none of that responsive stuff, keyboard is king,
 no touchy the screen, and no megabytes of polyfills to implement half a
 browser because you want to squeeze that last drop of the market or deliver
 a few more ads.
@@ -27,12 +27,14 @@ This will probably only work on desktop Firefox and Chrome/Edge for the
 forseeable future. Something might be done for Safari and maybe mobile
 Chrome and Firefox too. Anything else is out.
 
-## Loading
+## Installation
 
-Load the .css and .js files for the widgets that you need in your web app.
+Look, it's just a bunch of .css and .js files. Load them as they are or
+combine, minify and gzip them, you know, do what you have to do, make it
+look professional.
 
-The dependencies are `glue.js` and `divs.js` from [webb] so load those first.
-Load `rowset.js` too if you want to use the widgets in data-driven mode.
+The dependencies are `glue.js` and `divs.js` from [webb] so get those first.
+Get `rowset.js` too if you want to use the widgets in data-driven mode.
 `glue.js` extends JavaScript with basic routines similar to [glue] from Lua.
 `divs.js` is a tiny jQuery-like library for DOM manipulation.
 `rowset.js` contains the client-side row-set abstraction that makes the

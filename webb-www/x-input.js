@@ -202,3 +202,4 @@ spin_input = component('x-spin-input', input, function(e) {
 	add_events(e.down, -1)
 
 })
+

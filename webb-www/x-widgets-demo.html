@@ -307,43 +307,6 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_inline>
-<help>
-
-</help>
-<script>
-
-main.add(H.div({style: 'line-height: 2'},
-	'All ',
-	input({
-			style: 'min-width: 4em; border: 0; border-bottom: 1px dashed black;',
-			value: 'inputs',
-	}),
-	'are baseline-aligned',
-	spin_input({
-		style: 'min-width: 5em; border: 0',
-		value: 42,
-	}),
-	', including dropdowns ',
-	dropdown({
-		classes: 'inline',
-		style: 'border: 0',
-		picker: calendar(),
-	}),
-	', which can be made to wrap-to-fit or grow-to-fit, and even',
-	button({
-		text: 'buttons.',
-		primary: true,
-		click: function() { print('clicked') },
-	}),
-	'This stays true under different fonts, font sizes and line heights.'
-))
-
-</script>
-</template>
-
-<!--------------------------------------------------------------------------->
-
 <template id=demo_pagelist>
 <help>
 
@@ -514,7 +477,6 @@ main.add(
 </script>
 </template>
 
-
 <!--------------------------------------------------------------------------->
 
 <template id=demo_dropdown_modes>
@@ -554,6 +516,43 @@ main.add(
 	H.div(),
 	dropdown({classes: 'fixed', picker: list()})
 )
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=demo_inline_inputs>
+<help>
+
+</help>
+<script>
+
+main.add(H.div({style: 'line-height: 2'},
+	'All ',
+	input({
+			style: 'min-width: 4em; border: 0; border-bottom: 1px dashed black;',
+			value: 'inputs',
+	}),
+	'are baseline-aligned',
+	spin_input({
+		style: 'min-width: 5em; border: 0',
+		value: 42,
+	}),
+	', including dropdowns ',
+	dropdown({
+		classes: 'inline',
+		style: 'border: 0',
+		picker: calendar(),
+	}),
+	', which can be made to wrap-to-fit or grow-to-fit, and even',
+	button({
+		text: 'buttons.',
+		primary: true,
+		click: function() { print('clicked') },
+	}),
+	'This stays true under different fonts, font sizes and line heights.'
+))
 
 </script>
 </template>
