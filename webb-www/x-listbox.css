@@ -36,6 +36,10 @@
 	color: white;
 }
 
+.x-listbox:focus {
+	outline: none;
+}
+
 .x-listbox:focus .x-listbox-item.selected {
 	background-color: #47a;
 }

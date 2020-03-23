@@ -3,29 +3,43 @@
 
 .petrol {
 	color: white;
-	background-color: #2a303e;
+	background-color: #181818;
 }
 
 /* buttons */
 
-.petrol .x-button {
+.petrol .x-button:not(.primary) {
 	color: white;
 	background-color: #000;
 	background-image: none;
 }
 
-.petrol .x-button:hover {
+.petrol .x-button:not(.primary):hover {
 	background-color: #111;
 	background-image: none;
 	border-color: #000;
 }
 
-/* inputs */
+/* inputs & dropdown */
+
+.petrol .x-input {
+	border-color: #444;
+}
+
+.petrol .x-input:focus-within,
+.petrol .x-dropdown:focus-within,
+.x-calendar-weekview:focus .x-calendar-day.selected {
+	box-shadow: 0 0 1px 1px #336;
+}
 
 .petrol .x-input:focus-within,
 .petrol .x-input-input:focus,
 .petrol .x-dropdown.open {
-	background-color: #000;
+	background-color: #080808;
+}
+
+.petrol .x-dropdown.open .x-calendar {
+	background-color: #2a303e;
 }
 
 .petrol .x-input-input.x-input-invalid {
@@ -40,7 +54,7 @@
 /* pickers of dropdowns */
 
 .petrol .x-dropdown .picker {
-	border: 1px solid #333;
+	border: 1px solid #222;
 	box-shadow: 5px 5px 5px #000;
 }
 

@@ -16,9 +16,13 @@
 	/* sizing for inline use */
 	margin: .25em;
 	padding: 0;
-	border: 1px solid #999;
+	border-width: 1px;
 	border-radius: .2em;
 	font-size: 100%;
+
+	/* styling */
+	border-color: #999;
+	border-style: solid;
 }
 
 .x-input-input {
