@@ -3,7 +3,7 @@ Data-driven web components in pure JavaScript.
 
 ## Overview
 
-Better [check out the demo](http://luapower.com/widgets_demo.html)
+Better [check out the demo](http://luapower.com/x-widgets-demo.html)
 before anything, which also includes some quick-reference documentation.
 
 This library is designed for data-dense business-type apps with a focus
