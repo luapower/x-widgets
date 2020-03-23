@@ -32,15 +32,17 @@
 	flex: auto;              /* stretch horizontally */
 	min-width: 0;            /* reset, let parent set this */
 	width: 100vw;
+	color: inherit;
+	background: none;
 }
 
 /* focus the outer div instead of the input */
 .x-input:focus-within {
+	background-color: #ffc;
 	box-shadow: 0 0 1px 1px #99f;
 }
 .x-input-input:focus {
 	outline: none;
-	background-color: #ffc;
 }
 
 .x-input-input.x-input-invalid {

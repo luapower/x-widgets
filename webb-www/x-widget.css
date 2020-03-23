@@ -1,4 +1,6 @@
 
+/* defaults --------------------------------------------------------------- */
+
 .x-widget, .x-widget * {
 	box-sizing: border-box;
 }
@@ -6,4 +8,28 @@
 .x-widget {
 	font-size: 13px;
 	font-family: widget, sans-serif;
+}
+
+/* popup theme ------------------------------------------------------------ */
+
+.popup {
+	color: white;
+	background-color: #2a303e;
+	box-shadow: 5px 5px 5px #999;
+	z-index: 1;
+}
+
+.popup .x-input:focus-within,
+.popup .x-input-input:focus,
+.popup .x-dropdown.open {
+	background-color: #000;
+}
+
+.popup .x-calendar-day.selected { background-color: #000; }
+.popup .x-calendar-day:hover    { background-color: #111; }
+
+.popup .x-dropdown .picker {
+	border: 1px solid #999;
+	#background-color: #2a303e;
+	box-shadow: 5px 5px 5px #000;
 }

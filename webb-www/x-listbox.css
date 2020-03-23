@@ -9,8 +9,6 @@
 	display: inline-flex;        /* the only way for it to shrink-wrap */
 	flex-flow: column nowrap;
 
-	/* styling */
-	//border: 1px solid #999;
 }
 
 .x-listbox-item {
