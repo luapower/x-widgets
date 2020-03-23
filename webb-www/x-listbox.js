@@ -58,7 +58,7 @@ listbox = component('x-listbox', function(e) {
 		e.fire('selected', item_div ? item_div.item : null)
 		e.fire('value_changed', item_div ? item_div.index : null, from_user_input)
 		if (pick)
-			e.fire('value_picked') // dropdown protocol
+			e.fire('value_picked', from_user_input) // dropdown protocol
 	}
 
 	function item_mousedown() {
@@ -85,7 +85,7 @@ listbox = component('x-listbox', function(e) {
 		}
 		if (key == 'Enter') {
 			if (e.selected_item)
-				e.fire('value_picked') // dropdown protocol
+				e.fire('value_picked', true) // dropdown protocol
 			return false
 		}
 	}
@@ -97,11 +97,11 @@ listbox = component('x-listbox', function(e) {
 	})
 
 	e.pick_value = function(v) {
-		select_item_by_index(v, true, true)
+		select_item_by_index(v, true, false)
 	}
 
 	e.pick_near_value = function(delta) {
-		select_item_by_index(e.selected_index + delta, true, true)
+		select_item_by_index(e.selected_index + delta, true, false)
 	}
 
 })

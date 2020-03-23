@@ -112,7 +112,7 @@ calendar = component('x-calendar', function(e) {
 		e.value = this.date
 		e.sel_month.cancel()
 		e.weekview.focus()
-		e.fire('value_picked') // dropdown protocol
+		e.fire('value_picked', true) // dropdown protocol
 		return false // prevent bubbling up to dropdown.
 	}
 
@@ -146,7 +146,7 @@ calendar = component('x-calendar', function(e) {
 			return false
 		}
 		if (key == 'Enter') {
-			e.fire('value_picked') // dropdown protocol
+			e.fire('value_picked', true) // dropdown protocol
 			return false
 		}
 	}
@@ -164,12 +164,12 @@ calendar = component('x-calendar', function(e) {
 
 	e.pick_value = function(v) {
 		e.value = v
-		e.fire('value_picked')
+		e.fire('value_picked', false)
 	}
 
 	e.pick_near_value = function(delta) {
 		e.value = day(e.value, delta)
-		e.fire('value_picked')
+		e.fire('value_picked', false)
 	}
 
 })

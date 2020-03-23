@@ -15,18 +15,11 @@ dropdown = component('x-dropdown', function(e) {
 
 	e.attrval('tabindex', 0)
 
+	// view
+
 	e.value_div = H.span({class: 'x-dropdown-value'})
 	e.button = H.span({class: 'x-dropdown-button fa fa-caret-down'})
 	e.add(e.value_div, e.button)
-
-	e.on('mousedown', view_mousedown)
-	e.on('keydown', view_keydown)
-	e.on('wheel', view_wheel)
-
-	e.init = function() {
-		e.picker.on('value_changed', value_changed)
-		e.picker.on('value_picked', value_picked)
-	}
 
 	function update_view() {
 		if (!e.isConnected)
@@ -42,11 +35,6 @@ dropdown = component('x-dropdown', function(e) {
 
 	e.attach = function(parent) {
 		update_view()
-		document.on('mousedown', document_mousedown)
-	}
-
-	e.detach = function() {
-		document.off('mousedown', document_mousedown)
 	}
 
 	// model
@@ -57,22 +45,32 @@ dropdown = component('x-dropdown', function(e) {
 		e.picker.pick_value(v)
 	})
 
-	// picker protocol
-
-	function value_changed(v) {
-		update_view()
-	}
-
-	function value_picked() {
-		e.close()
-		e.fire('value_changed', e.picker.value) // input protocol
-		if (e.rowset) {
-			let err = e.rowset.set_value(e.value)
-			// TODO: show error
-		}
-	}
-
 	// controller
+
+	e.on('mousedown', view_mousedown)
+	e.on('keydown'  , view_keydown)
+	e.on('wheel'    , view_wheel)
+	e.on('focusout' , view_focusout)
+
+	e.init = function() {
+		e.picker.on('value_changed', value_changed)
+		e.picker.on('value_picked' , value_picked)
+	}
+
+	// focusing
+
+	let builtin_focus = e.focus
+	let focusing_picker
+	e.focus = function() {
+		if (e.isopen) {
+			focusing_picker = true
+			e.picker.focus()
+			focusing_picker = false
+		} else
+			builtin_focus.call(this)
+	}
+
+	// isopen property
 
 	e.late_property('isopen',
 		function() {
@@ -81,21 +79,17 @@ dropdown = component('x-dropdown', function(e) {
 		function(open) {
 			if (e.isopen == open)
 				return
+			e.class('open', open)
+			e.button.replace_class('fa-caret-down', 'fa-caret-up', open)
+			e.picker.class('picker', open)
 			if (open) {
-				e.button.replace_class('fa-caret-down', 'fa-caret-up')
-				e.old_value = e.value
-				e.picker.class('picker', true)
+				e.cancel_value = e.value
 				e.picker.y = e.clientHeight
 				e.picker.x = -e.clientLeft
 				e.add(e.picker)
-				e.class('open')
-				e.picker.focus()
 			} else {
-				e.button.replace_class('fa-caret-down', 'fa-caret-up', false)
-				e.old_value = undefined
+				e.cancel_value = null
 				e.picker.remove()
-				e.class('open', false)
-				e.focus()
 			}
 		}
 	)
@@ -103,20 +97,43 @@ dropdown = component('x-dropdown', function(e) {
 	e.open   = function() { e.isopen = true }
 	e.close  = function() { e.isopen = false }
 	e.toggle = function() { e.isopen = !e.isopen }
-	e.cancel = function() { if (e.isopen) e.value = e.old_value }
+	e.cancel = function() {
+		if (!e.isopen) return
+		e.value = e.cancel_value
+		e.cancel_value = null
+	}
+
+	// picker protocol
+
+	function value_changed(v) {
+		update_view()
+	}
+
+	function value_picked(from_user_input) {
+		e.close()
+		if (from_user_input)
+			e.focus()
+		e.fire('value_changed', e.picker.value) // input protocol
+		if (e.rowset) {
+			let err = e.rowset.set_value(e.value)
+			// TODO: show error
+		}
+	}
 
 	// kb & mouse binding
 
 	function view_mousedown(ev) {
 		if (!e.picker.contains(ev.target)) {
 			e.toggle()
-			return false // prevent focusing back this element.
+			e.focus()
+			return false
 		}
 	}
 
 	function view_keydown(key) {
 		if (key == 'Enter') {
 			e.toggle()
+			e.focus()
 			return false
 		}
 		if (key == 'Escape') {
@@ -138,9 +155,12 @@ dropdown = component('x-dropdown', function(e) {
 		}
 	}
 
-	function document_mousedown(ev) {
-		if (!e.contains(ev.target))
-			e.cancel()
+	function view_focusout() {
+		if (focusing_picker) {
+			focusing_picker = false
+			return
+		}
+		e.cancel()
 	}
 
 })

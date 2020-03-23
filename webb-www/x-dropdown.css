@@ -1,5 +1,6 @@
 
-/* note: x-input class applied before this. */
+/* NOTE: the .x-input class is applied before this. */
+
 .x-dropdown {
 	/* layouting */
 	align-items: stretch;
@@ -14,6 +15,21 @@
 	/* default mode: variable-width, no-wrap but with .x-input's min-width applied */
 	width: auto;             /* shrink-wrap */
 	white-space: nowrap;
+}
+
+.x-dropdown-value {
+	flex: 1;                 /* stretch horizontally */
+	height: 100%;
+	padding-right: .25em;
+}
+
+.x-dropdown-button {
+	align-self: center;
+	padding-left : .35em;
+	padding-right: .25em;
+	border-left-style: inherit;
+	border-left-color: inherit;
+	border-left-width: 1px;
 }
 
 /* inline mode: variable-width, no-wrap with no min-width */
@@ -40,29 +56,16 @@
 	overflow: hidden;
 }
 
+/* state styling ---------------------------------------------------------- */
+
+.x-dropdown.open {
+}
+
 /* show as focused when the picker is focused */
 .x-dropdown:focus-within {
 	outline: none;
-	box-shadow: 0 0 1px 1px #99f;
-}
-
-.x-dropdown.open {
 	background-color: #ffc;  /* same as x-input */
-}
-
-.x-dropdown-value {
-	flex: 1;                 /* stretch horizontally */
-	height: 100%;
-	padding-right: .25em;
-}
-
-.x-dropdown-button {
-	align-self: center;
-	padding-left : .35em;
-	padding-right: .25em;
-	border-left-style: inherit;
-	border-left-color: inherit;
-	border-left-width: 1px;
+	box-shadow: 0 0 1px 1px #99f;
 }
 
 .x-dropdown .picker {
@@ -70,6 +73,6 @@
 	position: absolute;
 	border: 1px solid #999;
 	background-color: inherit;
-	box-shadow: 5px 5px 5px #999;
+	box-shadow: 5px 5px 5px #000000aa;
 	z-index: 1;
 }
