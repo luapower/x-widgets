@@ -46,7 +46,7 @@
 }
 
 .x-input-input.x-input-invalid {
-	background-color: #f33;
+	background-color: #a33;
 	color: white;
 }
 
@@ -72,13 +72,12 @@
 	display: inline-block;
 
 	/* sizing */
-	padding: .5em;
+	padding: .5em 1em;
 
 	/* styling */
 	color: white;
-	background-color: #f33;
+	background-color: #a33;
 	border-radius: 5px;
-	border: 1px solid #ccc;
 }
 
 /* spin-input */

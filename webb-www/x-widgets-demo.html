@@ -122,7 +122,14 @@ h2 {
 				</button>
 			</a>
 		</td>
-		<td class="main_td lb lp"><h3>#main</h3></td>
+		<td class="main_td lb lp">
+			<table width=100%>
+				<tr>
+					<td width=100%><h3>#main</h3></td>
+					<td><button id=lights_button>Lights</button></td>
+				</tr>
+			</table>
+		</td>
 		<td class="code_td lb">
 			<table width=100%>
 				<tr>
@@ -348,10 +355,7 @@ main.add(pages)
 <script>
 
 main.add(calendar())
-main.add(calendar({
-	classes: 'petrol',
-	value: now(),
-}))
+main.add(calendar({value: day(now(), 2)}))
 
 </script>
 </template>
@@ -615,7 +619,11 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 6
+demo_list.value = 7
+
+lights_button.on('click', function() {
+	document.body.class('petrol', !document.body.hasclass('petrol'))
+})
 
 </script>
 </body>

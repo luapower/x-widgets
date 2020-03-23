@@ -4,8 +4,20 @@
 .petrol {
 	color: white;
 	background-color: #2a303e;
-	box-shadow: 5px 5px 5px #999;
-	z-index: 1;
+}
+
+/* buttons */
+
+.petrol .x-button {
+	color: white;
+	background-color: #000;
+	background-image: none;
+}
+
+.petrol .x-button:hover {
+	background-color: #111;
+	background-image: none;
+	border-color: #000;
 }
 
 /* inputs */
@@ -16,10 +28,14 @@
 	background-color: #000;
 }
 
+.petrol .x-input-input.x-input-invalid {
+	background-color: #a33;
+}
+
 /* calendars */
 
 .petrol .x-calendar-day.selected { background-color: #000; }
-.petrol .x-calendar-day:hover    { background-color: #111; }
+.petrol .x-calendar-day:hover    { background-color: #0004; }
 
 /* pickers of dropdowns */
 
@@ -30,6 +46,32 @@
 
 /* listboxes */
 
+.petrol .x-listbox-item.selected {
+	background-color: #000;
+}
+
 .petrol .x-listbox-item:hover {
-	background-color: #111;
+	background-color: #0004;
+}
+
+/* page lists */
+
+.petrol .x-pagelist {
+	border-bottom-color: #5a606e;
+}
+
+.petrol .x-pagelist-item {
+	color: #aaa;
+}
+
+.petrol .x-pagelist-item:hover {
+	background-color: #0004;
+}
+
+.petrol .x-pagelist-item.selected {
+	color: white;
+}
+
+.petrol .x-pagelist-selection-bar {
+	background-color: #fff;
 }
