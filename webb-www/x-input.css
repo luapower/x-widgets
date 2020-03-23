@@ -31,6 +31,7 @@
 	height: 100%;            /* stretch vertically */
 	flex: auto;              /* stretch horizontally */
 	min-width: 0;            /* reset, let parent set this */
+	width: 100vw;
 }
 
 /* focus the outer div instead of the input */

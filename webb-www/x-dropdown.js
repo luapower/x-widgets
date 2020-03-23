@@ -1,5 +1,5 @@
 /*
-	Dropdown Widget.
+	Dropdown widget.
 	Written by Cosmin Apreutesei. Public Domain.
 
 	--
@@ -65,6 +65,7 @@ dropdown = component('x-dropdown', function(e) {
 
 	function value_picked() {
 		e.close()
+		e.fire('value_changed', e.picker.value) // input protocol
 		if (e.rowset) {
 			let err = e.rowset.set_value(e.value)
 			// TODO: show error
@@ -78,10 +79,12 @@ dropdown = component('x-dropdown', function(e) {
 			return e.hasclass('open')
 		},
 		function(open) {
+			if (e.isopen == open)
+				return
 			if (open) {
 				e.button.replace_class('fa-caret-down', 'fa-caret-up')
 				e.old_value = e.value
-				e.picker.class('x-dropdown-picker', true)
+				e.picker.class('picker', true)
 				e.picker.y = e.clientHeight
 				e.picker.x = -e.clientLeft
 				e.add(e.picker)
@@ -100,14 +103,14 @@ dropdown = component('x-dropdown', function(e) {
 	e.open   = function() { e.isopen = true }
 	e.close  = function() { e.isopen = false }
 	e.toggle = function() { e.isopen = !e.isopen }
-	e.cancel = function() { e.value = e.old_value }
+	e.cancel = function() { if (e.isopen) e.value = e.old_value }
 
 	// kb & mouse binding
 
 	function view_mousedown(ev) {
 		if (!e.picker.contains(ev.target)) {
 			e.toggle()
-			ev.preventDefault() // prevent focusing back this element.
+			return false // prevent focusing back this element.
 		}
 	}
 
@@ -137,7 +140,7 @@ dropdown = component('x-dropdown', function(e) {
 
 	function document_mousedown(ev) {
 		if (!e.contains(ev.target))
-			e.close()
+			e.cancel()
 	}
 
 })

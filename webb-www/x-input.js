@@ -1,5 +1,5 @@
 /*
-	Input-type widgets.
+	Input and spin-input widgets.
 	Written by Cosmin Apreutesei. Public Domain.
 
 */
@@ -18,18 +18,39 @@ input = component('x-input', function(e) {
 	e.input.on('blur', input_blur)
 	e.add(e.input, e.tooltip)
 
-	function get_value() {
-		return e.from_text(this.input.value)
+	function set_valid(err) {
+		e.invalid = err != true
+		e.input.class('x-input-invalid', e.invalid)
+		e.error = e.invalid && err || ''
+		e.tooltip.at[0].innerHTML = e.error
+		e.tooltip.style.display = e.error ? null : 'none'
 	}
 
-	function set_value(v) {
-		if (!e.validate(v))
-			return
-		v = e.to_text(v)
-		if (this.input.value === v)
-			return
-		this.input.value = v
-		this.input.fire('value_changed') // picker protocol
+	let value, value_set
+
+	e.init = function() {
+		if ('default_value' in e) {
+			value = e.default_value
+			value_set = true
+		}
+	}
+
+	function get_value() {
+		return value
+	}
+
+	function set_value(v, from_user_input) {
+		if (value_set && v === value) // event loop barrier
+			return true
+		let err = e.validate(v)
+		if (err != true) // invalid value spread barrier
+			return err
+		set_valid(true)
+		e.input.value = e.to_text(v)
+		value = v
+		value_set = true
+		e.fire('value_changed', v, from_user_input) // input protocol
+		return true
 	}
 
 	e.late_property('value', get_value, set_value)
@@ -37,15 +58,8 @@ input = component('x-input', function(e) {
 	// view
 
 	function input_input() {
-		let v = e.from_text(e.value)
-		let err = e.validate(v)
-		e.invalid = err != true
-		e.input.class('x-input-invalid', e.invalid)
-		e.error = e.invalid && err || ''
-		e.tooltip.at[0].innerHTML = e.error
-		e.tooltip.style.display = e.error ? null : 'none'
-		if (e.invalid)
-			return false
+		let v = e.from_text(e.input.value)
+		set_valid(set_value(v, true))
 	}
 
 	function input_focus() {
@@ -69,6 +83,8 @@ input = component('x-input', function(e) {
 	}
 
 })
+
+// spin_input ----------------------------------------------------------------
 
 spin_input = component('x-spin-input', input, function(e) {
 
@@ -133,16 +149,27 @@ spin_input = component('x-spin-input', input, function(e) {
 		return /^[\-]?\d*\.?\d*$/.test(v) // allow digits and '.' only
 	}
 
+	e.min_error  = function() { return 'Value must be at least {0}'.format(e.min) }
+	e.max_error  = function() { return 'Value must be at most {0}'.format(e.max) }
+	e.step_error = function() {
+		if (e.step == null) return true
+		if (e.step == 1) return 'Value must be an integer'
+		return 'Value must be multiple of {0}'.format(e.step)
+	}
+
 	e.validate = function(v) {
-		return v >= e.min && v <= e.max && v % e.step == 0
+		if (v < e.min) return e.min_error(v)
+		if (v > e.max) return e.max_error(v)
+		if (v % e.step != 0) return e.step_error(v)
+		return true
 	}
 
 	e.from_text = function(s) {
-		return Number(s)
+		return s !== '' ? Number(s) : null
 	}
 
 	e.to_text = function(x) {
-		return String(x)
+		return x != null ? String(x) : ''
 	}
 
 	let increment

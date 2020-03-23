@@ -1,5 +1,5 @@
 /*
-	Pagelist Widget.
+	Pagelist widget.
 	Written by Cosmin Apreutesei. Public Domain.
 
 	--

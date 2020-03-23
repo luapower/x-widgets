@@ -22,7 +22,7 @@
 
 body {
 	font-family: widget, sans-serif;
-	font-size: 12px;
+	font-size: 13px;
 	padding: 1em;
 }
 
@@ -326,7 +326,7 @@ main.add(H.div({style: 'line-height: 2'},
 	}),
 	', including dropdowns ',
 	dropdown({
-		classes: 'x-dropdown-nowrap',
+		classes: 'inline',
 		style: 'border: 0',
 		picker: calendar(),
 	}),
@@ -471,8 +471,13 @@ main.add(
 </help>
 <script>
 
-main.add(H.p({}, 'wrap-to-fit: ', dropdown({picker: calendar(), style: 'min-width: 10em'})))
-main.add(H.p({}, 'grow-to-fit: ', dropdown({picker: calendar(), classes: 'x-dropdown-nowrap'})))
+main.add(
+	dropdown({
+		picker: calendar({
+			value: now(),
+		})
+	})
+)
 
 </script>
 </template>
@@ -504,6 +509,50 @@ main.add(
 			}),
 		}),
 	})
+)
+
+</script>
+</template>
+
+
+<!--------------------------------------------------------------------------->
+
+<template id=demo_dropdown_modes>
+<help>
+
+</help>
+<script>
+
+function list() {
+	return listbox({
+		items: [
+			'Apples',
+			'Bananas',
+			'Something Else Entirely',
+		],
+	})
+}
+
+main.add(
+	H.div({}, 'default mode: variable-width, no-wrap with min-width aligned with other inputs'),
+	dropdown({picker: calendar({value: now()})}),
+	H.div(),
+	dropdown({picker: list()}),
+
+	H.div({}, 'inline mode: variable-width, no-wrap, with no min-width (shrink-wrapped)'),
+	dropdown({classes: 'inline', picker: calendar({value: now()})}),
+	H.div(),
+	dropdown({classes: 'inline', picker: list()}),
+
+	H.div({}, 'wrap mode: fixed-width, auto-wrap'),
+	dropdown({classes: 'wrap', picker: calendar({value: now()})}),
+	H.div(),
+	dropdown({classes: 'wrap', picker: list()}),
+
+	H.div({}, 'fixed mode: fixed-width, no-wrap, overflow hidden'),
+	dropdown({classes: 'fixed', picker: calendar({value: now()})}),
+	H.div(),
+	dropdown({classes: 'fixed', picker: list()})
 )
 
 </script>

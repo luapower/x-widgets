@@ -15,7 +15,7 @@
 	z-index: 1;
 }
 
-.x-calendar.popup input {
+.x-calendar.popup .x-input {
 	background-color: inherit;
 	color: inherit;
 }

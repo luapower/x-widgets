@@ -1,5 +1,5 @@
 /*
-	Calendar Widget.
+	Calendar widget.
 	Written by Cosmin Apreutesei. Public Domain.
 
 */
@@ -27,12 +27,13 @@ calendar = component('x-calendar', function(e) {
 		}),
 	})
 	e.sel_year = spin_input({
-			classes: 'x-calendar-sel-year',
-			validate: validate_year,
-			button_style: 'left-right',
+		classes: 'x-calendar-sel-year',
+		min: 1000,
+		max: 3000,
+		button_style: 'left-right',
 	})
-	e.sel_month.on('value_picked', month_changed)
-	e.sel_year.input.on('input', year_changed)
+	e.sel_month.on('value_changed', month_changed)
+	e.sel_year.on('value_changed', year_changed)
 	e.header = H.div({class: 'x-calendar-header'},
 		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
 	e.weekview = H.table({class: 'x-calendar-weekview', tabindex: 0})
@@ -43,9 +44,11 @@ calendar = component('x-calendar', function(e) {
 	// model
 
 	let value = day(0)
-	e.late_property('value', function() {
+	e.late_property('value',
+		function() {
 			return value
-	}, function(t) {
+		},
+		function(t) {
 			t = day(t)
 			if (t != t) // NaN
 				return
@@ -54,14 +57,10 @@ calendar = component('x-calendar', function(e) {
 			value = t
 			this.fire('value_changed', t) // dropdown protocol
 			update_view()
-	})
+		}
+	)
 
 	// view
-
-	function validate_year(v) {
-		let y = Number(v)
-		return y >= 1970 && y <= 2200 || 'Year must be between 1970 and 2200'
-	}
 
 	function update_view() {
 		let t = e.value
@@ -72,7 +71,7 @@ calendar = component('x-calendar', function(e) {
 		let day_suffixes = ['', 'st', 'nd', 'rd']
 		e.sel_day_suffix.innerHTML = locale.starts('en') ?
 			(n < 11 || n > 13) && day_suffixes[n % 10] || 'th' : ''
-		e.sel_month.value = month_name(t, 'long')
+		e.sel_month.value = month_of(t)
 		e.sel_year.value = y
 	}
 

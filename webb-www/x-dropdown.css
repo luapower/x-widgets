@@ -10,15 +10,34 @@
 
 	/* styling */
 	cursor: default;
+
+	/* default mode: variable-width, no-wrap but with .x-input's min-width applied */
+	width: auto;             /* shrink-wrap */
+	white-space: nowrap;
 }
 
-/* use the inline class for inline variable-width dropdowns. */
-.x-dropdown-nowrap {
-	width: auto;             /* shrink-wrap */
-	min-width: 0;            /* reset from x-input */
+/* inline mode: variable-width, no-wrap with no min-width */
+.x-dropdown.inline {
+	min-width: 0;            /* reset from x-input's min-width */
 }
-.x-dropdown-nowrap .x-dropdown-value {
+.x-dropdown.inline .x-dropdown-value {
+}
+
+/* wrap mode: fixed-width, auto-wrap */
+.x-dropdown.wrap {
+	width: 0;                /* fixed width, constrained by x-input's min-width */
+}
+.x-dropdown.wrap .x-dropdown-value {
+	white-space: normal;
+}
+
+/* fixed mode: fixed-width, no-wrap, hide-overflow */
+.x-dropdown.fixed {
+	width: 0;                /* fixed width, constrained by x-input's min-width */
+}
+.x-dropdown.fixed .x-dropdown-value {
 	white-space: nowrap;
+	overflow: hidden;
 }
 
 /* show as focused when the picker is focused */
@@ -46,7 +65,7 @@
 	border-left-width: 1px;
 }
 
-.x-dropdown-picker {
+.x-dropdown .picker {
 	box-sizing: border-box;
 	position: absolute;
 	border: 1px solid #999;
