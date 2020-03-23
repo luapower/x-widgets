@@ -43,3 +43,9 @@
 .x-listbox:focus .x-listbox-item.selected {
 	background-color: #47a;
 }
+
+.x-listbox.picker {
+	max-height: 300px;
+	overflow: auto;
+	min-width: 100%;
+}

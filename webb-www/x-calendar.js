@@ -6,7 +6,7 @@
 
 function month_names() {
 	let a = []
-	for (let i = 0; i < 11; i++)
+	for (let i = 0; i <= 11; i++)
 		a.push(month_name(utctime(0, i), 'short'))
 	return a
 }

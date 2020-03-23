@@ -36,6 +36,7 @@ grid = component('x-grid', function(e) {
 	e.prevent_exit_edit = false // prevent exiting edit mode on validation errors
 	e.prevent_exit_row = true   // prevent changing row on validation errors
 
+	e.class('x-widget')
 	e.class('x-grid')
 	e.attrval('tabindex', 0)
 

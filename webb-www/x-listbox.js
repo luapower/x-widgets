@@ -38,6 +38,11 @@ listbox = component('x-listbox', function(e) {
 
 	// controller
 
+	e.attach = function() {
+		if (e.selected_item)
+			e.selected_item.make_visible()
+	}
+
 	e.on('keydown', list_keydown)
 
 	function select_item_by_index(i, pick, from_user_input) {
@@ -52,8 +57,10 @@ listbox = component('x-listbox', function(e) {
 	function select_item(item_div, pick, from_user_input) {
 		if (e.selected_item)
 			e.selected_item.class('selected', false)
-		if (item_div)
+		if (item_div) {
 			item_div.class('selected')
+			item_div.make_visible()
+		}
 		e.selected_item = item_div
 		e.fire('selected', item_div ? item_div.item : null)
 		e.fire('value_changed', item_div ? item_div.index : null, from_user_input)

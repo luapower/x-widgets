@@ -53,9 +53,6 @@ h2 {
 .lb { border-left: 1px solid #ccc; }
 .lp { padding-left: 20px; }
 
-.petrol #layout { border-color: #333; }
-.petrol .lb { border-color: #333; }
-
 #code_td {
 	position: relative;
 }
@@ -84,6 +81,8 @@ h2 {
 #demo_list:focus {
 	outline: none;
 }
+
+.petrol #layout, .petrol #code, .petrol .lb { border-color: #333; }
 
 </style>
 
@@ -417,6 +416,13 @@ main.add(g1, g2)
 </help>
 <script>
 
+function lots_of_items() {
+	let a = []
+	for (let i = 1; i <= 1000; i++)
+		a.push('Record '+i)
+	return a
+}
+
 main.add(
 	dropdown({
 		picker: listbox({
@@ -428,7 +434,12 @@ main.add(
 			selected_index: 1,
 			style: 'display: inline-flex',
 		}),
-	})
+	}),
+	dropdown({
+		picker: listbox({
+			items: lots_of_items(),
+		}),
+	}),
 )
 
 </script>
@@ -625,7 +636,9 @@ demo_list_ct.add(demo_list)
 demo_list.value = 7
 
 lights_button.on('click', function() {
-	document.body.class('petrol', !document.body.hasclass('petrol'))
+	let dark = !document.body.hasclass('petrol')
+	document.body.class('petrol', dark)
+	ace_editor.setTheme(dark ? 'ace/theme/tomorrow_night' : null)
 })
 
 </script>

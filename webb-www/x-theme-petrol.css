@@ -3,8 +3,12 @@
 
 .petrol {
 	color: white;
-	background-color: #181818;
+	background-color: #1f1f22;
 }
+
+.petrol .x-widget ::-webkit-scrollbar-track  { background-color: #222; }
+.petrol .x-widget ::-webkit-scrollbar-thumb  { background-color: #444; border-color: #222; }
+.petrol .x-widget ::-webkit-scrollbar-corner { background-color: #00000000; }
 
 /* buttons */
 
