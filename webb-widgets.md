@@ -24,7 +24,7 @@ a few more ads.
 ## Browser Compatibility
 
 This will probably only work on desktop Firefox and Chrome/Edge for the
-forseable future. Something might be done for Safari and maybe mobile
+forseeable future. Something might be done for Safari and maybe mobile
 Chrome and Firefox too. Anything else is out.
 
 ## Loading
