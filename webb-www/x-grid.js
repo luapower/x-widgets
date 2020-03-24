@@ -4,18 +4,6 @@
 
 */
 
-// box scroll-to-view box. from box2d.lua.
-function scroll_to_view_rect(x, y, w, h, pw, ph, sx, sy) {
-	let min_sx = -x
-	let min_sy = -y
-	let max_sx = -(x + w - pw)
-	let max_sy = -(y + h - ph)
-	return [
-		min(max(sx, min_sx), max_sx),
-		min(max(sy, min_sy), max_sy)
-	]
-}
-
 // sign() that only returns only -1 or 1, never 0, and returns -1 for -0.
 function strict_sign(x) {
 	return 1/x == 1/-0 ? -1 : (x >= 0 ? 1 : -1)
@@ -45,6 +33,7 @@ grid = component('x-grid', function(e) {
 	e.init = function() {
 		create_fields()
 		create_rows()
+		update_header_table()
 	}
 
 	// model ------------------------------------------------------------------
@@ -54,11 +43,11 @@ grid = component('x-grid', function(e) {
 		e.fields = []
 		if (e.cols) {
 			for (let fi of e.cols)
-				if (!e.rowset.fields[fi].hidden)
+				if (e.rowset.fields[fi].visible != false)
 					e.fields.push(e.rowset.fields[fi])
 		} else {
 			for (let field of e.rowset.fields)
-				if (!field.hidden)
+				if (field.visible != false)
 					e.fields.push(field)
 		}
 		if (e.dropdown_col)
@@ -100,21 +89,11 @@ grid = component('x-grid', function(e) {
 			return
 		let view = e.rows_view_div
 		let th = fi != null && e.header_tr.at[fi]
-
 		let h = e.row_h
 		let y = h * ri
 		let x = th ? th.offsetLeft  : 0
 		let w = th ? th.clientWidth : 0
-
-		let pw = view.clientWidth
-		let ph = view.clientHeight
-
-		let sx0 = view.scrollLeft
-		let sy0 = view.scrollTop
-
-		let [sx, sy] = scroll_to_view_rect(x, y, w, h, pw, ph, -sx0, -sy0)
-
-		view.scroll(-sx, -sy)
+		view.scroll_to_view_rect(x, y, w, h)
 	}
 
 	function first_visible_row(sy) {
@@ -161,8 +140,10 @@ grid = component('x-grid', function(e) {
 		e.add(e.header_table, e.rows_view_div)
 
 		e.on('mousemove', view_mousemove)
-		e.on('focusin', view_focusin)
-		e.on('blur', view_blur)
+		e.on('focusin'  , view_focusin)
+		e.on('blur'     , view_blur)
+		e.on('keydown'  , view_keydown)
+		e.on('keypress' , view_keypress)
 
 		e.rows_view_div.on('scroll', update_view)
 	}
@@ -172,7 +153,7 @@ grid = component('x-grid', function(e) {
 		e.header_table.clear()
 		for (let field of e.fields) {
 
-			let sort_icon  = H.div({class: 'fa grid-sort-icon'})
+			let sort_icon  = H.div({class: 'fa x-grid-sort-icon'})
 			let e1 = H.td({class: 'x-grid-header-title-td'}, field.name)
 			let e2 = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon)
 			if (field.align == 'right')
@@ -265,13 +246,9 @@ grid = component('x-grid', function(e) {
 		for (let th of e.header_tr.children) {
 			let dir = e.order_by_dir(th.field)
 			let sort_icon = th.sort_icon
-			sort_icon.class('fa-sort', false)
-			sort_icon.class('fa-angle-up', false)
-			sort_icon.class('fa-angle-down', false)
-			sort_icon.class(
-				   dir == 'asc'  && 'fa-angle-up'
-				|| dir == 'desc' && 'fa-angle-down'
-			   || 'fa-sort', true)
+			sort_icon.class('fa-sort'      , false)
+			sort_icon.class('fa-angle-up'  , dir == 'asc')
+			sort_icon.class('fa-angle-down', dir == 'desc')
 		}
 	}
 
@@ -355,11 +332,9 @@ grid = component('x-grid', function(e) {
 	}
 
 	function hook_unhook_events(on) {
-		document.onoff('keydown'  , keydown  , on)
-		document.onoff('keypress' , keypress , on)
-		document.onoff('mousedown', mousedown, on)
-		document.onoff('mouseup'  , mouseup  , on)
-		document.onoff('mousemove', mousemove, on)
+		document.onoff('mousedown', document_mousedown, on)
+		document.onoff('mouseup'  , document_mouseup  , on)
+		document.onoff('mousemove', document_mousemove, on)
 		e.rowset.onoff('reload'       , reload       , on)
 		e.rowset.onoff('value_changed', value_changed, on)
 		e.rowset.onoff('row_added'    , row_added    , on)
@@ -367,7 +342,6 @@ grid = component('x-grid', function(e) {
 	}
 
 	e.attach = function(parent) {
-		update_header_table()
 		update_heights()
 		update_rows_table()
 		update_view()
@@ -383,26 +357,26 @@ grid = component('x-grid', function(e) {
 
 	let hit_th, hit_x
 
-	function mousedown() {
+	function document_mousedown() {
 		if (window.grid_col_resizing || !hit_th)
 			return
-		focus()
+		e.focus()
 		window.grid_col_resizing = true
 		e.class('col-resizing')
 		return false
 	}
 
-	function mouseup() {
+	function document_mouseup() {
 		window.grid_col_resizing = false
 		e.class('col-resizing', false)
 	}
 
-	function view_mousemove() {
+	function view_mousemove(mx, my) {
 		if (window.grid_col_resizing)
 			return
 		hit_th = null
-		for (th of e.header_tr.children) {
-			hit_x = e.clientX - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
+		for (let th of e.header_tr.children) {
+			hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
 			if (hit_x >= -5 && hit_x <= 5) {
 				hit_th = th
 				break
@@ -411,11 +385,11 @@ grid = component('x-grid', function(e) {
 		e.class('col-resize', hit_th != null)
 	}
 
-	function mousemove() {
+	function document_mousemove(mx, my) {
 		if (!e.hasclass('col-resizing'))
 			return
 		let field = e.fields[hit_th.index]
-		let w = e.clientX - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
+		let w = mx - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
 		let min_w = max(20, field.min_w || 0)
 		let max_w = max(min_w, field.max_w || 1000)
 		hit_th.w = clamp(w, min_w, max_w)
@@ -425,11 +399,6 @@ grid = component('x-grid', function(e) {
 	}
 
 	// focusing ---------------------------------------------------------------
-
-	function is_focused() {
-		let e = document.activeElement
-		return e == e.view || e == e.input
-	}
 
 	function view_focusin() {
 		e.class('focused')
@@ -622,6 +591,9 @@ grid = component('x-grid', function(e) {
 
 	e.enter_edit = function(where) {
 		if (e.input)
+			return
+		let [row, field] = row_field_at(e.focused_cell)
+		if (field, field.editable == false)
 			return
 		create_input()
 		if (where == 'right')
@@ -833,6 +805,7 @@ grid = component('x-grid', function(e) {
 	function cell_mousedown() {
 		if (e.hasclass('col-resize'))
 			return
+		e.focus()
 		let ri = this.parent.row_index
 		let fi = this.field_index
 		if (e.focused_cell[0] == ri && e.focused_cell[1] == fi) {
@@ -844,10 +817,7 @@ grid = component('x-grid', function(e) {
 
 	// key bindings -----------------------------------------------------------
 
-	function keydown(key, shift) {
-
-		if (!is_focused())
-			return
+	function view_keydown(key, shift) {
 
 		// Arrows: horizontal navigation.
 		if (key == 'ArrowLeft' || key == 'ArrowRight') {
@@ -949,6 +919,7 @@ grid = component('x-grid', function(e) {
 		// Esc: revert cell edits or row edits.
 		if (key == 'Escape') {
 			e.exit_edit()
+			e.focus()
 			return false
 		}
 
@@ -967,7 +938,7 @@ grid = component('x-grid', function(e) {
 	}
 
 	// printable characters: enter quick edit mode
-	function keypress() {
+	function view_keypress() {
 		if (!e.input) {
 			e.enter_edit(true)
 			return false
@@ -976,7 +947,7 @@ grid = component('x-grid', function(e) {
 
 	// sorting ----------------------------------------------------------------
 
-	let order_by_dir
+	let order_by_dir = new Map()
 
 	e.late_property('order_by',
 		function() {

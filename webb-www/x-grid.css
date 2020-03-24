@@ -1,17 +1,13 @@
 
 .x-grid {
 	display: inline-block;     /* required: don't expand to fit parent width */
-	overflow: hidden;          /* required: hide header trail */
-}
-
-.x-grid:focus {
-	outline: none;
+	overflow: hidden;          /* required: hide header overflow */
+	cursor: default;           /* required: don't show caret over text */
 }
 
 .x-grid, .x-grid * {
-	box-sizing: border-box;    /* required: borders don't affect width */
-	padding: 0px;              /* required */
-	margin: 0px;               /* required */
+	padding: 0;                /* required */
+	margin : 0;                /* required */
 }
 
 .x-grid-header-table, .x-grid-rows-table {
@@ -32,6 +28,13 @@
 	width: 10px;               /* required: leave the rest of the space to the title */
 }
 
+.x-grid-header-th {           /* default: header column style */
+	height: 2.5em;
+	vertical-align: bottom;
+	padding-bottom: .3em;
+	border-bottom: 1px solid #999;
+}
+
 .x-grid-rows-view-div {
 	overflow: auto;            /* required: show scrollbars as needed */
 }
@@ -39,20 +42,14 @@
 .x-grid-rows-view-div {
 	position: relative;        /* required: anchor rows-div */
 }
+
 .x-grid-rows-div {
 	position: absolute;        /* required: keep at y=0 while scrolling */
 	overflow: hidden;          /* required: hide surplus bottom rows */
 }
-.x-grid-header-th {             /* default: header column style */
-	height: 2.5em;
-	vertical-align: bottom;
-	padding-bottom: .3em;
-	border-bottom: 1px solid #999;
-}
 
-.x-grid {
-	cursor: default;           /* required: don't show caret over text */
-}
+/* col resizing ------------------------------------------------------------*/
+
 .x-grid.col-resize {
 	cursor: ew-resize;         /* default: column resizing cursor */
 }
@@ -79,13 +76,17 @@
 
 /* cell & row states ------------------------------------------------------ */
 
+.x-grid:focus {
+	outline: none;
+}
+
 .x-grid-td.not-focusable              { color: #bbb; }
 .x-grid-td.read-only                  { color: #999; }
 .x-grid-tr:hover                      { background-color: #efefef; }
 .x-grid-td.focused                    { background-color: #666; color: white; }
 .x-grid-tr.focused                    { background-color: #333; color: white; }
-.x-grid.focused .x-grid-tr.focused    { background-color: #246; color: white; }
-.x-grid.focused .x-grid-td.focused    { background-color: #47a; }
+.x-grid:focus-within .x-grid-tr.focused    { background-color: #246; color: white; }
+.x-grid:focus-within .x-grid-td.focused    { background-color: #47a; }
 .x-grid-tr.new                        { background-color: #eef; }
 .x-grid-tr.new.focused                { background-color: #dde; }
 .x-grid-td.modified                   { background-color: #ddffdd; }

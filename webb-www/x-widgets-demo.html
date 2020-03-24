@@ -372,38 +372,36 @@ main.add(calendar({value: day(now(), 2)}))
 
 var data = {
 	fields: [
-		{name: 'id', type: 'number', align: 'right', editable: false, w: 50, min_w: 30},
-		{name: 'name', w: 100, min_w: 100, max_w: 200},
-		{name: 'parent_id', type: 'number', w: 100, min_w: 50,
-			allow_null: true, editable: false, focusable: false},
-		{name: 'comment', w: 200, allow_null: true},
+		{name: 'id'        , w:  60, min_w:  30, type: 'number', align: 'right', editable: false},
+		{name: 'name'      , w: 100, min_w: 100, max_w: 200},
+		{name: 'parent_id' , w:  60, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: false},
+		{name: 'comment'   , w: 200, allow_null: true},
 	],
 	rows: [],
 }
 
-for (var i = 0; i < 20; i++) {
-	data.rows.push({focusable: i % 2 == 0, values: [i, 'record '+i, floor((random() * i))]})
+for (var i = 1; i <= 5e5; i++) {
+	let id        = i
+	let name      = 'record '+i
+	let parent_id = floor((random() * i))
+	let comment   = random()
+	data.rows.push({
+		//focusable: i % 2 == 0,
+		values: [id, name, parent]
+	})
 }
 
-var d = rowset(data)
+d = rowset(data)
 
-var g1 = grid({
+main.add(grid({
 	rowset: d,
+	w: 500,
 	h: 200,
-	row_border_h: 1,
-	row_h: 24,
+	//row_border_h: 1,
+	//row_h: 24,
 	//row_border_h: 30,
 	//order_by: 'parent_id, name desc',
-})
-
-var g2 = grid({
-	rowset: d,
-	h: 300,
-	row_h: 30,
-	//order_by: 'parent_id, name desc',
-})
-
-main.add(g1, g2)
+}))
 
 </script>
 </template>
