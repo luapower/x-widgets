@@ -33,5 +33,9 @@ button = component('x-button', HTMLButtonElement, 'button', function(e) {
 
 	e.css_property('primary')
 
+	e.detach = function() {
+		e.fire('detach') // for auto-closing attached popup menus.
+	}
+
 })
 

@@ -68,31 +68,15 @@
 }
 
 .x-grid-td {
-	border-bottom: 0px solid #ccc;
+	border-bottom: 0px solid #eee;
 	cursor: parent;           /* required: show cursor as set by parent */
 }
-
-.x-grid-sort-icon.fa-sort { color: #ccc; }
 
 /* cell & row states ------------------------------------------------------ */
 
 .x-grid:focus {
 	outline: none;
 }
-
-.x-grid-td.not-focusable              { color: #bbb; }
-.x-grid-td.read-only                  { color: #999; }
-.x-grid-tr:hover                      { background-color: #efefef; }
-.x-grid-td.focused                    { background-color: #666; color: white; }
-.x-grid-tr.focused                    { background-color: #333; color: white; }
-.x-grid:focus-within .x-grid-tr.focused    { background-color: #246; color: white; }
-.x-grid:focus-within .x-grid-td.focused    { background-color: #47a; }
-.x-grid-tr.new                        { background-color: #eef; }
-.x-grid-tr.new.focused                { background-color: #dde; }
-.x-grid-td.modified                   { background-color: #ddffdd; }
-.x-grid-tr.focused .x-grid-td.modified  { background-color: #cceecc; }
-.x-grid-td.invalid                    { background-color: #ffcccc; }
-.x-grid-tr.focused .x-grid-td.invalid   { background-color: #eebbbb; }
 
 /* editing ---------------------------------------------------------------- */
 
@@ -107,14 +91,26 @@
 	font-family: inherit;
 	cursor: initial;
 	color: inherit;
-	background: parent;
+	background: #fff;
 	outline: 0;
 	box-shadow: inset 2px 2px 6px -2px rgba(0,0,0,0.75);
 }
 
 /* scrollbars ------------------------------------------------------------- */
 
-.x-grid ::-webkit-scrollbar {
+.x-grid-rows-view-div::-webkit-scrollbar {
 	width  : 8px;
 	height : 8px;
+}
+
+.x-grid-rows-view-div {
+  scrollbar-width: thin;
+}
+
+/* picker ----------------------------------------------------------------- */
+
+.x-grid.picker {
+	min-height: 100px;
+	max-height: 300px;
+	min-width: 100%;
 }

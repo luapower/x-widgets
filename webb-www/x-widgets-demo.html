@@ -22,7 +22,7 @@
 
 body {
 	font-family: widget, sans-serif;
-	font-size: 13px;
+	font-size: 12px;
 	padding: 1em;
 }
 
@@ -374,20 +374,20 @@ var data = {
 	fields: [
 		{name: 'id'        , w:  60, min_w:  30, type: 'number', align: 'right', editable: false},
 		{name: 'name'      , w: 100, min_w: 100, max_w: 200},
-		{name: 'parent_id' , w:  60, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: false},
-		{name: 'comment'   , w: 200, allow_null: true},
+		{name: 'parent_id' , w:  60, min_w:  50, type: 'number', align: 'right', allow_null: true, editable: false, focusable: false},
+		{name: 'random_num', w: 200, allow_null: true, type: 'number'},
 	],
 	rows: [],
 }
 
-for (var i = 1; i <= 5e5; i++) {
-	let id        = i
-	let name      = 'record '+i
-	let parent_id = floor((random() * i))
-	let comment   = random()
+for (var i = 1; i <= 1e5; i++) {
+	let id         = i
+	let name       = 'record '+i
+	let parent_id  = floor((random() * i))
+	let random_num = random()
 	data.rows.push({
-		//focusable: i % 2 == 0,
-		values: [id, name, parent]
+		focusable: i % 10 >= 2,
+		values: [id, name, parent_id, random_num]
 	})
 }
 
@@ -396,10 +396,10 @@ d = rowset(data)
 main.add(grid({
 	rowset: d,
 	w: 500,
-	h: 200,
+	//h: 200,
 	//row_border_h: 1,
-	//row_h: 24,
-	//row_border_h: 30,
+	//row_h: 50,
+	row_border_h: 1,
 	//order_by: 'parent_id, name desc',
 }))
 
@@ -470,24 +470,30 @@ main.add(
 </help>
 <script>
 
+r = rowset({
+	fields: [
+		{w:  50, name: 'id', type: 'number', visible: false},
+		{w: 150, name: 'name'},
+		{w: 150, name: 'date', type: 'date'},
+	],
+	rows: [
+		{values: [1, 'Hey Dude', day(now())]},
+		{values: [2, 'Wasup'   , month(now())]},
+		{values: [3, 'Nuthin'  , year(now())]},
+	],
+})
+
+g = grid({
+	w: 310,
+	dropdown_value_col: 'id',
+	dropdown_display_col: 'name',
+	rowset: r,
+})
+
 main.add(
 	dropdown({
-		value: 'hello hello',
-		picker: grid({
-			dropdown_field: 'name',
-			rowset: rowset({
-				fields: [
-					{name: 'id', type: 'number'},
-					{name: 'name'},
-					{name: 'date', type: 'date'},
-				],
-				rows: [
-					{values: [1, 'Hey Dude', now()    ]},
-					{values: [2, 'Wasup', utctime()]},
-					{values: [3, '', 0]},
-				],
-			}),
-		}),
+		value: 2,
+		picker: g,
 	})
 )
 

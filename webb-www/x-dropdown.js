@@ -105,6 +105,7 @@ dropdown = component('x-dropdown', function(e) {
 	e.cancel = function() {
 		if (!e.isopen) return
 		e.value = e.cancel_value
+		e.close()
 	}
 
 	// picker protocol
@@ -135,7 +136,7 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	function view_keydown(key) {
-		if (key == 'Enter') {
+		if (key == 'Enter' || key == ' ') {
 			e.toggle()
 			e.focus()
 			return false

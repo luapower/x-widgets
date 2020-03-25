@@ -55,6 +55,7 @@ menu = component('x-menu', function(e) {
 			e.close()
 		}
 		document.on('mousedown', table.document_mousedown)
+		pe.on('detach', e.close)
 		return table
 	}
 

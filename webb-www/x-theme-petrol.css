@@ -1,16 +1,34 @@
 
-/* petrol dark theme ------------------------------------------------------ */
+/* petrol dark theme for x-widgets ---------------------------------------- */
 
 .petrol {
 	color: white;
 	background-color: #1f1f22;
 }
 
-.petrol .x-widget ::-webkit-scrollbar-track  { background-color: #222; }
-.petrol .x-widget ::-webkit-scrollbar-thumb  { background-color: #444; border-color: #222; }
-.petrol .x-widget ::-webkit-scrollbar-corner { background-color: #00000000; }
+/* focusable item shades -------------------------------------------------- */
 
-/* buttons */
+/* TODO:
+.petrol                             .x-focusable-item.focused            { color: #fff; }
+.petrol                             .x-focusable-item.read-only.focused  { color: #ccc; }
+.petrol .x-focusable-item.focused > .x-focusable-item.read-only          { color: #ccc; }
+.petrol .x-focusable-item.focused > .x-focusable-item.read-only.focused  { color: #fff; }
+
+.petrol                             .x-focusable-item.focused       { background-color: #333; }
+.petrol                             .x-focusable-item.focused:hover { background-color: #444; }
+.petrol .x-focusable-item         > .x-focusable-item:hover         { background-color: #11111188; }
+.petrol .x-focusable-item.focused > .x-focusable-item:hover         { background-color: #555; }
+.petrol .x-focusable-item.focused > .x-focusable-item.focused       { background-color: #666; }
+.petrol .x-focusable-item.focused > .x-focusable-item.focused:hover { background-color: #777; }
+.petrol
+.petrol .x-focusable:focus                             .x-focusable-item.focused       { background-color: #47a; }
+.petrol .x-focusable:focus                             .x-focusable-item.focused:hover { background-color: #58b; }
+.petrol .x-focusable:focus .x-focusable-item.focused > .x-focusable-item:hover         { background-color: #69c; }
+.petrol .x-focusable:focus .x-focusable-item.focused > .x-focusable-item.focused       { background-color: #7ad; }
+.petrol .x-focusable:focus .x-focusable-item.focused > .x-focusable-item.focused:hover { background-color: #8be; }
+*/
+
+/* button ----------------------------------------------------------------- */
 
 .petrol .x-button:not(.primary) {
 	color: white;
@@ -24,7 +42,7 @@
 	border-color: #000;
 }
 
-/* inputs & dropdown */
+/* inputs & dropdown ------------------------------------------------------ */
 
 .petrol .x-input {
 	border-color: #444;
@@ -50,19 +68,19 @@
 	background-color: #a33;
 }
 
-/* calendars */
+/* calendar --------------------------------------------------------------- */
 
 .petrol .x-calendar-day.selected { background-color: #000; }
 .petrol .x-calendar-day:hover    { background-color: #0004; }
 
-/* pickers of dropdowns */
+/* pickers of dropdowns --------------------------------------------------- */
 
 .petrol .x-dropdown .picker {
 	border: 1px solid #222;
 	box-shadow: 5px 5px 5px #000;
 }
 
-/* listboxes */
+/* listbox ---------------------------------------------------------------- */
 
 .petrol .x-listbox-item.selected {
 	background-color: #666;
@@ -72,24 +90,33 @@
 	background-color: #0004;
 }
 
-/* page lists */
+/* page list -------------------------------------------------------------- */
 
-.petrol .x-pagelist {
-	border-bottom-color: #5a606e;
-}
+.petrol .x-pagelist               { border-bottom-color: #5a606e; }
+.petrol .x-pagelist-item          { color: #aaa; }
+.petrol .x-pagelist-item:hover    { background-color: #0004; }
+.petrol .x-pagelist-item.selected { color: white; }
+.petrol .x-pagelist-selection-bar { background-color: #fff; }
 
-.petrol .x-pagelist-item {
-	color: #aaa;
-}
+/* grid ------------------------------------------------------------------- */
 
-.petrol .x-pagelist-item:hover {
-	background-color: #0004;
-}
+.petrol .x-grid-header-th { border-bottom-color: #666; }
+.petrol .x-grid-td        { border-bottom-color: #333; }
 
-.petrol .x-pagelist-item.selected {
-	color: white;
-}
+//.petrol .x-grid-tr:hover                        { background-color: #0004; }
 
-.petrol .x-pagelist-selection-bar {
-	background-color: #fff;
-}
+/* TODO:
+.petrol .x-grid-tr.new                          { background-color: #eef; }
+.petrol .x-grid-tr.new.focused                  { background-color: #dde; }
+.petrol .x-grid-td.modified                     { background-color: #ddffdd; }
+.petrol .x-grid-tr.focused .x-grid-td.modified  { background-color: #cceecc; }
+.petrol .x-grid-td.invalid                      { background-color: #ffcccc; }
+.petrol .x-grid-tr.focused .x-grid-td.invalid   { background-color: #eebbbb; }
+*/
+
+/* scrollbars ------------------------------------------------------------- */
+
+.petrol .x-widget ::-webkit-scrollbar-track  { background-color: #222; }
+.petrol .x-widget ::-webkit-scrollbar-thumb  { background-color: #444; border-color: #222; }
+.petrol .x-widget ::-webkit-scrollbar-corner { background-color: #00000000; }
+

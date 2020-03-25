@@ -158,7 +158,7 @@ let rowset = function(...options) {
 			&& (field == null || (field.editable != false && !field.get_value))
 	}
 
-	d.can_be_focused = function(row, field, for_editing) {
+	d.can_focus_cell = function(row, field, for_editing) {
 		return row.focusable != false
 			&& (field == null || field.focusable != false)
 			&& (!for_editing || d.can_change_value(row, field))

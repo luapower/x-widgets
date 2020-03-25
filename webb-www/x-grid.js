@@ -12,8 +12,19 @@ function strict_sign(x) {
 grid = component('x-grid', function(e) {
 
 	// geometry
+	e.w = 400
+	e.h = 400
 	e.row_h = 24
-	e.row_border_h = 0
+	e.row_border_h = 1
+	e.min_col_w = 20
+
+	// editing features
+	e.can_focus_cells = true
+	e.can_edit = true
+	e.can_add_rows = true
+	e.can_remove_rows = true
+	e.can_change_rows = true
+
 	// keyboard behavior
 	e.auto_advance = 'next_row' // advance on enter = false|'next_row'|'next_cell'
 	e.auto_advance_row = true   // jump row on horiz. navigation limits
@@ -26,6 +37,7 @@ grid = component('x-grid', function(e) {
 
 	e.class('x-widget')
 	e.class('x-grid')
+	e.class('x-focusable')
 	e.attrval('tabindex', 0)
 
 	create_view()
@@ -38,7 +50,7 @@ grid = component('x-grid', function(e) {
 
 	// model ------------------------------------------------------------------
 
-	// when: cols changed, dataset fields changed.
+	// when: cols changed, rowset fields changed.
 	function create_fields() {
 		e.fields = []
 		if (e.cols) {
@@ -50,20 +62,37 @@ grid = component('x-grid', function(e) {
 				if (field.visible != false)
 					e.fields.push(field)
 		}
-		if (e.dropdown_col)
-			e.dropdown_field = e.rowset.field(e.dropdown_col)
+		if (e.dropdown_value_col)
+			e.dropdown_value_field = e.rowset.field(e.dropdown_value_col)
+		if (e.dropdown_display_col)
+			e.dropdown_display_field = e.rowset.field(e.dropdown_display_col)
+		else
+			e.dropdown_display_field = e.dropdown_value_field
+	}
+
+	function field_w(field) {
+		return max(e.min_col_w, field.w || 0)
 	}
 
 	function create_row(row) {
 		return {row: row}
 	}
 
-	// when: entire dataset changed.
+	// NOTE: we load only the first 500K rows because of scrollbox
+	// implementation limitations of browser rendering engines:
+	// Chrome shows drawing artefacts over ~1.3mil rows at standard row height.
+	// Firefox resets the scrollbar over ~700K rows at standard row height.
+	// A custom scrollbar implementation is needed for rendering larger rowsets.
+
+	// when: entire rowset changed.
 	function create_rows() {
 		e.rows = []
-		for (let row of e.rowset.rows)
+		let rows = e.rowset.rows
+		for (let i = 0; i < min(5e5, rows.length); i++) {
+			let row = rows[i]
 			if (!row.removed)
 				e.rows.push(create_row(row))
+		}
 	}
 
 	function row_index(row) {
@@ -75,6 +104,22 @@ grid = component('x-grid', function(e) {
 	function row_field_at(cell) {
 		let [ri, fi] = cell
 		return [ri != null ? e.rows[ri] : null, fi != null ? e.fields[fi] : null]
+	}
+
+	function can_change_value(row, field) {
+		return e.can_edit && e.can_change_rows
+			&& e.rowset.can_change_value(row.row, field)
+	}
+
+	function can_focus_cell(row, field) {
+		return (field == null || e.can_focus_cells)
+			&& e.rowset.can_focus_cell(row.row, field)
+	}
+
+	function find_row(field, v) {
+		for (let ri = 0; ri < e.rows.length; ri++)
+			if (e.rows[ri].row.values[field.index] == v)
+				return ri
 	}
 
 	// rendering / geometry ---------------------------------------------------
@@ -150,6 +195,7 @@ grid = component('x-grid', function(e) {
 
 	// when: fields changed.
 	function update_header_table() {
+		set_header_visibility()
 		e.header_table.clear()
 		for (let field of e.fields) {
 
@@ -169,7 +215,7 @@ grid = component('x-grid', function(e) {
 			th.field = field
 			th.sort_icon = sort_icon
 
-			if (field.w) th.w = field.w
+			if (field.w) th.w = field_w(field)
 			if (field.max_w) th.max_w = field.max_w
 			if (field.min_w) th.min_w = max(10, field.min_w)
 
@@ -186,14 +232,16 @@ grid = component('x-grid', function(e) {
 	function update_rows_table() {
 		e.rows_table.clear()
 		for (let i = 0; i < e.visible_row_count; i++) {
-			let tr = H.tr({class: 'x-grid-tr'})
+			let tr = H.tr({class: 'x-grid-tr x-item'})
 			for (let i = 0; i < e.fields.length; i++) {
 				let th = e.header_tr.at[i]
 				let field = e.fields[i]
 				let td = H.td({class: 'x-grid-td x-grid-cell'})
-				td.w = field.w
+				td.w = field_w(field)
 				td.h = e.row_h
 				td.style['border-bottom-width'] = e.row_border_h + 'px'
+				if (field.align)
+					td.attr('align', field.align)
 				td.on('mousedown', cell_mousedown)
 				tr.add(td)
 			}
@@ -208,6 +256,7 @@ grid = component('x-grid', function(e) {
 		update_view()
 	}
 
+	// when: scroll_y changed.
 	function update_row(tr, ri) {
 		let row = e.rows[ri]
 		tr.row = row
@@ -219,8 +268,8 @@ grid = component('x-grid', function(e) {
 			td.field_index = fi
 			if (row) {
 				td.innerHTML = e.rowset.display_value(row.row, field)
-				td.class('read-only', !e.rowset.can_change_value(row.row, field))
-				td.class('not-focusable', !e.rowset.can_be_focused(row.row, field))
+				td.class('x-item', can_focus_cell(row, field))
+				td.class('read-only', !can_change_value(row, field))
 				td.style.display = null
 			} else {
 				td.clear()
@@ -228,8 +277,6 @@ grid = component('x-grid', function(e) {
 			}
 		}
 	}
-
-	// when: scroll_y changed.
 	function update_rows() {
 		let sy = e.scroll_y
 		let i0 = first_visible_row(sy)
@@ -265,9 +312,9 @@ grid = component('x-grid', function(e) {
 		let [ri, fi] = e.focused_cell
 		let th = e.header_tr.at[fi]
 		e.input.x = th.offsetLeft
-		e.input.y = e.row_h * ri
+		e.input.y = e.row_h * ri + floor(e.row_border_h / 2 + (window.chrome ? .5 : 0))
 		e.input.w = th.clientWidth
-		e.input.h = e.row_h
+		e.input.h = e.row_h - e.row_border_h
 	}
 
 	// when: col resizing.
@@ -281,6 +328,13 @@ grid = component('x-grid', function(e) {
 	// when: horizontal scrolling, widget width changed.
 	function update_header_x(sx) {
 		e.header_table.x = -sx
+	}
+
+	function set_header_visibility() {
+		if (e.header_visible != false && !e.hasclass('picker'))
+			e.header_table.show()
+		else
+			e.header_table.hide()
 	}
 
 	function update_view() {
@@ -341,7 +395,29 @@ grid = component('x-grid', function(e) {
 		e.rowset.onoff('row_removed'  , row_removed  , on)
 	}
 
+	function copy_keys(dst, src, keys) {
+		for (k in keys)
+			dst[k] = src[k]
+	}
+
+	let picker_forced_options = {can_edit: 1, can_focus_cells: 1}
+
+	function set_picker_options() {
+		e._saved = {}
+		copy_keys(e._saved, e, picker_forced_options)
+		let as_picker = e.hasclass('picker')
+		e.can_edit        = !as_picker
+		e.can_focus_cells = !as_picker
+	}
+
+	function unset_picker_options() {
+		copy_keys(e, e._saved, picker_forced_options)
+		e._saved = null
+	}
+
 	e.attach = function(parent) {
+		set_header_visibility()
+		set_picker_options()
 		update_heights()
 		update_rows_table()
 		update_view()
@@ -351,6 +427,7 @@ grid = component('x-grid', function(e) {
 
 	e.detach = function() {
 		hook_unhook_events(false)
+		unset_picker_options()
 	}
 
 	// make columns resizeable ------------------------------------------------
@@ -374,12 +451,16 @@ grid = component('x-grid', function(e) {
 	function view_mousemove(mx, my) {
 		if (window.grid_col_resizing)
 			return
+		// hit-test for column resizing.
 		hit_th = null
-		for (let th of e.header_tr.children) {
-			hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
-			if (hit_x >= -5 && hit_x <= 5) {
-				hit_th = th
-				break
+		if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
+			// ^^ not over vertical scrollbar.
+			for (let th of e.header_tr.children) {
+				hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
+				if (hit_x >= -5 && hit_x <= 5) {
+					hit_th = th
+					break
+				}
 			}
 		}
 		e.class('col-resize', hit_th != null)
@@ -390,7 +471,7 @@ grid = component('x-grid', function(e) {
 			return
 		let field = e.fields[hit_th.index]
 		let w = mx - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
-		let min_w = max(20, field.min_w || 0)
+		let min_w = max(e.min_col_w, field.min_w || 0)
 		let max_w = max(min_w, field.max_w || 1000)
 		hit_th.w = clamp(w, min_w, max_w)
 		update_col_width(hit_th.index, hit_th.clientWidth)
@@ -429,7 +510,8 @@ grid = component('x-grid', function(e) {
 
 		let for_editing = options && options.for_editing // skip non-editable cells.
 		let must_move = options && options.must_move // return only if moved.
-		let must_not_move = options && options.must_not_move // return only if not moved.
+		let must_not_move_row = options && options.must_not_move_row // return only if row not moved.
+		let must_not_move_col = options && options.must_not_move_col // return only if col not moved.
 
 		let [ri, fi] = cell
 		let ri_inc = strict_sign(rows)
@@ -455,8 +537,8 @@ grid = component('x-grid', function(e) {
 
 		// find the last valid row, stopping after the specified row count.
 		while (ri >= 0 && ri < e.rows.length) {
-			let row = e.rows[ri].row
-			if (e.rowset.can_be_focused(row, for_editing)) {
+			let row = e.rows[ri]
+			if (can_focus_cell(row, null, for_editing)) {
 				last_valid_ri = ri
 				last_valid_row = row
 				if (rows <= 0)
@@ -475,7 +557,7 @@ grid = component('x-grid', function(e) {
 
 		while (fi >= 0 && fi < e.fields.length) {
 			let field = e.fields[fi]
-			if (e.rowset.can_be_focused(last_valid_row, field, for_editing)) {
+			if (can_focus_cell(last_valid_row, field, for_editing)) {
 				last_valid_fi = fi
 				if (cols <= 0)
 					break
@@ -489,7 +571,7 @@ grid = component('x-grid', function(e) {
 		if (must_move && !(row_moved || col_moved))
 			return [null, null]
 
-		if (must_not_move && (row_moved || col_moved))
+		if ((must_not_move_row && row_moved) || (must_not_move_col && col_moved))
 			return [null, null]
 
 		return [last_valid_ri, last_valid_fi]
@@ -519,6 +601,14 @@ grid = component('x-grid', function(e) {
 		update_focus(true)
 		if (!options || options.make_visible != false)
 			scroll_to_cell(cell)
+
+		if (e.dropdown_value_field) {
+			let [row] = row_field_at(cell)
+			let v
+			if (row)
+				v = e.rowset.value(row.row, e.dropdown_value_field)
+			e.fire('value_changed', v, true)
+		}
 
 		return true
 	}
@@ -593,7 +683,7 @@ grid = component('x-grid', function(e) {
 		if (e.input)
 			return
 		let [row, field] = row_field_at(e.focused_cell)
-		if (field, field.editable == false)
+		if (!can_change_value(row, field))
 			return
 		create_input()
 		if (where == 'right')
@@ -711,20 +801,25 @@ grid = component('x-grid', function(e) {
 	let adding
 
 	e.insert_row = function() {
+		if (!e.can_edit || !e.can_add_rows)
+			return false
 		adding = false
-		let row = e.rowset.add_row(g)
+		let row = e.rowset.add_row(e)
 		return row != null
 	}
 
 	e.add_row = function() {
+		if (!e.can_edit || !e.can_add_rows)
+			return false
 		adding = true
-		let row = e.rowset.add_row(g)
+		let row = e.rowset.add_row(e)
 		return row != null
 	}
 
 	e.remove_row = function(ri) {
+		if (!e.can_edit || !e.can_remove_rows) return false
 		let row = e.rows[ri]
-		return e.rowset.remove_row(row.row, g)
+		return e.rowset.remove_row(row.row, e)
 	}
 
 	e.remove_focused_row = function() {
@@ -749,7 +844,7 @@ grid = component('x-grid', function(e) {
 	function row_added(row, source) {
 		row = create_row(row)
 		update_focus(false)
-		if (source == g) {
+		if (source == e) {
 			let reenter_edit = e.input && e.keep_editing
 			let [ri] = e.focused_cell
 			if (adding) {
@@ -786,7 +881,7 @@ grid = component('x-grid', function(e) {
 		update_view()
 	}
 
-	// mouse boundings --------------------------------------------------------
+	// mouse bindings ---------------------------------------------------------
 
 	function header_cell_mousedown() {
 		if (e.hasclass('col-resize'))
@@ -810,12 +905,14 @@ grid = component('x-grid', function(e) {
 		let fi = this.field_index
 		if (e.focused_cell[0] == ri && e.focused_cell[1] == fi) {
 			e.enter_edit()
-		} else
-			e.focus_cell([ri, fi], 0, 0, {must_not_move: true})
-		return false
+		} else {
+			e.focus_cell([ri, fi], 0, 0, {must_not_move_row: true})
+			e.fire('value_picked', true) // dropdown protocol.
+		}
+		return false // prevent bubbling up to dropdown.
 	}
 
-	// key bindings -----------------------------------------------------------
+	// keyboard bindings ------------------------------------------------------
 
 	function view_keydown(key, shift) {
 
@@ -901,7 +998,9 @@ grid = component('x-grid', function(e) {
 
 		// Enter: toggle edit mode, and navigate on exit
 		if (key == 'Enter') {
-			if (!e.input) {
+			if (e.hasclass('picker')) {
+				e.fire('value_picked', true)
+			} else if (!e.input) {
 				e.enter_edit(true)
 			} else if (e.exit_edit()) {
 				if (e.auto_advance == 'next_row') {
@@ -918,6 +1017,8 @@ grid = component('x-grid', function(e) {
 
 		// Esc: revert cell edits or row edits.
 		if (key == 'Escape') {
+			if (e.hasclass('picker'))
+				return
 			e.exit_edit()
 			e.focus()
 			return false
@@ -1048,15 +1149,22 @@ grid = component('x-grid', function(e) {
 
 	e.property('display_value', function() {
 		let [row] = row_field_at(e.focused_cell)
-		return row ? e.rowset.display_value(row.row, e.dropdown_field) : ''
+		return row ? e.rowset.display_value(row.row, e.dropdown_display_field) : ''
 	})
 
-	e.pick_value = function(v) {
-		//
+	e.pick_value = function(v, from_user_input) {
+		let field = e.dropdown_value_field
+		let ri = find_row(field, v)
+		if (ri == null)
+			return // TODO: deselect
+		if (e.focus_cell([ri, field.index]))
+			e.fire('value_picked', from_user_input) // dropdown protocol.
 	}
 
-	e.pick_near_value = function(delta) {
-		//
+	e.pick_near_value = function(delta, from_user_input) {
+		let field = e.dropdown_value_field
+		if (e.focus_cell(e.focused_cell, delta))
+			e.fire('value_picked', from_user_input)
 	}
 
 })

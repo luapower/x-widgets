@@ -36,7 +36,7 @@ calendar = component('x-calendar', function(e) {
 	e.sel_year.on('value_changed', year_changed)
 	e.header = H.div({class: 'x-calendar-header'},
 		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
-	e.weekview = H.table({class: 'x-calendar-weekview', tabindex: 0})
+	e.weekview = H.table({class: 'x-calendar-weekview x-focusable', tabindex: 0})
 	e.weekview.on('keydown', weekview_keydown)
 	e.weekview.on('wheel', weekview_wheel)
 	e.add(e.header, e.weekview)
@@ -90,8 +90,8 @@ calendar = component('x-calendar', function(e) {
 					let m = month(d)
 					let s = d == today ? ' today' : ''
 					s = s + (m == this_month ? ' current-month' : '')
-					s = s + (d == e.value ? ' selected' : '')
-					let td = H.td({class: 'x-calendar-day'+s}, floor(1 + days(d - m)))
+					s = s + (d == e.value ? ' focused selected' : '')
+					let td = H.td({class: 'x-calendar-day x-item'+s}, floor(1 + days(d - m)))
 					td.date = d
 					td.on('mousedown', day_mousedown)
 					tr.add(td)

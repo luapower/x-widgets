@@ -10,6 +10,7 @@ listbox = component('x-listbox', function(e) {
 
 	e.class('x-widget')
 	e.class('x-listbox')
+	e.class('x-focusable')
 	e.attrval('tabindex', 0)
 
 	e.page_size = 10
@@ -18,7 +19,7 @@ listbox = component('x-listbox', function(e) {
 
 		for (item of e.items) {
 			let text = typeof(item) == 'string' ? item : item.text
-			let item_div = H.div({class: 'x-listbox-item'}, text)
+			let item_div = H.div({class: 'x-listbox-item x-item'}, text)
 			e.add(item_div)
 			item_div.item = item
 			item_div.on('mousedown', item_mousedown)
@@ -54,16 +55,21 @@ listbox = component('x-listbox', function(e) {
 		return select_item(item, pick, from_user_input)
 	}
 
-	function select_item(item_div, pick, from_user_input) {
-		if (e.selected_item)
+	function select_item(item, pick, from_user_input) {
+		if (item == e.selected_item)
+			return
+		if (e.selected_item) {
+			e.selected_item.class('focused', false)
 			e.selected_item.class('selected', false)
-		if (item_div) {
-			item_div.class('selected')
-			item_div.make_visible()
 		}
-		e.selected_item = item_div
-		e.fire('selected', item_div ? item_div.item : null)
-		e.fire('value_changed', item_div ? item_div.index : null, from_user_input)
+		if (item) {
+			item.class('focused')
+			item.class('selected')
+			item.make_visible()
+		}
+		e.selected_item = item
+		e.fire('selected', item ? item.item : null)
+		e.fire('value_changed', item ? item.index : null, from_user_input)
 		if (pick)
 			e.fire('value_picked', from_user_input) // dropdown protocol
 	}

@@ -6,47 +6,49 @@
 }
 
 .x-widget {
-	font-size: 13px;
+	font-size: 12px;
 	font-family: widget, sans-serif;
 }
 
-/* scrollbars */
+/* item states ------------------------------------------------------------ */
 
-/*
-.x-widget::-webkit-scrollbar,
-.x-widget ::-webkit-scrollbar
-{
-	width: 12px;
-	height: 12px;
-}
+.x-item.read-only                 { color: #999; }
+.x-widget.picker x-item.read-only { color: inherit; }
 
-.x-widget::-webkit-scrollbar-thumb,
-.x-widget ::-webkit-scrollbar-thumb
-{
-	border-radius: 100px;
-}
+//.x-grid-tr.new                          { background-color: #eef; }
+//.x-grid-tr.new.focused                  { background-color: #dde; }
+//.x-grid-td.modified                     { background-color: #ddffdd; }
+//.x-grid-tr.focused .x-grid-td.modified  { background-color: #cceecc; }
+//.x-grid-td.invalid                      { background-color: #ffcccc; }
+//.x-grid-tr.focused .x-grid-td.invalid   { background-color: #eebbbb; }
 
-.x-widget::-webkit-scrollbar-thumb:vertical,
-.x-widget ::-webkit-scrollbar-thumb:vertical
-{
-	border-left   : 3px solid #eee;
-	border-right  : 3px solid #eee;
-}
 
-.x-widget::-webkit-scrollbar-thumb:horizontal,
-.x-widget ::-webkit-scrollbar-thumb:horizontal
-{
-	border-top    : 3px solid #eee;
-	border-bottom : 3px solid #eee;
-}
-*/
+
+                  .x-item.focused            { color: #fff; }
+                  .x-item.read-only.focused  { color: #ccc; }
+.x-item.focused > .x-item.read-only          { color: #ccc; }
+.x-item.focused > .x-item.read-only.focused  { color: #fff; }
+
+                  .x-item:hover              { background-color: #00000011; }
+                  .x-item.focused            { background-color: #333; }
+                  .x-item.focused:hover      { background-color: #444; }
+.x-item         > .x-item:hover              { background-color: #f8f8f8; }
+.x-item.focused > .x-item:hover              { background-color: #555; }
+.x-item.focused > .x-item.focused            { background-color: #666; }
+.x-item.focused > .x-item.focused:hover      { background-color: #777; }
+
+.x-focusable:focus                   .x-item.focused       { background-color: #47a; }
+.x-focusable:focus                   .x-item.focused:hover { background-color: #58b; }
+.x-focusable:focus .x-item.focused > .x-item:hover         { background-color: #69c; }
+.x-focusable:focus .x-item.focused > .x-item.focused       { background-color: #7ad; }
+.x-focusable:focus .x-item.focused > .x-item.focused:hover { background-color: #8be; }
+
+/* scrollbars ------------------------------------------------------------- */
 
 .x-widget::-webkit-scrollbar-track,
-.x-widget ::-webkit-scrollbar-track
-	{ background-color: #eee; }
+.x-widget ::-webkit-scrollbar-track  { background-color: #eee; }
 .x-widget::-webkit-scrollbar-thumb,
-.x-widget ::-webkit-scrollbar-thumb
-	{ background-color: #c0c0c0; border-color: #eee; }
+.x-widget ::-webkit-scrollbar-thumb  { background-color: #c0c0c0; border-color: #eee; }
 .x-widget::-webkit-scrollbar-corner,
-.x-widget ::-webkit-scrollbar-corner
-	{ background-color: #fff; }
+.x-widget ::-webkit-scrollbar-corner { background-color: #eee; }
+.x-widget                            { scrollbar-color: #c0c0c0 #eee; }

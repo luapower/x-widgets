@@ -1,8 +1,4 @@
 
-.x-listbox, .x-listbox * {
-	box-sizing: border-box;    /* required: borders don't affect width */
-}
-
 .x-listbox {
 
 	/* layout */
@@ -16,32 +12,13 @@
 	/* sizing */
 	padding: .25em .25em;
 
-	/* styling */
-	//border: 1px solid #999;
-
 	/* behavior */
 	cursor: default;
 
 }
 
-.x-listbox-item:hover {
-
-	/* styling */
-	background-color: #ddd;
-
-}
-
-.x-listbox-item.selected {
-	background-color: #333;
-	color: white;
-}
-
 .x-listbox:focus {
 	outline: none;
-}
-
-.x-listbox:focus .x-listbox-item.selected {
-	background-color: #47a;
 }
 
 .x-listbox.picker {
