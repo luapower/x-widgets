@@ -293,10 +293,15 @@ grid = component('x-grid', function(e) {
 	function update_sort_icons() {
 		for (let th of e.header_tr.children) {
 			let dir = e.order_by_dir(th.field)
+			let pri = e.order_by_priority(th.field)
 			let sort_icon = th.sort_icon
-			sort_icon.class('fa-sort'      , false)
-			sort_icon.class('fa-angle-up'  , dir == 'asc')
-			sort_icon.class('fa-angle-down', dir == 'desc')
+			sort_icon.class('fa-sort'             , false)
+			sort_icon.class('fa-angle-up'         , false)
+			sort_icon.class('fa-angle-double-up'  , false)
+			sort_icon.class('fa-angle-down'       , false)
+			sort_icon.class('fa-angle-double-down', false)
+			sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-up'  , dir == 'asc')
+			sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-down', dir == 'desc')
 		}
 	}
 
@@ -312,10 +317,12 @@ grid = component('x-grid', function(e) {
 			return
 		let [ri, fi] = e.focused_cell
 		let th = e.header_tr.at[fi]
+		let fix = floor(e.row_border_h / 2 + (window.chrome ? .5 : 0))
 		e.input.x = th.offsetLeft
-		e.input.y = e.row_h * ri + floor(e.row_border_h / 2 + (window.chrome ? .5 : 0))
+		e.input.y = e.row_h * ri + fix
 		e.input.w = th.clientWidth
 		e.input.h = e.row_h - e.row_border_h
+		e.input.style['padding-bottom'] = fix + 'px'
 	}
 
 	// when: col resizing.
@@ -884,10 +891,10 @@ grid = component('x-grid', function(e) {
 
 	// mouse bindings ---------------------------------------------------------
 
-	function header_cell_mousedown() {
+	function header_cell_mousedown(ev) {
 		if (e.hasclass('col-resize'))
 			return
-		e.toggle_order(this.field, e.shiftKey)
+		e.toggle_order(this.field, ev.shiftKey)
 		return false
 	}
 
@@ -1074,6 +1081,15 @@ grid = component('x-grid', function(e) {
 			}
 		}
 	)
+
+	e.order_by_priority = function(field) {
+		let i = order_by_dir.size-1
+		for (let [field1] of order_by_dir) {
+			if (field1 == field)
+				return i
+			i--
+		}
+	}
 
 	e.order_by_dir = function(field) {
 		return order_by_dir.get(field)
