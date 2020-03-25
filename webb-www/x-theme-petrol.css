@@ -17,11 +17,11 @@
 .petrol .x-item.focused > .x-item.focused                          { background-color: #666; }
 .petrol .x-item.focused > .x-item.focused:hover                    { background-color: #777; }
 
-.petrol .x-focusable:focus                   .x-item.focused       { background-color: #47a; }
-.petrol .x-focusable:focus                   .x-item.focused:hover { background-color: #58b; }
-.petrol .x-focusable:focus .x-item.focused > .x-item:hover         { background-color: #69c; }
-.petrol .x-focusable:focus .x-item.focused > .x-item.focused       { background-color: #7ad; }
-.petrol .x-focusable:focus .x-item.focused > .x-item.focused:hover { background-color: #8be; }
+.petrol .x-focusable:focus-within                   .x-item.focused       { background-color: #47a; }
+.petrol .x-focusable:focus-within                   .x-item.focused:hover { background-color: #58b; }
+.petrol .x-focusable:focus-within .x-item.focused > .x-item:hover         { background-color: #69c; }
+.petrol .x-focusable:focus-within .x-item.focused > .x-item.focused       { background-color: #7ad; }
+.petrol .x-focusable:focus-within .x-item.focused > .x-item.focused:hover { background-color: #8be; }
 
 /* button ----------------------------------------------------------------- */
 

@@ -25,7 +25,12 @@
 	overflow: hidden;          /* required: hide title under the sort icon */
 }
 .x-grid-header-sort-icon-td {
-	width: 10px;               /* required: leave the rest of the space to the title */
+	width: 1em;                /* required: leave the rest of the space to the title */
+}
+
+.x-grid-header-sort-icon-pri {
+	font-family: inherit;
+	font-size: 85%;
 }
 
 .x-grid-header-th {           /* default: header column style */

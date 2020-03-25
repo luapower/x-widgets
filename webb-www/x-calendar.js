@@ -133,16 +133,35 @@ calendar = component('x-calendar', function(e) {
 		return false
 	}
 
-	function weekview_keydown(key) {
-		let d
+	function weekview_keydown(key, shift) {
+		let d, m
 		switch (key) {
 			case 'ArrowLeft'  : d = -1; break
 			case 'ArrowRight' : d =  1; break
 			case 'ArrowUp'    : d = -7; break
 			case 'ArrowDown'  : d =  7; break
+			case 'PageUp'     : m = -1; break
+			case 'PageDown'   : m =  1; break
 		}
 		if (d) {
 			e.value = day(e.value, d)
+			return false
+		}
+		if (m) {
+			_d.setTime(e.value)
+			if (shift)
+				_d.setFullYear(year_of(e.value) + m)
+			else
+				_d.setMonth(month_of(e.value) + m)
+			e.value = _d.valueOf()
+			return false
+		}
+		if (key == 'Home') {
+			e.value = shift ? year(e.value) : month(e.value)
+			return false
+		}
+		if (key == 'End') {
+			e.value = day(shift ? year(e.value, 1) : month(e.value, 1), -1)
 			return false
 		}
 		if (key == 'Enter') {

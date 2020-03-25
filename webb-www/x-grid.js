@@ -200,9 +200,10 @@ grid = component('x-grid', function(e) {
 		e.header_table.clear()
 		for (let field of e.fields) {
 
-			let sort_icon  = H.div({class: 'fa x-grid-sort-icon'})
+			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
+			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
 			let e1 = H.td({class: 'x-grid-header-title-td'}, field.name)
-			let e2 = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon)
+			let e2 = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
 			if (field.align == 'right')
 				[e1, e2] = [e2, e1]
 			e1.attr('align', 'left')
@@ -215,6 +216,7 @@ grid = component('x-grid', function(e) {
 
 			th.field = field
 			th.sort_icon = sort_icon
+			th.sort_icon_pri = sort_icon_pri
 
 			if (field.w) th.w = field_w(field)
 			if (field.max_w) th.max_w = field.max_w
@@ -294,14 +296,14 @@ grid = component('x-grid', function(e) {
 		for (let th of e.header_tr.children) {
 			let dir = e.order_by_dir(th.field)
 			let pri = e.order_by_priority(th.field)
-			let sort_icon = th.sort_icon
-			sort_icon.class('fa-sort'             , false)
-			sort_icon.class('fa-angle-up'         , false)
-			sort_icon.class('fa-angle-double-up'  , false)
-			sort_icon.class('fa-angle-down'       , false)
-			sort_icon.class('fa-angle-double-down', false)
-			sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-up'  , dir == 'asc')
-			sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-down', dir == 'desc')
+			th.sort_icon.class('fa-sort'             , false)
+			th.sort_icon.class('fa-angle-up'         , false)
+			th.sort_icon.class('fa-angle-double-up'  , false)
+			th.sort_icon.class('fa-angle-down'       , false)
+			th.sort_icon.class('fa-angle-double-down', false)
+			th.sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-up'  , dir == 'asc')
+			th.sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-down', dir == 'desc')
+			th.sort_icon_pri.innerHTML = pri > 1 ? pri : ''
 		}
 	}
 
@@ -894,6 +896,7 @@ grid = component('x-grid', function(e) {
 	function header_cell_mousedown(ev) {
 		if (e.hasclass('col-resize'))
 			return
+		e.focus()
 		e.toggle_order(this.field, ev.shiftKey)
 		return false
 	}
@@ -901,6 +904,7 @@ grid = component('x-grid', function(e) {
 	function header_cell_rightmousedown() {
 		if (e.hasclass('col-resize'))
 			return
+		e.focus()
 		e.clear_order()
 		return false
 	}

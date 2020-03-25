@@ -7,7 +7,7 @@
 
 .x-widget {
 	font-size: 13px;
-	font-family: widget, sans-serif;
+	font-family: x-widget, sans-serif;
 }
 
 /* item states ------------------------------------------------------------ */
@@ -36,11 +36,11 @@
 .x-item.focused > .x-item.focused                          { background-color: #666; }
 .x-item.focused > .x-item.focused:hover                    { background-color: #777; }
 
-.x-focusable:focus                   .x-item.focused       { background-color: #47a; }
-.x-focusable:focus                   .x-item.focused:hover { background-color: #58b; }
-.x-focusable:focus .x-item.focused > .x-item:hover         { background-color: #69c; }
-.x-focusable:focus .x-item.focused > .x-item.focused       { background-color: #7ad; }
-.x-focusable:focus .x-item.focused > .x-item.focused:hover { background-color: #8be; }
+.x-focusable:focus-within                   .x-item.focused       { background-color: #47a; }
+.x-focusable:focus-within                   .x-item.focused:hover { background-color: #58b; }
+.x-focusable:focus-within .x-item.focused > .x-item:hover         { background-color: #69c; }
+.x-focusable:focus-within .x-item.focused > .x-item.focused       { background-color: #7ad; }
+.x-focusable:focus-within .x-item.focused > .x-item.focused:hover { background-color: #8be; }
 
 /* scrollbars ------------------------------------------------------------- */
 
