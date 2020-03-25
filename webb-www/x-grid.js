@@ -14,7 +14,7 @@ grid = component('x-grid', function(e) {
 	// geometry
 	e.w = 400
 	e.h = 400
-	e.row_h = 24
+	e.row_h = 26
 	e.row_border_h = 1
 	e.min_col_w = 20
 
@@ -26,6 +26,7 @@ grid = component('x-grid', function(e) {
 	e.can_change_rows = true
 
 	// keyboard behavior
+	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
 	e.auto_advance = 'next_row' // advance on enter = false|'next_row'|'next_cell'
 	e.auto_advance_row = true   // jump row on horiz. navigation limits
 	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
@@ -935,7 +936,7 @@ grid = component('x-grid', function(e) {
 		}
 
 		// Tab/Shift+Tab cell navigation.
-		if (key == 'Tab') {
+		if (key == 'Tab' && e.tab_navigation) {
 
 			let cols = shift ? -1 : 1
 

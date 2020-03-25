@@ -8,25 +8,20 @@
 
 /* focusable item shades -------------------------------------------------- */
 
-/* TODO:
-.petrol                             .x-focusable-item.focused            { color: #fff; }
-.petrol                             .x-focusable-item.read-only.focused  { color: #ccc; }
-.petrol .x-focusable-item.focused > .x-focusable-item.read-only          { color: #ccc; }
-.petrol .x-focusable-item.focused > .x-focusable-item.read-only.focused  { color: #fff; }
+.petrol                   .x-item:hover                            { background-color: #18181a; }
+.petrol .x-item         > .x-item:hover                            { background-color: #1f1f22; }
 
-.petrol                             .x-focusable-item.focused       { background-color: #333; }
-.petrol                             .x-focusable-item.focused:hover { background-color: #444; }
-.petrol .x-focusable-item         > .x-focusable-item:hover         { background-color: #11111188; }
-.petrol .x-focusable-item.focused > .x-focusable-item:hover         { background-color: #555; }
-.petrol .x-focusable-item.focused > .x-focusable-item.focused       { background-color: #666; }
-.petrol .x-focusable-item.focused > .x-focusable-item.focused:hover { background-color: #777; }
-.petrol
-.petrol .x-focusable:focus                             .x-focusable-item.focused       { background-color: #47a; }
-.petrol .x-focusable:focus                             .x-focusable-item.focused:hover { background-color: #58b; }
-.petrol .x-focusable:focus .x-focusable-item.focused > .x-focusable-item:hover         { background-color: #69c; }
-.petrol .x-focusable:focus .x-focusable-item.focused > .x-focusable-item.focused       { background-color: #7ad; }
-.petrol .x-focusable:focus .x-focusable-item.focused > .x-focusable-item.focused:hover { background-color: #8be; }
-*/
+.petrol                   .x-item.focused                          { background-color: #333; }
+.petrol                   .x-item.focused:hover                    { background-color: #444; }
+.petrol .x-item.focused > .x-item:hover                            { background-color: #555; }
+.petrol .x-item.focused > .x-item.focused                          { background-color: #666; }
+.petrol .x-item.focused > .x-item.focused:hover                    { background-color: #777; }
+
+.petrol .x-focusable:focus                   .x-item.focused       { background-color: #47a; }
+.petrol .x-focusable:focus                   .x-item.focused:hover { background-color: #58b; }
+.petrol .x-focusable:focus .x-item.focused > .x-item:hover         { background-color: #69c; }
+.petrol .x-focusable:focus .x-item.focused > .x-item.focused       { background-color: #7ad; }
+.petrol .x-focusable:focus .x-item.focused > .x-item.focused:hover { background-color: #8be; }
 
 /* button ----------------------------------------------------------------- */
 
@@ -68,26 +63,11 @@
 	background-color: #a33;
 }
 
-/* calendar --------------------------------------------------------------- */
-
-.petrol .x-calendar-day.selected { background-color: #000; }
-.petrol .x-calendar-day:hover    { background-color: #0004; }
-
 /* pickers of dropdowns --------------------------------------------------- */
 
 .petrol .x-dropdown .picker {
 	border: 1px solid #222;
 	box-shadow: 5px 5px 5px #000;
-}
-
-/* listbox ---------------------------------------------------------------- */
-
-.petrol .x-listbox-item.selected {
-	background-color: #666;
-}
-
-.petrol .x-listbox-item:hover {
-	background-color: #0004;
 }
 
 /* page list -------------------------------------------------------------- */
@@ -113,6 +93,10 @@
 .petrol .x-grid-td.invalid                      { background-color: #ffcccc; }
 .petrol .x-grid-tr.focused .x-grid-td.invalid   { background-color: #eebbbb; }
 */
+
+.petrol .x-grid.col-resize {
+	cursor: col-resize;
+}
 
 /* scrollbars ------------------------------------------------------------- */
 

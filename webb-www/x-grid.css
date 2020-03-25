@@ -50,8 +50,9 @@
 
 /* col resizing ------------------------------------------------------------*/
 
+/* NOTE: `col-resize` is almost invisible on a light background on Windows 7 */
 .x-grid.col-resize {
-	cursor: ew-resize;         /* default: column resizing cursor */
+	cursor: ew-resize;
 }
 .x-grid:not(.col-resize) .x-grid-header-th {
 	cursor: pointer;           /* required: resizing area is underneath */
@@ -69,7 +70,6 @@
 
 .x-grid-td {
 	border-bottom: 0px solid #eee;
-	cursor: parent;           /* required: show cursor as set by parent */
 }
 
 /* cell & row states ------------------------------------------------------ */
