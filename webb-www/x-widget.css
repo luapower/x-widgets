@@ -12,8 +12,7 @@
 
 /* item states ------------------------------------------------------------ */
 
-.x-item.read-only                 { color: #999; }
-.x-widget.picker x-item.read-only { color: inherit; }
+.x-widget .read-only { color: #999; }
 
 //.x-grid-tr.new                          { background-color: #eef; }
 //.x-grid-tr.new.focused                  { background-color: #dde; }
@@ -22,19 +21,19 @@
 //.x-grid-td.invalid                      { background-color: #ffcccc; }
 //.x-grid-tr.focused .x-grid-td.invalid   { background-color: #eebbbb; }
 
-                  .x-item.focused                          { color: #fff; }
-                  .x-item.read-only.focused                { color: #ccc; }
-.x-item.focused > .x-item.read-only                        { color: #ccc; }
-.x-item.focused > .x-item.read-only.focused                { color: #fff; }
+                  .x-item.focused           { color: #fff; }
+                  .x-item.read-only.focused { color: #ccc; }
+.x-item.focused > .x-item.read-only         { color: #ccc; }
+.x-item.focused > .x-item.read-only.focused { color: #fff; }
 
-                  .x-item:hover                            { background-color: #00000011; }
-.x-item         > .x-item:hover                            { background-color: #f8f8f8; }
+                  .x-item:hover             { background-color: #00000011; }
+.x-item         > .x-item:hover             { background-color: #f8f8f8; }
 
-                  .x-item.focused                          { background-color: #333; }
-                  .x-item.focused:hover                    { background-color: #444; }
-.x-item.focused > .x-item:hover                            { background-color: #555; }
-.x-item.focused > .x-item.focused                          { background-color: #666; }
-.x-item.focused > .x-item.focused:hover                    { background-color: #777; }
+                  .x-item.focused           { background-color: #333; }
+                  .x-item.focused:hover     { background-color: #444; }
+.x-item.focused > .x-item:hover             { background-color: #555; }
+.x-item.focused > .x-item.focused           { background-color: #666; }
+.x-item.focused > .x-item.focused:hover     { background-color: #777; }
 
 .x-focusable:focus-within                   .x-item.focused       { background-color: #47a; }
 .x-focusable:focus-within                   .x-item.focused:hover { background-color: #58b; }

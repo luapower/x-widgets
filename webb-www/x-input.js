@@ -75,11 +75,27 @@ input = component('x-input', function(e) {
 	}
 
 	e.to_text = function(v) {
-		return String(v)
+		return v != null ? String(v) : null
 	}
 
 	e.from_text = function(s) {
-		return s
+		s = s.trim()
+		return s != '' ? s : null
+	}
+
+	// editor protocol
+
+	e.focus = function() {
+		e.input.focus()
+	}
+
+	e.enter_editor = function(field, where) {
+		if (where == 'right')
+			e.input.select(e.input.value.length, e.input.value.length)
+		else if (where == 'left')
+			e.input.select(0, 0)
+		else if (where)
+			e.input.select(0, e.input.value.length)
 	}
 
 })

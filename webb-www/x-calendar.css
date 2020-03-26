@@ -1,8 +1,4 @@
 
-.x-calendar, .x-calendar * {
-	box-sizing: border-box;    /* required: borders don't affect width */
-}
-
 .x-calendar {
 	display: inline-block;
 	padding: 2em;

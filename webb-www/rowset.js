@@ -2,23 +2,21 @@
 	RowSet.
 	Written by Cosmin Apreutesei. Public Domain.
 
-	rowset.validators  : {type -> f}
-	rowset.converters  : {type -> f}
-	rowset.formatters  : {type -> f}
-	rowset.comparators : {type -> f}
+	rowset.types : {type -> {attr->val}}
 
 	d.fields: [{attr->val}, ...]
-		name           :
-		type           : for type-based validators, converters and formatters.
+		name           : field name (defaults to field numeric index)
+		type           : for choosing a field template.
 		client_default : default value that new rows are initialized with.
 		server_default : default value that the server sets.
 		allow_null     : allow null (true).
 		editable       : allow modifying (true).
-		validate_value : f(field, v) -> true|err
-		validate_row   : f(row) -> true|err
-		convert_value  : f(field, s) -> v
-		format_value   : f(field, v) -> s
-		comparator     : f(field) -> f(row1, row2, field_index) -> -1|0|1
+		validate       : f(v, field) -> true|err
+		format         : f(v, field) -> s
+		align          : 'left'|'right'|'center'
+		editor         : f(field) -> editor
+		compare_types  : f(v1, v2) -> -1|0|1
+		compare_values : f(v1, v2) -> -1|0|1
 
 	d.rows: [{attr->val}, ...]
 		values         : [v1,...]
@@ -37,11 +35,12 @@
 
 let rowset = function(...options) {
 
-	let d = {
-		can_add_rows: true,
-		can_remove_rows: true,
-		can_change_rows: true,
-	}
+	let d = {}
+
+	d.can_edit        = true
+	d.can_add_rows    = true
+	d.can_remove_rows = true
+	d.can_change_rows = true
 
 	let fields // [fi: {name:, client_default: v, server_default: v, ...}]
 	let rows   // [ri: row]; row = {values: [fi: val], attr: val, ...}
@@ -52,13 +51,7 @@ let rowset = function(...options) {
 	let init = function() {
 
 		// set options/override.
-		update(d, ...options)
-
-		// add missing state.
-		d.validators  = update({}, rowset.validators , d.validators)
-		d.converters  = update({}, rowset.converters , d.converters)
-		d.formatters  = update({}, rowset.formatters , d.formatters)
-		d.comparators = update({}, rowset.comparators, d.comparators)
+		update(d, rowset, ...options)
 
 		d.fields = d.fields || []
 		d.rows = d.rows || []
@@ -67,10 +60,12 @@ let rowset = function(...options) {
 		fields = d.fields
 		rows = d.rows
 
-		for (let i = 0; i < fields.length; i++) {
-			let field = fields[i]
-			field.index = i
-			field_map.set(field.name, field)
+		for (let i = 0; i < d.fields.length; i++) {
+			let f1 = d.fields[i]
+			let f0 = f1.type ? (d.types[f1.type] || rowset.types[f1.type]) : null
+			let field = update({index: i}, rowset.default_type, d.default_type, f0, f1)
+			fields[i] = field
+			field_map.set(field.name || i, field)
 		}
 
 	}
@@ -87,29 +82,19 @@ let rowset = function(...options) {
 	}
 
 	d.display_value = function(row, field) {
-		return d.format_value(field, d.value(row, field))
+		return field.format.call(d, d.value(row, field), field)
 	}
 
 	d.validate_value = function(field, val) {
 		if (val == '' || val == null)
-			return field.allow_null != false || 'NULL not allowed'
-		let validate = field.validate || d.validators[field.type]
+			return field.allow_null || 'NULL not allowed'
+		let validate = field.validate
 		if (!validate)
 			return true
 		return validate.call(d, val, field)
 	}
 
 	d.validate_row = return_true // stub
-
-	d.convert_value = function(field, val) {
-		let convert = field.convert || d.converters[field.type]
-		return convert ? convert.call(d, val, field) : val
-	}
-
-	d.format_value = function(field, val) {
-		let format = field.format || d.formatters[field.type]
-		return format ? format.call(d, val, field) : val
-	}
 
 	d.compare_rows = function(row1, row2) {
 		// invalid rows come first.
@@ -135,8 +120,8 @@ let rowset = function(...options) {
 	d.comparator = function(field) {
 
 		var compare_rows = d.compare_rows
-		var compare_types = d.compare_types
-		var compare_values = field.compare || d.comparators[field.type] || d.compare_values
+		var compare_types  = field.compare_types  || d.compare_types
+		var compare_values = field.compare_values || d.compare_values
 		var field_index = field.index
 
 		return function (row1, row2) {
@@ -153,15 +138,18 @@ let rowset = function(...options) {
 		}
 	}
 
-	d.can_change_value = function(row, field) {
-		return d.can_change_rows && row.editable != false
-			&& (field == null || (field.editable != false && !field.get_value))
+	d.can_focus_cell = function(row, field) {
+		return row.focusable != false && (field == null || field.focusable != false)
 	}
 
-	d.can_focus_cell = function(row, field, for_editing) {
-		return row.focusable != false
-			&& (field == null || field.focusable != false)
-			&& (!for_editing || d.can_change_value(row, field))
+	d.can_change_value = function(row, field) {
+		return d.can_edit && d.can_change_rows && row.editable != false
+			&& (field == null || (field.editable && !field.get_value))
+			&& d.can_focus_cell(row, field)
+	}
+
+	d.create_editor = function(row, field) {
+		return field.editor.call(d, field)
 	}
 
 	d.set_value = function(row, field, val, source) {
@@ -169,24 +157,16 @@ let rowset = function(...options) {
 		if (!d.can_change_value(row, field))
 			return 'read only'
 
-		// convert value to internal represenation.
-		val = d.convert_value(field, val)
-
-		// validate converted value.
 		let ret = d.validate_value(field, val)
 		if (ret !== true)
 			return ret
 
-		// save original values if not already saved and the row is not new.
 		if (!row.original_values)
 			row.original_values = row.values.slice(0)
 
-		// set the value.
 		row.values[field.index] = val
-
 		row.modified = true
 
-		// fire changed event.
 		d.fire('value_changed', row, field, val, source)
 
 		return true
@@ -264,36 +244,47 @@ let rowset = function(...options) {
 	return d
 }
 
-// validators ----------------------------------------------------------------
+// field templates -----------------------------------------------------------
 
-rowset.validators = {
-	number: function(val, field) {
+{
+	rowset.types = {
+		number: {align: 'right'},
+		date  : {align: 'right'},
+	}
+
+	rowset.types.number.validate = function(val, field) {
 		val = parseFloat(val)
 		return typeof(val) == 'number' && val === val || 'invalid number'
-	},
-}
-
-rowset.converters = {
-	number: function(val, field) {
-		if (val == '' || val == null)
-			return null
-		return parseFloat(val)
-	},
-	boolean: function(val, field) {
-		return !!val
-	},
-}
-
-rowset.formatters = {
-	date: function(t, field) {
-		_d.setTime(t)
-		return _d.toLocaleString(locale, rowset.formatters.date.format)
 	}
-}
 
-rowset.formatters.date.format =
-	{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
+	rowset.types.number.editor = function() {
+		return spin_input()
+	}
 
-rowset.comparators = {
+	rowset.types.date.format = function(t, field) {
+		_d.setTime(t)
+		return _d.toLocaleString(locale, rowset.types.date.format.format)
+	}
+	rowset.types.date.format.format = {weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
+
+	rowset.types.date.editor = function() {
+		return dropdown({picker: calendar()})
+	}
+
+	rowset.default_type = {
+		align: 'left',
+		client_default: null,
+		server_default: null,
+		allow_null: true,
+		editable: true,
+	}
+
+	rowset.default_type.format = function(v) {
+		return String(v)
+	}
+
+	rowset.default_type.editor = function() {
+		return input()
+	}
 
 }

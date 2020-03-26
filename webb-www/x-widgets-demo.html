@@ -85,16 +85,19 @@ h2 {
 </style>
 
 <link rel="stylesheet" type="text/css" href="fontawesome.css">
+
+<!-- put these in reverse logical order to test that load order of css files doesn't matter -->
+<link rel="stylesheet" type="text/css" href="x-theme-petrol.css">
 <link rel="stylesheet" type="text/css" href="x-widget.css">
 <link rel="stylesheet" type="text/css" href="x-grid.css">
+<link rel="stylesheet" type="text/css" href="x-dropdown.css">
+
 <link rel="stylesheet" type="text/css" href="x-menu.css">
 <link rel="stylesheet" type="text/css" href="x-button.css">
 <link rel="stylesheet" type="text/css" href="x-calendar.css">
 <link rel="stylesheet" type="text/css" href="x-input.css">
 <link rel="stylesheet" type="text/css" href="x-listbox.css">
-<link rel="stylesheet" type="text/css" href="x-dropdown.css">
 <link rel="stylesheet" type="text/css" href="x-pagelist.css">
-<link rel="stylesheet" type="text/css" href="x-theme-petrol.css">
 
 <script src="glue.js"></script>
 <script src="divs.js"></script>
@@ -370,10 +373,11 @@ main.add(calendar({value: day(now(), 2)}))
 
 var data = {
 	fields: [
-		{name: 'id'        , w:  60, min_w:  30, type: 'number', align: 'right', editable: false},
+		{name: 'id'        , w:  60, min_w:  30, type: 'number', editable: false},
 		{name: 'name'      , w: 100, min_w: 100, max_w: 200},
-		{name: 'parent_id' , w:  60, min_w:  50, type: 'number', align: 'right', allow_null: true, editable: false, focusable: false},
-		{name: 'random_num', w: 200, allow_null: true, type: 'number'},
+		{name: 'parent_id' , w:  60, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: false},
+		{name: 'random_num', w: 100, allow_null: true, type: 'number'},
+		{name: 'date'      , w: 140, allow_null: true, type: 'date'},
 	],
 	rows: [],
 }
@@ -382,10 +386,11 @@ for (var i = 1; i <= 1e5; i++) {
 	let id         = i
 	let name       = 'record '+i
 	let parent_id  = floor((random() * i))
-	let random_num = random()
+	let random_num = floor(random() * 1e9)
+	let random_date = i * 24 * 3600 * 1000
 	data.rows.push({
 		focusable: i % 10 >= 2,
-		values: [id, name, parent_id, random_num]
+		values: [id, name, parent_id, random_num, random_date]
 	})
 }
 

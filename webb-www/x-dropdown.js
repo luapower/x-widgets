@@ -10,6 +10,7 @@ dropdown = component('x-dropdown', function(e) {
 
 	// view
 
+	e.class('x-widget')
 	e.class('x-input')
 	e.class('x-dropdown')
 
@@ -149,7 +150,7 @@ dropdown = component('x-dropdown', function(e) {
 			}
 		}
 		if (key == 'ArrowDown' || key == 'ArrowUp') {
-			if (!e.isopen) {
+			if (!e.isopen && !e.hasclass('grid-editor')) {
 				e.picker.pick_near_value(key == 'ArrowDown' ? 1 : -1)
 				return false
 			}
@@ -183,4 +184,9 @@ dropdown = component('x-dropdown', function(e) {
 			e.cancel()
 	}
 
+	// editor protocol
+
+	e.enter_editor = function(field, direction) {
+		//
+	}
 })

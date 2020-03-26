@@ -1,5 +1,5 @@
 
-/* NOTE: the .x-input class is applied before this. */
+/* NOTE: the .x-input class is applied too on dropdowns. */
 
 .x-dropdown {
 	/* layouting */
@@ -56,11 +56,6 @@
 	overflow: hidden;
 }
 
-/* state styling ---------------------------------------------------------- */
-
-.x-dropdown.open {
-}
-
 /* show as focused when the picker is focused */
 .x-dropdown:focus-within {
 	outline: none;
@@ -68,11 +63,16 @@
 	box-shadow: 0 0 1px 1px #99f;
 }
 
-.x-widget.picker {
-	box-sizing: border-box;
+/* override with more specificity: .x-dropdown .x-widget.x-<foo>.picker */
+/* override with less specificity: .x-<foo>.picker */
+.x-dropdown .x-widget.picker {
 	position: absolute;
 	border: 1px solid #999;
 	background-color: inherit;
 	box-shadow: 5px 5px 5px #000000aa;
 	z-index: 1;
+}
+
+.x-widget.x-dropdown.grid-editor {
+
 }

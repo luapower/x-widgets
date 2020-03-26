@@ -21,7 +21,7 @@
 	outline: none;
 }
 
-.x-listbox.picker {
+.x-dropdown .x-widget.x-listbox.picker {
 	max-height: 300px;
 	overflow: auto;
 	min-width: 100%;

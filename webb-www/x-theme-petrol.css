@@ -8,14 +8,14 @@
 
 /* focusable item shades -------------------------------------------------- */
 
-.petrol                   .x-item:hover                            { background-color: #18181a; }
-.petrol .x-item         > .x-item:hover                            { background-color: #1f1f22; }
+.petrol                   .x-item:hover         { background-color: #18181a; }
+.petrol .x-item         > .x-item:hover         { background-color: #1f1f22; }
 
-.petrol                   .x-item.focused                          { background-color: #333; }
-.petrol                   .x-item.focused:hover                    { background-color: #444; }
-.petrol .x-item.focused > .x-item:hover                            { background-color: #555; }
-.petrol .x-item.focused > .x-item.focused                          { background-color: #666; }
-.petrol .x-item.focused > .x-item.focused:hover                    { background-color: #777; }
+.petrol                   .x-item.focused       { background-color: #333; }
+.petrol                   .x-item.focused:hover { background-color: #444; }
+.petrol .x-item.focused > .x-item:hover         { background-color: #555; }
+.petrol .x-item.focused > .x-item.focused       { background-color: #666; }
+.petrol .x-item.focused > .x-item.focused:hover { background-color: #777; }
 
 .petrol .x-focusable:focus-within                   .x-item.focused       { background-color: #47a; }
 .petrol .x-focusable:focus-within                   .x-item.focused:hover { background-color: #58b; }
@@ -69,7 +69,7 @@
 
 /* pickers of dropdowns --------------------------------------------------- */
 
-.petrol .x-dropdown .picker {
+.petrol .x-dropdown .x-widget.picker {
 	border: 1px solid #222;
 	box-shadow: 5px 5px 5px #000;
 }

@@ -112,9 +112,10 @@ grid = component('x-grid', function(e) {
 			&& e.rowset.can_change_value(row.row, field)
 	}
 
-	function can_focus_cell(row, field) {
+	function can_focus_cell(row, field, for_editing) {
 		return (field == null || e.can_focus_cells)
 			&& e.rowset.can_focus_cell(row.row, field)
+			&& (!for_editing || can_change_value(row, field))
 	}
 
 	function find_row(field, v) {
@@ -186,8 +187,6 @@ grid = component('x-grid', function(e) {
 		e.add(e.header_table, e.rows_view_div)
 
 		e.on('mousemove', view_mousemove)
-		e.on('focusin'  , view_focusin)
-		e.on('blur'     , view_blur)
 		e.on('keydown'  , view_keydown)
 		e.on('keypress' , view_keypress)
 
@@ -235,7 +234,7 @@ grid = component('x-grid', function(e) {
 	function update_rows_table() {
 		e.rows_table.clear()
 		for (let i = 0; i < e.visible_row_count; i++) {
-			let tr = H.tr({class: 'x-grid-tr x-item'})
+			let tr = H.tr({class: 'x-grid-tr'})
 			for (let i = 0; i < e.fields.length; i++) {
 				let th = e.header_tr.at[i]
 				let field = e.fields[i]
@@ -264,6 +263,8 @@ grid = component('x-grid', function(e) {
 		let row = e.rows[ri]
 		tr.row = row
 		tr.row_index = ri
+		if (row)
+			tr.class('x-item', can_focus_cell(row))
 		for (let fi = 0; fi < e.fields.length; fi++) {
 			let field = e.fields[fi]
 			let td = tr.at[fi]
@@ -272,7 +273,12 @@ grid = component('x-grid', function(e) {
 			if (row) {
 				td.innerHTML = e.rowset.display_value(row.row, field)
 				td.class('x-item', can_focus_cell(row, field))
-				td.class('read-only', !can_change_value(row, field))
+				td.class('read-only',
+					e.can_focus_cells
+					&& e.can_edit
+					&& e.rowset.can_edit
+					&& e.rowset.can_change_rows
+					&& !can_focus_cell(row, field, true))
 				td.style.display = null
 			} else {
 				td.clear()
@@ -309,11 +315,11 @@ grid = component('x-grid', function(e) {
 
 	function update_focus(set) {
 		let [tr, td] = tr_td_at(e.focused_cell)
-		if (tr) { tr.class('focused', set); tr.class('editing', e.input && set); }
-		if (td) { td.class('focused', set); td.class('editing', e.input && set); }
+		if (tr) { tr.class('focused', set); tr.class('editing', e.input && set || false); }
+		if (td) { td.class('focused', set); td.class('editing', e.input && set || false); }
 	}
 
-	// when: heights changed.
+	// when: input created, heights changed, column width changed.
 	function update_input_geometry() {
 		if (!e.input)
 			return
@@ -358,33 +364,40 @@ grid = component('x-grid', function(e) {
 		update_header_x(sx)
 	}
 
-	function create_input() {
+	function create_editor(enter_direction) {
 		let [row, field] = row_field_at(e.focused_cell)
 		let [_, td] = tr_td_at(e.focused_cell)
-		e.input = H.input({
-			type: 'text',
-			class: 'x-grid-input x-grid-cell',
-			maxlength: field.maxlength,
-			value: e.rowset.value(row.row, field),
-		})
-		e.input.on('input', input_input)
-		e.input.on('focus', input_focus)
-		e.input.on('blur', input_blur)
+		update_focus(false)
+
+		e.input = d.create_editor(row, field)
+		e.input.value = e.rowset.value(row.row, field)
+
+		e.input.class('grid-editor')
+
+		e.input.enter_editor(field, enter_direction)
+
+		//TODO: e.input.style.textAlign = field.align
+
+		e.input.on('value_changed', input_value_changed)
+		e.input.on('focusout', input_focusout)
+
 		e.rows_div.add(e.input)
 		update_input_geometry()
-		e.input.style.textAlign = field.align
 		if (td)
 			td.innerHTML = null
+		update_focus(true)
 	}
 
-	function free_input() {
+	function free_editor() {
 		let input = e.input
 		let [row, field] = row_field_at(e.focused_cell)
 		let [tr, td] = tr_td_at(e.focused_cell)
-		e.input = null
+		update_focus(false)
+		e.input = null // clear it before removing it for input_focusout!
 		e.rows_div.removeChild(input)
 		if (td)
 			td.innerHTML = e.rowset.display_value(row.row, field)
+		update_focus(true)
 	}
 
 	function reload() {
@@ -490,25 +503,6 @@ grid = component('x-grid', function(e) {
 	}
 
 	// focusing ---------------------------------------------------------------
-
-	function view_focusin() {
-		e.class('focused')
-	}
-
-	function view_blur() {
-		e.class('focused', false)
-	}
-
-	function input_focus() {
-		print('input_focus')
-		//view_focus()
-	}
-
-	function input_blur() {
-		print('input_blur')
-		//e.exit_edit()
-		//view_blur()
-	}
 
 	e.focused_cell = [null, null]
 
@@ -620,14 +614,17 @@ grid = component('x-grid', function(e) {
 			e.fire('value_changed', v, true)
 		}
 
+		if (cell)
+			e.focus()
+
 		return true
 	}
 
-	e.focus_next_cell = function(cols, auto_advance_row) {
+	e.focus_next_cell = function(cols, auto_advance_row, for_editing) {
 		let dir = strict_sign(cols)
-		return e.focus_cell(null, dir * 0, cols, {must_move: true})
+		return e.focus_cell(null, dir * 0, cols, {must_move: true, for_editing: for_editing})
 			|| ((auto_advance_row || e.auto_advance_row)
-				&& e.focus_cell(null, dir, dir * -1/0))
+				&& e.focus_cell(null, dir, dir * -1/0, {for_editing: for_editing}))
 	}
 
 	function on_last_row() {
@@ -638,6 +635,13 @@ grid = component('x-grid', function(e) {
 	function focused_row() {
 		let [ri] = e.focused_cell
 		return ri != null ? e.rows[ri] : null
+	}
+
+	// auto-exit edit mode if the input lost focus.
+	function input_focusout() {
+		if (!e.input) // input is being removed.
+			return
+		//e.exit_edit()
 	}
 
 	// editing ----------------------------------------------------------------
@@ -665,8 +669,8 @@ grid = component('x-grid', function(e) {
 	}
 	*/
 
-	// NOTE: input even is not cancellable.
-	function input_input(e) {
+	function input_value_changed(v) {
+		return
 		let td = e.focused_td
 		let tr = e.focused_tr
 		td.class('unsaved', true)
@@ -689,21 +693,14 @@ grid = component('x-grid', function(e) {
 		return td.first
 	}
 
-	e.enter_edit = function(where) {
+	e.enter_edit = function(enter_direction) {
 		if (e.input)
 			return
 		let [row, field] = row_field_at(e.focused_cell)
-		if (!can_change_value(row, field))
+		if (!can_focus_cell(row, field, true))
 			return
-		create_input()
-		if (where == 'right')
-			e.input.select(e.input.value.length, e.input.value.length)
-		else if (where == 'left')
-			e.input.select(0, 0)
-		else if (where)
-			e.input.select(0, e.input.value.length)
-		if (where)
-			e.input.focus()
+		create_editor(enter_direction)
+		e.input.focus()
 	}
 
 	e.exit_edit = function() {
@@ -719,7 +716,7 @@ grid = component('x-grid', function(e) {
 			if (e.focused_td.hasclass('invalid'))
 				return false
 		*/
-		free_input()
+		free_editor()
 		return true
 	}
 
@@ -761,7 +758,7 @@ grid = component('x-grid', function(e) {
 	}
 
 	e.tooltip = function(e, msg) {
-		// let div = H.div({class: 'grid-error'}, msg)
+		// let div = H.div({class: 'x-grid-error'}, msg)
 		e.title = msg || ''
 	}
 
@@ -912,16 +909,25 @@ grid = component('x-grid', function(e) {
 	function cell_mousedown() {
 		if (e.hasclass('col-resize'))
 			return
-		e.focus()
+		let had_focus = e.hasfocus()
+		if (!had_focus)
+			e.focus()
 		let ri = this.parent.row_index
 		let fi = this.field_index
 		if (e.focused_cell[0] == ri && e.focused_cell[1] == fi) {
-			e.enter_edit()
+			if (had_focus) {
+				// TODO: what we want here is `e.enter_edit()` without `return false`
+				// to let mousedown click-through to the input box and focus the input
+				// and move the caret under the mouse all by itself.
+				// Unfortunately, this only works in Chrome no luck with Firefox.
+				e.enter_edit(true)
+				return false
+			}
 		} else {
 			e.focus_cell([ri, fi], 0, 0, {must_not_move_row: true})
 			e.fire('value_picked', true) // dropdown protocol.
+			return false // prevent bubbling up to dropdown.
 		}
-		return false // prevent bubbling up to dropdown.
 	}
 
 	// keyboard bindings ------------------------------------------------------
@@ -939,7 +945,7 @@ grid = component('x-grid', function(e) {
 				|| (e.auto_jump_cells && !shift
 					&& e.input.caret == (cols < 0 ? 0 : e.input.value.length))
 
-			if (move && e.focus_next_cell(cols)) {
+			if (move && e.focus_next_cell(cols, null, reenter_edit)) {
 				if (reenter_edit)
 					e.enter_edit(cols > 0 ? 'left' : 'right')
 				return false
@@ -953,7 +959,7 @@ grid = component('x-grid', function(e) {
 
 			let reenter_edit = e.input && e.keep_editing
 
-			if (e.focus_next_cell(cols, true))
+			if (e.focus_next_cell(cols, true, reenter_edit))
 				if (reenter_edit)
 					e.enter_edit(cols > 0 ? 'left' : 'right')
 
@@ -1020,7 +1026,7 @@ grid = component('x-grid', function(e) {
 						if (e.keep_editing)
 							e.enter_edit(true)
 				} else if (e.auto_advance == 'next_cell')
-					if (e.focus_next_cell(shift ? -1 : 1))
+					if (e.focus_next_cell(shift ? -1 : 1, null, e.keep_editing))
 						if (e.keep_editing)
 							e.enter_edit(true)
 			}
@@ -1132,9 +1138,6 @@ grid = component('x-grid', function(e) {
 			let i = field.index
 			cmps[i] = e.rowset.comparator(field)
 			let r = dir == 'asc' ? 1 : -1
-			// header row comes first
-			s.push('if (!r1.row) return -1')
-			s.push('if (!r2.row) return  1')
 			// invalid values come first
 			s.push('var v1 = !(r1.fields && r1.fields['+i+'].invalid)')
 			s.push('var v2 = !(r2.fields && r2.fields['+i+'].invalid)')
@@ -1161,7 +1164,6 @@ grid = component('x-grid', function(e) {
 		update_sort_icons()
 		update_view()
 		update_focus(true)
-		update_input_geometry()
 		scroll_to_cell(e.focused_cell)
 
 	}

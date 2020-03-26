@@ -89,14 +89,22 @@
 	position: absolute;
 }
 
-.x-grid-input {
+.x-widget.grid-editor {
+
 	position: absolute;
+	min-width: 0;
 	border: 0;
+	margin: 0;
+
 	font-size: inherit;
 	font-family: inherit;
 	cursor: initial;
 	color: inherit;
 	background: #fff;
+}
+
+.x-widget.grid-editor,
+.x-widget.grid-editor:focus-within {
 	outline: 0;
 	box-shadow: inset 2px 2px 6px -2px rgba(0,0,0,0.75);
 }
@@ -114,7 +122,7 @@
 
 /* picker ----------------------------------------------------------------- */
 
-.x-grid.picker {
+.x-dropdown .x-widget.x-grid.picker {
 	min-height: 100px;
 	max-height: 300px;
 	min-width: 100%;
