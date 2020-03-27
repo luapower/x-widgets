@@ -593,6 +593,7 @@ spin_input = component('x-spin-input', input, function(e) {
 			increment = e.step * sign
 			increment_value()
 			start_incrementing_timer = setTimeout(start_incrementing, 500)
+			return false
 		})
 		function mouseup() {
 			clearTimeout(start_incrementing_timer)
@@ -787,7 +788,7 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	// clicking outside the picker closes the picker.
-	function document_mousedown(shift, ctrl, alt, ev) {
+	function document_mousedown(ev) {
 		if (e.contains(ev.target)) // clicked inside the dropdown.
 			return
 		if (e.picker.contains(ev.target)) // clicked inside the picker.
@@ -798,7 +799,7 @@ dropdown = component('x-dropdown', function(e) {
 	// clicking outside the picker closes the picker, even if the click did something.
 	function document_stopped_event(ev) {
 		if (ev.type == 'mousedown')
-			document_mousedown(0, 0, 0, ev)
+			document_mousedown(ev)
 	}
 
 	function view_focusout(ev) {
@@ -1211,8 +1212,9 @@ menu = component('x-menu', function(e) {
 	function show_menu(x, y, pe) {
 		pe = pe || document.body
 		let table = create_menu(e.actions)
-		table.x = pe.offsetLeft + x
-		table.y = pe.offsetTop + pe.offsetHeight + y
+		let r = pe.getBoundingClientRect()
+		table.x = r.left   + window.scrollX
+		table.y = r.bottom + window.scrollY
 		document.body.add(table)
 		table.document_mousedown = function() {
 			e.close()
@@ -2280,20 +2282,20 @@ grid = component('x-grid', function(e) {
 
 	// mouse bindings ---------------------------------------------------------
 
-	function header_cell_mousedown(shift) {
+	function header_cell_mousedown(ev) {
 		if (e.hasclass('col-resize'))
 			return
 		e.focus()
-		e.toggle_order(this.field, shift)
+		e.toggle_order(this.field, ev.shiftKey)
 		return false
 	}
 
-	function header_cell_rightmousedown(shift) {
+	function header_cell_rightmousedown(ev) {
 		if (e.hasclass('col-resize'))
 			return
 		e.focus()
-		if (shift) {
-
+		if (ev.shiftKey) {
+			field_context_menu_popup(ev.target, this.field)
 			return false
 		}
 		e.clear_order()
@@ -2565,7 +2567,24 @@ grid = component('x-grid', function(e) {
 
 	}
 
-	// dropdown protocol
+	// columns context menu ---------------------------------------------------
+
+	function field_context_menu_popup(th, field) {
+		if (th.menu)
+			th.menu.close()
+		function toggle_field(item) {
+			print(item.field)
+			return false
+		}
+		let act = []
+		for (let field of e.rowset.fields) {
+			act.push({field: field, text: field.name, checked: true, click: toggle_field})
+		}
+		th.menu = menu({actions: act})
+		th.menu.popup(0, 0, th)
+	}
+
+	// dropdown protocol ------------------------------------------------------
 
 	e.property('display_value', function() {
 		let [row] = row_field_at(e.focused_cell)
