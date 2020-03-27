@@ -24,21 +24,22 @@ a few more ads.
 ## Browser Compatibility
 
 This will probably only work on desktop Firefox and Chrome/Edge for the
-forseeable future. Something might be done for Safari and maybe mobile
-Chrome and Firefox too. Anything else is out.
+forseeable future. Something might be done for Safari (if it doesn't catch
+up all by itself, or you know, dies) and maybe mobile Chrome and Firefox too.
+Anything else is out.
 
 ## Installation
 
-Look, it's just a bunch of .css and .js files. Load them as they are or
-combine, minify and gzip them, you know, do what you have to do, make it
-look professional.
+To install the library you need docker, kubernetes, webpack, redis, memcached
+(because RAM is cheap) four medium AWS instances and an Apple developer account.
+Look, it's just one .js file and one .css file. Load them as they are or
+bundle, minify and gzip them, do what you have to do. Just make it look professional.
 
 The dependencies are `glue.js` and `divs.js` from [webb] so get those first.
-Get `rowset.js` too if you want to use the widgets in data-driven mode.
+
 `glue.js` extends JavaScript with basic routines similar to [glue] from Lua.
+
 `divs.js` is a tiny jQuery-like library for DOM manipulation.
-`rowset.js` contains the client-side row-set abstraction that makes the
-widgets data-driven.
 
 ## Styling
 
@@ -61,9 +62,10 @@ If you're still not sure, here's a list to
 * this lib only uses `===` when it's actually necessary.
 * this lib uses `<table>` for layouting. are you sick yet?
 * this lib uses snake case instead of hungarian notation.
-* this lib wraps instantation with `new` into plain functions.
+* this lib wraps instantiations with `new` into plain functions.
 * this lib does not even quote html attributes. why are you still reading?
 * this lib uses a deployment system whereby you open up your file explorer
 and then you copy-paste a bunch of .css and .js files to your goddam www folder.
-* look, it's not even a framework, it's a library. don't you wanna use a framework?
+* look, it's not even a framework, it's a library. don't you wanna use React
+or something cool like that?
 

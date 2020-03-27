@@ -359,6 +359,7 @@ input = component('x-input', function(e) {
 	e.input.on('input', input_input)
 	e.input.on('focus', input_focus)
 	e.input.on('blur', input_blur)
+	e.input.on('keyup', input_keyup)
 	e.add(e.input, e.tooltip)
 
 	function set_valid(err) {
@@ -436,27 +437,52 @@ input = component('x-input', function(e) {
 		e.input.focus()
 	}
 
-	e.editor_state = function(field) {
+	let editor_state
+
+	function update_editor_state() {
 		let i0 = e.input.selectionStart
 		let i1 = e.input.selectionEnd
 		let imax = e.input.value.length
 		let leftmost  = i0 == 0
 		let rightmost = i1 == imax
-		if (field == 'left')
-			return i0 == i1 && leftmost && 'left'
-		else if (field == 'right')
-			return i0 == i1 && rightmost && 'right'
-		else if (field == null) {
-			if (e.align == 'left') {
-				if (rightmost)
-					i1 = -1
-			} else if (e.align == 'right') {
-				i0 = i0 - imax - 1
-				i1 = i1 - imax - 1
-				if (leftmost)
-					i0 = 0
+		if (e.align == 'left') {
+			if (rightmost) {
+				if (i0 == i1)
+					i0 = -1
+				i1 = -1
 			}
-			return [i0, i1]
+		} else if (e.align == 'right') {
+			i0 = i0 - imax - 1
+			i1 = i1 - imax - 1
+			if (leftmost) {
+				if (i0 == 1)
+					i1 = 0
+				i0 = 0
+			}
+		}
+		editor_state = [i0, i1]
+	}
+
+	function input_keyup(key) {
+		if (key.starts('Arrow'))
+			update_editor_state()
+	}
+
+	e.editor_state = function(field) {
+		if (field) {
+			let i0 = e.input.selectionStart
+			let i1 = e.input.selectionEnd
+			let imax = e.input.value.length
+			let leftmost  = i0 == 0
+			let rightmost = i1 == imax
+			if (field == 'left')
+				return i0 == i1 && leftmost && 'left'
+			else if (field == 'right')
+				return i0 == i1 && rightmost && 'right'
+		} else {
+			if (!editor_state)
+				update_editor_state()
+			return editor_state
 		}
 	}
 
@@ -812,7 +838,7 @@ dropdown = component('x-dropdown', function(e) {
 
 	// editor protocol (stubs)
 
-	e.editor_state = function(field) { return true }
+	e.editor_state = function(field) { return field }
 	e.enter_editor = function(state) {}
 
 })
@@ -2574,7 +2600,6 @@ grid = component('x-grid', function(e) {
 		if (th.menu)
 			th.menu.close()
 		function toggle_field(item) {
-			print(item.field)
 			return false
 		}
 		let act = []
