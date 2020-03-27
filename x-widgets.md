@@ -66,6 +66,5 @@ If you're still not sure, here's a list to
 * this lib does not even quote html attributes. why are you still reading?
 * this lib uses a deployment system whereby you open up your file explorer
 and then you copy-paste a bunch of .css and .js files to your goddam www folder.
-* look, it's not even a framework, it's a library. don't you wanna use React
-or something cool like that?
+* look, it's not even a framework, it's a library. don't you wanna use _a framework_?
 
