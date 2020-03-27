@@ -756,7 +756,7 @@ dropdown = component('x-dropdown', function(e) {
 
 	// kb & mouse binding
 
-	function view_mousedown(ev) {
+	function view_mousedown() {
 		e.toggle(true)
 		return false
 	}
@@ -787,7 +787,7 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	// clicking outside the picker closes the picker.
-	function document_mousedown(ev) {
+	function document_mousedown(shift, ctrl, alt, ev) {
 		if (e.contains(ev.target)) // clicked inside the dropdown.
 			return
 		if (e.picker.contains(ev.target)) // clicked inside the picker.
@@ -798,7 +798,7 @@ dropdown = component('x-dropdown', function(e) {
 	// clicking outside the picker closes the picker, even if the click did something.
 	function document_stopped_event(ev) {
 		if (ev.type == 'mousedown')
-			document_mousedown(ev)
+			document_mousedown(0, 0, 0, ev)
 	}
 
 	function view_focusout(ev) {
@@ -1136,6 +1136,15 @@ calendar = component('x-calendar', function(e) {
 	}
 
 	// dropdown protocol
+
+	// hack: trick dropdown into thinking that our own opened dropdown picker
+	// is our child, which is how we would implement dropdowns if this fucking
+	// rendering model would allow us to decouple painting order from element's
+	// position in the tree (IOW we need the concept of global z-index).
+	let builtin_contains = e.contains
+	e.contains = function(e1) {
+		return builtin_contains.call(this, e1) || e.sel_month.picker.contains(e1)
+	}
 
 	e.property('display_value', function() {
 		_d.setTime(e.value)
@@ -2271,18 +2280,22 @@ grid = component('x-grid', function(e) {
 
 	// mouse bindings ---------------------------------------------------------
 
-	function header_cell_mousedown(ev) {
+	function header_cell_mousedown(shift) {
 		if (e.hasclass('col-resize'))
 			return
 		e.focus()
-		e.toggle_order(this.field, ev.shiftKey)
+		e.toggle_order(this.field, shift)
 		return false
 	}
 
-	function header_cell_rightmousedown() {
+	function header_cell_rightmousedown(shift) {
 		if (e.hasclass('col-resize'))
 			return
 		e.focus()
+		if (shift) {
+
+			return false
+		}
 		e.clear_order()
 		return false
 	}
