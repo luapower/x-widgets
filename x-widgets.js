@@ -369,6 +369,8 @@ input = component('x-input', function(e) {
 		e.tooltip.style.display = e.error ? null : 'none'
 	}
 
+	e.attr_property('align', 'left')
+
 	let value, value_set
 
 	e.init = function() {
@@ -376,6 +378,7 @@ input = component('x-input', function(e) {
 			value = e.default_value
 			value_set = true
 		}
+		e.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
 	}
 
 	function get_value() {
@@ -427,22 +430,50 @@ input = component('x-input', function(e) {
 		return s !== '' ? s : null
 	}
 
-	// editor protocol
+	// grid editor protocol
 
 	e.focus = function() {
 		e.input.focus()
 	}
 
-	e.editor_selection = function(field) {
-		return [e.input.selectionStart, e.input.selectionEnd]
+	e.editor_state = function(field) {
+		let i0 = e.input.selectionStart
+		let i1 = e.input.selectionEnd
+		let imax = e.input.value.length
+		let leftmost  = i0 == 0
+		let rightmost = i1 == imax
+		if (field == 'left')
+			return i0 == i1 && leftmost && 'left'
+		else if (field == 'right')
+			return i0 == i1 && rightmost && 'right'
+		else if (field == null) {
+			if (e.align == 'left') {
+				if (rightmost)
+					i1 = -1
+			} else if (e.align == 'right') {
+				i0 = i0 - imax - 1
+				i1 = i1 - imax - 1
+				if (leftmost)
+					i0 = 0
+			}
+			return [i0, i1]
+		}
 	}
 
-	e.enter_editor = function(field, sel0, sel1) {
-		if (sel0 == null)
+	e.enter_editor = function(field, s) {
+		if (!s)
 			return
-		if (sel1 == null)
-			sel1 = sel0
-		e.input.select(sel0, sel1)
+		if (s == 'select_all')
+			s = [0, -1]
+		else if (s == 'left')
+			s = [0, 0]
+		else if (s == 'right')
+			s = [-1, -1]
+		let [i0, i1] = s
+		let imax = e.input.value.length
+		if (i0 < 0) i0 = imax + i0 + 1
+		if (i1 < 0) i1 = imax + i1 + 1
+		e.input.select(i0, i1)
 	}
 
 })
@@ -454,6 +485,7 @@ input = component('x-input', function(e) {
 spin_input = component('x-spin-input', input, function(e) {
 
 	e.class('x-spin-input')
+	e.attrval('align', 'right')
 
 	// model
 
@@ -778,8 +810,8 @@ dropdown = component('x-dropdown', function(e) {
 
 	// editor protocol (stubs)
 
-	e.editor_selection = function(field) { return [0, 0] }
-	e.enter_editor = function(field, sel1, sel2) {}
+	e.editor_state = function(field) { return true }
+	e.enter_editor = function(state) {}
 
 })
 
@@ -1715,7 +1747,7 @@ grid = component('x-grid', function(e) {
 		update_header_x(sx)
 	}
 
-	function create_editor(sel0, sel1) {
+	function create_editor(editor_state) {
 		let [row, field] = row_field_at(e.focused_cell)
 		let [_, td] = tr_td_at(e.focused_cell)
 		update_focus(false)
@@ -1725,7 +1757,7 @@ grid = component('x-grid', function(e) {
 
 		e.input.class('grid-editor')
 
-		e.input.enter_editor(field, sel0, sel1)
+		e.input.enter_editor(field, editor_state)
 
 		e.input.on('value_changed', input_value_changed)
 		e.input.on('lost_focus', editor_lost_focus)
@@ -2042,13 +2074,13 @@ grid = component('x-grid', function(e) {
 		return td.first
 	}
 
-	e.enter_edit = function(sel0, sel1) {
+	e.enter_edit = function(editor_state) {
 		if (e.input)
 			return
 		let [row, field] = row_field_at(e.focused_cell)
 		if (!can_focus_cell(row, field, true))
 			return
-		create_editor(sel0, sel1)
+		create_editor(editor_state)
 		e.input.focus()
 	}
 
@@ -2212,7 +2244,7 @@ grid = component('x-grid', function(e) {
 			update_view()
 			scroll_to_cell(e.focused_cell)
 			if (reenter_edit)
-				e.enter_edit(0, -1)
+				e.enter_edit('select_all')
 		} else {
 			e.rows.push(row)
 			update_heights()
@@ -2269,7 +2301,7 @@ grid = component('x-grid', function(e) {
 				// to let mousedown click-through to the input box and focus the input
 				// and move the caret under the mouse all by itself.
 				// Unfortunately, this only works in Chrome no luck with Firefox.
-				e.enter_edit(0, -1)
+				e.enter_edit('select_all')
 				return false
 			}
 		} else {
@@ -2292,11 +2324,11 @@ grid = component('x-grid', function(e) {
 
 			let move = !e.input
 				|| (e.auto_jump_cells && !shift
-					&& e.input.caret == (cols < 0 ? 0 : e.input.value.length))
+					&& e.input.editor_state(cols < 0 ? 'left' : 'right'))
 
 			if (move && e.focus_next_cell(cols, null, reenter_edit)) {
 				if (reenter_edit)
-					e.enter_edit(cols > 0 ? 0 : -1)
+					e.enter_edit(cols > 0 ? 'left' : 'right')
 				return false
 			}
 		}
@@ -2310,7 +2342,7 @@ grid = component('x-grid', function(e) {
 
 			if (e.focus_next_cell(cols, true, reenter_edit))
 				if (reenter_edit)
-					e.enter_edit(cols > 0 ? 0 : -1)
+					e.enter_edit(cols > 0 ? 'left' : 'right')
 
 			return false
 		}
@@ -2349,18 +2381,18 @@ grid = component('x-grid', function(e) {
 			}
 
 			let reenter_edit = e.input && e.keep_editing
-			let editor_sel = e.input && e.input.editor_selection()
+			let editor_state = e.input && e.input.editor_state()
 
 			if (e.focus_cell(null, rows)) {
 				if (reenter_edit)
-					e.enter_edit(...editor_sel)
+					e.enter_edit(editor_state)
 				return false
 			}
 		}
 
 		// F2: enter edit mode
 		if (!e.input && key == 'F2') {
-			e.enter_edit(0, -1)
+			e.enter_edit('select_all')
 			return false
 		}
 
@@ -2369,16 +2401,16 @@ grid = component('x-grid', function(e) {
 			if (e.hasclass('picker')) {
 				e.fire('value_picked', true)
 			} else if (!e.input) {
-				e.enter_edit(0, -1)
+				e.enter_edit('select_all')
 			} else if (e.exit_edit()) {
 				if (e.auto_advance == 'next_row') {
 					if (e.focus_cell(null, 1))
 						if (e.keep_editing)
-							e.enter_edit(0, -1)
+							e.enter_edit('select_all')
 				} else if (e.auto_advance == 'next_cell')
 					if (e.focus_next_cell(shift ? -1 : 1, null, e.keep_editing))
 						if (e.keep_editing)
-							e.enter_edit(0, -1)
+							e.enter_edit('select_all')
 			}
 			return false
 		}
@@ -2409,7 +2441,7 @@ grid = component('x-grid', function(e) {
 	// printable characters: enter quick edit mode.
 	function view_keypress() {
 		if (!e.input) {
-			e.enter_edit(0, -1)
+			e.enter_edit('select_all')
 			return false
 		}
 	}
