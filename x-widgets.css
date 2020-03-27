@@ -2,7 +2,8 @@
 /* variables -------------------------------------------------------------- */
 
 :root {
-	--x-input-padding          : .5em;  /* x-padding for inputs and grid cells */
+	--x-input-padding          : .25em .5em; /* padding for inputs and grid cells */
+	--x-input-padding-x        : .5em;  /* x-padding for inputs and grid cells */
 	--x-input-focused-bg-color : #ffc;  /* bg color for focused inputs, dropdowns and pickers */
 	--x-error-bg-color         : #a33;  /* bg color for invalid inputs and error bubbles */
 	--x-focus-shadow           : 0 0 1px 1px #99f; /* to be used in place of focus outline */
@@ -70,7 +71,7 @@
 	position: relative;      /* anchor stuff to the button */
 
 	/* sizing for inline use */
-	padding: .25em .5em;
+	padding: var(--x-input-padding);
 	margin: .25em;
 	border: 1px solid rgba(27,31,35,.2);
 	border-radius: .25em;
@@ -146,7 +147,7 @@
 
 	/* sizing for inline use */
 	margin: .25em;
-	padding: 0;
+	padding: 0;              /* required: set from code */
 	border-width: 1px;
 	border-radius: .2em;
 	font-size: 100%;
@@ -160,7 +161,7 @@
 	/* defaults */
 	margin: 0;
 	border: 0;
-	padding: .25em;
+	padding: var(--x-input-padding);
 	font-size: inherit;
 	font-family: inherit;
 	height: 100%;            /* stretch vertically */
@@ -220,35 +221,31 @@
 	border-style: solid;
 	border-color: #999;
 	border-width: 0;
-	padding-left : var(--x-input-padding);
-	padding-right: var(--x-input-padding);
+	padding-left : var(--x-input-padding-x);
+	padding-right: var(--x-input-padding-x);
 }
 
-.x-spin-input-button-left  { border-right-width: 1px; }
-.x-spin-input-button-right { border-left-width : 1px; }
+.x-spin-input-button.left  { border-right-width: 1px; }
+.x-spin-input-button.right { border-left-width : 1px; }
 
 .x-spin-input-button.fa-plus,
 .x-spin-input-button.fa-minus {
 	font-size: 70%;
 	align-self: center;
 }
+.x-spin-input-button.fa-minus.leftmost { padding-left  : calc(1.428 * var(--x-input-padding-x)); }
+.x-spin-input-button.fa-plus.rightmost { padding-right : calc(1.428 * var(--x-input-padding-x)); }
 
-/* input as grid editor --------------------------------------------------- */
-
-.x-input.grid-editor .x-input-input {
-	padding-left : var(--x-input-padding);
-	padding-right: var(--x-input-padding);
-}
+.x-spin-input-button.fa-caret-left  { padding-right : calc(.5 * var(--x-input-padding-x)); }
+.x-spin-input-button.fa-caret-right { padding-left  : calc(.5 * var(--x-input-padding-x)); }
 
 /* dropdown --------------------------------------------------------------- */
 
-.x-dropdown {
-	/* layouting */
-	align-items: stretch;
+/* NOTE: .x-input is applied too on dropdowns so consider this a class extension! */
 
-	/* sizing for inline use */
-	padding: .25em;
-	line-height: normal;
+.x-dropdown {
+	/* content layouting */
+	align-items: stretch;
 
 	/* styling */
 	cursor: default;
@@ -259,24 +256,34 @@
 }
 
 .x-dropdown-value {
-	flex: 1;                 /* stretch horizontally */
-	height: 100%;
-	padding-right: .25em;
-}
 
-.x-dropdown.align-right .x-dropdown-value {
-	order: 2;
-	text-align: right;
-	padding-right: 0;
+	/* self positioning & alignment */
+	flex: 1;                 /* stretch horizontally */
+	padding: var(--x-input-padding);
+	padding-right : .25em;
+	padding-left  : var(--x-input-padding-x);
+
+	/* content layouting */
+	display: flex;
+	align-items: center;
 }
 
 .x-dropdown-button {
 	align-self: center;
-	padding-left : .35em;
-	padding-right: .25em;
+	padding-left : var(--x-input-padding-x);
+	padding-right: var(--x-input-padding-x);
+
 	border-left-style: inherit;
 	border-left-color: inherit;
 	border-left-width: 1px;
+}
+
+.x-dropdown.align-right .x-dropdown-value {
+	order: 2;
+	padding-left  : .25em;
+	padding-right : var(--x-input-padding-x);
+
+	justify-content: flex-end;
 }
 
 /* inline mode: variable-width, no-wrap with no min-width */
@@ -318,13 +325,6 @@
 	outline: none;
 	background-color: var(--x-input-focused-bg-color);
 	box-shadow: var(--x-focus-shadow);
-}
-
-/* dropdown as grid editor ------------------------------------------------ */
-
-.x-widget.x-dropdown.grid-editor {
-	padding-left : var(--x-input-padding);
-	padding-right: var(--x-input-padding);
 }
 
 /* listbox ---------------------------------------------------------------- */
@@ -417,7 +417,7 @@
 }
 
 .x-calendar-sel-month.x-input {
-	min-width: 5em;          /* limit shrinking */
+	min-width: 4.5em;        /* limit shrinking */
 	margin: .25em;           /* separate from day suffix */
 }
 
@@ -426,7 +426,7 @@
 }
 
 .x-input.x-calendar-sel-year {
-	min-width: 6em;
+	min-width: 6.5em;
 }
 
 /* calendar as picker ----------------------------------------------------- */
@@ -611,8 +611,7 @@ td.x-menu-title-td {
 }
 
 .x-grid-cell {
-	padding-left : var(--x-input-padding);
-	padding-right: var(--x-input-padding);
+	padding: var(--x-input-padding);
 }
 
 .x-grid-td {

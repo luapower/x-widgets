@@ -19,6 +19,7 @@
 		server_default : default value that the server sets.
 		allow_null     : allow null (true).
 		editable       : allow modifying (true).
+		sortable       : allow sorting (true).
 		validate       : f(v, field) -> true|err
 		format         : f(v, field) -> s
 		align          : 'left'|'right'|'center'
@@ -290,6 +291,7 @@ let rowset = function(...options) {
 		server_default: null,
 		allow_null: true,
 		editable: true,
+		sortable: true,
 	}
 
 	rowset.default_type.format = function(v) {
@@ -409,6 +411,7 @@ input = component('x-input', function(e) {
 
 	function input_blur() {
 		e.tooltip.style.display = 'none'
+		e.fire('lost_focus') // grid editor protocol
 	}
 
 	e.validate = function(v) {
@@ -430,13 +433,16 @@ input = component('x-input', function(e) {
 		e.input.focus()
 	}
 
-	e.enter_editor = function(field, where) {
-		if (where == 'right')
-			e.input.select(e.input.value.length, e.input.value.length)
-		else if (where == 'left')
-			e.input.select(0, 0)
-		else if (where)
-			e.input.select(0, e.input.value.length)
+	e.editor_selection = function(field) {
+		return [e.input.selectionStart, e.input.selectionEnd]
+	}
+
+	e.enter_editor = function(field, sel0, sel1) {
+		if (sel0 == null)
+			return
+		if (sel1 == null)
+			sel1 = sel0
+		e.input.select(sel0, sel1)
 	}
 
 })
@@ -488,16 +494,20 @@ spin_input = component('x-spin-input', input, function(e) {
 		if (bp == 'each-side') {
 			e.insert(0, e.down)
 			e.add(e.up)
-			e.down.class('x-spin-input-button-left' )
-			e.up  .class('x-spin-input-button-right')
+			e.down.class('left' )
+			e.up  .class('right')
+			e.down.class('leftmost' )
+			e.up  .class('rightmost')
 		} else if (bp == 'right') {
 			e.add(e.down, e.up)
-			e.down.class('x-spin-input-button-right')
-			e.up  .class('x-spin-input-button-right')
+			e.down.class('right')
+			e.up  .class('right')
+			e.up  .class('rightmost')
 		} else if (bp == 'left') {
 			e.insert(0, e.down, e.up)
-			e.down.class('x-spin-input-button-left')
-			e.up  .class('x-spin-input-button-left')
+			e.down.class('left')
+			e.up  .class('left')
+			e.down.class('leftmost' )
 		}
 
 	}
@@ -551,7 +561,6 @@ spin_input = component('x-spin-input', input, function(e) {
 			increment = e.step * sign
 			increment_value()
 			start_incrementing_timer = setTimeout(start_incrementing, 500)
-			return false
 		})
 		function mouseup() {
 			clearTimeout(start_incrementing_timer)
@@ -604,13 +613,18 @@ dropdown = component('x-dropdown', function(e) {
 			e.value_div.replace(0, v)
 	}
 
+	function onoff_events(on) {
+		document.onoff('mousedown', document_mousedown, on)
+		document.onoff('stopped_event', document_stopped_event, on)
+	}
+
 	e.attach = function(parent) {
 		update_view()
-		document.on('mousedown', document_mousedown)
+		onoff_events(true)
 	}
 
 	e.detach = function() {
-		document.off('mousedown', document_mousedown)
+		onoff_events(false)
 		e.close()
 	}
 
@@ -633,7 +647,6 @@ dropdown = component('x-dropdown', function(e) {
 		e.picker.on('value_changed', value_changed)
 		e.picker.on('value_picked' , value_picked)
 		e.picker.on('keydown', picker_keydown)
-		e.picker.on('focusout', picker_focusout)
 	}
 
 	// focusing
@@ -642,30 +655,25 @@ dropdown = component('x-dropdown', function(e) {
 	let focusing_picker
 	e.focus = function() {
 		if (e.isopen) {
-			focusing_picker = true
+			focusing_picker = true // focusout barrier.
 			e.picker.focus()
 			focusing_picker = false
 		} else
 			builtin_focus.call(this)
 	}
 
-	// isopen property
+	// opening & closing
 
-	e.late_property('isopen',
-		function() {
-			return e.hasclass('open')
-		},
-		function(open) {
-			if (e.isopen == open)
-				return
+	e.set_open = function(open, focus) {
+		if (e.isopen != open) {
 			e.class('open', open)
 			e.button.replace_class('fa-caret-down', 'fa-caret-up', open)
 			e.picker.class('picker', open)
 			if (open) {
 				e.cancel_value = e.value
 				let r = e.getBoundingClientRect()
-				e.picker.x = r.left
-				e.picker.y = r.bottom
+				e.picker.x = r.left   + window.scrollX
+				e.picker.y = r.bottom + window.scrollY
 				e.picker.min_w = r.width
 				document.body.add(e.picker)
 				e.fire('opened')
@@ -673,18 +681,31 @@ dropdown = component('x-dropdown', function(e) {
 				e.cancel_value = null
 				e.picker.remove()
 				e.fire('closed')
+				if (!focus)
+					e.fire('lost_focus') // grid editor protocol
 			}
 		}
-	)
-
-	e.open   = function() { e.isopen = true }
-	e.close  = function() { e.isopen = false }
-	e.toggle = function() { e.isopen = !e.isopen }
-	e.cancel = function() {
-		if (!e.isopen) return
-		e.value = e.cancel_value
-		e.close()
+		if (focus)
+			e.focus()
 	}
+
+	e.open   = function(focus) { e.set_open(true, focus) }
+	e.close  = function(focus) { e.set_open(false, focus) }
+	e.toggle = function(focus) { e.set_open(!e.isopen, focus) }
+	e.cancel = function(focus) {
+		if (e.isopen)
+			e.value = e.cancel_value
+		e.close(focus)
+	}
+
+	e.late_property('isopen',
+		function() {
+			return e.hasclass('open')
+		},
+		function(open) {
+			e.set_open(open, true)
+		}
+	)
 
 	// picker protocol
 
@@ -693,9 +714,7 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	function value_picked(from_user_input) {
-		e.close()
-		if (from_user_input)
-			e.focus()
+		e.close(from_user_input)
 		e.fire('value_changed', e.picker.value) // input protocol
 		if (e.rowset) {
 			let err = e.rowset.set_value(e.value)
@@ -706,17 +725,13 @@ dropdown = component('x-dropdown', function(e) {
 	// kb & mouse binding
 
 	function view_mousedown(ev) {
-		if (!e.picker.contains(ev.target)) {
-			e.toggle()
-			e.focus()
-			return false
-		}
+		e.toggle(true)
+		return false
 	}
 
 	function view_keydown(key) {
 		if (key == 'Enter' || key == ' ') {
-			e.toggle()
-			e.focus()
+			e.toggle(true)
 			return false
 		}
 		if (key == 'ArrowDown' || key == 'ArrowUp') {
@@ -727,10 +742,9 @@ dropdown = component('x-dropdown', function(e) {
 		}
 	}
 
-	function picker_keydown(key) {
-		if (key == 'Escape') {
-			e.cancel()
-			e.focus()
+	function picker_keydown(key, shift, ctrl, alt, ev) {
+		if (key == 'Escape' || key == 'Tab') {
+			e.cancel(true)
 			return false
 		}
 	}
@@ -740,47 +754,33 @@ dropdown = component('x-dropdown', function(e) {
 		return false
 	}
 
-	// auto-closing picker when clicking or tabbing outside of it.
-
-	// tabbing outside the picker closes the picker.
-	function picker_focusout(ev) {
-		print(e.isopen)
-		if (!e.isopen)
+	// clicking outside the picker closes the picker.
+	function document_mousedown(ev) {
+		if (e.contains(ev.target)) // clicked inside the dropdown.
 			return
-		print(ev.relatedTarget)
-		/*
-		if (!ev.relatedTarget) // might've been focusing inside
-			return
-		print(ev.relatedTarget)
-		if (e.picker.contains(ev.relatedTarget)) // focusing inside
+		if (e.picker.contains(ev.target)) // clicked inside the picker.
 			return
 		e.cancel()
-	*/
 	}
 
-	// clicking outside the picker closes the picker and re-focuses the dropdown.
-	function document_mousedown(ev) {
-		if (!e.isopen)
-			return
-		if (!e.picker.contains(ev.target)) {
-			e.cancel()
-			e.focus()
-			return false
-		}
+	// clicking outside the picker closes the picker, even if the click did something.
+	function document_stopped_event(ev) {
+		if (ev.type == 'mousedown')
+			document_mousedown(ev)
 	}
 
-	// prevent dropdown's focusout from bubbling to the parent, which prevents
-	// the parent from thinking we lost focus (grid uses that to exit edit mode).
 	function view_focusout(ev) {
+		// prevent dropdown's focusout from bubbling to the parent when opening the picker.
 		if (focusing_picker)
 			return false
+		e.fire('lost_focus') // grid editor protocol
 	}
 
-	// editor protocol
+	// editor protocol (stubs)
 
-	e.enter_editor = function(field, direction) {
-		//
-	}
+	e.editor_selection = function(field) { return [0, 0] }
+	e.enter_editor = function(field, sel1, sel2) {}
+
 })
 
 // ---------------------------------------------------------------------------
@@ -837,20 +837,20 @@ listbox = component('x-listbox', function(e) {
 	}
 
 	function select_item(item, pick, from_user_input) {
-		if (item == e.selected_item)
-			return
-		if (e.selected_item) {
-			e.selected_item.class('focused', false)
-			e.selected_item.class('selected', false)
+		if (item != e.selected_item) {
+			if (e.selected_item) {
+				e.selected_item.class('focused', false)
+				e.selected_item.class('selected', false)
+			}
+			if (item) {
+				item.class('focused')
+				item.class('selected')
+				item.make_visible()
+			}
+			e.selected_item = item
+			e.fire('selected', item ? item.item : null)
+			e.fire('value_changed', item ? item.index : null, from_user_input)
 		}
-		if (item) {
-			item.class('focused')
-			item.class('selected')
-			item.make_visible()
-		}
-		e.selected_item = item
-		e.fire('selected', item ? item.item : null)
-		e.fire('value_changed', item ? item.index : null, from_user_input)
 		if (pick)
 			e.fire('value_picked', from_user_input) // dropdown protocol
 	}
@@ -858,7 +858,7 @@ listbox = component('x-listbox', function(e) {
 	function item_mousedown() {
 		e.focus()
 		select_item(this, true, true)
-		return false // prevent bubbling up to dropdown.
+		return false
 	}
 
 	function list_keydown(key) {
@@ -940,6 +940,8 @@ calendar = component('x-calendar', function(e) {
 		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
 	e.weekview = H.table({class: 'x-calendar-weekview'})
 	e.on('keydown', view_keydown)
+	e.sel_month.on('keydown', sel_month_keydown)
+	e.sel_year.on('keydown', sel_year_keydown)
 	e.weekview.on('wheel', weekview_wheel)
 	e.add(e.header, e.weekview)
 
@@ -1015,7 +1017,7 @@ calendar = component('x-calendar', function(e) {
 		e.sel_month.cancel()
 		e.focus()
 		e.fire('value_picked', true) // dropdown protocol
-		return false // prevent bubbling up to dropdown.
+		return false
 	}
 
 	function month_changed() {
@@ -1036,8 +1038,15 @@ calendar = component('x-calendar', function(e) {
 	}
 
 	function view_keydown(key, shift) {
-		if (!e.focused)
+		if (!e.focused) // other inside element got focus
 			return
+		if (key == 'Tab' && e.hasclass('picker')) { // capture Tab navigation.
+			if (shift)
+				e.sel_year.focus()
+			else
+				e.sel_month.focus()
+			return false
+		}
 		let d, m
 		switch (key) {
 			case 'ArrowLeft'  : d = -1; break
@@ -1070,6 +1079,26 @@ calendar = component('x-calendar', function(e) {
 		}
 		if (key == 'Enter') {
 			e.fire('value_picked', true) // dropdown protocol
+			return false
+		}
+	}
+
+	function sel_month_keydown(key, shift) {
+		if (key == 'Tab' && e.hasclass('picker')) {// capture Tab navigation.
+			if (shift)
+				e.focus()
+			else
+				e.sel_year.focus()
+			return false
+		}
+	}
+
+	function sel_year_keydown(key, shift) {
+		if (key == 'Tab' && e.hasclass('picker')) { // capture Tab navigation.
+			if (shift)
+				e.sel_month.focus()
+			else
+				e.focus()
 			return false
 		}
 	}
@@ -1686,7 +1715,7 @@ grid = component('x-grid', function(e) {
 		update_header_x(sx)
 	}
 
-	function create_editor(enter_direction) {
+	function create_editor(sel0, sel1) {
 		let [row, field] = row_field_at(e.focused_cell)
 		let [_, td] = tr_td_at(e.focused_cell)
 		update_focus(false)
@@ -1696,10 +1725,10 @@ grid = component('x-grid', function(e) {
 
 		e.input.class('grid-editor')
 
-		e.input.enter_editor(field, enter_direction)
+		e.input.enter_editor(field, sel0, sel1)
 
 		e.input.on('value_changed', input_value_changed)
-		e.input.on('focusout', input_focusout)
+		e.input.on('lost_focus', editor_lost_focus)
 
 		e.rows_div.add(e.input)
 		update_input_geometry()
@@ -1956,11 +1985,12 @@ grid = component('x-grid', function(e) {
 		return ri != null ? e.rows[ri] : null
 	}
 
-	// auto-exit edit mode if the input lost focus.
-	function input_focusout() {
+	function editor_lost_focus(ev) {
 		if (!e.input) // input is being removed.
 			return
-		//e.exit_edit()
+		if (ev.target != e.input) // other input that bubbled up.
+			return
+		e.exit_edit()
 	}
 
 	// editing ----------------------------------------------------------------
@@ -2012,13 +2042,13 @@ grid = component('x-grid', function(e) {
 		return td.first
 	}
 
-	e.enter_edit = function(enter_direction) {
+	e.enter_edit = function(sel0, sel1) {
 		if (e.input)
 			return
 		let [row, field] = row_field_at(e.focused_cell)
 		if (!can_focus_cell(row, field, true))
 			return
-		create_editor(enter_direction)
+		create_editor(sel0, sel1)
 		e.input.focus()
 	}
 
@@ -2182,7 +2212,7 @@ grid = component('x-grid', function(e) {
 			update_view()
 			scroll_to_cell(e.focused_cell)
 			if (reenter_edit)
-				e.enter_edit(true)
+				e.enter_edit(0, -1)
 		} else {
 			e.rows.push(row)
 			update_heights()
@@ -2239,13 +2269,13 @@ grid = component('x-grid', function(e) {
 				// to let mousedown click-through to the input box and focus the input
 				// and move the caret under the mouse all by itself.
 				// Unfortunately, this only works in Chrome no luck with Firefox.
-				e.enter_edit(true)
+				e.enter_edit(0, -1)
 				return false
 			}
 		} else {
 			e.focus_cell([ri, fi], 0, 0, {must_not_move_row: true})
 			e.fire('value_picked', true) // dropdown protocol.
-			return false // prevent bubbling up to dropdown.
+			return false
 		}
 	}
 
@@ -2266,7 +2296,7 @@ grid = component('x-grid', function(e) {
 
 			if (move && e.focus_next_cell(cols, null, reenter_edit)) {
 				if (reenter_edit)
-					e.enter_edit(cols > 0 ? 'left' : 'right')
+					e.enter_edit(cols > 0 ? 0 : -1)
 				return false
 			}
 		}
@@ -2280,7 +2310,7 @@ grid = component('x-grid', function(e) {
 
 			if (e.focus_next_cell(cols, true, reenter_edit))
 				if (reenter_edit)
-					e.enter_edit(cols > 0 ? 'left' : 'right')
+					e.enter_edit(cols > 0 ? 0 : -1)
 
 			return false
 		}
@@ -2319,17 +2349,18 @@ grid = component('x-grid', function(e) {
 			}
 
 			let reenter_edit = e.input && e.keep_editing
+			let editor_sel = e.input && e.input.editor_selection()
 
 			if (e.focus_cell(null, rows)) {
 				if (reenter_edit)
-					e.enter_edit(true)
+					e.enter_edit(...editor_sel)
 				return false
 			}
 		}
 
 		// F2: enter edit mode
 		if (!e.input && key == 'F2') {
-			e.enter_edit(true)
+			e.enter_edit(0, -1)
 			return false
 		}
 
@@ -2338,16 +2369,16 @@ grid = component('x-grid', function(e) {
 			if (e.hasclass('picker')) {
 				e.fire('value_picked', true)
 			} else if (!e.input) {
-				e.enter_edit(true)
+				e.enter_edit(0, -1)
 			} else if (e.exit_edit()) {
 				if (e.auto_advance == 'next_row') {
 					if (e.focus_cell(null, 1))
 						if (e.keep_editing)
-							e.enter_edit(true)
+							e.enter_edit(0, -1)
 				} else if (e.auto_advance == 'next_cell')
 					if (e.focus_next_cell(shift ? -1 : 1, null, e.keep_editing))
 						if (e.keep_editing)
-							e.enter_edit(true)
+							e.enter_edit(0, -1)
 			}
 			return false
 		}
@@ -2375,10 +2406,10 @@ grid = component('x-grid', function(e) {
 
 	}
 
-	// printable characters: enter quick edit mode
+	// printable characters: enter quick edit mode.
 	function view_keypress() {
 		if (!e.input) {
-			e.enter_edit(true)
+			e.enter_edit(0, -1)
 			return false
 		}
 	}
@@ -2402,7 +2433,7 @@ grid = component('x-grid', function(e) {
 				let m = e.match(/^([^\s]*)\s*(.*)$/)
 				let name = m[1]
 				let field = e.rowset.field(name)
-				if (field) {
+				if (field && field.sortable) {
 					let dir = m[2] || 'asc'
 					if (dir == 'asc' || dir == 'desc')
 						order_by_dir.set(field, dir)
@@ -2425,6 +2456,8 @@ grid = component('x-grid', function(e) {
 	}
 
 	e.toggle_order = function(field, keep_others) {
+		if (!field.sortable)
+			return
 		let dir = order_by_dir.get(field)
 		dir = dir == 'asc' ? 'desc' : 'asc'
 		if (!keep_others)
