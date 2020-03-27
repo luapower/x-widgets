@@ -1,5 +1,6 @@
 /*
-	X-Widgets: Data-driven web components in JavaScript.
+
+	X-WIDGETS: Data-driven web components in JavaScript.
 	Written by Cosmin Apreutesei. Public Domain.
 
 */
