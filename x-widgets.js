@@ -727,8 +727,9 @@ dropdown = component('x-dropdown', function(e) {
 	e.toggle = function(focus) { e.set_open(!e.isopen, focus) }
 	e.cancel = function(focus) {
 		if (e.isopen)
-			e.value = e.cancel_value
-		e.close(focus)
+			e.picker.pick_value(e.cancel_value, focus)
+		else
+			e.close(focus)
 	}
 
 	e.late_property('isopen',
@@ -923,12 +924,12 @@ listbox = component('x-listbox', function(e) {
 		return e.selected_item ? e.selected_item.innerHTML : ''
 	})
 
-	e.pick_value = function(v) {
-		select_item_by_index(v, true, false)
+	e.pick_value = function(v, from_user_input) {
+		select_item_by_index(v, true, from_user_input)
 	}
 
-	e.pick_near_value = function(delta) {
-		select_item_by_index(e.selected_index + delta, true, false)
+	e.pick_near_value = function(delta, from_user_input) {
+		select_item_by_index(e.selected_index + delta, true, from_user_input)
 	}
 
 })
@@ -1152,14 +1153,14 @@ calendar = component('x-calendar', function(e) {
 		return _d.toLocaleString(locale, e.format)
 	})
 
-	e.pick_value = function(v) {
+	e.pick_value = function(v, from_user_input) {
 		e.value = v
-		e.fire('value_picked', false)
+		e.fire('value_picked', from_user_input)
 	}
 
-	e.pick_near_value = function(delta) {
+	e.pick_near_value = function(delta, from_user_input) {
 		e.value = day(e.value, delta)
-		e.fire('value_picked', false)
+		e.fire('value_picked', from_user_input)
 	}
 
 })
