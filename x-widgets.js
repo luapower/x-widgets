@@ -1897,20 +1897,18 @@ grid = component('x-grid', function(e) {
 		e.class('col-resizing', false)
 	}
 
-	function view_mousemove(mx, my) {
+	function view_mousemove(mx, my, ev) {
 		if (window.grid_col_resizing)
 			return
 		// hit-test for column resizing.
 		hit_th = null
-		if (my >= 0 && my <= e.offsetTop + e.clientTop) {
-			if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
-				// ^^ not over vertical scrollbar.
-				for (let th of e.header_tr.children) {
-					hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
-					if (hit_x >= -5 && hit_x <= 5) {
-						hit_th = th
-						break
-					}
+		if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
+			// ^^ not over vertical scrollbar.
+			for (let th of e.header_tr.children) {
+				hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
+				if (hit_x >= -5 && hit_x <= 5) {
+					hit_th = th
+					break
 				}
 			}
 		}

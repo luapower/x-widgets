@@ -616,7 +616,8 @@ td.x-menu-title-td {
 }
 
 .x-grid-td {
-	border-bottom: 0px solid #eee;
+	border-bottom: 0px solid #eee;  /* border width set from code */
+	//TODO: border-right: 1px solid #eee;
 }
 
 /* grid cell & row states ------------------------------------------------- */
