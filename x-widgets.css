@@ -483,6 +483,7 @@ tr.x-menu-separator-tr > td > hr {
 }
 
 td.x-menu-title-td {
+	padding: 0;
 	width: 100%;
 	padding-left: 0;
 }
@@ -551,6 +552,7 @@ td.x-menu-title-td {
 	display: inline-block;     /* required: don't expand to fit parent width */
 	overflow: hidden;          /* required: hide header overflow */
 	cursor: default;           /* required: don't show caret over text */
+	border: 0px solid #ccc;
 }
 
 .x-grid-header-table, .x-grid-rows-table {
@@ -560,14 +562,20 @@ td.x-menu-title-td {
 	border-collapse: collapse; /* required */
 }
 
+/* header */
+
 .x-grid-header-th-table {
 	width: 100%;               /* required: expand to fit column width */
 	table-layout: fixed;       /* required: don't expand based on content */
 }
+
 .x-grid-header-title-td {
+	padding: 0;
 	overflow: hidden;          /* required: hide title under the sort icon */
 }
+
 .x-grid-header-sort-icon-td {
+	padding: 0;
 	width: 1em;                /* required: leave the rest of the space to the title */
 }
 
@@ -583,11 +591,10 @@ td.x-menu-title-td {
 	border-bottom: 1px solid #999;
 }
 
-.x-grid-rows-view-div {
-	overflow: auto;            /* required: show scrollbars as needed */
-}
+/* rows */
 
 .x-grid-rows-view-div {
+	overflow: auto;            /* required: show scrollbars as needed */
 	position: relative;        /* required: anchor rows-div */
 }
 
@@ -606,18 +613,19 @@ td.x-menu-title-td {
 	cursor: pointer;           /* required: resizing area is underneath */
 }
 
-.x-grid-header-th, .x-grid-td {
-	white-space: nowrap;       /* required: height must be kept constant */
-	overflow: hidden;          /* required */
-}
+/* cells */
 
-.x-grid-cell {
+.x-grid-header-th, .x-grid-td {
+	overflow: hidden;          /* required */
+	white-space: nowrap;       /* required: height must be kept constant */
+
+	/* sizing & styling */
 	padding: var(--x-input-padding);
+	border-right: 0px solid #ccc;
 }
 
 .x-grid-td {
 	border-bottom: 0px solid #eee;  /* border width set from code */
-	//TODO: border-right: 1px solid #eee;
 }
 
 /* grid cell & row states ------------------------------------------------- */

@@ -95,7 +95,7 @@ let rowset = function(...options) {
 	}
 
 	d.validate_value = function(field, val) {
-		if (val === '' || val == null)
+		if (val == null)
 			return field.allow_null || 'NULL not allowed'
 		let validate = field.validate
 		if (!validate)
@@ -188,7 +188,7 @@ let rowset = function(...options) {
 		// add server_default values or null
 		for (let field of fields) {
 			let val = field.server_default
-			values.push(val != null ? val : null)
+			values.push(or(val, val, null))
 		}
 		let row = {values: values, is_new: true}
 		// set default client values.
@@ -330,12 +330,16 @@ button = component('x-button', HTMLButtonElement, 'button', function(e) {
 	}
 
 	e.property('text', function() {
-		return e.text_span.innerHTML
+		return e.text_span.html
 	}, function(s) {
-		e.text_span.innerHTML = s
+		e.text_span.html = s
 	})
 
-	e.css_property('primary')
+	e.late_property('primary', function() {
+		return e.hasclass('primary')
+	}, function(on) {
+		e.class('primary', on)
+	})
 
 	e.detach = function() {
 		e.fire('detach') // for auto-closing attached popup menus.
@@ -352,6 +356,8 @@ input = component('x-input', function(e) {
 	e.class('x-widget')
 	e.class('x-input')
 
+	e.align = 'left'
+
 	e.tooltip = H.div({class: 'x-input-error-ct'}, H.div({class: 'x-input-error'}))
 	e.tooltip.style.display = 'none'
 	e.input = H.input({class: 'x-input-input'})
@@ -359,6 +365,7 @@ input = component('x-input', function(e) {
 	e.input.on('input', input_input)
 	e.input.on('focus', input_focus)
 	e.input.on('blur', input_blur)
+	e.input.on('keydown', input_keydown)
 	e.input.on('keyup', input_keyup)
 	e.add(e.input, e.tooltip)
 
@@ -366,11 +373,9 @@ input = component('x-input', function(e) {
 		e.invalid = err != true
 		e.input.class('invalid', e.invalid)
 		e.error = e.invalid && err || ''
-		e.tooltip.at[0].innerHTML = e.error
+		e.tooltip.at[0].html = e.error
 		e.tooltip.style.display = e.error ? null : 'none'
 	}
-
-	e.attr_property('align', 'left')
 
 	let value, value_set
 
@@ -439,19 +444,23 @@ input = component('x-input', function(e) {
 
 	let editor_state
 
-	function update_editor_state() {
-		let i0 = e.input.selectionStart
-		let i1 = e.input.selectionEnd
+	function update_editor_state(moved_forward, i0, i1) {
+		i0 = or(i0, e.input.selectionStart)
+		i1 = or(i1, e.input.selectionEnd)
+		let anchor_left =
+			e.input.selectionDirection != 'none'
+				? e.input.selectionDirection == 'forward'
+				: (moved_forward || e.align == 'left')
 		let imax = e.input.value.length
 		let leftmost  = i0 == 0
-		let rightmost = i1 == imax
-		if (e.align == 'left') {
+		let rightmost = (i1 == imax || i1 == -1)
+		if (anchor_left) {
 			if (rightmost) {
 				if (i0 == i1)
 					i0 = -1
 				i1 = -1
 			}
-		} else if (e.align == 'right') {
+		} else {
 			i0 = i0 - imax - 1
 			i1 = i1 - imax - 1
 			if (leftmost) {
@@ -463,9 +472,16 @@ input = component('x-input', function(e) {
 		editor_state = [i0, i1]
 	}
 
-	function input_keyup(key) {
-		if (key.starts('Arrow'))
-			update_editor_state()
+	function input_keydown(key, shift, ctrl) {
+		// NOTE: we capture Ctrl+A on keydown because the user might
+		// depress Ctrl first and when we get the 'a' Ctrl is not pressed.
+		if (key == 'a' && ctrl)
+			update_editor_state(null, 0, -1)
+	}
+
+	function input_keyup(key, shift, ctrl) {
+		if (key == 'ArrowLeft' || key == 'ArrowRight')
+			update_editor_state(key == 'ArrowRight')
 	}
 
 	e.editor_state = function(field) {
@@ -495,6 +511,7 @@ input = component('x-input', function(e) {
 			s = [0, 0]
 		else if (s == 'right')
 			s = [-1, -1]
+		editor_state = s
 		let [i0, i1] = s
 		let imax = e.input.value.length
 		if (i0 < 0) i0 = imax + i0 + 1
@@ -511,7 +528,11 @@ input = component('x-input', function(e) {
 spin_input = component('x-spin-input', input, function(e) {
 
 	e.class('x-spin-input')
-	e.attrval('align', 'right')
+
+	e.align = 'right'
+
+	e.button_style     = 'plus-minus'
+	e.button_placement = 'each-side'
 
 	// model
 
@@ -524,16 +545,13 @@ spin_input = component('x-spin-input', input, function(e) {
 	e.up   = H.div({class: 'x-spin-input-button fa'})
 	e.down = H.div({class: 'x-spin-input-button fa'})
 
-	e.attr_property('button-style'    , 'plus-minus')
-	e.attr_property('button-placement', 'auto')
-
 	let init = e.init
 	e.init = function() {
 
 		init.call(this)
 
 		let bs = e.button_style
-		let bp = e.button_placement; bp = bp != 'auto' && bp
+		let bp = e.button_placement
 
 		if (bs == 'plus-minus') {
 			e.up  .class('fa-plus')
@@ -653,7 +671,6 @@ dropdown = component('x-dropdown', function(e) {
 	e.class('x-widget')
 	e.class('x-input')
 	e.class('x-dropdown')
-
 	e.attrval('tabindex', 0)
 
 	e.value_div = H.span({class: 'x-dropdown-value'})
@@ -667,7 +684,7 @@ dropdown = component('x-dropdown', function(e) {
 		if (v === '')
 			v = '&nbsp;'
 		if (typeof(v) == 'string')
-			e.value_div.innerHTML = v
+			e.value_div.html = v
 		else
 			e.value_div.replace(0, v)
 	}
@@ -947,7 +964,7 @@ listbox = component('x-listbox', function(e) {
 	// picker protocol
 
 	e.property('display_value', function() {
-		return e.selected_item ? e.selected_item.innerHTML : ''
+		return e.selected_item ? e.selected_item.html : ''
 	})
 
 	e.pick_value = function(v, from_user_input) {
@@ -1031,9 +1048,9 @@ calendar = component('x-calendar', function(e) {
 		update_weekview(t, 6)
 		let y = year_of(t)
 		let n = floor(1 + days(t - month(t)))
-		e.sel_day.innerHTML = n
+		e.sel_day.html = n
 		let day_suffixes = ['', 'st', 'nd', 'rd']
-		e.sel_day_suffix.innerHTML = locale.starts('en') ?
+		e.sel_day_suffix.html = locale.starts('en') ?
 			(n < 11 || n > 13) && day_suffixes[n % 10] || 'th' : ''
 		e.sel_month.value = month_of(t)
 		e.sel_year.value = y
@@ -1626,7 +1643,7 @@ grid = component('x-grid', function(e) {
 
 			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
 			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
-			let e1 = H.td({class: 'x-grid-header-title-td'}, field.name)
+			let e1 = H.td({class: 'x-grid-header-title-td'}, H(field.text) || field.name)
 			let e2 = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
 			if (field.align == 'right')
 				[e1, e2] = [e2, e1]
@@ -1636,13 +1653,14 @@ grid = component('x-grid', function(e) {
 				H.table({class: 'x-grid-header-th-table'},
 					H.tr(0, e1, e2))
 
-			let th = H.th({class: 'x-grid-header-th x-grid-cell'}, title_table)
+			let th = H.th({class: 'x-grid-header-th'}, title_table)
 
 			th.field = field
 			th.sort_icon = sort_icon
 			th.sort_icon_pri = sort_icon_pri
 
 			th.w = field_w(field)
+			th.style['border-right-width' ] = e.row_border_w + 'px'
 
 			th.on('mousedown', header_cell_mousedown)
 			th.on('rightmousedown', header_cell_rightmousedown)
@@ -1661,9 +1679,10 @@ grid = component('x-grid', function(e) {
 			for (let i = 0; i < e.fields.length; i++) {
 				let th = e.header_tr.at[i]
 				let field = e.fields[i]
-				let td = H.td({class: 'x-grid-td x-grid-cell'})
+				let td = H.td({class: 'x-grid-td'})
 				td.w = field_w(field)
 				td.h = e.row_h
+				td.style['border-right-width' ] = e.row_border_w + 'px'
 				td.style['border-bottom-width'] = e.row_border_h + 'px'
 				if (field.align)
 					td.attr('align', field.align)
@@ -1694,7 +1713,7 @@ grid = component('x-grid', function(e) {
 			td.field = field
 			td.field_index = fi
 			if (row) {
-				td.innerHTML = e.rowset.display_value(row.row, field)
+				td.html = e.rowset.display_value(row.row, field)
 				td.class('x-item', can_focus_cell(row, field))
 				td.class('read-only',
 					e.can_focus_cells
@@ -1732,7 +1751,7 @@ grid = component('x-grid', function(e) {
 			th.sort_icon.class('fa-angle-double-down', false)
 			th.sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-up'  , dir == 'asc')
 			th.sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-down', dir == 'desc')
-			th.sort_icon_pri.innerHTML = pri > 1 ? pri : ''
+			th.sort_icon_pri.html = pri > 1 ? pri : ''
 		}
 	}
 
@@ -1749,7 +1768,7 @@ grid = component('x-grid', function(e) {
 		let [ri, fi] = e.focused_cell
 		let th = e.header_tr.at[fi]
 		let fix = floor(e.row_border_h / 2 + (window.chrome ? .5 : 0))
-		e.input.x = th.offsetLeft
+		e.input.x = th.offsetLeft + th.clientLeft
 		e.input.y = e.row_h * ri + fix
 		e.input.w = th.clientWidth
 		e.input.h = e.row_h - e.row_border_h
@@ -1805,7 +1824,7 @@ grid = component('x-grid', function(e) {
 		e.rows_div.add(e.input)
 		update_input_geometry()
 		if (td)
-			td.innerHTML = null
+			td.html = null
 		update_focus(true)
 	}
 
@@ -1817,7 +1836,7 @@ grid = component('x-grid', function(e) {
 		e.input = null // clear it before removing it for input_focusout!
 		e.rows_div.removeChild(input)
 		if (td)
-			td.innerHTML = e.rowset.display_value(row.row, field)
+			td.html = e.rowset.display_value(row.row, field)
 		update_focus(true)
 	}
 
@@ -1854,8 +1873,8 @@ grid = component('x-grid', function(e) {
 		copy_keys(e._saved, e, picker_forced_options)
 		e.can_edit        = false
 		e.can_focus_cells = false
-		if (e.picker_h     == null) e.picker_h     = 0
-		if (e.picker_max_h == null) e.picker_max_h = 200
+		e.picker_h     = or(e.picker_h    , 0)
+		e.picker_max_h = or(e.picker_max_h, 200)
 	}
 
 	function unset_picker_options() {
@@ -1934,9 +1953,9 @@ grid = component('x-grid', function(e) {
 
 	e.first_focusable_cell = function(cell, rows, cols, options) {
 
-		if (cell == null) cell = e.focused_cell // null cell means focused cell.
-		if (rows == null) rows = 0 // by default find the first focusable row.
-		if (cols == null) cols = 0 // by default find the first focusable col.
+		cell = or(cell, e.focused_cell) // null cell means focused cell.
+		rows = or(rows, 0) // by default find the first focusable row.
+		cols = or(cols, 0) // by default find the first focusable col.
 
 		let for_editing = options && options.for_editing // skip non-editable cells.
 		let must_move = options && options.must_move // return only if moved.
@@ -1954,8 +1973,8 @@ grid = component('x-grid', function(e) {
 		let start_fi = fi
 
 		// the default cell is the first or the last depending on direction.
-		if (ri == null) ri = ri_inc * -1/0
-		if (fi == null) fi = fi_inc * -1/0
+		ri = or(ri, ri_inc * -1/0)
+		fi = or(fi, fi_inc * -1/0)
 
 		// clamp out-of-bound row/col indices.
 		ri = clamp(ri, 0, e.rows.length-1)
@@ -2034,9 +2053,6 @@ grid = component('x-grid', function(e) {
 
 		if (e.pick_value_field)
 			e.fire('value_changed', e.value, true)
-
-		if (cell)
-			e.focus()
 
 		return true
 	}
@@ -2138,7 +2154,10 @@ grid = component('x-grid', function(e) {
 			if (e.focused_td.hasclass('invalid'))
 				return false
 		*/
+		let had_focus = e.hasfocus()
 		free_editor()
+		if (had_focus)
+			e.focus()
 		return true
 	}
 
