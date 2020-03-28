@@ -453,7 +453,7 @@ main.add(
 </help>
 <script>
 
-r = rowset({
+r1 = rowset({
 	fields: [
 		{w:  50, name: 'id', type: 'number', visible: false},
 		{w: 150, name: 'name'},
@@ -466,17 +466,43 @@ r = rowset({
 	],
 })
 
-g = grid({
-	w: 310,
-	dropdown_value_col: 'id',
-	dropdown_display_col: 'name',
-	rowset: r,
+g1 = grid({
+	w: 302,
+	pick_value_col: 'id',
+	pick_display_col: 'name',
+	rowset: r1,
 })
 
 main.add(
 	dropdown({
 		value: 2,
-		picker: g,
+		picker: g1,
+	})
+)
+
+rows2 = []
+for (let i = 1; i <= 1e5; i++)
+	rows2.push({values: [i, 'Hey Dude #'+i]})
+
+r2 = rowset({
+	fields: [
+		{w:  50, name: 'id', type: 'number', visible: false},
+		{w: 200, name: 'name'},
+	],
+	rows: rows2,
+})
+
+g2 = grid({
+	w: 210,
+	pick_value_col: 'id',
+	pick_display_col: 'name',
+	rowset: r2,
+})
+
+main.add(
+	dropdown({
+		value: 42,
+		picker: g2,
 	})
 )
 

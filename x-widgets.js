@@ -876,7 +876,7 @@ listbox = component('x-listbox', function(e) {
 		select_item_by_index(i)
 	})
 
-	alias(e, 'value', 'selected_index')
+	alias(e, 'value', 'selected_index') // picker protocol
 
 	// controller
 
@@ -912,7 +912,7 @@ listbox = component('x-listbox', function(e) {
 			e.fire('value_changed', item ? item.index : null, from_user_input)
 		}
 		if (pick)
-			e.fire('value_picked', from_user_input) // dropdown protocol
+			e.fire('value_picked', from_user_input) // picker protocol
 	}
 
 	function item_mousedown() {
@@ -939,12 +939,12 @@ listbox = component('x-listbox', function(e) {
 		}
 		if (key == 'Enter') {
 			if (e.selected_item)
-				e.fire('value_picked', true) // dropdown protocol
+				e.fire('value_picked', true) // picker protocol
 			return false
 		}
 	}
 
-	// dropdown protocol
+	// picker protocol
 
 	e.property('display_value', function() {
 		return e.selected_item ? e.selected_item.innerHTML : ''
@@ -1019,7 +1019,7 @@ calendar = component('x-calendar', function(e) {
 			if (t === value)
 				return
 			value = t
-			this.fire('value_changed', t) // dropdown protocol
+			this.fire('value_changed', t) // picker protocol
 			update_view()
 		}
 	)
@@ -1076,7 +1076,7 @@ calendar = component('x-calendar', function(e) {
 		e.value = this.date
 		e.sel_month.cancel()
 		e.focus()
-		e.fire('value_picked', true) // dropdown protocol
+		e.fire('value_picked', true) // picker protocol
 		return false
 	}
 
@@ -1138,7 +1138,7 @@ calendar = component('x-calendar', function(e) {
 			return false
 		}
 		if (key == 'Enter') {
-			e.fire('value_picked', true) // dropdown protocol
+			e.fire('value_picked', true) // picker protocol
 			return false
 		}
 	}
@@ -1163,7 +1163,7 @@ calendar = component('x-calendar', function(e) {
 		}
 	}
 
-	// dropdown protocol
+	// picker protocol
 
 	// hack: trick dropdown into thinking that our own opened dropdown picker
 	// is our child, which is how we would implement dropdowns if this fucking
@@ -1484,16 +1484,16 @@ grid = component('x-grid', function(e) {
 				if (field.visible != false)
 					e.fields.push(field)
 		}
-		if (e.dropdown_value_col)
-			e.dropdown_value_field = e.rowset.field(e.dropdown_value_col)
-		if (e.dropdown_display_col)
-			e.dropdown_display_field = e.rowset.field(e.dropdown_display_col)
+		if (e.pick_value_col)
+			e.pick_value_field = e.rowset.field(e.pick_value_col)
+		if (e.pick_display_col)
+			e.pick_display_field = e.rowset.field(e.pick_display_col)
 		else
-			e.dropdown_display_field = e.dropdown_value_field
+			e.pick_display_field = e.pick_value_field
 	}
 
 	function field_w(field) {
-		return max(e.min_col_w, field.w || 0)
+		return max(e.min_col_w, clamp(field.w || 0, field.min_w || -1/0, field.max_w || 1/0))
 	}
 
 	function create_row(row) {
@@ -1551,7 +1551,7 @@ grid = component('x-grid', function(e) {
 		return clamp(sy, 0, max(0, e.rows_h - e.rows_view_h))
 	}
 
-	function scroll_to_cell(cell) {
+	e.scroll_to_cell = function(cell) {
 		let [ri, fi] = cell
 		if (ri == null)
 			return
@@ -1575,6 +1575,10 @@ grid = component('x-grid', function(e) {
 	// when: row count or height changed, rows viewport height changed, header height changed.
 	function update_heights() {
 		e.rows_h = e.row_h * e.rows.length - floor(e.row_border_h / 2)
+		if (e.picker_h != null && e.picker_max_h != null) {
+			e.h = 0 // compute e.offsetHeight with 0 clientHeight. relayouting...
+			e.h = max(e.picker_h, min(e.rows_h, e.picker_max_h)) + e.offsetHeight
+		}
 		e.rows_view_h = e.clientHeight - e.header_table.clientHeight
 		e.rows_div.h = e.rows_h
 		e.rows_view_div.h = e.rows_view_h
@@ -1638,9 +1642,7 @@ grid = component('x-grid', function(e) {
 			th.sort_icon = sort_icon
 			th.sort_icon_pri = sort_icon_pri
 
-			if (field.w) th.w = field_w(field)
-			if (field.max_w) th.max_w = field.max_w
-			if (field.min_w) th.min_w = max(10, field.min_w)
+			th.w = field_w(field)
 
 			th.on('mousedown', header_cell_mousedown)
 			th.on('rightmousedown', header_cell_rightmousedown)
@@ -1842,17 +1844,23 @@ grid = component('x-grid', function(e) {
 			dst[k] = src[k]
 	}
 
-	let picker_forced_options = {can_edit: 1, can_focus_cells: 1}
+	let picker_forced_options = {can_edit: 1, can_focus_cells: 1, picker_h: 1, picker_max_h: 1}
 
 	function set_picker_options() {
+		let as_picker = e.hasclass('picker')
+		if (!as_picker)
+			return
 		e._saved = {}
 		copy_keys(e._saved, e, picker_forced_options)
-		let as_picker = e.hasclass('picker')
-		e.can_edit        = !as_picker
-		e.can_focus_cells = !as_picker
+		e.can_edit        = false
+		e.can_focus_cells = false
+		if (e.picker_h     == null) e.picker_h     = 0
+		if (e.picker_max_h == null) e.picker_max_h = 200
 	}
 
 	function unset_picker_options() {
+		if (!e._saved)
+			return
 		copy_keys(e, e._saved, picker_forced_options)
 		e._saved = null
 	}
@@ -1864,7 +1872,7 @@ grid = component('x-grid', function(e) {
 		update_rows_table()
 		update_view()
 		hook_unhook_events(true)
-		e.focus_cell()
+		e.focus_cell(null, 0, 0, {force: true})
 	}
 
 	e.detach = function() {
@@ -1894,13 +1902,15 @@ grid = component('x-grid', function(e) {
 			return
 		// hit-test for column resizing.
 		hit_th = null
-		if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
-			// ^^ not over vertical scrollbar.
-			for (let th of e.header_tr.children) {
-				hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
-				if (hit_x >= -5 && hit_x <= 5) {
-					hit_th = th
-					break
+		if (my >= 0 && my <= e.offsetTop + e.clientTop) {
+			if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
+				// ^^ not over vertical scrollbar.
+				for (let th of e.header_tr.children) {
+					hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
+					if (hit_x >= -5 && hit_x <= 5) {
+						hit_th = th
+						break
+					}
 				}
 			}
 		}
@@ -2015,22 +2025,17 @@ grid = component('x-grid', function(e) {
 		} else if (e.focused_cell[1] != cell[1]) {
 			if (!e.exit_edit())
 				return false
-		} else
+		} else if (!(options && options.force))
 			return true // same cell.
 
 		update_focus(false)
 		e.focused_cell = cell
 		update_focus(true)
 		if (!options || options.make_visible != false)
-			scroll_to_cell(cell)
+			e.scroll_to_cell(cell)
 
-		if (e.dropdown_value_field) {
-			let [row] = row_field_at(cell)
-			let v
-			if (row)
-				v = e.rowset.value(row.row, e.dropdown_value_field)
-			e.fire('value_changed', v, true)
-		}
+		if (e.pick_value_field)
+			e.fire('value_changed', e.value, true)
 
 		if (cell)
 			e.focus()
@@ -2280,7 +2285,7 @@ grid = component('x-grid', function(e) {
 			e.rows.insert(ri, row)
 			update_heights()
 			update_view()
-			scroll_to_cell(e.focused_cell)
+			e.scroll_to_cell(e.focused_cell)
 			if (reenter_edit)
 				e.enter_edit('select_all')
 		} else {
@@ -2348,7 +2353,7 @@ grid = component('x-grid', function(e) {
 			}
 		} else {
 			e.focus_cell([ri, fi], 0, 0, {must_not_move_row: true})
-			e.fire('value_picked', true) // dropdown protocol.
+			e.fire('value_picked', true) // picker protocol.
 			return false
 		}
 	}
@@ -2590,7 +2595,7 @@ grid = component('x-grid', function(e) {
 		update_sort_icons()
 		update_view()
 		update_focus(true)
-		scroll_to_cell(e.focused_cell)
+		e.scroll_to_cell(e.focused_cell)
 
 	}
 
@@ -2610,24 +2615,34 @@ grid = component('x-grid', function(e) {
 		th.menu.popup(0, 0, th)
 	}
 
-	// dropdown protocol ------------------------------------------------------
+	// picker protocol --------------------------------------------------------
+
+	e.property('value',
+		function() {
+			let [row] = row_field_at(e.focused_cell)
+			return row ? e.rowset.value(row.row, e.pick_value_field) : null
+		},
+		function(v) {
+			e.pick_value(v)
+		}
+	)
 
 	e.property('display_value', function() {
 		let [row] = row_field_at(e.focused_cell)
-		return row ? e.rowset.display_value(row.row, e.dropdown_display_field) : ''
+		return row ? e.rowset.display_value(row.row, e.pick_display_field) : ''
 	})
 
 	e.pick_value = function(v, from_user_input) {
-		let field = e.dropdown_value_field
+		let field = e.pick_value_field
 		let ri = find_row(field, v)
 		if (ri == null)
 			return // TODO: deselect
 		if (e.focus_cell([ri, field.index]))
-			e.fire('value_picked', from_user_input) // dropdown protocol.
+			e.fire('value_picked', from_user_input) // picker protocol.
 	}
 
 	e.pick_near_value = function(delta, from_user_input) {
-		let field = e.dropdown_value_field
+		let field = e.pick_value_field
 		if (e.focus_cell(e.focused_cell, delta))
 			e.fire('value_picked', from_user_input)
 	}
