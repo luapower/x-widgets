@@ -877,8 +877,6 @@ listbox = component('x-listbox', function(e) {
 	e.class('x-focusable')
 	e.attrval('tabindex', 0)
 
-	e.page_size = 10
-
 	e.init = function() {
 
 		for (let item of e.items) {
@@ -890,6 +888,25 @@ listbox = component('x-listbox', function(e) {
 			item_div.on('mousedown', item_mousedown)
 		}
 
+	}
+
+	// view
+
+	// find the next item before/after the selected item that would need
+	// scrolling, if the selected item would be on top/bottom of the viewport.
+	function page_item(forward) {
+		if (!e.selected_item)
+			return forward ? e.first : e.last
+		let item = e.selected_item
+		let sy0 = item.offsetTop + (forward ? 0 : item.offsetHeight - e.clientHeight)
+		item = forward ? item.next : item.prev
+		while(item) {
+			let [sx, sy] = item.make_visible_scroll_offset(0, sy0)
+			if (sy != sy0)
+				return item
+			item = forward ? item.next : item.prev
+		}
+		return forward ? e.last : e.first
 	}
 
 	// model
@@ -953,13 +970,15 @@ listbox = component('x-listbox', function(e) {
 			case 'ArrowDown' : d =  1; break
 			case 'ArrowLeft' : d = -1; break
 			case 'ArrowRight': d =  1; break
-			case 'PageUp'    : d = -e.page_size; break
-			case 'PageDown'  : d =  e.page_size; break
 			case 'Home'      : d = -1/0; break
 			case 'End'       : d =  1/0; break
 		}
 		if (d) {
 			select_item_by_index(e.selected_index + d, false, true)
+			return false
+		}
+		if (key == 'PageUp' || key == 'PageDown') {
+			select_item(page_item(key == 'PageDown'), false, true)
 			return false
 		}
 		if (key == 'Enter') {
@@ -1636,7 +1655,7 @@ grid = component('x-grid', function(e) {
 		e.rows_div.h = e.rows_h
 		e.rows_view_div.h = e.rows_view_h
 		e.visible_row_count = floor(e.rows_view_h / e.row_h) + 2
-		e.page_rows = floor(e.rows_view_h / e.row_h)
+		e.page_row_count = floor(e.rows_view_h / e.row_h)
 		update_input_geometry()
 	}
 
@@ -2474,8 +2493,8 @@ grid = component('x-grid', function(e) {
 			switch (key) {
 				case 'ArrowUp'   : rows = -1; break
 				case 'ArrowDown' : rows =  1; break
-				case 'PageUp'    : rows = -e.page_rows; break
-				case 'PageDown'  : rows =  e.page_rows; break
+				case 'PageUp'    : rows = -e.page_row_count; break
+				case 'PageDown'  : rows =  e.page_row_count; break
 				case 'Home'      : rows = -1/0; break
 				case 'End'       : rows =  1/0; break
 			}
