@@ -1292,11 +1292,12 @@ menu = component('x-menu', function(e) {
 	function create_separator() {
 		let td = H.td({colspan: 5}, H.hr())
 		let tr = H.tr({class: 'x-menu-separator-tr'}, td)
+		tr.focusable = false
 		return tr
 	}
 
 	function create_menu(actions) {
-		let table = H.table({class: 'x-menu-table'})
+		let table = H.table({class: 'x-menu-table', tabindex: 0})
 		for (let i = 0; i < actions.length; i++) {
 			let a = actions[i]
 			table.add(create_item(a))
@@ -1305,6 +1306,7 @@ menu = component('x-menu', function(e) {
 		}
 		table.on('mouseenter', menu_mouseenter)
 		table.on('mouseleave', menu_mouseleave)
+		table.on('keydown', menu_keydown)
 		return table
 	}
 
@@ -1370,23 +1372,85 @@ menu = component('x-menu', function(e) {
 
 	function menu_mouseenter() {
 		this.keep_open = true
+		this.focus()
 	}
 
 	function menu_mouseleave() {
 		this.keep_open = false
+		this.parent.parent.focus()
+	}
+
+	function select_item(tr) {
+		unselect_item(tr.parent.selected_item_tr)
+		show_submenu(tr)
+		tr.parent.selected_item_tr = tr
+		tr.class('selected', true)
+	}
+
+	function unselect_item(tr) {
+		if (!tr) return
+		hide_submenu(tr)
+		tr.parent.selected_item_tr = null
+		tr.class('selected', false)
+	}
+
+	function next_focusable_item(tr, down) {
+		let tr0 = tr
+		tr = tr && (down ? tr.next : tr.prev)
+		tr = tr || (down ? this.last : this.first)
+		tr = tr.focusable != false ? tr : next_focusable_item(tr, down)
+		return tr
 	}
 
 	function item_mouseenter() {
-		let tr = this
-		hide_submenu(tr.parent.selected_item_tr)
-		show_submenu(tr)
-		tr.parent.selected_item_tr = tr
+		select_item(this)
 	}
 
 	function item_mouseleave() {
-		let tr = this
-		hide_submenu(tr)
-		tr.parent.selected_item_tr = null
+		unselect_item(this)
+	}
+
+	function menu_keydown(key) {
+		print(key)
+		if (key == 'ArrowUp' || key == 'ArrowDown') {
+			let down = key == 'ArrowDown'
+			let tr = this.selected_item_tr
+			tr = tr && (down ? tr.next : tr.prev)
+			tr = tr || (down ? this.first : this.last)
+			select_item(tr)
+			return false
+		}
+		if (key == 'ArrowRight') {
+			let table = show_submenu(this.selected_item_tr)
+			if (table) {
+				table.focus()
+				let tr = table.first
+				select_item(tr)
+			}
+			return false
+		}
+		if (key == 'ArrowLeft') {
+			item_mouseleave.call(this.selected_item_tr)
+			menu_mouseleave.call(this)
+			item_mouseenter.call(this.parent)
+			return false
+		}
+		if (key == 'Home') {
+
+			return false
+		}
+		if (key == 'End') {
+
+			return false
+		}
+		if (key == 'PageUp' || key == 'PageDown') {
+
+			return false
+		}
+		if (key == 'Escape') {
+			//
+			return false
+		}
 	}
 
 	e.popup = function(x, y, offset_parent) {
@@ -1633,7 +1697,7 @@ grid = component('x-grid', function(e) {
 		let y = h * ri
 		let x = th ? th.offsetLeft  : 0
 		let w = th ? th.clientWidth : 0
-		view.scroll_to_view_rect(x, y, w, h)
+		view.scroll_to_view_rect(null, null, x, y, w, h)
 	}
 
 	function first_visible_row(sy) {

@@ -463,6 +463,10 @@
 	box-shadow: 2px 2px 2px #666;
 }
 
+.x-menu-table:focus {
+	//outline: none;
+}
+
 .x-menu-tr {
 	position: relative;        /* required: submenus are anchored to item trs */
 }
@@ -488,14 +492,14 @@ td.x-menu-title-td {
 	padding-left: 0;
 }
 
-.x-menu-tr:hover > td {
+.x-menu-tr:not(.enabled) > td {
+	color: #999;
+}
+
+.x-menu-tr.selected > td {
 	color: white;
 	background-color: #333;
 	cursor: default;
-}
-
-.x-menu-tr:not(.enabled) > td {
-	color: #999;
 }
 
 /* pagelist --------------------------------------------------------------- */
