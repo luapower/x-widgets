@@ -717,6 +717,7 @@ dropdown = component('x-dropdown', function(e) {
 	e.on('focusout' , view_focusout)
 	e.on('mousedown', view_mousedown)
 	e.on('keydown'  , view_keydown)
+	e.on('keypress' , view_keypress)
 	e.on('wheel'    , view_wheel)
 
 	e.init = function() {
@@ -819,6 +820,11 @@ dropdown = component('x-dropdown', function(e) {
 		}
 	}
 
+	function view_keypress(c) {
+		e.picker.pick_next_value_starting_with(c)
+		return false
+	}
+
 	function picker_keydown(key, shift, ctrl, alt, ev) {
 		if (key == 'Escape' || key == 'Tab') {
 			e.cancel(true)
@@ -875,9 +881,10 @@ listbox = component('x-listbox', function(e) {
 
 	e.init = function() {
 
-		for (item of e.items) {
-			let text = typeof(item) == 'string' ? item : item.text
-			let item_div = H.div({class: 'x-listbox-item x-item'}, text)
+		for (let item of e.items) {
+			if (typeof(item) == 'string')
+				item = {text: item}
+			let item_div = H.div({class: 'x-listbox-item x-item'}, item.text)
 			e.add(item_div)
 			item_div.item = item
 			item_div.on('mousedown', item_mousedown)
@@ -903,6 +910,7 @@ listbox = component('x-listbox', function(e) {
 	}
 
 	e.on('keydown', list_keydown)
+	e.on('keypress', list_keypress)
 
 	function select_item_by_index(i, pick, from_user_input) {
 		let item = null
@@ -961,6 +969,28 @@ listbox = component('x-listbox', function(e) {
 		}
 	}
 
+	// crude quick-search only for the first letter.
+	let found_item
+	function find_item(c, again) {
+		if (e.selected_item != found_item)
+			found_item = null // user changed selection, start over.
+		let item = found_item && found_item.next || e.first
+		while (item) {
+			let s = item.item.text
+			if (s.starts(c.toLowerCase()) || s.starts(c.toUpperCase())) {
+				select_item(item, false, true)
+				break
+			}
+			item = item.next
+		}
+		found_item = item
+		if (!found_item && !again)
+			find_item(c, true)
+	}
+	function list_keypress(c) {
+		find_item(c)
+	}
+
 	// picker protocol
 
 	e.property('display_value', function() {
@@ -971,8 +1001,12 @@ listbox = component('x-listbox', function(e) {
 		select_item_by_index(v, true, from_user_input)
 	}
 
-	e.pick_near_value = function(delta, from_user_input) {
-		select_item_by_index(e.selected_index + delta, true, from_user_input)
+	e.pick_near_value = function(delta) {
+		select_item_by_index(e.selected_index + delta, true)
+	}
+
+	e.pick_next_value_starting_with = function(s) {
+		find_item(s)
 	}
 
 })
@@ -1205,6 +1239,8 @@ calendar = component('x-calendar', function(e) {
 		e.value = day(e.value, delta)
 		e.fire('value_picked', from_user_input)
 	}
+
+	e.pick_next_value_starting_with = function(s) {}
 
 })
 
@@ -2663,6 +2699,11 @@ grid = component('x-grid', function(e) {
 		if (e.focus_cell(e.focused_cell, delta))
 			e.fire('value_picked', from_user_input)
 	}
+
+	e.pick_next_value_starting_with = function(s) {
+		// TODO:
+	}
+
 
 })
 
