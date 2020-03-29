@@ -327,8 +327,6 @@ main.add(
 <template id=demo_pagelist>
 <help>
 
-	<div>HEI</div>
-
 </help>
 <script>
 
@@ -351,6 +349,44 @@ main.add(
 )
 
 main.add(pages)
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=demo_splitter>
+<help>
+
+</help>
+<script>
+
+p1 = H.div({style: 'width: 100px; height: 100px; background-color: #eee'}, 'Left Side')
+p2 = H.div({style: 'width: 200px; height: 100px; background-color: #fff'}, 'Content')
+p3 = H.div({style: 'width: 100px; height: 100px; background-color: #eee'}, 'Right Side')
+
+main.add(
+	splitter({
+		panes: [p1, p2, p3],
+	})
+)
+
+p1 = H.div({style: 'background-color: #eee'}, 'Header')
+p2 = H.div({style: 'background-color: #fff'}, 'Content')
+p3 = H.div({style: 'background-color: #eee'}, 'Footer')
+
+p1.h = 100
+p2.h =  50
+p3.h = 100
+
+main.add(H.p())
+
+main.add(
+	splitter({
+		panes: [p1, p2, p3],
+		horizontal: true,
+	})
+)
 
 </script>
 </template>

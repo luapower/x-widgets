@@ -585,6 +585,58 @@ td.x-menu-title-td {
 	transition: left .1s;
 }
 
+/* splitter --------------------------------------------------------------- */
+
+.x-splitter {
+	display: flex;
+	flex-flow: column nowrap;
+	align-items: stretch;
+	justify-content: stretch;
+}
+.x-splitter.vertical {
+	flex-direction: row;
+}
+
+.x-splitter-sizer {
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	min-width : 6px;
+	min-height: 6px;
+
+	background-color: #eee;
+	cursor: ns-resize;
+	flex-direction: column;
+}
+.x-splitter.vertical > .x-splitter-sizer {
+	cursor: ew-resize;
+	flex-direction: row;
+}
+
+.x-splitter-sizer:hover {
+	background-color: #ddd;
+	transition: background-color 200ms;
+}
+
+.x-splitter-sizer::before {
+	content: '';
+	box-sizing: border-box;
+	border: 1.25px #999;
+}
+
+.x-splitter:not(.vertical) > .x-splitter-sizer::before {
+	width: 24px;
+	height: 4px;
+	border-style: solid none;
+}
+.x-splitter.vertical > .x-splitter-sizer::before {
+	width: 4px;
+	height: 24px;
+	border-style: none solid;
+}
+
 /* grid ------------------------------------------------------------------- */
 
 .x-grid {

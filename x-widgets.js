@@ -1652,6 +1652,101 @@ pagelist = component('x-pagelist', function(e) {
 })
 
 // ---------------------------------------------------------------------------
+// splitter
+// ---------------------------------------------------------------------------
+
+splitter = component('x-splitter', function(e) {
+
+	e.class('x-widget')
+	e.class('x-splitter')
+
+	e.init = function() {
+		e.class('vertical', !e.horizontal)
+		for (let i = 0; i < e.panes.length; i++) {
+			let pane = e.panes[i]
+			pane.class('x-splitter-pane', true)
+			e.add(pane)
+			if (i < e.panes.length-1) {
+				let sizer = H.div({class: 'x-splitter-sizer'})
+				e.add(sizer)
+			}
+		}
+	}
+
+	function window_pointerdown(ev) {
+		let sizer = ev.target
+		if (sizer.parent != e)
+			return
+		if (!sizer.hasclass('x-splitter-sizer'))
+			return
+		if (!ev.isPrimary || ev.button !== 0)
+        return
+
+		let vert = sizer.parent.hasclass('vertical')
+		let pointerId = ev.pointerId
+		let pane1 = sizer.prev
+		let pane2 = sizer.next
+		let r1 = pane1.getBoundingClientRect()
+
+		let pane1_pos = vert ?
+			r1.left + ev.offsetX :
+			r1.top  + ev.offsetY
+
+		let total_size = vert ?
+			pane1.offsetWidth  + pane2.clientWidth  :
+			pane1.offsetHeight + pane2.offsetHeight
+
+		let cs1 = getComputedStyle(pane1)
+		let cs2 = getComputedStyle(pane2)
+		let min1 = vert ? cs1.minWidth : cs1.minHeight
+		let min2 = vert ? cs2.minWidth : cs2.minHeight
+		let max1 = vert ? cs1.maxWidth : cs1.maxHeight
+		let max2 = vert ? cs2.maxWidth : cs2.maxHeight
+
+		let pane1_min_size = max(parseInt(min1, 10) || 0, total_size - (parseInt(max2, 10) || total_size))
+		let pane1_max_size = min(parseInt(max1, 10) || total_size, total_size - (parseInt(min2, 10) || 0))
+
+		function sizer_pointermove(ev) {
+			if (ev.pointerId !== pointerId)
+				return
+			let sizer_pos = vert ? ev.clientX : ev.clientY
+			let pane1_size = round(clamp(sizer_pos - pane1_pos, pane1_min_size, pane1_max_size))
+			let attr = vert ? 'width' : 'height'
+			pane1.style[attr] = pane1_size + 'px'
+			pane2.style[attr] = total_size - pane1_size + 'px'
+		}
+
+		function sizer_pointerup(ev) {
+			if (ev.pointerId !== pointerId)
+				return
+			sizer.releasePointerCapture(pointerId)
+			sizer.off('pointermove'  , sizer_pointermove)
+			sizer.off('pointerup'    , sizer_pointerup)
+			sizer.off('pointercancel', sizer_pointerup)
+		}
+
+		sizer_pointermove(ev)
+		pane1.style.flexShrink = pane2.style.flexShrink = 1
+		sizer.on('pointermove'  , sizer_pointermove)
+		sizer.on('pointerup'    , sizer_pointerup)
+		sizer.on('pointercancel', sizer_pointerup)
+		sizer.setPointerCapture(pointerId)
+
+		// prevent text selection
+		ev.preventDefault()
+	}
+
+	e.attach = function() {
+		window.on('pointerdown', window_pointerdown)
+	}
+
+	e.detach = function() {
+		window.off('pointerdown', window_pointerdown)
+	}
+
+})
+
+// ---------------------------------------------------------------------------
 // grid
 // ---------------------------------------------------------------------------
 
