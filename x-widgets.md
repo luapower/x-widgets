@@ -60,6 +60,7 @@ If you're still not sure, here's a list to
 * this lib pollutes the global namespace like it's London 1858.
 * this lib extends built-in classes with new methods.
 * this lib only uses `===` when it's actually necessary.
+* this lib uses both `var` and `let` as needed.
 * this lib uses `<table>` for layouting. are you sick yet?
 * this lib uses snake case instead of hungarian notation.
 * this lib wraps instantiations with `new` into plain functions.

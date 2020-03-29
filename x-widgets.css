@@ -133,6 +133,40 @@
 	box-shadow: inset 0 0.15em 0.3em rgba(27,31,35,.15);
 }
 
+/* checkbox --------------------------------------------------------------- */
+
+.x-checkbox {
+	/* layouting */
+	display: inline-flex;
+	align-items: baseline;   /* that are baseline-aligned */
+	flex-flow: row nowrap;
+
+	/* sizing for inline use */
+	margin: .25em;
+	padding: .5em;
+
+	cursor: default;
+}
+
+.x-checkbox:focus {
+	outline: none;
+	box-shadow: var(--x-focus-shadow);
+}
+
+.x-checkbox-mark {
+	padding-right: .5em;
+	font-size: 120%;
+}
+
+.x-checkbox.align-right .x-checkbox-mark {
+	padding-right: 0;
+	padding-left: .5em;
+	order: 2;
+}
+.x-checkbox.align-right .x-checkbox-text {
+	text-align: right;
+}
+
 /* input ------------------------------------------------------------------ */
 
 .x-input {

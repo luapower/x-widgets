@@ -348,6 +348,72 @@ button = component('x-button', HTMLButtonElement, 'button', function(e) {
 })
 
 // ---------------------------------------------------------------------------
+// checkbox
+// ---------------------------------------------------------------------------
+
+checkbox = component('x-checkbox', function(e) {
+
+	e.class('x-widget')
+	e.class('x-checkbox')
+	e.attrval('tabindex', 0)
+
+	e.align = 'left'
+
+	e.checkmark_div = H.span({class: 'x-checkbox-mark far fa-square'})
+	e.text_div = H.span({class: 'x-checkbox-text'})
+	e.add(e.checkmark_div, e.text_div)
+
+	e.init = function() {
+		e.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
+		e.on('click', click)
+		e.on('mousedown', mousedown)
+		e.on('keydown', keydown)
+	}
+
+	e.property('text', function() {
+		return e.text_div.html
+	}, function(s) {
+		e.text_div.html = s
+	})
+
+	e.property('checked',
+		function() {
+			return e.hasclass('checked')
+		},
+		function(v) {
+			v = !!v
+			e.class('checked', v)
+			e.checkmark_div.class('fa-check-square', v)
+			e.checkmark_div.class('fa-square', !v)
+			e.fire('value_changed', v)
+			e.fire(v ? 'checked' : 'unchecked')
+		}
+	)
+
+	e.toggle = function() {
+		e.checked = !e.checked
+	}
+
+	function mousedown(ev) {
+		ev.preventDefault() // prevent accidental selection by double-clicking.
+		e.focus()
+	}
+
+	function click() {
+		e.toggle()
+		return false
+	}
+
+	function keydown(key) {
+		if (key == 'Enter' || key == ' ') {
+			e.toggle()
+			return false
+		}
+	}
+
+})
+
+// ---------------------------------------------------------------------------
 // input
 // ---------------------------------------------------------------------------
 

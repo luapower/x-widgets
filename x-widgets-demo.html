@@ -179,6 +179,32 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
+<template id=demo_checkbox>
+<help>
+
+</help>
+
+<script>
+
+main.add(checkbox({
+	text: 'Wassup homie',
+	checked: true,
+}))
+
+c2 = checkbox({
+	text: 'Yo wasup<br>I am multiline and right-aligned.',
+	align: 'right',
+})
+
+c2.on('value_changed', function(v) { print(v, this.checked) })
+
+main.add(c2)
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
 <template id=demo_menus>
 <help>
 
