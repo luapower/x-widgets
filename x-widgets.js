@@ -358,7 +358,9 @@ input = component('x-input', function(e) {
 
 	e.align = 'left'
 
-	e.tooltip = H.div({class: 'x-input-error-ct'}, H.div({class: 'x-input-error'}))
+	e.tooltip_message = H.div({class: 'x-input-error'})
+	e.tooltip_pin = H.div({class: 'x-input-error-tip'}, '\u25BC')
+	e.tooltip = H.div({class: 'x-input-error-ct'}, e.tooltip_message, e.tooltip_pin)
 	e.tooltip.style.display = 'none'
 	e.input = H.input({class: 'x-input-input'})
 	e.input.set_input_filter() // must be set as first event handler!
@@ -373,7 +375,7 @@ input = component('x-input', function(e) {
 		e.invalid = err != true
 		e.input.class('invalid', e.invalid)
 		e.error = e.invalid && err || ''
-		e.tooltip.at[0].html = e.error
+		e.tooltip_message.html = e.error
 		e.tooltip.style.display = e.error ? null : 'none'
 	}
 
@@ -1269,6 +1271,8 @@ calendar = component('x-calendar', function(e) {
 
 menu = component('x-menu', function(e) {
 
+	// view
+
 	function create_item(a) {
 		let check_div = H.div({class: 'x-menu-check-div fa fa-check'})
 		let icon_div  = H.div({class: 'x-menu-icon-div '+(a.icon_class || '')})
@@ -1278,8 +1282,8 @@ menu = component('x-menu', function(e) {
 		let sub_div   = H.div({class: 'x-menu-sub-div fa fa-caret-right'})
 		let sub_td    = H.td ({class: 'x-menu-sub-td'}, sub_div)
 		sub_div.style.visibility = a.actions ? null : 'hidden'
-		let tr = H.tr({class: 'x-menu-tr'}, check_td, title_td, key_td, sub_td)
-		tr.class('enabled', a.enabled != false)
+		let tr = H.tr({class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
+		tr.class('disabled', a.enabled == false)
 		tr.action = a
 		tr.check_div = check_div
 		update_check(tr)
@@ -1297,59 +1301,88 @@ menu = component('x-menu', function(e) {
 	}
 
 	function create_menu(actions) {
-		let table = H.table({class: 'x-menu-table', tabindex: 0})
+		let table = H.table({class: 'x-focusable x-menu-table', tabindex: 0})
 		for (let i = 0; i < actions.length; i++) {
 			let a = actions[i]
-			table.add(create_item(a))
+			let tr = create_item(a)
+			table.add(tr)
 			if (a.separator)
 				table.add(create_separator())
 		}
-		table.on('mouseenter', menu_mouseenter)
-		table.on('mouseleave', menu_mouseleave)
 		table.on('keydown', menu_keydown)
 		return table
 	}
 
-	function show_menu(x, y, pe) {
-		pe = pe || document.body
-		let table = create_menu(e.actions)
-		let r = pe.getBoundingClientRect()
-		table.x = r.left   + window.scrollX
-		table.y = r.bottom + window.scrollY
-		document.body.add(table)
-		table.document_mousedown = function() {
+	e.popup = function(parent, side, x, y, select_first_item) {
+		if (e.table)
 			e.close()
-		}
-		document.on('mousedown', table.document_mousedown)
-		pe.on('detach', e.close)
-		return table
+		parent = parent || document.body
+		e.table = create_menu(e.actions)
+		e.popup_parent = parent
+		let r = parent.getBoundingClientRect()
+		let x0, y0
+		if (side == 'right')
+			[x0, y0] = [r.right, r.top]
+		else // bottom, default
+			[x0, y0] = [r.left, r.bottom]
+		e.table.x = window.scrollX + x0 + x
+		e.table.y = window.scrollY + y0 + y
+		e.table.root_menu = e.table
+		document.body.add(e.table)
+		document.on('mousedown', e.close)
+		parent.on('detach', e.close)
+		if (select_first_item)
+			select_next_item(e.table)
+		e.table.focus()
 	}
 
-	function hide_menu(table) {
-		table.remove()
-		document.off('mousedown', table.document_mousedown)
+	e.close = function(focus_parent) {
+		if (!e.table)
+			return
+		e.table.parent.off('detach', e.close)
+		document.off('mousedown', e.close)
+		e.table.remove()
+		e.table = null
+		e.popup_parent.focus()
+		e.popup_parent = null
 	}
 
-	function show_submenu(item_tr) {
-		let actions = item_tr.action.actions
+	function show_submenu(tr) {
+		if (tr.submenu_table)
+			return tr.submenu_table
+		let actions = tr.action.actions
 		if (!actions)
 			return
 		let table = create_menu(actions)
-		table.x = item_tr.clientWidth - 2
-		item_tr.submenu_table = table
-		item_tr.add(table)
+		table.x = tr.clientWidth - 2
+		table.parent_menu = tr.parent
+		table.root_menu = tr.parent.root_menu
+		tr.submenu_table = table
+		tr.add(table)
 		return table
 	}
 
-	function hide_submenu(item_tr) {
-		if (!item_tr)
+	function hide_submenu(tr, force) {
+		if (!tr.submenu_table)
 			return
-		if (!item_tr.submenu_table)
+		tr.submenu_table.remove()
+		tr.submenu_table = null
+	}
+
+	function select_item(menu, tr) {
+		unselect_selected_item(menu)
+		menu.selected_item_tr = tr
+		if (tr)
+			tr.class('focused', true)
+	}
+
+	function unselect_selected_item(menu) {
+		let tr = menu.selected_item_tr
+		if (!tr)
 			return
-		if (item_tr.submenu_table.keep_open)
-			return
-		item_tr.submenu_table.remove()
-		item_tr.submenu_table = null
+		menu.selected_item_tr = null
+		hide_submenu(tr)
+		tr.class('focused', false)
 	}
 
 	function update_check(tr) {
@@ -1357,113 +1390,106 @@ menu = component('x-menu', function(e) {
 		tr.check_div.style.visibility = tr.action.checked ? null : 'hidden'
 	}
 
-	function item_mousedown() {
-		let a = this.action
-		if ((a.click || a.checked != null) && this.hasclass('enabled')) {
+	// navigation
+
+	function next_item(menu, down, tr) {
+		tr = tr && (down ? tr.next : tr.prev)
+		return tr || (down ? menu.first : menu.last)
+	}
+	function next_valid_item(menu, down, tr, enabled) {
+		let i = menu.children.length
+		while (i--) {
+			tr = next_item(menu, down != false, tr)
+			if (tr && tr.focusable != false && (!enabled || tr.enabled != false))
+				return tr
+		}
+	}
+	function select_next_item(menu, down, tr0, enabled) {
+		select_item(menu, next_valid_item(menu, down, tr0, enabled))
+	}
+
+	function activate_submenu(tr) {
+		let submenu = show_submenu(tr)
+		if (!submenu)
+			return
+		submenu.focus()
+		select_next_item(submenu)
+		return true
+	}
+
+	function click_item(tr) {
+		let submenu_activated = activate_submenu(tr)
+		let a = tr.action
+		if ((a.click || a.checked != null) && a.enabled != false) {
 			if (a.checked != null) {
 				a.checked = !a.checked
-				update_check(this)
+				update_check(tr)
 			}
 			if (!a.click || a.click(a) != false)
-				e.close()
+				if (!submenu_activated)
+					e.close()
 		}
+	}
+
+	// mouse bindings
+
+	function item_mousedown() {
+		click_item(this)
 		return false
 	}
 
-	function menu_mouseenter() {
-		this.keep_open = true
-		this.focus()
-	}
-
-	function menu_mouseleave() {
-		this.keep_open = false
-		this.parent.parent.focus()
-	}
-
-	function select_item(tr) {
-		unselect_item(tr.parent.selected_item_tr)
-		show_submenu(tr)
-		tr.parent.selected_item_tr = tr
-		tr.class('selected', true)
-	}
-
-	function unselect_item(tr) {
-		if (!tr) return
-		hide_submenu(tr)
-		tr.parent.selected_item_tr = null
-		tr.class('selected', false)
-	}
-
-	function next_focusable_item(tr, down) {
-		let tr0 = tr
-		tr = tr && (down ? tr.next : tr.prev)
-		tr = tr || (down ? this.last : this.first)
-		tr = tr.focusable != false ? tr : next_focusable_item(tr, down)
-		return tr
-	}
-
-	function item_mouseenter() {
-		select_item(this)
+	function item_mouseenter(ev) {
+		if (this.submenu_table)
+			return // mouse entered on the submenu.
+		this.parent.focus()
+		select_item(this.parent, this)
+		show_submenu(this)
 	}
 
 	function item_mouseleave() {
-		unselect_item(this)
+		//unselect_selected_item(this.parent)
 	}
 
+	// keyboard binding
+
 	function menu_keydown(key) {
-		print(key)
 		if (key == 'ArrowUp' || key == 'ArrowDown') {
-			let down = key == 'ArrowDown'
-			let tr = this.selected_item_tr
-			tr = tr && (down ? tr.next : tr.prev)
-			tr = tr || (down ? this.first : this.last)
-			select_item(tr)
+			select_next_item(this, key == 'ArrowDown', this.selected_item_tr)
 			return false
 		}
 		if (key == 'ArrowRight') {
-			let table = show_submenu(this.selected_item_tr)
-			if (table) {
-				table.focus()
-				let tr = table.first
-				select_item(tr)
-			}
+			if (this.selected_item_tr)
+				activate_submenu(this.selected_item_tr)
 			return false
 		}
 		if (key == 'ArrowLeft') {
-			item_mouseleave.call(this.selected_item_tr)
-			menu_mouseleave.call(this)
-			item_mouseenter.call(this.parent)
+			if (this.parent_menu) {
+				this.parent_menu.focus()
+				hide_submenu(this.parent)
+			}
 			return false
 		}
-		if (key == 'Home') {
-
-			return false
-		}
-		if (key == 'End') {
-
+		if (key == 'Home' || key == 'End') {
+			select_next_item(this, key == 'Home')
 			return false
 		}
 		if (key == 'PageUp' || key == 'PageDown') {
-
+			select_next_item(this, key == 'PageUp')
+			return false
+		}
+		if (key == 'Enter' || key == ' ') {
+			if (this.selected_item_tr)
+				click_item(this.selected_item_tr)
 			return false
 		}
 		if (key == 'Escape') {
-			//
+			if (this.parent_menu) {
+				this.parent_menu.focus()
+				hide_submenu(this.parent)
+			} else
+				e.close(true)
 			return false
 		}
-	}
-
-	e.popup = function(x, y, offset_parent) {
-		if (e.table)
-			return
-		e.table = show_menu(x, y, offset_parent)
-	}
-
-	e.close = function() {
-		if (!e.table)
-			return
-		hide_menu(e.table)
-		e.table = null
 	}
 
 })
@@ -1834,7 +1860,7 @@ grid = component('x-grid', function(e) {
 			if (row) {
 				td.html = e.rowset.display_value(row.row, field)
 				td.class('x-item', can_focus_cell(row, field))
-				td.class('read-only',
+				td.class('disabled',
 					e.can_focus_cells
 					&& e.can_edit
 					&& e.rowset.can_edit
@@ -2748,7 +2774,7 @@ grid = component('x-grid', function(e) {
 			act.push({field: field, text: field.name, checked: true, click: toggle_field})
 		}
 		th.menu = menu({actions: act})
-		th.menu.popup(0, 0, th)
+		th.menu.popup(th)
 	}
 
 	// picker protocol --------------------------------------------------------

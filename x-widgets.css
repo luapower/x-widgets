@@ -22,7 +22,7 @@
 
 /* item states ------------------------------------------------------------ */
 
-.x-widget .read-only { color: #999; }
+.x-widget .disabled { color: #999; }
 
 //.x-grid-tr.new                          { background-color: #eef; }
 //.x-grid-tr.new.focused                  { background-color: #dde; }
@@ -32,9 +32,9 @@
 //.x-grid-tr.focused .x-grid-td.invalid   { background-color: #eebbbb; }
 
                   .x-item.focused           { color: #fff; }
-                  .x-item.read-only.focused { color: #ccc; }
-.x-item.focused > .x-item.read-only         { color: #ccc; }
-.x-item.focused > .x-item.read-only.focused { color: #fff; }
+                  .x-item.disabled.focused  { color: #ccc; }
+.x-item.focused > .x-item.disabled          { color: #ccc; }
+.x-item.focused > .x-item.disabled.focused  { color: #fff; }
 
                   .x-item:hover             { background-color: #00000011; }
 .x-item         > .x-item:hover             { background-color: #f8f8f8; }
@@ -193,7 +193,7 @@
 	/* positioning */
 	position: absolute;
 	z-index: 1;
-	bottom: 2.5em;                /* move above input */
+	bottom: 2.3em;                /* move above input */
 	left: 50%;                    /* anchor to parent's center */
 	transform: translateX(-50%);  /* center tooltip */
 
@@ -205,7 +205,7 @@
 .x-input-error {
 
 	/* layouting */
-	display: inline-block;
+	display: block;
 
 	/* sizing */
 	padding: .5em 1em;
@@ -214,6 +214,13 @@
 	color: white;
 	background-color: var(--x-error-bg-color);
 	border-radius: 5px;
+}
+
+.x-input-error-tip {
+	line-height: 7px;
+
+	/* styling */
+	color: var(--x-error-bg-color);
 }
 
 /* spin_input ------------------------------------------------------------- */
@@ -464,7 +471,7 @@
 }
 
 .x-menu-table:focus {
-	//outline: none;
+	outline: none;
 }
 
 .x-menu-tr {
@@ -492,13 +499,7 @@ td.x-menu-title-td {
 	padding-left: 0;
 }
 
-.x-menu-tr:not(.enabled) > td {
-	color: #999;
-}
-
-.x-menu-tr.selected > td {
-	color: white;
-	background-color: #333;
+.x-menu-tr.focused > td {
 	cursor: default;
 }
 

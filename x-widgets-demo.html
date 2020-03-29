@@ -210,7 +210,7 @@ m = menu({
 b = button({
 	text: 'Click for menu',
 	primary: true,
-	click: function() { m.popup(0, 2, b) },
+	click: function() { m.popup(b, 'bottom', 0, 2) },
 })
 
 main.add(b)
