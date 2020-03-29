@@ -198,14 +198,14 @@
 	transform: translateX(-50%);  /* center tooltip */
 
 	/* sizing */
-	width: 400px;
-	text-align: center;
+	width: 400px;                 /* max. width of the message bubble before wrapping */
+	text-align: center;           /* center the message bubble inside this container of fixed width */
 }
 
 .x-input-error {
 
 	/* layouting */
-	display: block;
+	display: inline-block;        /* shrink-wrap, and also word-wrap when reaching container width */
 
 	/* sizing */
 	padding: .5em 1em;
