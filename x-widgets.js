@@ -1417,8 +1417,7 @@ menu = component('x-menu', function(e) {
 		return true
 	}
 
-	function click_item(tr) {
-		let submenu_activated = activate_submenu(tr)
+	function click_item(tr, allow_close) {
 		let a = tr.action
 		if ((a.click || a.checked != null) && a.enabled != false) {
 			if (a.checked != null) {
@@ -1426,7 +1425,7 @@ menu = component('x-menu', function(e) {
 				update_check(tr)
 			}
 			if (!a.click || a.click(a) != false)
-				if (!submenu_activated)
+				if (allow_close != false)
 					e.close()
 		}
 	}
@@ -1478,8 +1477,11 @@ menu = component('x-menu', function(e) {
 			return false
 		}
 		if (key == 'Enter' || key == ' ') {
-			if (this.selected_item_tr)
-				click_item(this.selected_item_tr)
+			let tr = this.selected_item_tr
+			if (tr) {
+				let submenu_activated = activate_submenu(tr)
+				click_item(tr, !submenu_activated)
+			}
 			return false
 		}
 		if (key == 'Escape') {
