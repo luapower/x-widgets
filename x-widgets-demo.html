@@ -429,7 +429,7 @@ for (var i = 1; i <= 1e5; i++) {
 
 d = rowset(data)
 
-main.add(grid({
+g = grid({
 	rowset: d,
 	w: 500,
 	//h: 200,
@@ -437,7 +437,11 @@ main.add(grid({
 	//row_h: 40,
 	//row_border_h: 1,
 	//order_by: 'parent_id, name desc',
-}))
+})
+
+g.style.resize = 'both'
+
+main.add(g)
 
 </script>
 </template>

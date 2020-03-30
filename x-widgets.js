@@ -286,6 +286,7 @@ let rowset = function(...options) {
 	}
 
 	rowset.default_type = {
+		width: 50,
 		align: 'left',
 		client_default: null,
 		server_default: null,
@@ -1851,8 +1852,8 @@ grid = component('x-grid', function(e) {
 			e.pick_display_field = e.pick_value_field
 	}
 
-	function field_w(field) {
-		return max(e.min_col_w, clamp(field.w || 0, field.min_w || -1/0, field.max_w || 1/0))
+	function field_w(field, w) {
+		return max(e.min_col_w, clamp(or(w, field.w), field.min_w || -1/0, field.max_w || 1/0))
 	}
 
 	function create_row(row) {
@@ -1973,6 +1974,7 @@ grid = component('x-grid', function(e) {
 		e.on('mousemove', view_mousemove)
 		e.on('keydown'  , view_keydown)
 		e.on('keypress' , view_keypress)
+		e.on('resize'   , view_resize)
 
 		e.rows_view_div.on('scroll', update_view)
 	}
@@ -2036,10 +2038,20 @@ grid = component('x-grid', function(e) {
 	}
 
 	// when: widget height changed.
-	function resize_view() {
-		update_heights()
-		update_rows_table()
-		update_view()
+	let cw, ch
+	function view_resize() {
+		if (e.clientWidth === cw && e.clientHeight === ch)
+			return
+		if (e.clientHeight !== ch) {
+			let vrc = e.visible_row_count
+			update_heights()
+			if (e.visible_row_count != vrc) {
+				update_rows_table()
+				update_view()
+			}
+		}
+		cw = e.clientWidth
+		ch = e.clientHeight
 	}
 
 	// when: scroll_y changed.
@@ -2709,9 +2721,8 @@ grid = component('x-grid', function(e) {
 			return
 		let field = e.fields[hit_th.index]
 		let w = mx - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
-		let min_w = max(e.min_col_w, field.min_w || 0)
-		let max_w = max(min_w, field.max_w || 1000)
-		hit_th.w = clamp(w, min_w, max_w)
+		field.w = field_w(field, w)
+		hit_th.w = field.w
 		update_col_width(hit_th.index, hit_th.clientWidth)
 		update_input_geometry()
 		return false
