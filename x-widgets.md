@@ -25,8 +25,8 @@ a few more ads.
 
 This will probably only work on desktop Firefox and Chrome/Edge for the
 forseeable future. Something might be done for Safari (if it doesn't catch
-up all by itself, or you know, dies) and maybe mobile Chrome and Firefox too.
-Anything else is out.
+up all by itself, or you know, dies and spares us all some grief) and maybe
+mobile Chrome and Firefox too. Anything else is out.
 
 ## Installation
 

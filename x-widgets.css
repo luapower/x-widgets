@@ -585,56 +585,89 @@ td.x-menu-title-td {
 	transition: left .1s;
 }
 
-/* splitter --------------------------------------------------------------- */
+/* split ------------------------------------------------------------------ */
 
-.x-splitter {
+.x-split {
+
+	/* layouting */
 	display: flex;
-	flex-flow: column nowrap;
+	flex-wrap: nowrap;
 	align-items: stretch;
+	align-content: stretch;
 	justify-content: stretch;
+
+	height: 100%;  /* width: 100% is covered by flex-grow: 1 */
 }
-.x-splitter.vertical {
-	flex-direction: row;
+.x-split.horizontal { flex-direction: row; }
+.x-split.vertical   { flex-direction: column; }
+
+.x-split.resize {
+	cursor: ns-resize;
+}
+.x-split.horizontal.resize {
+	cursor: ew-resize;
 }
 
-.x-splitter-sizer {
+.x-split-pane {
+	overflow: auto;
+}
 
+.x-split-pane-auto {
+	flex-grow: 1;  /* expand-to-fit container */
+}
+
+.x-split.horizontal > .x-split-pane.collapsed {
+	min-width: 0 !important;
+	width: 0 !important;
+}
+.x-split.vertical > .x-split-pane.collapsed {
+	min-height: 0 !important;
+	height: 0 !important;
+}
+
+/* sizer */
+
+.x-split-sizer {
+
+	/* layouting */
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 
 	min-width : 6px;
 	min-height: 6px;
 
+	/* styling */
 	background-color: #eee;
-	cursor: ns-resize;
-	flex-direction: column;
+
 }
-.x-splitter.vertical > .x-splitter-sizer {
-	cursor: ew-resize;
+.x-split.horizontal > .x-split-sizer {
 	flex-direction: row;
 }
 
-.x-splitter-sizer:hover {
+.x-split.resize > .x-split-sizer {
 	background-color: #ddd;
 	transition: background-color 200ms;
 }
 
-.x-splitter-sizer::before {
+/* grip */
+
+.x-split-sizer::before {
 	content: '';
 	box-sizing: border-box;
 	border: 1.25px #999;
 }
 
-.x-splitter:not(.vertical) > .x-splitter-sizer::before {
-	width: 24px;
-	height: 4px;
-	border-style: solid none;
-}
-.x-splitter.vertical > .x-splitter-sizer::before {
+.x-split.horizontal > .x-split-sizer::before {
 	width: 4px;
 	height: 24px;
 	border-style: none solid;
+}
+.x-split.vertical > .x-split-sizer::before {
+	width: 24px;
+	height: 4px;
+	border-style: solid none;
 }
 
 /* grid ------------------------------------------------------------------- */

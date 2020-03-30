@@ -816,7 +816,7 @@ dropdown = component('x-dropdown', function(e) {
 			e.picker.class('picker', open)
 			if (open) {
 				e.cancel_value = e.value
-				let r = e.getBoundingClientRect()
+				let r = e.client_rect()
 				e.picker.x = r.left   + window.scrollX
 				e.picker.y = r.bottom + window.scrollY
 				e.picker.min_w = r.width
@@ -1385,7 +1385,7 @@ menu = component('x-menu', function(e) {
 		parent = parent || document.body
 		e.table = create_menu(e.actions)
 		e.popup_parent = parent
-		let r = parent.getBoundingClientRect()
+		let r = parent.client_rect()
 		let x0, y0
 		if (side == 'right')
 			[x0, y0] = [r.right, r.top]
@@ -1652,99 +1652,133 @@ pagelist = component('x-pagelist', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// splitter
+// split-view
 // ---------------------------------------------------------------------------
 
-splitter = component('x-splitter', function(e) {
+vsplit = component('x-split', function(e) {
 
 	e.class('x-widget')
-	e.class('x-splitter')
+	e.class('x-split')
+
+	let horiz, left, fixed_pane, auto_pane
 
 	e.init = function() {
-		e.class('vertical', !e.horizontal)
-		for (let i = 0; i < e.panes.length; i++) {
-			let pane = e.panes[i]
-			pane.class('x-splitter-pane', true)
-			e.add(pane)
-			if (i < e.panes.length-1) {
-				let sizer = H.div({class: 'x-splitter-sizer'})
-				e.add(sizer)
-			}
-		}
+
+		horiz = e.horizontal == true
+
+		// check which pane is the one with a fixed width.
+		let fixed_pi =
+			((e[1].style[horiz ? 'width' : 'height'] || '').ends('px') && 1) ||
+			((e[2].style[horiz ? 'width' : 'height'] || '').ends('px') && 2) || 1
+		e.fixed_pane = e[  fixed_pi]
+		e. auto_pane = e[3-fixed_pi]
+		left = fixed_pi == 1
+
+		e.class('horizontal',  horiz)
+		e.class(  'vertical', !horiz)
+		e[1].class('x-split-pane', true)
+		e[2].class('x-split-pane', true)
+		e.fixed_pane.class('x-split-pane-fixed')
+		e. auto_pane.class('x-split-pane-auto')
+		e.sizer = H.div({class: 'x-split-sizer'})
+		e.add(e[1], e.sizer, e[2])
+
+		e.class('resizeable', e.resizeable != false)
+		if (e.resizeable == false)
+			e.sizer.hide()
 	}
 
-	function window_pointerdown(ev) {
-		let sizer = ev.target
-		if (sizer.parent != e)
-			return
-		if (!sizer.hasclass('x-splitter-sizer'))
-			return
-		if (!ev.isPrimary || ev.button !== 0)
-        return
-
-		let vert = sizer.parent.hasclass('vertical')
-		let pointerId = ev.pointerId
-		let pane1 = sizer.prev
-		let pane2 = sizer.next
-		let r1 = pane1.getBoundingClientRect()
-
-		let pane1_pos = vert ?
-			r1.left + ev.offsetX :
-			r1.top  + ev.offsetY
-
-		let total_size = vert ?
-			pane1.offsetWidth  + pane2.clientWidth  :
-			pane1.offsetHeight + pane2.offsetHeight
-
-		let cs1 = getComputedStyle(pane1)
-		let cs2 = getComputedStyle(pane2)
-		let min1 = vert ? cs1.minWidth : cs1.minHeight
-		let min2 = vert ? cs2.minWidth : cs2.minHeight
-		let max1 = vert ? cs1.maxWidth : cs1.maxHeight
-		let max2 = vert ? cs2.maxWidth : cs2.maxHeight
-
-		let pane1_min_size = max(parseInt(min1, 10) || 0, total_size - (parseInt(max2, 10) || total_size))
-		let pane1_max_size = min(parseInt(max1, 10) || total_size, total_size - (parseInt(min2, 10) || 0))
-
-		function sizer_pointermove(ev) {
-			if (ev.pointerId !== pointerId)
-				return
-			let sizer_pos = vert ? ev.clientX : ev.clientY
-			let pane1_size = round(clamp(sizer_pos - pane1_pos, pane1_min_size, pane1_max_size))
-			let attr = vert ? 'width' : 'height'
-			pane1.style[attr] = pane1_size + 'px'
-			pane2.style[attr] = total_size - pane1_size + 'px'
-		}
-
-		function sizer_pointerup(ev) {
-			if (ev.pointerId !== pointerId)
-				return
-			sizer.releasePointerCapture(pointerId)
-			sizer.off('pointermove'  , sizer_pointermove)
-			sizer.off('pointerup'    , sizer_pointerup)
-			sizer.off('pointercancel', sizer_pointerup)
-		}
-
-		sizer_pointermove(ev)
-		pane1.style.flexShrink = pane2.style.flexShrink = 1
-		sizer.on('pointermove'  , sizer_pointermove)
-		sizer.on('pointerup'    , sizer_pointerup)
-		sizer.on('pointercancel', sizer_pointerup)
-		sizer.setPointerCapture(pointerId)
-
-		// prevent text selection
-		ev.preventDefault()
-	}
-
-	e.attach = function() {
-		window.on('pointerdown', window_pointerdown)
-	}
+	e.on('mousemove', view_mousemove)
+	e.on('mousedown', view_mousedown)
 
 	e.detach = function() {
-		window.off('pointerdown', window_pointerdown)
+		document_mouseup()
+	}
+
+	// controller
+
+	let hit, hit_x, mx0, w0, resist
+
+	function view_mousemove(rmx, rmy) {
+		if (window.split_resizing)
+			return
+		// hit-test for split resizing.
+		hit = false
+		if (e.client_rect().contains(rmx, rmy)) {
+			// ^^ mouse is not over some scrollbar.
+			let mx = horiz ? rmx : rmy
+			let sr = e.sizer.client_rect()
+			let sx1 = horiz ? sr.left  : sr.top
+			let sx2 = horiz ? sr.right : sr.bottom
+			w0 = e.fixed_pane.client_rect()[horiz ? 'width' : 'height']
+			hit_x = mx - sx1
+			hit = abs(hit_x - (sx2 - sx1) / 2) <= 5
+			resist = true
+			mx0 = mx
+		}
+		e.class('resize', hit)
+	}
+
+	function view_mousedown() {
+		if (!hit)
+			return
+		e.class('resizing')
+		window.split_resizing = true // view_mousemove barrier.
+		document.on('mousemove', document_mousemove)
+		document.on('mouseup'  , document_mouseup)
+	}
+
+	function document_mousemove(rmx, rmy) {
+
+		let mx = horiz ? rmx : rmy
+		let w
+		if (left) {
+			let fpx1 = e.fixed_pane.client_rect()[horiz ? 'left' : 'top']
+			w = mx - (fpx1 + hit_x)
+		} else {
+			let ex2 = e.client_rect()[horiz ? 'right' : 'bottom']
+			let sw = e.sizer[horiz ? 'clientWidth' : 'clientHeight']
+			w = ex2 - mx + hit_x - sw
+		}
+
+		resist = resist && abs(mx - mx0) < 20
+		if (resist)
+			w = w0 + (w - w0) * .2 // show resistance
+
+		e.fixed_pane[horiz ? 'w' : 'h'] = w
+
+		if (e.collapsable != false) {
+			let w1 = e.fixed_pane.client_rect()[horiz ? 'width' : 'height']
+
+			let pminw = e.fixed_pane.style[horiz ? 'min-width' : 'min-height']
+			pminw = pminw ? parseInt(pminw) : 0
+
+			if (!e.fixed_pane.hasclass('collapsed')) {
+				if (w < min(max(pminw, 20), 30) - 5)
+					e.fixed_pane.class('collapsed', true)
+			} else {
+				if (w > max(pminw, 30))
+					e.fixed_pane.class('collapsed', false)
+			}
+		}
+
+		return false
+	}
+
+	function document_mouseup() {
+		if (resist) // reset width
+			e[1][horiz ? 'w' : 'h'] = w0
+		e.class('resizing', false)
+		window.split_resizing = null
+		document.off('mousemove', document_mousemove)
+		document.off('mouseup'  , document_mouseup)
 	}
 
 })
+
+function hsplit(...args) {
+	return vsplit({horizontal: true}, ...args)
+}
 
 // ---------------------------------------------------------------------------
 // grid
@@ -2207,54 +2241,6 @@ grid = component('x-grid', function(e) {
 		unset_picker_options()
 	}
 
-	// make columns resizeable ------------------------------------------------
-
-	let hit_th, hit_x
-
-	function document_mousedown() {
-		if (window.grid_col_resizing || !hit_th)
-			return
-		e.focus()
-		window.grid_col_resizing = true
-		e.class('col-resizing')
-	}
-
-	function document_mouseup() {
-		window.grid_col_resizing = false
-		e.class('col-resizing', false)
-	}
-
-	function view_mousemove(mx, my, ev) {
-		if (window.grid_col_resizing)
-			return
-		// hit-test for column resizing.
-		hit_th = null
-		if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
-			// ^^ not over vertical scrollbar.
-			for (let th of e.header_tr.children) {
-				hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
-				if (hit_x >= -5 && hit_x <= 5) {
-					hit_th = th
-					break
-				}
-			}
-		}
-		e.class('col-resize', hit_th != null)
-	}
-
-	function document_mousemove(mx, my) {
-		if (!e.hasclass('col-resizing'))
-			return
-		let field = e.fields[hit_th.index]
-		let w = mx - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
-		let min_w = max(e.min_col_w, field.min_w || 0)
-		let max_w = max(min_w, field.max_w || 1000)
-		hit_th.w = clamp(w, min_w, max_w)
-		update_col_width(hit_th.index, hit_th.clientWidth)
-		update_input_geometry()
-		return false
-	}
-
 	// focusing ---------------------------------------------------------------
 
 	e.focused_cell = [null, null]
@@ -2681,6 +2667,54 @@ grid = component('x-grid', function(e) {
 			e.fire('value_picked', true) // picker protocol.
 			return false
 		}
+	}
+
+	// make columns resizeable ------------------------------------------------
+
+	let hit_th, hit_x
+
+	function document_mousedown() {
+		if (window.grid_col_resizing || !hit_th)
+			return
+		e.focus()
+		window.grid_col_resizing = true
+		e.class('col-resizing')
+	}
+
+	function document_mouseup() {
+		window.grid_col_resizing = false
+		e.class('col-resizing', false)
+	}
+
+	function view_mousemove(mx, my, ev) {
+		if (window.grid_col_resizing)
+			return
+		// hit-test for column resizing.
+		hit_th = null
+		if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
+			// ^^ not over vertical scrollbar.
+			for (let th of e.header_tr.children) {
+				hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
+				if (hit_x >= -5 && hit_x <= 5) {
+					hit_th = th
+					break
+				}
+			}
+		}
+		e.class('col-resize', hit_th != null)
+	}
+
+	function document_mousemove(mx, my) {
+		if (!e.hasclass('col-resizing'))
+			return
+		let field = e.fields[hit_th.index]
+		let w = mx - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
+		let min_w = max(e.min_col_w, field.min_w || 0)
+		let max_w = max(min_w, field.max_w || 1000)
+		hit_th.w = clamp(w, min_w, max_w)
+		update_col_width(hit_th.index, hit_th.clientWidth)
+		update_input_geometry()
+		return false
 	}
 
 	// keyboard bindings ------------------------------------------------------

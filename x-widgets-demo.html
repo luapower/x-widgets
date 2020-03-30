@@ -60,6 +60,11 @@ h2 {
 	-moz-tab-size: 3;
 }
 
+#main {
+	height: 100%;
+	overflow: auto;
+}
+
 #code {
 	position: absolute;
 	width: 100%;
@@ -127,7 +132,7 @@ h2 {
 	<tr>
 		<td valign=top width=160 id=demo_list_ct>
 		</td>
-		<td class="main_td lb lp" valign=top width=34%>
+		<td class="main_td lb lp" valign=top width=34% height=100%>
 			<div id=main></div>
 		</td>
 		<td valign=top class="lb" id=code_td>
@@ -355,36 +360,25 @@ main.add(pages)
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_splitter>
+<template id=demo_split>
 <help>
 
 </help>
 <script>
 
-p1 = H.div({style: 'width: 100px; height: 100px; background-color: #eee'}, 'Left Side')
-p2 = H.div({style: 'width: 200px; height: 100px; background-color: #fff'}, 'Content')
-p3 = H.div({style: 'width: 100px; height: 100px; background-color: #eee'}, 'Right Side')
+sidebar = H.div({style: 'max-width: 300px; width: 200px'}, 'Sidebar')
+header  = H.div({style: 'min-height: 100px; height: 200px'}, 'Header')
+content = H.div({style: 'min-height: 100px;'}, 'Content')
 
 main.add(
-	splitter({
-		panes: [p1, p2, p3],
-	})
-)
-
-p1 = H.div({style: 'background-color: #eee'}, 'Header')
-p2 = H.div({style: 'background-color: #fff'}, 'Content')
-p3 = H.div({style: 'background-color: #eee'}, 'Footer')
-
-p1.h = 100
-p2.h =  50
-p3.h = 100
-
-main.add(H.p())
-
-main.add(
-	splitter({
-		panes: [p1, p2, p3],
-		horizontal: true,
+	hsplit({
+		2: sidebar,
+		1: vsplit({
+			1: header, 2: content,
+			//	size1: 100,
+			//resizeable: false,
+		}),
+		//resizeable: false,
 	})
 )
 
