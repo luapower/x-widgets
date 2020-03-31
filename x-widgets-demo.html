@@ -81,10 +81,6 @@ h2 {
 	display: flex;
 }
 
-#demo_list:focus {
-	outline: none;
-}
-
 .x-dark #layout, .x-dark #code, .x-dark .lb { border-color: #333; }
 
 </style>
@@ -295,6 +291,19 @@ main.add(H.div({}, spin_input({min: -2, max: 5, step: 1.5, button_placement: 'ri
 
 <!--------------------------------------------------------------------------->
 
+<template id=demo_slider>
+<help>
+
+</help>
+<script>
+
+main.add(H.div({}, slider({value: 50, min_value: 20, max_value: 100, step: 10})))
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
 <template id=demo_listbox>
 <help>
 
@@ -336,7 +345,7 @@ main.add(
 <script>
 
 pages = H.div({style: 'margin-top: 1em'})
-pages.console = H.div({}, 'Console page contents.')
+pages.console = H.div({}, 'Console page. Contains focusble element. ', input())
 pages.source = H.div({}, 'Source page contents.')
 
 main.add(
@@ -704,7 +713,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 7
+demo_list.value = 5
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

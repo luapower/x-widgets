@@ -730,6 +730,105 @@ spin_input = component('x-spin-input', input, function(e) {
 })
 
 // ---------------------------------------------------------------------------
+// slider
+// ---------------------------------------------------------------------------
+
+slider = component('x-slider', function(e) {
+
+	e.min_value = 0
+	e.max_value = 1
+	e.step = null
+
+	e.class('x-widget')
+	e.class('x-slider')
+	e.attrval('tabindex', 0)
+
+	e.fill = H.div({class: 'x-slider-fill'})
+	e.thumb = H.div({class: 'x-slider-thumb'})
+
+	e.add(e.fill, e.thumb)
+	e.thumb.on('mousedown', thumb_mousedown)
+	e.on('keydown', view_keydown)
+
+	function update_view() {
+		let p = e.progress
+		e.fill.style.width = (p * 100)+'%'
+		e.thumb.style.left = (p * 100)+'%'
+	}
+
+	// model
+
+	let value
+
+	e.late_property('value',
+		function() {
+			return value
+		},
+		function(v) {
+			if (e.step != null)
+				v = floor(v / e.step + .5) * e.step
+			value = clamp(v, e.min_value, e.max_value)
+			update_view()
+			e.on('value_changed', value)
+		}
+	)
+
+	e.late_property('progress',
+		function() {
+			return lerp(value, e.min_value, e.max_value, 0, 1)
+		},
+		function(p) {
+			e.value = lerp(p, 0, 1, e.min_value, e.max_value)
+		},
+		0
+	)
+
+	// controller
+
+	let hit_x
+
+	function thumb_mousedown(ev) {
+		e.focus()
+		hit_x = ev.offsetX
+		document.on('mousemove', document_mousemove)
+		document.on('mouseup'  , document_mouseup)
+		return false
+	}
+
+	function document_mousemove(mx, my) {
+		let r = e.client_rect()
+		e.progress = (mx - r.left - hit_x) / r.width
+		return false
+	}
+
+	function document_mouseup() {
+		hit_x = null
+		document.off('mousemove', document_mousemove)
+		document.off('mouseup'  , document_mouseup)
+	}
+
+	function view_keydown(key) {
+		let d
+		switch (key) {
+			case 'ArrowLeft'  : d =  -.1; break
+			case 'ArrowRight' : d =   .1; break
+			case 'ArrowUp'    : d =  -.1; break
+			case 'ArrowDown'  : d =   .1; break
+			case 'PageUp'     : d =  -.5; break
+			case 'PageDown'   : d =   .5; break
+			case 'Home'       : d = -1/0; break
+			case 'End'        : d =  1/0; break
+		}
+		if (d) {
+			e.progress += d
+			return false
+		}
+	}
+
+})
+
+
+// ---------------------------------------------------------------------------
 // dropdown
 // ---------------------------------------------------------------------------
 
@@ -1611,15 +1710,19 @@ pagelist = component('x-pagelist', function(e) {
 			e.fire('open', idiv.index)
 			if (e.page_container) {
 				let page = idiv.item.page
-				if (page)
+				if (page) {
 					e.page_container.add(page)
+					let first_focusable = page.focusables()[0]
+					if (first_focusable)
+						first_focusable.focus()
+				}
 			}
 		}
 	}
 
 	function item_mousedown() {
-		select_item(this)
 		this.focus()
+		select_item(this)
 		return false
 	}
 
@@ -1784,11 +1887,6 @@ function hsplit(...args) {
 // ---------------------------------------------------------------------------
 // grid
 // ---------------------------------------------------------------------------
-
-// sign() that only returns only -1 or 1, never 0, and returns -1 for -0.
-function strict_sign(x) {
-	return 1/x == 1/-0 ? -1 : (x >= 0 ? 1 : -1)
-}
 
 grid = component('x-grid', function(e) {
 
