@@ -818,7 +818,7 @@ slider = component('x-slider', function(e) {
 		e.progress = (ev.clientX - r.left) / r.width
 	}
 
-	function view_keydown(key) {
+	function view_keydown(key, shift) {
 		let d
 		switch (key) {
 			case 'ArrowLeft'  : d =  -.1; break
@@ -831,7 +831,7 @@ slider = component('x-slider', function(e) {
 			case 'End'        : d =  1/0; break
 		}
 		if (d) {
-			e.progress += d
+			e.progress += d * (shift ? .1 : 1)
 			return false
 		}
 	}
