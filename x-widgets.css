@@ -299,11 +299,11 @@
 .x-slider {
 	/* inline layouting */
 	display: inline-block;
-	margin: .25em .5em;           /* horizontal margin  */
+	margin: .5em;                 /* horizontal margin  */
 
 	/* sizing */
 	width: var(--x-input-min-width);
-	height: .5em;
+	height: 7px;
 
 	/* styling */
 	background: var(--x-item-bg-only-bg-color);
@@ -337,6 +337,7 @@
 	box-shadow: 1px 1px 2px #000000aa;
 
 	border-radius: 10em;
+
 }
 
 .x-slider:focus {
@@ -351,6 +352,9 @@
 	border: 1px solid var(--x-item-focused-bg-color);
 	background-color: #eee;
 }
+
+.x-slider.animated > .x-slider-thumb { transition: left  .1s; }
+.x-slider.animated > .x-slider-fill  { transition: width .1s; }
 
 /* dropdown --------------------------------------------------------------- */
 

@@ -756,6 +756,10 @@ slider = component('x-slider', function(e) {
 		e.thumb.style.left = (p * 100)+'%'
 	}
 
+	e.init = function() {
+		e.class('animated', e.step >= 5)
+	}
+
 	// model
 
 	let value
@@ -789,7 +793,8 @@ slider = component('x-slider', function(e) {
 
 	function thumb_mousedown(ev) {
 		e.focus()
-		hit_x = ev.offsetX
+		let r = e.thumb.client_rect()
+		hit_x = ev.clientX - (r.left + r.width / 2)
 		document.on('mousemove', document_mousemove)
 		document.on('mouseup'  , document_mouseup)
 		return false
