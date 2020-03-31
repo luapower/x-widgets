@@ -177,7 +177,7 @@
 
 	/* sizing */
 	width: 0;                /* don't set this, set min-width */
-	min-width: 10em;
+	min-width: 12em;
 
 	/* sizing for inline use */
 	margin: .25em;
@@ -286,14 +286,16 @@
 /* NOTE: .x-input is applied too on dropdowns so consider this a class extension! */
 
 .x-dropdown {
+
 	/* content layouting */
-	align-items: stretch;
+	align-items: baseline;
+	line-height: initial;       /* prevent y-stretching to surrounding text's line height */
 
 	/* styling */
 	cursor: default;
 
 	/* default mode: variable-width, no-wrap but with .x-input's min-width applied */
-	width: auto;             /* shrink-wrap */
+	width: auto;                /* shrink-wrap */
 	white-space: nowrap;
 }
 
