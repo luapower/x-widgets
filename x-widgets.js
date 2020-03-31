@@ -748,6 +748,7 @@ slider = component('x-slider', function(e) {
 
 	e.add(e.fill, e.thumb)
 	e.thumb.on('mousedown', thumb_mousedown)
+	e.on('mousedown', view_mousedown)
 	e.on('keydown', view_keydown)
 
 	function update_view() {
@@ -810,6 +811,11 @@ slider = component('x-slider', function(e) {
 		hit_x = null
 		document.off('mousemove', document_mousemove)
 		document.off('mouseup'  , document_mouseup)
+	}
+
+	function view_mousedown(ev) {
+		let r = e.client_rect()
+		e.progress = (ev.clientX - r.left) / r.width
 	}
 
 	function view_keydown(key) {
