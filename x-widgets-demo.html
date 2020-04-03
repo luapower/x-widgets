@@ -206,6 +206,39 @@ main.add(c2)
 
 <!--------------------------------------------------------------------------->
 
+<template id=demo_radiogroup>
+<help>
+
+</help>
+
+<script>
+
+main.add(
+	radiogroup({
+		items: [
+			'Option 1',
+			'Option 2',
+			'Option 3<br>Multiple lines',
+		],
+		value: 1,
+	}),
+	radiogroup({
+		align: 'right',
+		items: [
+			'Option 1',
+			'Option 2',
+			'Option 3<br>Multiple lines long text',
+		],
+		value: 1/0,
+	})
+)
+
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
 <template id=demo_menus>
 <help>
 

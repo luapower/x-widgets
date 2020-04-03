@@ -415,6 +415,67 @@ checkbox = component('x-checkbox', function(e) {
 })
 
 // ---------------------------------------------------------------------------
+// radiogroup
+// ---------------------------------------------------------------------------
+
+radiogroup = component('x-radiogroup', function(e) {
+
+	e.class('x-widget')
+	e.class('x-radiogroup')
+
+	e.items = []
+	e.align = 'left'
+
+	e.init = function() {
+		e.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
+		for (let item of e.items) {
+			if (typeof(item) == 'string')
+				item = {text: item}
+			let radio_div = H.span({class: 'x-radio-icon far fa-circle'})
+			let text_div = H.span({class: 'x-radio-text'})
+			text_div.html = item.text
+			let item_div = H.div({class: 'x-radio-item', tabindex: 0}, radio_div, text_div)
+			item_div.item = item
+			item_div.on('click', item_click)
+			item_div.on('keydown', item_keydown)
+			e.add(item_div)
+		}
+	}
+
+	let sel_item
+
+	e.late_property('value', function() {
+		return sel_item.index
+	}, function(i) {
+		if (sel_item) {
+			sel_item.class('selected', false)
+			sel_item.at[0].class('fa-dot-circle', false)
+			sel_item.at[0].class('fa-circle', true)
+		}
+		sel_item = i != null ? e.at[i] : null
+		if (sel_item) {
+			sel_item.class('selected', true)
+			sel_item.at[0].class('fa-dot-circle', true)
+			sel_item.at[0].class('fa-circle', false)
+		}
+		e.fire('value_changed', i)
+	})
+
+	function item_click() {
+		e.value = this.index
+		return false
+	}
+
+	function item_keydown(key) {
+		if (key == ' ' || key == 'Enter') {
+			e.value = this.index
+			return false
+		}
+	}
+
+})
+
+// ---------------------------------------------------------------------------
 // input
 // ---------------------------------------------------------------------------
 

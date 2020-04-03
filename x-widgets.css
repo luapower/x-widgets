@@ -180,6 +180,42 @@
 	text-align: right;
 }
 
+/* radiogroup ------------------------------------------------------------- */
+
+.x-radiogroup {
+	/* layouting */
+	display: inline-flex;
+	flex-flow: column wrap;
+	align-items: flex-start;
+
+	cursor: default;
+}
+.x-radiogroup.align-right {
+	align-items: flex-end;
+}
+
+.x-radio-item {
+	display: flex;
+	flex-flow: row nowrap;
+	align-items: baseline;
+	margin: .25em;
+	padding: .5em;
+}
+
+.x-radio-icon {
+	padding-right: .5em;
+	font-size: 120%;
+}
+
+.x-radiogroup.align-right .x-radio-icon {
+	padding-right: 0;
+	padding-left: .5em;
+	order: 2;
+}
+.x-radiogroup.align-right .x-radio-text {
+	text-align: right;
+}
+
 /* input ------------------------------------------------------------------ */
 
 .x-input {
