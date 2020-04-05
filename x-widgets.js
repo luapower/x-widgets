@@ -405,57 +405,44 @@ tooltip = component('x-tooltip', function(e) {
 
 	e.class('x-widget')
 	e.class('x-tooltip')
-	e.type = 'info'
 
 	e.text_div = H.div({class: 'x-tooltip-text'})
 	e.pin = H.div({class: 'x-tooltip-tip'})
 	e.add(e.text_div, e.pin)
 
+	e.attrval('side', 'top')
+	e.attrval('align', 'center')
+
+	let target
+
+	function check(target, e) {
+		let visible = !e.check || e.check(target, e)
+		e.class('visible', !!visible)
+		return visible
+	}
+
+	e.update = function() {
+		e.popup(target, e.side, e.align, check)
+	}
+
 	e.property('text',
 		function()  { return e.text_div.html },
-		function(s) { e.text_div.html = s }
+		function(s) { e.text_div.html = s; e.update() }
 	)
 
 	e.property('visible',
 		function()  { return e.style.display != 'none' },
-		function(v) { return e.style.display = v ? null : 'none' }
+		function(v) { return e.style.display = v ? null : 'none'; e.update() }
 	)
 
-	let target
-	let side    // 'left'|'right'|'top'|'bottom'
-	let align   // 'start'|'end'|'center'
-	let show
+	e.attr_property('side' , e.update)
+	e.attr_property('align', e.update)
+	e.attr_property('type' , e.update)
 
-	function update() {
-		e.class('side-left'  , false)
-		e.class('side-right' , false)
-		e.class('side-top'   , false)
-		e.class('side-bottom', false)
-		e.class('align-start', false)
-		e.class('align-end'  , false)
-		e.class('side-'+side, true)
-		e.class('align-'+align, true)
-		e.class('error', e.type == 'error')
-		e.class('info' , e.type == 'info')
-		e.popup(target, side, align)
-	}
-
-	e.property('side',
-		function()  { return side },
-		function(v) { side = v; update() }
-	)
-
-	e.property('align',
-		function()  { return align },
-		function(v) { align = v; update() }
-	)
-
-	e.property('target',
+	e.late_property('target',
 		function()  { return target },
-		function(v) { target = v; update() }
+		function(v) { target = v; e.update() }
 	)
-
-	//e.property('show',
 
 })
 
@@ -497,7 +484,6 @@ checkbox = component('x-checkbox', function(e) {
 		e.text_div.html = s
 	})
 
-
 	function set_checked(v) {
 		e.class('checked', v)
 		e.icon_div.class('fa-check-square', v)
@@ -531,6 +517,15 @@ checkbox = component('x-checkbox', function(e) {
 				return
 			set_checked(v === e.checked_value)
 			e.fire('value_changed', v)
+		}
+	)
+
+	e.late_property('checked',
+		function() {
+			return e.hasclass('checked')
+		},
+		function(v) {
+			e.value = v ? e.checked_value : e.unchecked_value
 		}
 	)
 
@@ -629,26 +624,25 @@ input = component('x-input', function(e) {
 	e.class('x-input')
 
 	e.align = 'left'
+	e.invalid = false
 
-	e.tooltip_message = H.div({class: 'x-input-error'})
-	e.tooltip_pin = H.div({class: 'x-input-error-tip'}, '\u25BC')
-	e.tooltip = H.div({class: 'x-input-error-ct'}, e.tooltip_message, e.tooltip_pin)
-	e.tooltip.style.display = 'none'
 	e.input = H.input({class: 'x-input-input'})
 	e.input.set_input_filter() // must be set as first event handler!
 	e.input.on('input', input_input)
-	e.input.on('focus', input_focus)
 	e.input.on('blur', input_blur)
 	e.input.on('keydown', input_keydown)
 	e.input.on('keyup', input_keyup)
-	e.add(e.input, e.tooltip)
+	e.add(e.input)
+
+	function tooltip_check() { return e.invalid && e.hasfocus }
+	e.tooltip = tooltip({type: 'error', target: e, check: tooltip_check})
 
 	function set_valid(err) {
 		e.invalid = err != true
 		e.input.class('invalid', e.invalid)
 		e.error = e.invalid && err || ''
-		e.tooltip_message.html = e.error
-		e.tooltip.style.display = e.error ? null : 'none'
+		e.tooltip.text = e.error
+		e.tooltip.update()
 	}
 
 	let value, value_set
@@ -688,12 +682,7 @@ input = component('x-input', function(e) {
 		set_valid(set_value(v, true))
 	}
 
-	function input_focus() {
-		e.tooltip.style.display = e.error ? null : 'none'
-	}
-
 	function input_blur() {
-		e.tooltip.style.display = 'none'
 		e.fire('lost_focus') // grid editor protocol
 	}
 
@@ -2731,7 +2720,7 @@ grid = component('x-grid', function(e) {
 				return false
 		*/
 
-		let had_focus = e.hasfocus()
+		let had_focus = e.hasfocus
 		free_editor()
 		if (had_focus)
 			e.focus()
@@ -2912,7 +2901,7 @@ grid = component('x-grid', function(e) {
 	function cell_mousedown() {
 		if (e.hasclass('col-resize'))
 			return
-		let had_focus = e.hasfocus()
+		let had_focus = e.hasfocus
 		if (!had_focus)
 			e.focus()
 		let ri = this.parent.row_index

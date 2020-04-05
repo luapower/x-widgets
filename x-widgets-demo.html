@@ -186,31 +186,32 @@ main.add(
 
 <script>
 
-b1 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
-b2 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
-b3 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
-//b4 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
-main.add(b1, b2, b3) //, b4)
+b1 = button({text: 'aaa ^ aaa<br>aaa aaa aaa v aaa aaa aaa'})
+b2 = button({text: 'aaa ^ aaa<br>aaa aaa aaa v aaa aaa aaa'})
+b3 = button({text: 'aaa ^ aaa<br>aaa aaa aaa v aaa aaa aaa'})
+main.add(H.div({style: 'text-align: center'}, H.div({}, b1), H.div({}, b2), H.div({}, b3)))
 
 b1.style['margin-bottom'] = '10em'
 b2.style['margin-bottom'] = '10em'
 
-let s = 'Imma tooltip<br>with text on multiple lines'
+let s = 'aaa v aaa<br>aaa aaa v aaa aaa'
 
-t1 = tooltip({text: s, side: 'right' , align: 'center', target: b1})
-t2 = tooltip({text: s, side: 'top'   , align: 'center', target: b1})
-t3 = tooltip({text: s, side: 'bottom', align: 'center', target: b1})
-t4 = tooltip({text: s, side: 'left'  , align: 'center', target: b1})
+function check(e) { return e.hovered }
+
+t1 = tooltip({text: s, side: 'right' , align: 'center', target: b1, type: 'info', check: check})
+t2 = tooltip({text: s, side: 'top'   , align: 'center', target: b1, type: 'info', check: check})
+t3 = tooltip({text: s, side: 'bottom', align: 'center', target: b1, type: 'info', check: check})
+t4 = tooltip({text: s, side: 'left'  , align: 'center', target: b1, type: 'info', check: check})
 
 t1 = tooltip({text: s, side: 'right' , align: 'start', target: b2})
 t2 = tooltip({text: s, side: 'top'   , align: 'start', target: b2})
 t3 = tooltip({text: s, side: 'bottom', align: 'start', target: b2})
 t4 = tooltip({text: s, side: 'left'  , align: 'start', target: b2})
 
-t1 = tooltip({text: s, side: 'right' , align: 'end', target: b3})
-t2 = tooltip({text: s, side: 'top'   , align: 'end', target: b3})
-t3 = tooltip({text: s, side: 'bottom', align: 'end', target: b3})
-t4 = tooltip({text: s, side: 'left'  , align: 'end', target: b3})
+t1 = tooltip({text: s, side: 'right' , align: 'end', target: b3, type: 'error'})
+t2 = tooltip({text: s, side: 'top'   , align: 'end', target: b3, type: 'error'})
+t3 = tooltip({text: s, side: 'bottom', align: 'end', target: b3, type: 'error'})
+t4 = tooltip({text: s, side: 'left'  , align: 'end', target: b3, type: 'error'})
 
 </script>
 </template>

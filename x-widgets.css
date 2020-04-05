@@ -159,7 +159,6 @@
 	display: flex;
 	align-items: flex-start;
 	justify-content: flex-start;
-	border: 1px solid black;
 
 	/* positioning */
 	position: absolute;
@@ -168,66 +167,132 @@
 	/* sizing */
 	width: 400px;                 /* max. width of the message bubble before wrapping */
 
+	/* hit-testing */
 	pointer-events: none;         /* click-through */
+
+	/* animation */
+	opacity: 0;
+	animation-duration: .2s;
+	animation-timing-function: ease-out;
+	animation-fill-mode: forwards;
 }
+
+/* visibility animation */
+
+.x-tooltip.visible { opacity: 1; }
+
+@keyframes x-tooltip-left   { from { opacity: 0; transform: translate(-1em, 0); } }
+@keyframes x-tooltip-right  { from { opacity: 0; transform: translate( 1em, 0); } }
+@keyframes x-tooltip-top    { from { opacity: 0; transform: translate(0, -.5em); } }
+@keyframes x-tooltip-bottom { from { opacity: 0; transform: translate(0,  .5em); } }
+
+.x-tooltip.visible[side=left]   { animation-name: x-tooltip-left; }
+.x-tooltip.visible[side=right]  { animation-name: x-tooltip-right; }
+.x-tooltip.visible[side=top]    { animation-name: x-tooltip-top; }
+.x-tooltip.visible[side=bottom] { animation-name: x-tooltip-bottom; }
 
 .x-tooltip-text {
 
 	/* layouting */
-	display: inline-block;        /* shrink-wrap, and also word-wrap when reaching container width */
+	display: inline-block;        /* shrink-wrap and also word-wrap when reaching container width */
 
 	/* sizing */
 	padding: .5em 1em;
 
 	/* styling */
-	color: white;
-	border-radius: 5px;
+	border-radius: .25em;
+	background-color: white;
 
 	cursor: default;
 	pointer-events: auto;
+
+	box-shadow: 2px 2px 10px #00000044;
 }
 
 .x-tooltip-tip {
-	line-height: .5em;
+
+	/* border-based triangle shape */
+	display: block;
+	box-sizing: content-box;
+	border-width: .5em;
+	border-color: transparent;
+	border-style: solid;
+	z-index: 1; /* draw over the parent's box shadow */
 
 	/* styling */
-	color: var(--x-error-bg-color);
+	color: white;
 }
 
-.x-tooltip.info > .x-tooltip-text { background-color: var(--x-info-bg-color); }
-.x-tooltip.info > .x-tooltip-tip  {            color: var(--x-info-bg-color); }
+.x-tooltip[side=left]   > .x-tooltip-tip { border-left-color   : inherit; }
+.x-tooltip[side=right]  > .x-tooltip-tip { border-right-color  : inherit; }
+.x-tooltip[side=top]    > .x-tooltip-tip { border-top-color    : inherit; }
+.x-tooltip[side=bottom] > .x-tooltip-tip { border-bottom-color : inherit; }
 
-.x-tooltip.error > .x-tooltip-text { background-color: var(--x-error-bg-color); }
-.x-tooltip.error > .x-tooltip-tip  {            color: var(--x-error-bg-color); }
+/* side & align combinations */
 
-.x-tooltip.side-left                           { justify-content: flex-end; }
-.x-tooltip.side-left > .x-tooltip-tip::before  { content: '\25B6'; }
-.x-tooltip.side-left > .x-tooltip-tip          { margin: 1em -2px; }
-.x-tooltip.side-left > .x-tooltip-text         { }
+.x-tooltip[side=top],
+.x-tooltip[side=bottom]  { flex-flow: column; }
 
-.x-tooltip.side-right > .x-tooltip-tip::before  { content: '\25c0'; }
-.x-tooltip.side-right > .x-tooltip-tip          { margin: 1em -2px; }
-.x-tooltip.side-right > .x-tooltip-text         { order: 2; }
+.x-tooltip[side=left]    { justify-content: flex-end; }
 
-.x-tooltip.side-top, .x-tooltip.side-bottom { flex-flow: column; }
+.x-tooltip[align=end]    { align-items: flex-end; }
+.x-tooltip[align=center] { align-items: center; }
 
-.x-tooltip.side-top > .x-tooltip-tip::before    { content: '\25bc'; }
-.x-tooltip.side-top > .x-tooltip-tip            { align-self: left; margin-left: .5em; }
+.x-tooltip[side=right]  > .x-tooltip-text,
+.x-tooltip[side=bottom] > .x-tooltip-text { order: 2; }
 
-.x-tooltip.side-bottom > .x-tooltip-tip::before { content: '\25b2'; }
-.x-tooltip.side-bottom > .x-tooltip-tip         { margin-left: .5em; }
-.x-tooltip.side-bottom > .x-tooltip-text        { order: 2; }
+.x-tooltip[side=top][align=center] > .x-tooltip-text,
+.x-tooltip[side=bottom][align=center] > .x-tooltip-text { text-align: center; }
 
-.x-tooltip.align-center,
-.x-tooltip.align-center {
-	align-items: center;
-	text-align: center;
+.x-tooltip[side=top][align=end] > .x-tooltip-text,
+.x-tooltip[side=bottom][align=end] > .x-tooltip-text { text-align: right; }
+
+.x-tooltip[side=top] > .x-tooltip-tip,
+.x-tooltip[side=bottom] > .x-tooltip-tip { margin: 0 .5em; }
+
+.x-tooltip[side=left] > .x-tooltip-tip,
+.x-tooltip[side=right] > .x-tooltip-tip { margin: .5em 0; }
+
+.x-tooltip[side=right]  { margin-left   : -.25em; }
+.x-tooltip[side=left]   { margin-left   :  .25em; }
+.x-tooltip[side=top]    { margin-top    :  .25em; }
+.x-tooltip[side=bottom] { margin-top    : -.25em; }
+
+/* styling based on type attr */
+
+.x-tooltip[type=info] > .x-tooltip-text { background-color: var(--x-info-bg-color); color: white; }
+.x-tooltip[type=info] > .x-tooltip-tip  { color: var(--x-info-bg-color); }
+
+.x-tooltip[type=error] > .x-tooltip-text { background-color: var(--x-error-bg-color); color: white; }
+.x-tooltip[type=error] > .x-tooltip-tip  { color: var(--x-error-bg-color); }
+
+/* animation */
+
+/*
+.x-tooltip]:not([flow]):hover::before,
+.x-tooltip]:not([flow]):hover::after,
+.x-tooltip][flow^="up"]:hover::before,
+.x-tooltip][flow^="up"]:hover::after,
+.x-tooltip][flow^="down"]:hover::before,
+.x-tooltip][flow^="down"]:hover::after {
+    animation:
+        tooltips-vert
+        300ms
+        ease-out
+        forwards;
 }
 
-.x-tooltip.align-center > .x-tooltip-tip {
-	margin-left: 0;
-	margin-right: 0;
+[tooltip][flow^="left"]:hover::before,
+[tooltip][flow^="left"]:hover::after,
+[tooltip][flow^="right"]:hover::before,
+[tooltip][flow^="right"]:hover::after {
+    animation:
+        tooltips-horz
+        300ms
+        ease-out
+        forwards;
 }
+*/
 
 /* checkbox & radiogroup = markbox ---------------------------------------- */
 
@@ -278,7 +343,6 @@
 	/* layouting */
 	display: inline-flex;    /* the only way to get variable-width inputs */
 	align-items: baseline;   /* that are baseline-aligned */
-	position: relative;      /* anchor the error tooltip */
 
 	/* sizing */
 	width: 0;                /* don't set this, set min-width */
@@ -323,43 +387,6 @@
 .x-input-input.invalid {
 	background-color: var(--x-error-bg-color);
 	color: white;
-}
-
-/* input / error message tooltip ------------------------------------------ */
-
-.x-input-error-ct {
-
-	/* positioning */
-	position: absolute;
-	z-index: 1;
-	bottom: 2.3em;                /* move above input */
-	left: 50%;                    /* anchor to parent's center */
-	transform: translateX(-50%);  /* center tooltip */
-
-	/* sizing */
-	width: 400px;                 /* max. width of the message bubble before wrapping */
-	text-align: center;           /* center the message bubble inside this container of fixed width */
-}
-
-.x-input-error {
-
-	/* layouting */
-	display: inline-block;        /* shrink-wrap, and also word-wrap when reaching container width */
-
-	/* sizing */
-	padding: .5em 1em;
-
-	/* styling */
-	color: white;
-	background-color: var(--x-error-bg-color);
-	border-radius: 5px;
-}
-
-.x-input-error-tip {
-	line-height: 7px;
-
-	/* styling */
-	color: var(--x-error-bg-color);
 }
 
 /* spin_input ------------------------------------------------------------- */
