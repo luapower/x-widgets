@@ -150,7 +150,6 @@ button({
 	text: 'html text',
 	icon_classes: 'class1 class2',
 	primary: true,
-	click: function() {},
 })
 
 </help>
@@ -161,19 +160,57 @@ main.add(
 	button({
 		text: 'Click me!',
 		primary: true,
-		click: function() { print('clicked') },
+		onclick: function() { print('clicked') },
 	}),
 	button({
 		text: 'Click&nbsp;<i>me</i>&nbsp;too!',
 		icon_classes: 'fa fa-biohazard',
-		click: function() { print('clicked') },
+		onclick: function() { print('clicked') },
 	}),
 	button({
 		text: 'Multiline text<br>works too!',
 		icon_classes: 'fa fa-folder-open',
-		click: function() { print('clicked') },
+		onclick: function() { print('clicked') },
 	})
 )
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=demo_tooltip>
+<help>
+
+</help>
+
+<script>
+
+b1 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
+b2 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
+b3 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
+//b4 = button({text: 'aaa aaa aaa ^ aaa aaa aaa'})
+main.add(b1, b2, b3) //, b4)
+
+b1.style['margin-bottom'] = '10em'
+b2.style['margin-bottom'] = '10em'
+
+let s = 'Imma tooltip<br>with text on multiple lines'
+
+t1 = tooltip({text: s, side: 'right' , align: 'center', target: b1})
+t2 = tooltip({text: s, side: 'top'   , align: 'center', target: b1})
+t3 = tooltip({text: s, side: 'bottom', align: 'center', target: b1})
+t4 = tooltip({text: s, side: 'left'  , align: 'center', target: b1})
+
+t1 = tooltip({text: s, side: 'right' , align: 'start', target: b2})
+t2 = tooltip({text: s, side: 'top'   , align: 'start', target: b2})
+t3 = tooltip({text: s, side: 'bottom', align: 'start', target: b2})
+t4 = tooltip({text: s, side: 'left'  , align: 'start', target: b2})
+
+t1 = tooltip({text: s, side: 'right' , align: 'end', target: b3})
+t2 = tooltip({text: s, side: 'top'   , align: 'end', target: b3})
+t3 = tooltip({text: s, side: 'bottom', align: 'end', target: b3})
+t4 = tooltip({text: s, side: 'left'  , align: 'end', target: b3})
 
 </script>
 </template>
@@ -249,15 +286,15 @@ function act(a) { print(a.text) }
 
 m = menu({
 	actions: [
-		{text: 'Open', click: act, key: 'Ctrl+B', icon_class: 'fa fa-folder-open'},
-		{text: 'Close', enabled: false, icon_class: 'fa fa-window-close', click: act, separator: true},
+		{text: 'Open', onclick: act, key: 'Ctrl+B', icon_class: 'fa fa-folder-open'},
+		{text: 'Close', enabled: false, icon_class: 'fa fa-window-close', onclick: act, separator: true},
 		{text: 'More', actions: [
 			{text: 'Check', checked: true},
 			{text: 'Check No Close', checked: true,
-				click: function(a) { print(a.checked); return false } },
+				onclick: function(a) { print(a.checked); return false } },
 			{text: 'More Stuff', actions: [
 				{text: 'More Stuff 1 this is a very long item text'},
-				{text: 'More Stuff 2', click: act},
+				{text: 'More Stuff 2', onclick: act},
 			]},
 		]},
 		{text: 'Even More', actions: [
@@ -270,7 +307,7 @@ m = menu({
 b = button({
 	text: 'Click for menu',
 	primary: true,
-	click: function() { m.popup(b, 'bottom', 0, 2) },
+	onclick: function() { m.popup(b, 'bottom', 0, 2) },
 })
 
 main.add(b)
@@ -448,10 +485,13 @@ main.add(calendar({value: day(now(), 2)}))
 </help>
 <script>
 
+var checked = '<div class="fa fa-check"></div>'
+
 var data = {
 	fields: [
 		{name: 'id'        , w:  60, min_w:  30, type: 'number', editable: false},
-		{name: 'name'      , w: 100, min_w: 100, max_w: 200},
+		{name: 'X'         , w:  30, type: 'bool', true_text: checked, false_text: ''},
+		{name: 'name'      , w:  70, min_w:  50, max_w: 200},
 		{name: 'parent_id' , w:  60, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: false},
 		{name: 'random_num', w: 130, allow_null: true, type: 'number', text: 'Random<br>Number'},
 		{name: 'date'      , w: 140, allow_null: true, type: 'date'},
@@ -467,7 +507,7 @@ for (var i = 1; i <= 1e5; i++) {
 	let random_date = i * 24 * 3600 * 1000
 	data.rows.push({
 		focusable: i % 10 >= 2,
-		values: [id, name, parent_id, random_num, random_date]
+		values: [id, i % 5 == 0, name, parent_id, random_num, random_date]
 	})
 }
 
@@ -683,7 +723,7 @@ main.add(H.div({style: 'line-height: 3; font-size: 120%'},
 	button({
 		text: 'buttons.',
 		primary: true,
-		click: function() { print('clicked') },
+		onclick: function() { print('clicked') },
 	}),
 	'This stays true under different fonts, font sizes and line heights.'
 ))
@@ -748,7 +788,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 5
+demo_list.value = 1
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

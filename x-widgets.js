@@ -13,7 +13,7 @@
 	rowset.types : {type -> {attr->val}}
 
 	d.fields: [{attr->val}, ...]
-		name           : field name (defaults to field numeric index)
+		name           : field name (defaults to field's numeric index)
 		type           : for choosing a field template.
 		client_default : default value that new rows are initialized with.
 		server_default : default value that the server sets.
@@ -22,10 +22,13 @@
 		sortable       : allow sorting (true).
 		validate       : f(v, field) -> true|err
 		format         : f(v, field) -> s
+		date_format    : toLocaleString format options for dates
+		true_text      : display value for boolean true
+		false_text     : display value for boolean false
 		align          : 'left'|'right'|'center'
-		editor         : f(field) -> editor
-		compare_types  : f(v1, v2) -> -1|0|1
-		compare_values : f(v1, v2) -> -1|0|1
+		editor         : f(field) -> editor instance
+		compare_types  : f(v1, v2) -> -1|0|1  (for sorting)
+		compare_values : f(v1, v2) -> -1|0|1  (for sorting)
 
 	d.rows: [{attr->val}, ...]
 		values         : [v1,...]
@@ -158,7 +161,7 @@ let rowset = function(...options) {
 	}
 
 	d.create_editor = function(row, field) {
-		return field.editor.call(d, field)
+		return field.editor.call(d, field, row)
 	}
 
 	d.set_value = function(row, field, val, source) {
@@ -256,35 +259,6 @@ let rowset = function(...options) {
 // field templates -----------------------------------------------------------
 
 {
-	rowset.types = {
-		number: {align: 'right'},
-		date  : {align: 'right'},
-	}
-
-	rowset.types.number.validate = function(val, field) {
-		val = parseFloat(val)
-		return typeof(val) == 'number' && val === val || 'invalid number'
-	}
-
-	rowset.types.number.editor = function() {
-		return spin_input({
-			button_placement: 'left',
-		})
-	}
-
-	rowset.types.date.format = function(t, field) {
-		_d.setTime(t)
-		return _d.toLocaleString(locale, rowset.types.date.format.format)
-	}
-	rowset.types.date.format.format = {weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
-
-	rowset.types.date.editor = function() {
-		return dropdown({
-			picker: calendar(),
-			classes: 'align-right fixed',
-		})
-	}
-
 	rowset.default_type = {
 		width: 50,
 		align: 'left',
@@ -293,14 +267,75 @@ let rowset = function(...options) {
 		allow_null: true,
 		editable: true,
 		sortable: true,
+		validate: return_true,
+		true_text: 'true',
+		false_text: 'false',
 	}
 
 	rowset.default_type.format = function(v) {
 		return String(v)
 	}
 
-	rowset.default_type.editor = function() {
-		return input()
+	rowset.default_type.editor = function(field, row) {
+		return input({
+			validate: field.validate,
+		})
+	}
+
+	rowset.types = {
+		number: {align: 'right'},
+		date  : {align: 'right'},
+		bool  : {align: 'center'},
+	}
+
+	// numbers
+
+	rowset.types.number.validate = function(val, field) {
+		val = parseFloat(val)
+		return typeof(val) == 'number' && val === val || 'invalid number'
+	}
+
+	rowset.types.number.editor = function(field, row) {
+		return spin_input({
+			button_placement: 'left',
+		})
+	}
+
+	// dates
+
+	rowset.types.date.validate = function(val, field) {
+		return typeof(val) == 'number' && val === val || 'invalid timestamp'
+	}
+
+	rowset.types.date.format = function(t, field) {
+		_d.setTime(t)
+		return _d.toLocaleString(locale, field.date_format)
+	}
+
+	rowset.default_type.date_format =
+		{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
+
+	rowset.types.date.editor = function(field, row) {
+		return dropdown({
+			picker: calendar(),
+			classes: 'align-right fixed',
+		})
+	}
+
+	// booleans
+
+	rowset.types.bool.validate = function(val, field) {
+		return typeof(val) == 'boolean'
+	}
+
+	rowset.types.bool.format = function(val, field) {
+		return val ? field.true_text : field.false_text
+	}
+
+	rowset.types.bool.editor = function(field, row) {
+		return checkbox({
+			center: true,
+		})
 	}
 
 }
@@ -309,10 +344,12 @@ let rowset = function(...options) {
 // button
 // ---------------------------------------------------------------------------
 
-button = component('x-button', HTMLButtonElement, 'button', function(e) {
+button = component('x-button', function(e) {
 
 	e.class('x-widget')
 	e.class('x-button')
+	e.attrval('tabindex', 0)
+	e.onclick = noop
 
 	e.icon_span = H.span({class: 'x-button-icon'})
 	e.text_span = H.span({class: 'x-button-text'})
@@ -327,7 +364,8 @@ button = component('x-button', HTMLButtonElement, 'button', function(e) {
 		if (!(e.icon_classes || e.icon))
 			e.icon_span.hide()
 
-		e.on('click', e.click)
+		e.on('keydown', keydown)
+		e.on('keyup', keyup)
 	}
 
 	e.property('text', function() {
@@ -342,11 +380,85 @@ button = component('x-button', HTMLButtonElement, 'button', function(e) {
 		e.class('primary', on)
 	})
 
-	e.detach = function() {
-		e.fire('detach') // for auto-closing attached popup menus.
+	function keydown(key) {
+		if (key == ' ' || key == 'Enter') {
+			e.class('active', true)
+			return false
+		}
+	}
+
+	function keyup(key) {
+		if (key == ' ' || key == 'Enter') {
+			e.click()
+			e.class('active', false)
+			return false
+		}
 	}
 
 })
+
+// ---------------------------------------------------------------------------
+// tooltip
+// ---------------------------------------------------------------------------
+
+tooltip = component('x-tooltip', function(e) {
+
+	e.class('x-widget')
+	e.class('x-tooltip')
+	e.type = 'info'
+
+	e.text_div = H.div({class: 'x-tooltip-text'})
+	e.pin = H.div({class: 'x-tooltip-tip'})
+	e.add(e.text_div, e.pin)
+
+	e.property('text',
+		function()  { return e.text_div.html },
+		function(s) { e.text_div.html = s }
+	)
+
+	e.property('visible',
+		function()  { return e.style.display != 'none' },
+		function(v) { return e.style.display = v ? null : 'none' }
+	)
+
+	let target
+	let side    // 'left'|'right'|'top'|'bottom'
+	let align   // 'start'|'end'|'center'
+	let show
+
+	function update() {
+		e.class('side-left'  , false)
+		e.class('side-right' , false)
+		e.class('side-top'   , false)
+		e.class('side-bottom', false)
+		e.class('align-start', false)
+		e.class('align-end'  , false)
+		e.class('side-'+side, true)
+		e.class('align-'+align, true)
+		e.class('error', e.type == 'error')
+		e.class('info' , e.type == 'info')
+		e.popup(target, side, align)
+	}
+
+	e.property('side',
+		function()  { return side },
+		function(v) { side = v; update() }
+	)
+
+	e.property('align',
+		function()  { return align },
+		function(v) { align = v; update() }
+	)
+
+	e.property('target',
+		function()  { return target },
+		function(v) { target = v; update() }
+	)
+
+	//e.property('show',
+
+})
+
 
 // ---------------------------------------------------------------------------
 // checkbox
@@ -355,20 +467,28 @@ button = component('x-button', HTMLButtonElement, 'button', function(e) {
 checkbox = component('x-checkbox', function(e) {
 
 	e.class('x-widget')
+	e.class('x-markbox')
 	e.class('x-checkbox')
 	e.attrval('tabindex', 0)
 
 	e.align = 'left'
+	e.checked_value = true
+	e.unchecked_value = false
+	e.validate = return_true
+	e.allow_invalid_values = false
 
-	e.checkmark_div = H.span({class: 'x-checkbox-mark far fa-square'})
-	e.text_div = H.span({class: 'x-checkbox-text'})
-	e.add(e.checkmark_div, e.text_div)
+	e.icon_div = H.span({class: 'x-markbox-icon x-checkbox-icon far fa-square'})
+	e.text_div = H.span({class: 'x-markbox-text x-checkbox-text'})
+	e.add(e.icon_div, e.text_div)
 
 	e.init = function() {
 		e.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
+		e.class('center', !!e.center)
 		e.on('click', click)
 		e.on('mousedown', mousedown)
 		e.on('keydown', keydown)
+		e.on('focus', focus)
+		e.on('blur', blur)
 	}
 
 	e.property('text', function() {
@@ -377,17 +497,40 @@ checkbox = component('x-checkbox', function(e) {
 		e.text_div.html = s
 	})
 
-	e.property('checked',
+
+	function set_checked(v) {
+		e.class('checked', v)
+		e.icon_div.class('fa-check-square', v)
+		e.icon_div.class('fa-square', !v)
+		e.fire(v ? 'checked' : 'unchecked')
+	}
+
+	e.show_error = function(err, focused) {
+		e.tooltip = e.tooltip || tooltip()
+		e.tooltip.text = err
+		e.tooltip.visible = focused
+	}
+
+	let error
+	function focus() { e.show_error(error, true ) }
+	function blur () { e.show_error(error, false) }
+	e.set_valid = function(err) {
+		error = err
+		e.class('invalid', err !== true)
+		e.show_error(err, e.focused)
+	}
+
+	e.late_property('value',
 		function() {
-			return e.hasclass('checked')
+			return e.hasclass('checked') ? e.checked_value : e.unchecked_value
 		},
 		function(v) {
-			v = !!v
-			e.class('checked', v)
-			e.checkmark_div.class('fa-check-square', v)
-			e.checkmark_div.class('fa-square', !v)
+			let err = e.validate(v)
+			e.set_valid(err)
+			if (err !== true && !e.allow_invalid_values)
+				return
+			set_checked(v === e.checked_value)
 			e.fire('value_changed', v)
-			e.fire(v ? 'checked' : 'unchecked')
 		}
 	)
 
@@ -427,14 +570,15 @@ radiogroup = component('x-radiogroup', function(e) {
 	e.align = 'left'
 
 	e.init = function() {
-		e.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
 		for (let item of e.items) {
 			if (typeof(item) == 'string')
 				item = {text: item}
-			let radio_div = H.span({class: 'x-radio-icon far fa-circle'})
-			let text_div = H.span({class: 'x-radio-text'})
+			let radio_div = H.span({class: 'x-markbox-icon x-radio-icon far fa-circle'})
+			let text_div = H.span({class: 'x-markbox-text x-radio-text'})
 			text_div.html = item.text
-			let item_div = H.div({class: 'x-radio-item', tabindex: 0}, radio_div, text_div)
+			let item_div = H.div({class: 'x-markbox x-radio-item', tabindex: 0}, radio_div, text_div)
+			item_div.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
+			item_div.class('center', !!e.center)
 			item_div.item = item
 			item_div.on('click', item_click)
 			item_div.on('keydown', item_keydown)
@@ -553,9 +697,7 @@ input = component('x-input', function(e) {
 		e.fire('lost_focus') // grid editor protocol
 	}
 
-	e.validate = function(v) {
-		return true
-	}
+	e.validate = return_true // stub
 
 	e.to_text = function(v) {
 		return v != null ? String(v) : null
@@ -923,10 +1065,7 @@ dropdown = component('x-dropdown', function(e) {
 		let v = e.picker.display_value
 		if (v === '')
 			v = '&nbsp;'
-		if (typeof(v) == 'string')
-			e.value_div.html = v
-		else
-			e.value_div.replace(0, v)
+		e.value_div.html = v
 	}
 
 	function onoff_events(on) {
@@ -1098,11 +1237,6 @@ dropdown = component('x-dropdown', function(e) {
 			return false
 		e.fire('lost_focus') // grid editor protocol
 	}
-
-	// editor protocol (stubs)
-
-	e.editor_state = function(field) { return field }
-	e.enter_editor = function(state) {}
 
 })
 
@@ -1366,7 +1500,7 @@ calendar = component('x-calendar', function(e) {
 					s = s + (m == this_month ? ' current-month' : '')
 					s = s + (d == e.value ? ' focused selected' : '')
 					let td = H.td({class: 'x-calendar-day x-item'+s}, floor(1 + days(d - m)))
-					td.date = d
+					td.day = d
 					td.on('mousedown', day_mousedown)
 					tr.add(td)
 					d = day(d, 1)
@@ -1383,7 +1517,7 @@ calendar = component('x-calendar', function(e) {
 	}
 
 	function day_mousedown() {
-		e.value = this.date
+		e.value = this.day
 		e.sel_month.cancel()
 		e.focus()
 		e.fire('value_picked', true) // picker protocol
@@ -2141,10 +2275,10 @@ grid = component('x-grid', function(e) {
 		e.rows_view_div = H.div({class: 'x-grid-rows-view-div'}, e.rows_div)
 		e.add(e.header_table, e.rows_view_div)
 
-		e.on('mousemove', view_mousemove)
-		e.on('keydown'  , view_keydown)
-		e.on('keypress' , view_keypress)
-		e.on('resize'   , view_resize)
+		e.on('mousemove'    , view_mousemove)
+		e.on('keydown'      , view_keydown)
+		e.on('keypress'     , view_keypress)
+		e.on('attr_changed' , view_attr_changed)
 
 		e.rows_view_div.on('scroll', update_view)
 	}
@@ -2209,7 +2343,7 @@ grid = component('x-grid', function(e) {
 
 	// when: widget height changed.
 	let cw, ch
-	function view_resize() {
+	function view_attr_changed() {
 		if (e.clientWidth === cw && e.clientHeight === ch)
 			return
 		if (e.clientHeight !== ch) {
@@ -2340,7 +2474,8 @@ grid = component('x-grid', function(e) {
 
 		e.input.class('grid-editor')
 
-		e.input.enter_editor(field, editor_state)
+		if (e.input.enter_editor)
+			e.input.enter_editor(field, editor_state)
 
 		e.input.on('value_changed', input_value_changed)
 		e.input.on('lost_focus', editor_lost_focus)
@@ -2562,45 +2697,9 @@ grid = component('x-grid', function(e) {
 
 	e.input = null
 
-	/*
-
-	function set_invalid_row(tr, invalid) {
-		tr.class('invalid', invalid)
-	}
-
-	function set_modified_cell(td, modified) {
-		set_invalid_cell(td, false)
-		td.class('modified', modified)
-		if (modified)
-			set_modified_row(td.parent, true)
-		else if (no_cell_has_class(td.parent, 'modified'))
-			set_modified_row(td.parent, false)
-	}
-
-	function set_modified_row(tr, modified) {
-		set_invalid_row(tr, false)
-		tr.class('modified', modified)
-	}
-	*/
-
 	function input_value_changed(v) {
-		return
-		let td = e.focused_td
-		let tr = e.focused_tr
-		td.class('unsaved', true)
-		td.class('modified', true)
-		tr.class('modified', true)
-		td.class('invalid', false)
-		tr.class('invalid', false)
-		tr.class('invalid_values', false)
-		e.tooltip(td, false)
-		e.tooltip(tr, false)
 		if (e.save_cell_on == 'input')
-			if (!e.save_cell(e.focused_td))
-				return
-		if (e.save_row_on == 'input')
-			if (!e.save_row(e.focused_tr))
-				return
+			e.save_cell(e.focused_cell)
 	}
 
 	function td_input(td) {
@@ -2620,20 +2719,23 @@ grid = component('x-grid', function(e) {
 	e.exit_edit = function() {
 		if (!e.input)
 			return true
-		/*
-		let [tr, td] = tr_td_at(e.focused_cell)
+
 		if (e.save_cell_on == 'exit_edit')
-			e.save_cell(td)
+			e.save_cell(e.focused_cell)
 		if (e.save_row_on == 'exit_edit')
-			e.save_row(tr)
+			e.save_row(e.focused_cell)
+
+		/*
 		if (e.prevent_exit_edit)
 			if (e.focused_td.hasclass('invalid'))
 				return false
 		*/
+
 		let had_focus = e.hasfocus()
 		free_editor()
 		if (had_focus)
 			e.focus()
+
 		return true
 	}
 
@@ -2657,32 +2759,12 @@ grid = component('x-grid', function(e) {
 	// saving -----------------------------------------------------------------
 
 	function cell_data(cell) {
-		let [ri, fi] = cell
-		let row = e.rows[ri]
-		let t = row.metadata[fi]
-		if (!t) {
-			t = {}
-			row.metadata[fi] = t
-		}
-		return t
-	}
-
-	function no_child_has_class(e, classname) {
-		for (let c of e.children)
-			if (c.hasclass(classname))
-				return false
-		return true
-	}
-
-	e.tooltip = function(e, msg) {
-		// let div = H.div({class: 'x-grid-error'}, msg)
-		e.title = msg || ''
+		let [row, field] = row_field_at(cell)
+		return attr(array_attr(row, 'metadata'), fi)
 	}
 
 	e.save_cell = function(cell) {
 		let t = cell_data(cell)
-		if (!t.unsaved)
-			return !t.invalid
 		let [row, field] = row_field_at(cell)
 		let ret = e.rowset.set_value(row, field, e.input.value, g)
 		let ok = ret === true
@@ -2911,7 +2993,8 @@ grid = component('x-grid', function(e) {
 
 			let move = !e.input
 				|| (e.auto_jump_cells && !shift
-					&& e.input.editor_state(cols < 0 ? 'left' : 'right'))
+					&& (!e.input.editor_state
+						|| e.input.editor_state(cols < 0 ? 'left' : 'right')))
 
 			if (move && e.focus_next_cell(cols, null, reenter_edit)) {
 				if (reenter_edit)
@@ -2968,7 +3051,8 @@ grid = component('x-grid', function(e) {
 			}
 
 			let reenter_edit = e.input && e.keep_editing
-			let editor_state = e.input && e.input.editor_state()
+			let editor_state = e.input
+				&& e.input.editor_state && e.input.editor_state()
 
 			if (e.focus_cell(null, rows)) {
 				if (reenter_edit)

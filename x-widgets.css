@@ -5,6 +5,7 @@
 	--x-input-padding               : .25em .5em; /* padding for inputs and grid cells */
 	--x-input-padding-x             : .5em;  /* x-padding for inputs and grid cells */
 	--x-input-focused-bg-color      : #ffc;  /* bg color for focused inputs, dropdowns and pickers */
+	--x-info-bg-color               : #069;  /* bg color for info bubbles */
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
 	--x-focus-shadow                : 0 0 1px 1px #99f; /* to be used in place of focus outline */
 	--x-item-unfocused-bg-color     : #333;
@@ -122,7 +123,7 @@
 	text-decoration: none;
 }
 
-.x-button:active {
+.x-button:active, .x-button.active {
 	outline: none;
 	border-color: rgba(27,31,35,.35);
 	background-color: #e9ecef;
@@ -143,7 +144,7 @@
 	background-image: linear-gradient(-180deg,#2fcb53,#269f42 90%);
 }
 
-.x-button.primary:active {
+.x-button.primary:active, .x-button.primary.active {
 	outline: none;
 	border-color: rgba(27,31,35,.5);
 	background-color: #279f43;
@@ -151,12 +152,92 @@
 	box-shadow: inset 0 0.15em 0.3em rgba(27,31,35,.15);
 }
 
-/* checkbox --------------------------------------------------------------- */
+/* tooltip ---------------------------------------------------------------- */
 
-.x-checkbox {
+.x-tooltip {
+
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	border: 1px solid black;
+
+	/* positioning */
+	position: absolute;
+	z-index: 1;
+
+	/* sizing */
+	width: 400px;                 /* max. width of the message bubble before wrapping */
+
+	pointer-events: none;         /* click-through */
+}
+
+.x-tooltip-text {
+
 	/* layouting */
+	display: inline-block;        /* shrink-wrap, and also word-wrap when reaching container width */
+
+	/* sizing */
+	padding: .5em 1em;
+
+	/* styling */
+	color: white;
+	border-radius: 5px;
+
+	cursor: default;
+	pointer-events: auto;
+}
+
+.x-tooltip-tip {
+	line-height: .5em;
+
+	/* styling */
+	color: var(--x-error-bg-color);
+}
+
+.x-tooltip.info > .x-tooltip-text { background-color: var(--x-info-bg-color); }
+.x-tooltip.info > .x-tooltip-tip  {            color: var(--x-info-bg-color); }
+
+.x-tooltip.error > .x-tooltip-text { background-color: var(--x-error-bg-color); }
+.x-tooltip.error > .x-tooltip-tip  {            color: var(--x-error-bg-color); }
+
+.x-tooltip.side-left                           { justify-content: flex-end; }
+.x-tooltip.side-left > .x-tooltip-tip::before  { content: '\25B6'; }
+.x-tooltip.side-left > .x-tooltip-tip          { margin: 1em -2px; }
+.x-tooltip.side-left > .x-tooltip-text         { }
+
+.x-tooltip.side-right > .x-tooltip-tip::before  { content: '\25c0'; }
+.x-tooltip.side-right > .x-tooltip-tip          { margin: 1em -2px; }
+.x-tooltip.side-right > .x-tooltip-text         { order: 2; }
+
+.x-tooltip.side-top, .x-tooltip.side-bottom { flex-flow: column; }
+
+.x-tooltip.side-top > .x-tooltip-tip::before    { content: '\25bc'; }
+.x-tooltip.side-top > .x-tooltip-tip            { align-self: left; margin-left: .5em; }
+
+.x-tooltip.side-bottom > .x-tooltip-tip::before { content: '\25b2'; }
+.x-tooltip.side-bottom > .x-tooltip-tip         { margin-left: .5em; }
+.x-tooltip.side-bottom > .x-tooltip-text        { order: 2; }
+
+.x-tooltip.align-center,
+.x-tooltip.align-center {
+	align-items: center;
+	text-align: center;
+}
+
+.x-tooltip.align-center > .x-tooltip-tip {
+	margin-left: 0;
+	margin-right: 0;
+}
+
+/* checkbox & radiogroup = markbox ---------------------------------------- */
+
+.x-markbox {
+
+	/* layouting of self & children */
 	display: inline-flex;
-	align-items: baseline;   /* that are baseline-aligned */
+
+	/* layouting of children */
+	align-items: baseline;
 	flex-flow: row nowrap;
 
 	/* sizing for inline use */
@@ -166,54 +247,29 @@
 	cursor: default;
 }
 
-.x-checkbox-mark {
-	padding-right: .5em;
-	font-size: 120%;
+.x-markbox:focus > .x-markbox-icon {
+	background-color: var(--x-input-focused-bg-color);
 }
 
-.x-checkbox.align-right .x-checkbox-mark {
-	padding-right: 0;
-	padding-left: .5em;
+.x-markbox.align-right > .x-markbox-icon {
 	order: 2;
 }
-.x-checkbox.align-right .x-checkbox-text {
+.x-markbox.align-right > .x-markbox-text {
 	text-align: right;
 }
+
+.x-markbox.center {
+	justify-content: center;
+}
+
+.x-markbox.align-left  > .x-markbox-text:not(:empty) { padding-left : .5em; }
+.x-markbox.align-right > .x-markbox-text:not(:empty) { padding-right: .5em; }
 
 /* radiogroup ------------------------------------------------------------- */
 
 .x-radiogroup {
-	/* layouting */
 	display: inline-flex;
 	flex-flow: column wrap;
-	align-items: flex-start;
-
-	cursor: default;
-}
-.x-radiogroup.align-right {
-	align-items: flex-end;
-}
-
-.x-radio-item {
-	display: flex;
-	flex-flow: row nowrap;
-	align-items: baseline;
-	margin: .25em;
-	padding: .5em;
-}
-
-.x-radio-icon {
-	padding-right: .5em;
-	font-size: 120%;
-}
-
-.x-radiogroup.align-right .x-radio-icon {
-	padding-right: 0;
-	padding-left: .5em;
-	order: 2;
-}
-.x-radiogroup.align-right .x-radio-text {
-	text-align: right;
 }
 
 /* input ------------------------------------------------------------------ */
@@ -856,6 +912,7 @@ td.x-menu-title-td {
 }
 
 .x-grid-td {
+	vertical-align: middle;
 	border-bottom: 0px solid #eee;  /* border width set from code */
 }
 
