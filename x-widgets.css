@@ -7,7 +7,7 @@
 	--x-input-focused-bg-color      : #ffc;  /* bg color for focused inputs, dropdowns and pickers */
 	--x-info-bg-color               : #069;  /* bg color for info bubbles */
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
-	--x-focus-shadow                : 0 0 1px 1px #99f; /* to be used in place of focus outline */
+	--x-focus-shadow                : 0 0 0 1px #99f; /* to be used in place of focus outline */
 	--x-item-unfocused-bg-color     : #333;
 	--x-item-focused-bg-color       : #47a;
 	--x-item-hover-bg-color         : #00000011;
@@ -35,8 +35,8 @@
 	box-shadow: var(--x-focus-shadow);
 }
 
-.x-focusable:focus-within {
-	/* focusables show focus through their focused item */
+.x-focusable:focus {
+	/* focusables show focus through their focused x-item */
 	outline: none;
 	box-shadow: none;
 }
@@ -266,34 +266,6 @@
 .x-tooltip[type=error] > .x-tooltip-text { background-color: var(--x-error-bg-color); color: white; }
 .x-tooltip[type=error] > .x-tooltip-tip  { color: var(--x-error-bg-color); }
 
-/* animation */
-
-/*
-.x-tooltip]:not([flow]):hover::before,
-.x-tooltip]:not([flow]):hover::after,
-.x-tooltip][flow^="up"]:hover::before,
-.x-tooltip][flow^="up"]:hover::after,
-.x-tooltip][flow^="down"]:hover::before,
-.x-tooltip][flow^="down"]:hover::after {
-    animation:
-        tooltips-vert
-        300ms
-        ease-out
-        forwards;
-}
-
-[tooltip][flow^="left"]:hover::before,
-[tooltip][flow^="left"]:hover::after,
-[tooltip][flow^="right"]:hover::before,
-[tooltip][flow^="right"]:hover::after {
-    animation:
-        tooltips-horz
-        300ms
-        ease-out
-        forwards;
-}
-*/
-
 /* checkbox & radiogroup = markbox ---------------------------------------- */
 
 .x-markbox {
@@ -316,10 +288,10 @@
 	background-color: var(--x-input-focused-bg-color);
 }
 
-.x-markbox.align-right > .x-markbox-icon {
+.x-markbox[align=right] > .x-markbox-icon {
 	order: 2;
 }
-.x-markbox.align-right > .x-markbox-text {
+.x-markbox[align=right] > .x-markbox-text {
 	text-align: right;
 }
 
@@ -327,14 +299,25 @@
 	justify-content: center;
 }
 
-.x-markbox.align-left  > .x-markbox-text:not(:empty) { padding-left : .5em; }
-.x-markbox.align-right > .x-markbox-text:not(:empty) { padding-right: .5em; }
+.x-markbox[align=left]  > .x-markbox-text:not(:empty) { padding-left : .5em; }
+.x-markbox[align=right] > .x-markbox-text:not(:empty) { padding-right: .5em; }
 
 /* radiogroup ------------------------------------------------------------- */
 
 .x-radiogroup {
 	display: inline-flex;
 	flex-flow: column wrap;
+	margin : .25em;
+	padding: 0;
+}
+
+.x-radiogroup > .x-markbox {
+	margin: 0;
+	padding: .25em .5em;
+}
+
+.x-radiogroup[align=right] > .x-markbox {
+	justify-content: flex-end;
 }
 
 /* input ------------------------------------------------------------------ */
@@ -376,7 +359,7 @@
 	text-align: left;
 }
 
-.x-input.align-right .x-input-input {
+.x-input[align=right] .x-input-input {
 	text-align: right;
 }
 

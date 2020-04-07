@@ -143,7 +143,7 @@ h2 {
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_buttons>
+<template id=button_demo>
 <help>
 
 button({
@@ -179,7 +179,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_tooltip>
+<template id=tooltip_demo>
 <help>
 
 </help>
@@ -218,7 +218,7 @@ t4 = tooltip({text: s, side: 'left'  , align: 'end', target: b3, type: 'error'})
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_checkbox>
+<template id=checkbox_demo>
 <help>
 
 </help>
@@ -244,7 +244,7 @@ main.add(c2)
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_radiogroup>
+<template id=radiogroup_demo>
 <help>
 
 </help>
@@ -277,7 +277,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_menus>
+<template id=menu_demo>
 <help>
 
 </help>
@@ -286,19 +286,19 @@ main.add(
 function act(a) { print(a.text) }
 
 m = menu({
-	actions: [
-		{text: 'Open', onclick: act, key: 'Ctrl+B', icon_class: 'fa fa-folder-open'},
-		{text: 'Close', enabled: false, icon_class: 'fa fa-window-close', onclick: act, separator: true},
-		{text: 'More', actions: [
+	items: [
+		{text: 'Open', action: act, key: 'Ctrl+B', icon_class: 'fa fa-folder-open'},
+		{text: 'Close', enabled: false, icon_class: 'fa fa-window-close', action: act, separator: true},
+		{text: 'More', items: [
 			{text: 'Check', checked: true},
 			{text: 'Check No Close', checked: true,
-				onclick: function(a) { print(a.checked); return false } },
-			{text: 'More Stuff', actions: [
+				action: function(a) { print(a.checked); return false } },
+			{text: 'More Stuff', items: [
 				{text: 'More Stuff 1 this is a very long item text'},
-				{text: 'More Stuff 2', onclick: act},
+				{text: 'More Stuff 2', action: act},
 			]},
 		]},
-		{text: 'Even More', actions: [
+		{text: 'Even More', items: [
 			{text: 'Even More Stuff 1'},
 			{text: 'Even More Stuff 2'},
 		]},
@@ -308,7 +308,7 @@ m = menu({
 b = button({
 	text: 'Click for menu',
 	primary: true,
-	onclick: function() { m.popup(b, 'bottom', 0, 2) },
+	onclick: function() { m.popup(b, 'bottom', 'left', 0, 2) },
 })
 
 main.add(b)
@@ -318,7 +318,7 @@ main.add(b)
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_input>
+<template id=input_demo>
 <help>
 
 </help>
@@ -346,7 +346,7 @@ main.add(H.div({}, 'type in "Klaus" to validate: ', input({
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_spin_input>
+<template id=spin_input_demo>
 <help>
 
 </help>
@@ -362,7 +362,7 @@ main.add(H.div({}, spin_input({min: -2, max: 5, step: 1.5, button_placement: 'ri
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_slider>
+<template id=slider_demo>
 <help>
 
 </help>
@@ -377,7 +377,7 @@ main.add(H.div({}, slider({value: 50, min_value: 20, max_value: 100, step: 10}))
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_listbox>
+<template id=listbox_demo>
 <help>
 
 </help>
@@ -411,7 +411,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_pagelist>
+<template id=pagelist_demo>
 <help>
 
 </help>
@@ -442,7 +442,7 @@ main.add(pages)
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_split>
+<template id=split_demo>
 <help>
 
 </help>
@@ -466,7 +466,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_calendar>
+<template id=calendar_demo>
 <help>
 
 </help>
@@ -480,7 +480,7 @@ main.add(calendar({value: day(now(), 2)}))
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_grid>
+<template id=grid_demo>
 <help>
 
 </help>
@@ -533,7 +533,7 @@ main.add(g)
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_dropdown_listbox>
+<template id=dropdown_listbox_demo>
 <help>
 
 </help>
@@ -571,7 +571,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_dropdown_calendar>
+<template id=dropdown_calendar_demo>
 <help>
 
 </help>
@@ -590,7 +590,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_dropdown_grid>
+<template id=dropdown_grid_demo>
 <help>
 
 </help>
@@ -654,7 +654,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_dropdown_modes>
+<template id=dropdown_modes_demo>
 <help>
 
 </help>
@@ -697,7 +697,7 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=demo_inline_inputs>
+<template id=inline_inputs_demo>
 <help>
 
 </help>
@@ -734,6 +734,36 @@ main.add(H.div({style: 'line-height: 3; font-size: 120%'},
 
 <!--------------------------------------------------------------------------->
 
+<template id=rowset_form_demo>
+<help>
+
+</help>
+<script>
+
+r = rowset({
+	fields: [
+		{w: 100, name: 'id', type: 'number'},
+		{w: 100, name: 'name'},
+	],
+	rows: [
+		{values: [1, 'apples']},
+		{values: [2, 'bananas']},
+	],
+})
+
+g = grid({w: 200, h: 200, rowset: r})
+
+i1 = input({rowset: r, navigator: g, field: 'name'})
+
+// nav = navigator({rowset: r, value: 1})
+
+main.add(H.div({}, g), i1)
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
 <script>
 
 ace_editor = ace.edit(code, {
@@ -760,10 +790,10 @@ let demos = []
 
 $('template').forEach(function(e) {
 	let id = e.attr('id')
-	if (!id.starts('demo'))
+	if (!id.ends('_demo'))
 		return
-	let name = id.replace('demo_', '')
-	let t = window['demo_'+name].content
+	let name = id.replace('_demo', '')
+	let t = window[name+'_demo'].content
 	let h = t.$('help')[0]; h = h && h.innerHTML.trim() || ''
 	let s = t.$('script')[0]; s = s && s.innerHTML.trim() || ''
 	demos.push({text: name, help: h, code: s})
@@ -789,7 +819,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 1
+demo_list.value = 12
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

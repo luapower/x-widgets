@@ -45,7 +45,7 @@
 
 */
 
-let rowset = function(...options) {
+rowset = function(...options) {
 
 	let d = {}
 
@@ -82,8 +82,9 @@ let rowset = function(...options) {
 
 	}
 
-	d.field = function(name) {
-		return field_map.get(name)
+	d.field = function(v) {
+		return typeof(v) == 'string' ? field_map.get(v) :
+			(typeof(v) == 'number' ? fields[v] : v)
 	}
 
 	// get/set row values -----------------------------------------------------
@@ -256,6 +257,31 @@ let rowset = function(...options) {
 	return d
 }
 
+navigator = function(...options) {
+	let nav = {}
+
+	nav.rowset.on('reload', rowset_reload)
+
+	let ri
+
+	property(nav, 'row_index', {
+		get: function() {
+			return ri
+		},
+		set: function(i) {
+			i = clamp(i, 0, nav.rowset.rows.length-1)
+			if (i == ri)
+				return
+			ri = i
+			nav.fire('row_changed', nav.rowset.rows[ri])
+		}
+	})
+
+	update(nav, ...options)
+
+	return nav
+}
+
 // field templates -----------------------------------------------------------
 
 {
@@ -341,6 +367,73 @@ let rowset = function(...options) {
 }
 
 // ---------------------------------------------------------------------------
+// value protocol
+// ---------------------------------------------------------------------------
+
+function value_protocol(e) {
+
+	e.update_error = function() {
+		if (!e.error_tooltip) {
+			if (!e.invalid)
+				return // don't create it until needed.
+			function error_tooltip_check() { return e.invalid && e.hasfocus }
+			e.error_tooltip = tooltip({type: 'error', target: e, check: error_tooltip_check})
+		}
+		e.error_tooltip.text = e.error
+		e.error_tooltip.update()
+	}
+
+	let value, value_set
+
+	function get_value() {
+		return value
+	}
+
+	e.validate = return_true // stub
+
+	e.set_value = function(v, from_user_input) {
+		if (value_set && v === value) // event loop barrier
+			return true
+
+		let err = e.validate(v)
+
+		if (err == true)
+			if (e.rowset && e.navigator && e.field && e.navigator.current_row)
+				err = e.rowset.set_value(
+							e.navigator.current_row,
+							e.rowset.field(e.field),
+							v, e)
+
+		e.invalid = err != true
+		e.input.class('invalid', e.invalid)
+		e.error = e.invalid && err || ''
+		e.update_error()
+
+		if (err != true) // invalid value spread barrier
+			return
+
+		value = v
+		value_set = true
+
+		e.fire('value_changed', v, from_user_input) // input protocol
+	}
+
+	e.late_property('value', get_value, e.set_value)
+
+	function init() {
+		if (e.rowset && e.navigator && e.field) {
+			e.navigator.on('row_changed', row_changed)
+		}
+	}
+	e.on('init', init)
+
+	function row_changed(row) {
+		e.value = e.rowset.value(row, e.rowset.field(e.field))
+	}
+
+}
+
+// ---------------------------------------------------------------------------
 // button
 // ---------------------------------------------------------------------------
 
@@ -349,7 +442,6 @@ button = component('x-button', function(e) {
 	e.class('x-widget')
 	e.class('x-button')
 	e.attrval('tabindex', 0)
-	e.onclick = noop
 
 	e.icon_span = H.span({class: 'x-button-icon'})
 	e.text_span = H.span({class: 'x-button-text'})
@@ -388,9 +480,15 @@ button = component('x-button', function(e) {
 	}
 
 	function keyup(key) {
-		if (key == ' ' || key == 'Enter') {
-			e.click()
-			e.class('active', false)
+		if (e.hasclass('active')) {
+			// ^^ always match keyups with keydowns otherwise we might catch
+			// a keyup from someone else's keydown, eg. a dropdown menu item
+			// could've been selected by pressing Enter which closed the menu
+			// and focused this button back and that Enter's keyup got here.
+			if (key == ' ' || key == 'Enter') {
+				e.click()
+				e.class('active', false)
+			}
 			return false
 		}
 	}
@@ -415,14 +513,13 @@ tooltip = component('x-tooltip', function(e) {
 
 	let target
 
-	function check(target, e) {
-		let visible = !e.check || e.check(target, e)
+	e.popup_target_changed = function(target) {
+		let visible = !e.check || e.check(target)
 		e.class('visible', !!visible)
-		return visible
 	}
 
 	e.update = function() {
-		e.popup(target, e.side, e.align, check)
+		e.popup(target, e.side, e.align)
 	}
 
 	e.property('text',
@@ -457,8 +554,8 @@ checkbox = component('x-checkbox', function(e) {
 	e.class('x-markbox')
 	e.class('x-checkbox')
 	e.attrval('tabindex', 0)
+	e.attrval('align', 'left')
 
-	e.align = 'left'
 	e.checked_value = true
 	e.unchecked_value = false
 	e.validate = return_true
@@ -469,7 +566,6 @@ checkbox = component('x-checkbox', function(e) {
 	e.add(e.icon_div, e.text_div)
 
 	e.init = function() {
-		e.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
 		e.class('center', !!e.center)
 		e.on('click', click)
 		e.on('mousedown', mousedown)
@@ -477,6 +573,8 @@ checkbox = component('x-checkbox', function(e) {
 		e.on('focus', focus)
 		e.on('blur', blur)
 	}
+
+	e.attr_property('align')
 
 	e.property('text', function() {
 		return e.text_div.html
@@ -560,9 +658,9 @@ radiogroup = component('x-radiogroup', function(e) {
 
 	e.class('x-widget')
 	e.class('x-radiogroup')
+	e.attrval('align', 'left')
 
 	e.items = []
-	e.align = 'left'
 
 	e.init = function() {
 		for (let item of e.items) {
@@ -571,8 +669,8 @@ radiogroup = component('x-radiogroup', function(e) {
 			let radio_div = H.span({class: 'x-markbox-icon x-radio-icon far fa-circle'})
 			let text_div = H.span({class: 'x-markbox-text x-radio-text'})
 			text_div.html = item.text
-			let item_div = H.div({class: 'x-markbox x-radio-item', tabindex: 0}, radio_div, text_div)
-			item_div.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
+			let item_div = H.div({class: 'x-widget x-markbox x-radio-item', tabindex: 0}, radio_div, text_div)
+			item_div.attrval('align', e.align)
 			item_div.class('center', !!e.center)
 			item_div.item = item
 			item_div.on('click', item_click)
@@ -580,6 +678,8 @@ radiogroup = component('x-radiogroup', function(e) {
 			e.add(item_div)
 		}
 	}
+
+	e.attr_property('align')
 
 	let sel_item
 
@@ -600,14 +700,27 @@ radiogroup = component('x-radiogroup', function(e) {
 		e.fire('value_changed', i)
 	})
 
+	function select_item(item) {
+		e.value = item.index
+		item.focus()
+	}
+
 	function item_click() {
-		e.value = this.index
+		select_item(this)
 		return false
 	}
 
 	function item_keydown(key) {
 		if (key == ' ' || key == 'Enter') {
-			e.value = this.index
+			select_item(this)
+			return false
+		}
+		if (key == 'ArrowUp' || key == 'ArrowDown') {
+			let item = e.focused_element
+			let next_item = item
+				&& (key == 'ArrowUp' ? (item.prev || e.last) : (item.next || e.first))
+			if (next_item)
+				select_item(next_item)
 			return false
 		}
 	}
@@ -622,8 +735,8 @@ input = component('x-input', function(e) {
 
 	e.class('x-widget')
 	e.class('x-input')
+	e.attrval('align', 'left')
 
-	e.align = 'left'
 	e.invalid = false
 
 	e.input = H.input({class: 'x-input-input'})
@@ -637,56 +750,24 @@ input = component('x-input', function(e) {
 	function tooltip_check() { return e.invalid && e.hasfocus }
 	e.tooltip = tooltip({type: 'error', target: e, check: tooltip_check})
 
-	function set_valid(err) {
-		e.invalid = err != true
-		e.input.class('invalid', e.invalid)
-		e.error = e.invalid && err || ''
-		e.tooltip.text = e.error
-		e.tooltip.update()
-	}
+	e.attr_property('align')
 
-	let value, value_set
-
-	e.init = function() {
-		if ('default_value' in e) {
-			value = e.default_value
-			value_set = true
-		}
-		e.class('align-' + (e.align == 'right' && 'right' || 'left'), true)
-	}
-
-	function get_value() {
-		return value
-	}
-
-	function set_value(v, from_user_input) {
-		if (value_set && v === value) // event loop barrier
-			return true
-		let err = e.validate(v)
-		if (err != true) // invalid value spread barrier
-			return err
-		set_valid(true)
-		e.input.value = e.to_text(v)
-		value = v
-		value_set = true
-		e.fire('value_changed', v, from_user_input) // input protocol
-		return true
-	}
-
-	e.late_property('value', get_value, set_value)
+	value_protocol(e)
 
 	// view
 
 	function input_input() {
 		let v = e.from_text(e.input.value)
-		set_valid(set_value(v, true))
+		e.set_value(v, true)
 	}
 
 	function input_blur() {
 		e.fire('lost_focus') // grid editor protocol
 	}
 
-	e.validate = return_true // stub
+	e.on('value_changed', function(v) {
+		e.input.value = e.to_text(v)
+	})
 
 	e.to_text = function(v) {
 		return v != null ? String(v) : null
@@ -745,16 +826,16 @@ input = component('x-input', function(e) {
 			update_editor_state(key == 'ArrowRight')
 	}
 
-	e.editor_state = function(field) {
-		if (field) {
+	e.editor_state = function(s) {
+		if (s) {
 			let i0 = e.input.selectionStart
 			let i1 = e.input.selectionEnd
 			let imax = e.input.value.length
 			let leftmost  = i0 == 0
 			let rightmost = i1 == imax
-			if (field == 'left')
+			if (s == 'left')
 				return i0 == i1 && leftmost && 'left'
-			else if (field == 'right')
+			else if (s == 'right')
 				return i0 == i1 && rightmost && 'right'
 		} else {
 			if (!editor_state)
@@ -763,7 +844,7 @@ input = component('x-input', function(e) {
 		}
 	}
 
-	e.enter_editor = function(field, s) {
+	e.enter_editor = function(s) {
 		if (!s)
 			return
 		if (s == 'select_all')
@@ -809,7 +890,7 @@ spin_input = component('x-spin-input', input, function(e) {
 	let init = e.init
 	e.init = function() {
 
-		init.call(this)
+		init()
 
 		let bs = e.button_style
 		let bp = e.button_placement
@@ -1634,23 +1715,22 @@ menu = component('x-menu', function(e) {
 
 	// view
 
-	function create_item(a) {
+	function create_item(item) {
 		let check_div = H.div({class: 'x-menu-check-div fa fa-check'})
-		let icon_div  = H.div({class: 'x-menu-icon-div '+(a.icon_class || '')})
+		let icon_div  = H.div({class: 'x-menu-icon-div '+(item.icon_class || '')})
 		let check_td  = H.td ({class: 'x-menu-check-td'}, check_div, icon_div)
-		let title_td  = H.td ({class: 'x-menu-title-td'}, a.text)
-		let key_td    = H.td ({class: 'x-menu-key-td'}, a.key)
+		let title_td  = H.td ({class: 'x-menu-title-td'}, item.text)
+		let key_td    = H.td ({class: 'x-menu-key-td'}, item.key)
 		let sub_div   = H.div({class: 'x-menu-sub-div fa fa-caret-right'})
 		let sub_td    = H.td ({class: 'x-menu-sub-td'}, sub_div)
-		sub_div.style.visibility = a.actions ? null : 'hidden'
+		sub_div.style.visibility = item.items ? null : 'hidden'
 		let tr = H.tr({class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
-		tr.class('disabled', a.enabled == false)
-		tr.action = a
+		tr.class('disabled', item.enabled == false)
+		tr.item = item
 		tr.check_div = check_div
 		update_check(tr)
 		tr.on('mousedown' , item_mousedown)
 		tr.on('mouseenter', item_mouseenter)
-		tr.on('mouseleave', item_mouseleave)
 		return tr
 	}
 
@@ -1661,63 +1741,33 @@ menu = component('x-menu', function(e) {
 		return tr
 	}
 
-	function create_menu(actions) {
+	function create_menu(items) {
 		let table = H.table({class: 'x-focusable x-menu-table', tabindex: 0})
-		for (let i = 0; i < actions.length; i++) {
-			let a = actions[i]
-			let tr = create_item(a)
+		for (let i = 0; i < items.length; i++) {
+			let item = items[i]
+			let tr = create_item(item)
 			table.add(tr)
-			if (a.separator)
+			if (item.separator)
 				table.add(create_separator())
 		}
 		table.on('keydown', menu_keydown)
 		return table
 	}
 
-	e.popup = function(parent, side, x, y, select_first_item) {
-		if (e.table)
-			e.close()
-		parent = parent || document.body
-		e.table = create_menu(e.actions)
-		e.popup_parent = parent
-		let r = parent.client_rect()
-		let x0, y0
-		if (side == 'right')
-			[x0, y0] = [r.right, r.top]
-		else // bottom, default
-			[x0, y0] = [r.left, r.bottom]
-		e.table.x = window.scrollX + x0 + x
-		e.table.y = window.scrollY + y0 + y
-		e.table.root_menu = e.table
-		document.body.add(e.table)
-		document.on('mousedown', e.close)
-		parent.on('detach', e.close)
-		if (select_first_item)
-			select_next_item(e.table)
-		e.table.focus()
-	}
-
-	e.close = function(focus_parent) {
-		if (!e.table)
-			return
-		e.table.parent.off('detach', e.close)
-		document.off('mousedown', e.close)
-		e.table.remove()
-		e.table = null
-		e.popup_parent.focus()
-		e.popup_parent = null
+	e.init = function() {
+		e.table = create_menu(e.items)
+		e.add(e.table)
 	}
 
 	function show_submenu(tr) {
 		if (tr.submenu_table)
 			return tr.submenu_table
-		let actions = tr.action.actions
-		if (!actions)
+		let items = tr.item.items
+		if (!items)
 			return
-		let table = create_menu(actions)
+		let table = create_menu(items)
 		table.x = tr.clientWidth - 2
 		table.parent_menu = tr.parent
-		table.root_menu = tr.parent.root_menu
 		tr.submenu_table = table
 		tr.add(table)
 		return table
@@ -1747,9 +1797,37 @@ menu = component('x-menu', function(e) {
 	}
 
 	function update_check(tr) {
-		tr.check_div.style.display = tr.action.checked != null ? null : 'none'
-		tr.check_div.style.visibility = tr.action.checked ? null : 'hidden'
+		tr.check_div.style.display = tr.item.checked != null ? null : 'none'
+		tr.check_div.style.visibility = tr.item.checked ? null : 'hidden'
 	}
+
+	// popup protocol
+
+	e.popup_target_attached = function(target) {
+		document.on('mousedown', e.close)
+	}
+
+	e.popup_target_detached = function(target) {
+		document.off('mousedown', e.close)
+	}
+
+	let popup_target
+
+	e.close = function(focus_target) {
+		let target = popup_target
+		e.popup(false)
+		select_item(e.table, null)
+		if (target && focus_target)
+			target.focus()
+	}
+
+	e.override('popup', function(inherited, target, side, align, x, y, select_first_item) {
+		popup_target = target
+		inherited.call(this, target, side, align, x, y)
+		if (select_first_item)
+			select_next_item(e.table)
+		e.table.focus()
+	})
 
 	// navigation
 
@@ -1778,16 +1856,16 @@ menu = component('x-menu', function(e) {
 		return true
 	}
 
-	function click_item(tr, allow_close) {
-		let a = tr.action
-		if ((a.click || a.checked != null) && a.enabled != false) {
-			if (a.checked != null) {
-				a.checked = !a.checked
+	function click_item(tr, allow_close, from_keyboard) {
+		let item = tr.item
+		if ((item.action || item.checked != null) && item.enabled != false) {
+			if (item.checked != null) {
+				item.checked = !item.checked
 				update_check(tr)
 			}
-			if (!a.click || a.click(a) != false)
+			if (!item.action || item.action(item) != false)
 				if (allow_close != false)
-					e.close()
+					e.close(from_keyboard)
 		}
 	}
 
@@ -1804,10 +1882,6 @@ menu = component('x-menu', function(e) {
 		this.parent.focus()
 		select_item(this.parent, this)
 		show_submenu(this)
-	}
-
-	function item_mouseleave() {
-		//unselect_selected_item(this.parent)
 	}
 
 	// keyboard binding
@@ -1841,7 +1915,7 @@ menu = component('x-menu', function(e) {
 			let tr = this.selected_item_tr
 			if (tr) {
 				let submenu_activated = activate_submenu(tr)
-				click_item(tr, !submenu_activated)
+				click_item(tr, !submenu_activated, true)
 			}
 			return false
 		}
@@ -2464,7 +2538,7 @@ grid = component('x-grid', function(e) {
 		e.input.class('grid-editor')
 
 		if (e.input.enter_editor)
-			e.input.enter_editor(field, editor_state)
+			e.input.enter_editor(editor_state)
 
 		e.input.on('value_changed', input_value_changed)
 		e.input.on('lost_focus', editor_lost_focus)
@@ -2646,6 +2720,7 @@ grid = component('x-grid', function(e) {
 			return true // same cell.
 
 		update_focus(false)
+		let row_changed = e.focused_cell[0] != cell[0]
 		e.focused_cell = cell
 		update_focus(true)
 		if (!options || options.make_visible != false)
@@ -2653,6 +2728,11 @@ grid = component('x-grid', function(e) {
 
 		if (e.pick_value_field)
 			e.fire('value_changed', e.value, true)
+
+		if (row_changed) { // navigator protocol
+			let [row] = row_field_at(e.focused_cell)
+			e.fire('row_changed', row.row)
+		}
 
 		return true
 	}
@@ -2747,15 +2827,15 @@ grid = component('x-grid', function(e) {
 
 	// saving -----------------------------------------------------------------
 
-	function cell_data(cell) {
+	function cell_metadata(cell) {
 		let [row, field] = row_field_at(cell)
-		return attr(array_attr(row, 'metadata'), fi)
+		return attr(array_attr(row, 'metadata'), field.index)
 	}
 
 	e.save_cell = function(cell) {
-		let t = cell_data(cell)
+		let t = cell_metadata(cell)
 		let [row, field] = row_field_at(cell)
-		let ret = e.rowset.set_value(row, field, e.input.value, g)
+		let ret = e.rowset.set_value(row.row, field, e.input.value, g)
 		let ok = ret === true
 		t.unsaved = false
 		t.invalid = !ok
@@ -2769,7 +2849,7 @@ grid = component('x-grid', function(e) {
 	}
 
 	e.save_row = function(cell) {
-		let t = cell_data(cell)
+		let t = cell_metadata(cell)
 		if (!t.unsaved)
 			return !t.invalid
 		for (td of tr.children)
@@ -3220,11 +3300,11 @@ grid = component('x-grid', function(e) {
 		function toggle_field(item) {
 			return false
 		}
-		let act = []
+		let items = []
 		for (let field of e.rowset.fields) {
-			act.push({field: field, text: field.name, checked: true, click: toggle_field})
+			items.push({field: field, text: field.name, checked: true, click: toggle_field})
 		}
-		th.menu = menu({actions: act})
+		th.menu = menu({items: items})
 		th.menu.popup(th)
 	}
 
