@@ -284,8 +284,17 @@
 	cursor: default;
 }
 
+.x-markbox-icon {
+	color: #333;
+}
+
+.x-markbox:focus {
+	box-shadow: none;
+	outline: 1px dashed #aaf;
+}
+
 .x-markbox:focus > .x-markbox-icon {
-	background-color: var(--x-input-focused-bg-color);
+	color: var(--x-item-focused-bg-color);
 }
 
 .x-markbox[align=right] > .x-markbox-icon {
@@ -311,9 +320,13 @@
 	padding: 0;
 }
 
-.x-radiogroup > .x-markbox {
+.x-radio-item {
 	margin: 0;
 	padding: .25em .5em;
+}
+
+.x-radio-item:focus > .x-radio-icon {
+	color: #333;
 }
 
 .x-radiogroup[align=right] > .x-markbox {

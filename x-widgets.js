@@ -277,6 +277,14 @@ navigator = function(...options) {
 		}
 	})
 
+	nav.value = function(field) {
+		return nav.rowset.value(nav.rowset.rows[ri], nav.rowset.field(field))
+	}
+
+	nav.set_value = function(field, v, source) {
+		return nav.rowset.set_value(nav.rowset.rows[ri], nav.rowset.field(field), v, source)
+	}
+
 	update(nav, ...options)
 
 	return nav
@@ -386,23 +394,26 @@ function value_protocol(e) {
 	let value, value_set
 
 	function get_value() {
-		return value
+		return e.nav ? e.nav.value(e.field) : value
 	}
 
 	e.validate = return_true // stub
+
+	e.set_error = function(err, from_user_input) {
+		e.invalid = err != true
+		e.input.class('invalid', e.invalid)
+		e.error = e.invalid && err || ''
+		e.update_error()
+	}
 
 	e.set_value = function(v, from_user_input) {
 		if (value_set && v === value) // event loop barrier
 			return true
 
 		let err = e.validate(v)
-
-		if (err == true)
-			if (e.rowset && e.navigator && e.field && e.navigator.current_row)
-				err = e.rowset.set_value(
-							e.navigator.current_row,
-							e.rowset.field(e.field),
-							v, e)
+		if (e.nav)
+			if (err == true)
+				err = e.nav.set_value(e.field, v, e)
 
 		e.invalid = err != true
 		e.input.class('invalid', e.invalid)
@@ -561,7 +572,7 @@ checkbox = component('x-checkbox', function(e) {
 	e.validate = return_true
 	e.allow_invalid_values = false
 
-	e.icon_div = H.span({class: 'x-markbox-icon x-checkbox-icon far fa-square'})
+	e.icon_div = H.span({class: 'x-markbox-icon x-checkbox-icon fa fa-square'})
 	e.text_div = H.span({class: 'x-markbox-text x-checkbox-text'})
 	e.add(e.icon_div, e.text_div)
 
@@ -765,8 +776,9 @@ input = component('x-input', function(e) {
 		e.fire('lost_focus') // grid editor protocol
 	}
 
-	e.on('value_changed', function(v) {
-		e.input.value = e.to_text(v)
+	e.on('value_changed', function(v, from_user_input) {
+		if (!from_user_input)
+			e.input.value = e.to_text(v)
 	})
 
 	e.to_text = function(v) {
