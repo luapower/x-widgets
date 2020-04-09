@@ -325,14 +325,14 @@ main.add(b)
 <script>
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
-	value: '',
+	value: 'wrong',
 	validate: function(v) {
 		return v == null || v == 'Klaus' || 'You have to type in "Klaus" or leave empty.'
 	},
 })))
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
-	value: '',
+	value: null,
 	validate: function(v) {
 		return v == null || v == 'Klaus'
 			|| ('You have to type in "Klaus" or leave empty. <br>' +

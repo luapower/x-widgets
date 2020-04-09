@@ -56,9 +56,15 @@ rowset = function(...options) {
 
 	let fields // [fi: {name:, client_default: v, server_default: v, ...}]
 	let rows   // [ri: row]; row = {values: [fi: val], attr: val, ...}
+	let pk     // [field1,...]
 	let field_map = new Map()
 
 	install_events(d)
+
+	d.field = function(v) {
+		return typeof(v) == 'string' ? field_map.get(v) :
+			(typeof(v) == 'number' ? fields[v] : v)
+	}
 
 	let init = function() {
 
@@ -67,10 +73,12 @@ rowset = function(...options) {
 
 		d.fields = d.fields || []
 		d.rows = d.rows || []
+		d.pk = d.pk || []
 
 		// init locals.
 		fields = d.fields
 		rows = d.rows
+		pk = []
 
 		for (let i = 0; i < d.fields.length; i++) {
 			let f1 = d.fields[i]
@@ -80,34 +88,19 @@ rowset = function(...options) {
 			field_map.set(field.name || i, field)
 		}
 
+		for (field of d.pk) {
+			pk.push(d.field(field))
+		}
+
 	}
 
-	d.field = function(v) {
-		return typeof(v) == 'string' ? field_map.get(v) :
-			(typeof(v) == 'number' ? fields[v] : v)
+	// indexing ---------------------------------------------------------------
+
+	d.create_index = function(fields) {
+
 	}
 
-	// get/set row values -----------------------------------------------------
-
-	d.value = function(row, field) {
-		let get_value = field.get_value // computed value?
-		return get_value ? get_value(field, row, fields) : row.values[field.index]
-	}
-
-	d.display_value = function(row, field) {
-		return field.format.call(d, d.value(row, field), field)
-	}
-
-	d.validate_value = function(field, val) {
-		if (val == null)
-			return field.allow_null || 'NULL not allowed'
-		let validate = field.validate
-		if (!validate)
-			return true
-		return validate.call(d, val, field)
-	}
-
-	d.validate_row = return_true // stub
+	// sorting ----------------------------------------------------------------
 
 	d.compare_rows = function(row1, row2) {
 		// invalid rows come first.
@@ -151,6 +144,43 @@ rowset = function(...options) {
 		}
 	}
 
+	// get/set cell state -----------------------------------------------------
+
+	d.cell_state = function(row, field, key) {
+		let t = row.state && row.state[field.index]
+		return t && t[key]
+	}
+
+	d.set_cell_state = function(row, field, key, val, source) {
+		let t = attr(array_attr(row, 'state'), field.index)
+		if (t[key] === val)
+			return
+		t[key] = val
+		d.fire(key+'_changed', row, field, val, source)
+	}
+
+	// get/set cell values ----------------------------------------------------
+
+	d.value = function(row, field) {
+		let get_value = field.get_value // computed value?
+		return get_value ? get_value(field, row, fields) : row.values[field.index]
+	}
+
+	d.display_value = function(row, field) {
+		return field.format.call(d, d.value(row, field), field)
+	}
+
+	d.validate_value = function(field, val) {
+		if (val == null)
+			return field.allow_null || 'NULL not allowed'
+		let validate = field.validate
+		if (!validate)
+			return true
+		return validate.call(d, val, field)
+	}
+
+	d.validate_row = return_true // stub
+
 	d.can_focus_cell = function(row, field) {
 		return row.focusable != false && (field == null || field.focusable != false)
 	}
@@ -167,22 +197,34 @@ rowset = function(...options) {
 
 	d.set_value = function(row, field, val, source) {
 
-		if (!d.can_change_value(row, field))
-			return 'read only'
+		if (val === undefined)
+			val = null
 
-		let ret = d.validate_value(field, val)
-		if (ret !== true)
-			return ret
+		let ret = d.can_change_value(row, field) || 'read_only'
+		ret = ret === true ? d.validate_value(field, val) : ret
 
-		if (!row.original_values)
-			row.original_values = row.values.slice(0)
+		let invalid = ret !== true
+		d.set_cell_state(row, field, 'invalid', invalid, source)
+		d.set_cell_state(row, field, 'error', invalid ? ret : undefined, source)
+
+		if (invalid)
+			return
+
+		let old_val = row.values[field.index]
+
+		if (old_val === val)
+			return
 
 		row.values[field.index] = val
-		row.modified = true
 
+		if (!d.cell_state(row, field, 'modified')) {
+			d.set_cell_state(row, field, 'old_value', old_val, source)
+			d.set_cell_state(row, field, 'modified', true, source)
+			row.modified = true
+		}
 		d.fire('value_changed', row, field, val, source)
 
-		return true
+		return
 	}
 
 	// add/remove rows --------------------------------------------------------
@@ -192,13 +234,9 @@ rowset = function(...options) {
 		// add server_default values or null
 		for (let field of fields) {
 			let val = field.server_default
-			values.push(or(val, val, null))
+			values.push(val != null ? val : null)
 		}
-		let row = {values: values, is_new: true}
-		// set default client values.
-		for (let field of fields)
-			d.set_value(row, field, field.client_default)
-		return row
+		return {values: values, is_new: true}
 	}
 
 	d.add_row = function(source) {
@@ -207,6 +245,9 @@ rowset = function(...options) {
 		let row = create_row()
 		rows.push(row)
 		d.fire('row_added', row, source)
+		// set default client values as if they were added by the user.
+		for (let field of fields)
+			d.set_value(row, field, field.client_default)
 		return row
 	}
 
@@ -231,25 +272,40 @@ rowset = function(...options) {
 		return row
 	}
 
-	// changeset --------------------------------------------------------------
+	// changeset & resultset --------------------------------------------------
 
-	d.original_value = function(row, field) {
-		let values = row.original_values || row.values
-		return values[field.index]
+	d.pack_changeset = function() {
+		let changes = {new_rows: [], updated_rows: [], removed_rows: []}
+		for (let row of rows) {
+			if (row.is_new) {
+				let t = {}
+				for (let fi = 0; fi < fields.length; fi++) {
+					let field = fields[fi]
+					let val = row.values[fi]
+					if (val === field.server_default)
+						val = null
+					t[field.name] = val
+				}
+				changes.new_rows.push(t)
+			} else if (row.modified) {
+				let t = {}
+				for (let fi = 0; fi < fields.length; fi++) {
+					let field = fields[fi]
+					if (d.cell_state(row, field, 'modified'))
+						t[field.name] = row.values[fi]
+				}
+				changes.updated_rows.push(t)
+			} else if (row.removed_rows) {
+				changes.removed_rows.push({})
+			}
+		}
+		return changes
 	}
 
-	d.value_changed = function(row, field) {
-		let t = row.original_values
-		return t && t[field.index] !== row.values[field.index]
-	}
-
-	// saving
-
-	d.save_row = function(row) {
-		let ret = d.validate_row(row)
-		let ok = ret === true
-		row.invalid = !ok
-		return ok
+	d.unpack_resultset = function(resultset) {
+		for (let row of resultset) {
+			//
+		}
 	}
 
 	init()
@@ -257,40 +313,9 @@ rowset = function(...options) {
 	return d
 }
 
-navigator = function(...options) {
-	let nav = {}
-
-	nav.rowset.on('reload', rowset_reload)
-
-	let ri
-
-	property(nav, 'row_index', {
-		get: function() {
-			return ri
-		},
-		set: function(i) {
-			i = clamp(i, 0, nav.rowset.rows.length-1)
-			if (i == ri)
-				return
-			ri = i
-			nav.fire('row_changed', nav.rowset.rows[ri])
-		}
-	})
-
-	nav.value = function(field) {
-		return nav.rowset.value(nav.rowset.rows[ri], nav.rowset.field(field))
-	}
-
-	nav.set_value = function(field, v, source) {
-		return nav.rowset.set_value(nav.rowset.rows[ri], nav.rowset.field(field), v, source)
-	}
-
-	update(nav, ...options)
-
-	return nav
-}
-
-// field templates -----------------------------------------------------------
+// ---------------------------------------------------------------------------
+// field types
+// ---------------------------------------------------------------------------
 
 {
 	rowset.default_type = {
@@ -375,71 +400,130 @@ navigator = function(...options) {
 }
 
 // ---------------------------------------------------------------------------
+// current_row
+// ---------------------------------------------------------------------------
+
+rowset_nav = function(...options) {
+	let nav = {}
+
+	install_events(nav)
+
+	let ri
+
+	nav.set_row_index = function(i, source) {
+		i = clamp(i, 0, nav.rowset.rows.length-1)
+		if (i == ri)
+			return
+		ri = i
+		nav.fire('row_changed', ri, source)
+	}
+
+	property(nav, 'row_index', {
+		get: function() { return ri },
+		set: nav.set_row_index,
+	})
+
+	property(nav, 'row', {
+		get: function() { return nav.rowset.rows[ri] }
+	})
+
+	nav.value = function(field) {
+		return nav.rowset.value(nav.rowset.rows[ri], nav.rowset.field(field))
+	}
+
+	nav.cell_state = function(field) {
+		return nav.rowset.cell_state(nav.rowset.rows[ri], nav.rowset.field(field))
+	}
+
+	nav.set_value = function(field, v, source) {
+		nav.rowset.set_value(nav.rowset.rows[ri], nav.rowset.field(field), v, source)
+	}
+
+	nav.set_cell_state = function(field, v, source) {
+		return nav.rowset.set_cell_state(nav.rowset.rows[ri], nav.rowset.field(field), v, source)
+	}
+
+	update(nav, ...options)
+
+	return nav
+}
+
+// ---------------------------------------------------------------------------
 // value protocol
 // ---------------------------------------------------------------------------
 
 function value_protocol(e) {
 
-	e.update_error = function() {
+	e.default_value = null
+
+	function init() {
+		if (!e.nav) {
+			let field = {type: e.field_type}
+			if (e.validate)
+				field.validate = e.validate
+			let row = {values: [e.default_value]}
+			let rowset_ = rowset({
+				fields: [field],
+				rows: [row],
+			})
+			e.field = rowset_.field(0)
+			e.nav = rowset_nav({rowset: rowset_, row_index: 0})
+		}
+		e.nav.on('row_changed', row_changed)
+		e.nav.rowset.on('reload', reload)
+		e.nav.rowset.on('value_changed', set_value)
+		e.nav.rowset.on('invalid_changed', set_invalid)
+		e.nav.rowset.on('error_changed', set_error)
+	}
+	e.on('init', init)
+
+	function row_changed(ri, source) {
+		e.update_value(e.value, source)
+	}
+
+	function reload(source) {
+		e.update_value(e.value, source)
+	}
+
+	function set_value(row, field, val, source) {
+		if (row != e.nav.row || field != e.field)
+			return
+		e.update_value(val, source)
+	}
+
+	function set_invalid(row, field, invalid, source) {
+		if (row != e.nav.row || field != e.field)
+			return
+		e.invalid = invalid
+		e.class('invalid', invalid)
+	}
+
+	function set_error(row, field, err, source) {
+		if (row != e.nav.row || field != e.field)
+			return
+		e.update_error(err, source)
+	}
+
+	e.late_property('value',
+		function() { return e.nav.value(e.field) },
+		function(v) {
+			e.update_value(v, e)
+			e.nav.set_value(e.field, v, e)
+		}
+	)
+
+	e.update_value = function(v, source) {} // stub
+
+	e.update_error = function(err, source) {
 		if (!e.error_tooltip) {
 			if (!e.invalid)
 				return // don't create it until needed.
 			function error_tooltip_check() { return e.invalid && e.hasfocus }
 			e.error_tooltip = tooltip({type: 'error', target: e, check: error_tooltip_check})
 		}
-		e.error_tooltip.text = e.error
+		if (e.invalid)
+			e.error_tooltip.text = err
 		e.error_tooltip.update()
-	}
-
-	let value, value_set
-
-	function get_value() {
-		return e.nav ? e.nav.value(e.field) : value
-	}
-
-	e.validate = return_true // stub
-
-	e.set_error = function(err, from_user_input) {
-		e.invalid = err != true
-		e.input.class('invalid', e.invalid)
-		e.error = e.invalid && err || ''
-		e.update_error()
-	}
-
-	e.set_value = function(v, from_user_input) {
-		if (value_set && v === value) // event loop barrier
-			return true
-
-		let err = e.validate(v)
-		if (e.nav)
-			if (err == true)
-				err = e.nav.set_value(e.field, v, e)
-
-		e.invalid = err != true
-		e.input.class('invalid', e.invalid)
-		e.error = e.invalid && err || ''
-		e.update_error()
-
-		if (err != true) // invalid value spread barrier
-			return
-
-		value = v
-		value_set = true
-
-		e.fire('value_changed', v, from_user_input) // input protocol
-	}
-
-	e.late_property('value', get_value, e.set_value)
-
-	function init() {
-		if (e.rowset && e.navigator && e.field) {
-			e.navigator.on('row_changed', row_changed)
-		}
-	}
-	e.on('init', init)
-
-	function row_changed(row) {
-		e.value = e.rowset.value(row, e.rowset.field(e.field))
 	}
 
 }
@@ -758,28 +842,11 @@ input = component('x-input', function(e) {
 	e.input.on('keyup', input_keyup)
 	e.add(e.input)
 
-	function tooltip_check() { return e.invalid && e.hasfocus }
-	e.tooltip = tooltip({type: 'error', target: e, check: tooltip_check})
-
 	e.attr_property('align')
 
+	// model
+
 	value_protocol(e)
-
-	// view
-
-	function input_input() {
-		let v = e.from_text(e.input.value)
-		e.set_value(v, true)
-	}
-
-	function input_blur() {
-		e.fire('lost_focus') // grid editor protocol
-	}
-
-	e.on('value_changed', function(v, from_user_input) {
-		if (!from_user_input)
-			e.input.value = e.to_text(v)
-	})
 
 	e.to_text = function(v) {
 		return v != null ? String(v) : null
@@ -788,6 +855,25 @@ input = component('x-input', function(e) {
 	e.from_text = function(s) {
 		s = s.trim()
 		return s !== '' ? s : null
+	}
+
+	let from_input
+
+	e.on('value_changed', function(v, source) {
+		if (!from_input)
+			e.input.value = e.to_text(v)
+	})
+
+	// view
+
+	function input_input() {
+		from_input = true
+		e.value = e.from_text(e.input.value)
+		from_input = false
+	}
+
+	function input_blur() {
+		e.fire('lost_focus') // grid editor protocol
 	}
 
 	// grid editor protocol
@@ -1252,8 +1338,8 @@ dropdown = component('x-dropdown', function(e) {
 		update_view()
 	}
 
-	function value_picked(from_user_input) {
-		e.close(from_user_input)
+	function value_picked(from_input) {
+		e.close(from_input)
 		e.fire('value_changed', e.picker.value) // input protocol
 		if (e.rowset) {
 			let err = e.rowset.set_value(e.value)
@@ -1385,16 +1471,16 @@ listbox = component('x-listbox', function(e) {
 	e.on('keydown', list_keydown)
 	e.on('keypress', list_keypress)
 
-	function select_item_by_index(i, pick, from_user_input) {
+	function select_item_by_index(i, pick, from_input) {
 		let item = null
 		if (i != null) {
 			i = clamp(i, 0, e.at.length-1)
 			item = e.at[i]
 		}
-		return select_item(item, pick, from_user_input)
+		return select_item(item, pick, from_input)
 	}
 
-	function select_item(item, pick, from_user_input) {
+	function select_item(item, pick, from_input) {
 		if (item != e.selected_item) {
 			if (e.selected_item) {
 				e.selected_item.class('focused', false)
@@ -1407,10 +1493,10 @@ listbox = component('x-listbox', function(e) {
 			}
 			e.selected_item = item
 			e.fire('selected', item ? item.item : null)
-			e.fire('value_changed', item ? item.index : null, from_user_input)
+			e.fire('value_changed', item ? item.index : null, from_input)
 		}
 		if (pick)
-			e.fire('value_picked', from_user_input) // picker protocol
+			e.fire('value_picked', from_input) // picker protocol
 	}
 
 	function item_mousedown() {
@@ -1472,8 +1558,8 @@ listbox = component('x-listbox', function(e) {
 		return e.selected_item ? e.selected_item.html : ''
 	})
 
-	e.pick_value = function(v, from_user_input) {
-		select_item_by_index(v, true, from_user_input)
+	e.pick_value = function(v, from_input) {
+		select_item_by_index(v, true, from_input)
 	}
 
 	e.pick_near_value = function(delta) {
@@ -1705,14 +1791,14 @@ calendar = component('x-calendar', function(e) {
 		return _d.toLocaleString(locale, e.format)
 	})
 
-	e.pick_value = function(v, from_user_input) {
+	e.pick_value = function(v, from_input) {
 		e.value = v
-		e.fire('value_picked', from_user_input)
+		e.fire('value_picked', from_input)
 	}
 
-	e.pick_near_value = function(delta, from_user_input) {
+	e.pick_near_value = function(delta, from_input) {
 		e.value = day(e.value, delta)
-		e.fire('value_picked', from_user_input)
+		e.fire('value_picked', from_input)
 	}
 
 	e.pick_next_value_starting_with = function(s) {}
@@ -2741,7 +2827,7 @@ grid = component('x-grid', function(e) {
 		if (e.pick_value_field)
 			e.fire('value_changed', e.value, true)
 
-		if (row_changed) { // navigator protocol
+		if (row_changed) { // rowset_nav protocol
 			let [row] = row_field_at(e.focused_cell)
 			e.fire('row_changed', row.row)
 		}
@@ -3337,19 +3423,19 @@ grid = component('x-grid', function(e) {
 		return row ? e.rowset.display_value(row.row, e.pick_display_field) : ''
 	})
 
-	e.pick_value = function(v, from_user_input) {
+	e.pick_value = function(v, from_input) {
 		let field = e.pick_value_field
 		let ri = find_row(field, v)
 		if (ri == null)
 			return // TODO: deselect
 		if (e.focus_cell([ri, field.index]))
-			e.fire('value_picked', from_user_input) // picker protocol.
+			e.fire('value_picked', from_input) // picker protocol.
 	}
 
-	e.pick_near_value = function(delta, from_user_input) {
+	e.pick_near_value = function(delta, from_input) {
 		let field = e.pick_value_field
 		if (e.focus_cell(e.focused_cell, delta))
-			e.fire('value_picked', from_user_input)
+			e.fire('value_picked', from_input)
 	}
 
 	e.pick_next_value_starting_with = function(s) {
