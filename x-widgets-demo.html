@@ -324,15 +324,16 @@ main.add(b)
 </help>
 <script>
 
+function say_my_name(v) {
+		return v == null || v == 'Klaus' || 'You have to type in "Klaus" or leave empty.'
+}
+
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
 	value: 'wrong',
-	validate: function(v) {
-		return v == null || v == 'Klaus' || 'You have to type in "Klaus" or leave empty.'
-	},
+	validate: say_my_name,
 })))
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
-	value: null,
 	validate: function(v) {
 		return v == null || v == 'Klaus'
 			|| ('You have to type in "Klaus" or leave empty. <br>' +
@@ -340,6 +341,18 @@ main.add(H.div({}, 'type in "Klaus" to validate: ', input({
 				'wraps decently and stays centered.')
 	},
 })))
+
+main.add(
+	H.div({style: 'padding-top: 2em'},
+		'Check out these inner labels:',
+		H.div({},
+			input({
+				field_name: "santa's_name",
+				validate: say_my_name,
+			})
+		)
+	)
+)
 
 </script>
 </template>
@@ -352,10 +365,10 @@ main.add(H.div({}, 'type in "Klaus" to validate: ', input({
 </help>
 <script>
 
-main.add(H.div({}, spin_input({value: 42})))
-main.add(H.div({}, spin_input({value: 42, button_style: 'up-down'})))
-main.add(H.div({}, spin_input({value: 42, button_style: 'left-right'})))
-main.add(H.div({}, spin_input({min: -2, max: 5, step: 1.5, button_placement: 'right'})))
+main.add(H.div({}, spin_input({idx: 1, value: 42})))
+main.add(H.div({}, spin_input({idx: 2, value: 42, button_style: 'up-down'})))
+main.add(H.div({}, spin_input({idx: 3, value: 42, button_style: 'left-right'})))
+main.add(H.div({}, spin_input({idx: 4, min: -2, max: 5, step: 1.5, button_placement: 'right'})))
 
 </script>
 </template>
@@ -551,7 +564,7 @@ main.add(
 		picker: listbox({
 			items: [
 				'Apples',
-				'Bananas',
+				'Mananas',
 				'Bangos',
 				'Something Else Entirely',
 			],
@@ -819,7 +832,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 12
+demo_list.value = 5
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

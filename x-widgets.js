@@ -15,6 +15,7 @@
 	d.fields: [{attr->val}, ...]
 		name           : field name (defaults to field's numeric index)
 		type           : for choosing a field template.
+		text           : field name for display purposes.
 		client_default : default value that new rows are initialized with.
 		server_default : default value that the server sets.
 		allow_null     : allow null (true).
@@ -45,6 +46,18 @@
 
 */
 
+{
+	let upper = function(s) {
+		return s.toUpperCase()
+	}
+	let upper2 = function(s) {
+		return ' ' + s.slice(1).toUpperCase()
+	}
+	function auto_display_name(s) {
+		return (s || '').replace(/[\w]/, upper).replace(/(_[\w])/, upper2)
+	}
+}
+
 rowset = function(...options) {
 
 	let d = {}
@@ -66,7 +79,7 @@ rowset = function(...options) {
 			(typeof(v) == 'number' ? fields[v] : v)
 	}
 
-	let init = function() {
+	function init() {
 
 		// set options/override.
 		update(d, rowset, ...options)
@@ -84,8 +97,11 @@ rowset = function(...options) {
 			let f1 = d.fields[i]
 			let f0 = f1.type ? (d.types[f1.type] || rowset.types[f1.type]) : null
 			let field = update({index: i}, rowset.default_type, d.default_type, f0, f1)
+			if (field.text == null)
+				field.text = auto_display_name(field.name)
+			field.name = or(field.name, 'field_'+i)
 			fields[i] = field
-			field_map.set(field.name || i, field)
+			field_map.set(field.name, field)
 		}
 
 		for (field of d.pk) {
@@ -206,6 +222,8 @@ rowset = function(...options) {
 		let invalid = ret !== true
 		d.set_cell_state(row, field, 'invalid', invalid, source)
 		d.set_cell_state(row, field, 'error', invalid ? ret : undefined, source)
+		if (invalid)
+			d.set_cell_state(row, field, 'wrong_value', val)
 
 		if (invalid)
 			return
@@ -452,30 +470,49 @@ rowset_nav = function(...options) {
 // value protocol
 // ---------------------------------------------------------------------------
 
+function validate_over_field(field, additional_validate) {
+	let field_validate = field.validate
+	if (!field_validate)
+		field.validate = additional_validate
+	else
+		field.validate = function(v) {
+			let ret = additional_validate(v)
+			if (ret === true)
+				ret = field_validate(v)
+			return ret
+		}
+}
+
 function value_protocol(e) {
 
 	e.default_value = null
 
-	function init() {
+	let init = e.init
+	e.init = function() {
+		init()
 		if (!e.nav) {
 			let field = {type: e.field_type}
-			if (e.validate)
-				field.validate = e.validate
+			if (e.field_name != null) field.name = e.field_name
+			if (e.field_text != null) field.text = e.field_text
 			let row = {values: [e.default_value]}
 			let rowset_ = rowset({
 				fields: [field],
 				rows: [row],
 			})
-			e.field = rowset_.field(0)
 			e.nav = rowset_nav({rowset: rowset_, row_index: 0})
+			e.field = e.nav.rowset.field(0)
+		} else {
+			e.field = e.nav.rowset.field(e.field_name)
 		}
+		if (e.validate)
+			validate_over_field(e.field, e.validate)
 		e.nav.on('row_changed', row_changed)
 		e.nav.rowset.on('reload', reload)
 		e.nav.rowset.on('value_changed', set_value)
 		e.nav.rowset.on('invalid_changed', set_invalid)
 		e.nav.rowset.on('error_changed', set_error)
+		e.nav.rowset.on('wrong_value_changed', set_wrong_value)
 	}
-	e.on('init', init)
 
 	function row_changed(ri, source) {
 		e.update_value(e.value, source)
@@ -504,10 +541,17 @@ function value_protocol(e) {
 		e.update_error(err, source)
 	}
 
+	function set_wrong_value(row, field, val, source) {
+		if (row != e.nav.row || field != e.field)
+			return
+		e.update_value(val, source)
+	}
+
 	e.late_property('value',
-		function() { return e.nav.value(e.field) },
+		function() {
+			return e.nav.value(e.field)
+		},
 		function(v) {
-			e.update_value(v, e)
 			e.nav.set_value(e.field, v, e)
 		}
 	)
@@ -518,7 +562,7 @@ function value_protocol(e) {
 		if (!e.error_tooltip) {
 			if (!e.invalid)
 				return // don't create it until needed.
-			function error_tooltip_check() { return e.invalid && e.hasfocus }
+			function error_tooltip_check() { return e.invalid && (e.hasfocus || e.hovered) }
 			e.error_tooltip = tooltip({type: 'error', target: e, check: error_tooltip_check})
 		}
 		if (e.invalid)
@@ -830,23 +874,37 @@ input = component('x-input', function(e) {
 
 	e.class('x-widget')
 	e.class('x-input')
-	e.attrval('align', 'left')
 
-	e.invalid = false
+	e.attrval('align', 'left')
+	e.attr_property('align')
+
+	e.attr_property('label')
 
 	e.input = H.input({class: 'x-input-input'})
+	e.inner_label_div = H.div({class: 'x-input-inner-label'})
 	e.input.set_input_filter() // must be set as first event handler!
 	e.input.on('input', input_input)
 	e.input.on('blur', input_blur)
 	e.input.on('keydown', input_keydown)
 	e.input.on('keyup', input_keyup)
-	e.add(e.input)
-
-	e.attr_property('align')
+	e.add(e.input, e.inner_label_div)
 
 	// model
 
 	value_protocol(e)
+
+	let init = e.init
+	e.init = function() {
+		init()
+		if (e.inner_label != false) {
+			let s = e.label || e.field.text
+			if (s) {
+				e.inner_label_div.html = s
+				e.class('with-inner-label', true)
+			}
+		}
+		e.input.class('empty', e.input.value == '')
+	}
 
 	e.to_text = function(v) {
 		return v != null ? String(v) : null
@@ -859,16 +917,24 @@ input = component('x-input', function(e) {
 
 	let from_input
 
-	e.on('value_changed', function(v, source) {
-		if (!from_input)
-			e.input.value = e.to_text(v)
-	})
+	function update_state(s) {
+		e.input.class('empty', s == '')
+	}
+
+	e.update_value = function(v, source) {
+		if (!from_input) {
+			let s = e.to_text(v)
+			e.input.value = s
+			update_state(s)
+		}
+	}
 
 	// view
 
 	function input_input() {
 		from_input = true
 		e.value = e.from_text(e.input.value)
+		update_state(e.input.value)
 		from_input = false
 	}
 
@@ -965,7 +1031,9 @@ input = component('x-input', function(e) {
 // spin_input
 // ---------------------------------------------------------------------------
 
-spin_input = component('x-spin-input', input, function(e) {
+spin_input = component('x-spin-input', function(e) {
+
+	input.construct(e)
 
 	e.class('x-spin-input')
 
@@ -987,7 +1055,6 @@ spin_input = component('x-spin-input', input, function(e) {
 
 	let init = e.init
 	e.init = function() {
-
 		init()
 
 		let bs = e.button_style

@@ -4,7 +4,10 @@
 :root {
 	--x-input-padding               : .25em .5em; /* padding for inputs and grid cells */
 	--x-input-padding-x             : .5em;  /* x-padding for inputs and grid cells */
-	--x-input-focused-bg-color      : #ffc;  /* bg color for focused inputs, dropdowns and pickers */
+	--x-input-inner-label-padding             : 1em .5em;
+	--x-input-inner-label-padding-focused     : 1.6em .5em .4em .5em;
+	--x-input-inner-label-padding-top-focused : .3em;
+	--x-input-focused-bg-color      : #fff;  /* bg color for focused inputs, dropdowns and pickers */
 	--x-info-bg-color               : #069;  /* bg color for info bubbles */
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
 	--x-focus-shadow                : 0 0 0 1px #99f; /* to be used in place of focus outline */
@@ -339,6 +342,7 @@
 	/* layouting */
 	display: inline-flex;    /* the only way to get variable-width inputs */
 	align-items: baseline;   /* that are baseline-aligned */
+	position: relative;      /* anchor the inner label to it */
 
 	/* sizing */
 	width: 0;                /* don't set this, set min-width */
@@ -380,9 +384,47 @@
 	outline: none;
 }
 
-.x-input-input.invalid {
-	background-color: var(--x-error-bg-color);
-	color: white;
+/* input with animated inner label/placeholder ---------------------------- */
+
+.x-input.with-inner-label {
+	border-radius: .3em;
+}
+
+.x-input.with-inner-label > .x-input-input {
+	padding: var(--x-input-inner-label-padding);
+}
+
+.x-input-inner-label {
+	position: absolute;
+	padding: var(--x-input-inner-label-padding);
+
+	pointer-events: none;       /* click-through */
+
+	color: #777;
+}
+
+.x-input.with-inner-label > .x-input-input:not(.empty),
+.x-input.with-inner-label > .x-input-input:focus {
+	padding: var(--x-input-inner-label-padding-focused);
+}
+
+.x-input.with-inner-label > .x-input-input:not(.empty) + .x-input-inner-label,
+.x-input.with-inner-label > .x-input-input:focus       + .x-input-inner-label {
+
+	user-select: none;
+
+	color: inherit;
+
+	font-size: 85%;
+	padding-top: var(--x-input-inner-label-padding-top-focused);
+	animation: x-input-inner-label-focused .1s;
+}
+
+@keyframes x-input-inner-label-focused {
+	from {
+		opacity: 0;
+		padding-top: calc(var(--x-input-inner-label-padding-top-focused) * 2);
+	}
 }
 
 /* spin_input ------------------------------------------------------------- */
@@ -559,6 +601,11 @@
 	outline: none;
 	background-color: var(--x-input-focused-bg-color);
 	box-shadow: var(--x-focus-shadow);
+}
+
+.x-input.invalid {
+	background-color: var(--x-error-bg-color);
+	color: white;
 }
 
 /* listbox ---------------------------------------------------------------- */
@@ -1055,7 +1102,7 @@ td.x-menu-title-td {
 	background-color: #2a303e;
 }
 
-.x-dark .x-input-input.invalid {
+.x-dark .x-input.invalid > .x-input-input {
 	background-color: var(--x-error-bg-color);
 }
 
