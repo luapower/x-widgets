@@ -470,19 +470,6 @@ rowset_nav = function(...options) {
 // value protocol
 // ---------------------------------------------------------------------------
 
-function validate_over_field(field, additional_validate) {
-	let field_validate = field.validate
-	if (!field_validate)
-		field.validate = additional_validate
-	else
-		field.validate = function(v) {
-			let ret = additional_validate(v)
-			if (ret === true)
-				ret = field_validate(v)
-			return ret
-		}
-}
-
 function value_protocol(e) {
 
 	e.default_value = null
@@ -504,14 +491,28 @@ function value_protocol(e) {
 		} else {
 			e.field = e.nav.rowset.field(e.field_name)
 		}
-		if (e.validate)
-			validate_over_field(e.field, e.validate)
+		e.add_validator(e.validate)
 		e.nav.on('row_changed', row_changed)
 		e.nav.rowset.on('reload', reload)
 		e.nav.rowset.on('value_changed', set_value)
 		e.nav.rowset.on('invalid_changed', set_invalid)
 		e.nav.rowset.on('error_changed', set_error)
 		e.nav.rowset.on('wrong_value_changed', set_wrong_value)
+	}
+
+	e.add_validator = function(validate) {
+		if (!validate)
+			return
+		let field_validate = e.field.validate
+		if (!field_validate)
+			e.field.validate = validate
+		else
+			e.field.validate = function(v) {
+				let ret = field_validate(v)
+				if (ret === true)
+					ret = validate(v)
+				return ret
+			}
 	}
 
 	function row_changed(ri, source) {
@@ -697,7 +698,6 @@ checkbox = component('x-checkbox', function(e) {
 
 	e.checked_value = true
 	e.unchecked_value = false
-	e.validate = return_true
 	e.allow_invalid_values = false
 
 	e.icon_div = H.span({class: 'x-markbox-icon x-checkbox-icon fa fa-square'})
@@ -883,13 +883,7 @@ input = component('x-input', function(e) {
 	e.input = H.input({class: 'x-input-input'})
 	e.inner_label_div = H.div({class: 'x-input-inner-label'})
 	e.input.set_input_filter() // must be set as first event handler!
-	e.input.on('input', input_input)
-	e.input.on('blur', input_blur)
-	e.input.on('keydown', input_keydown)
-	e.input.on('keyup', input_keyup)
 	e.add(e.input, e.inner_label_div)
-
-	// model
 
 	value_protocol(e)
 
@@ -905,6 +899,8 @@ input = component('x-input', function(e) {
 		}
 		e.input.class('empty', e.input.value == '')
 	}
+
+	// value updating
 
 	e.to_text = function(v) {
 		return v != null ? String(v) : null
@@ -929,24 +925,22 @@ input = component('x-input', function(e) {
 		}
 	}
 
-	// view
-
-	function input_input() {
+	e.input.on('input', function() {
 		from_input = true
 		e.value = e.from_text(e.input.value)
 		update_state(e.input.value)
 		from_input = false
-	}
-
-	function input_blur() {
-		e.fire('lost_focus') // grid editor protocol
-	}
+	})
 
 	// grid editor protocol
 
 	e.focus = function() {
 		e.input.focus()
 	}
+
+	e.input.on('blur', function() {
+		e.fire('lost_focus')
+	})
 
 	let editor_state
 
@@ -978,17 +972,17 @@ input = component('x-input', function(e) {
 		editor_state = [i0, i1]
 	}
 
-	function input_keydown(key, shift, ctrl) {
+	e.input.on('keydown', function(key, shift, ctrl) {
 		// NOTE: we capture Ctrl+A on keydown because the user might
 		// depress Ctrl first and when we get the 'a' Ctrl is not pressed.
 		if (key == 'a' && ctrl)
 			update_editor_state(null, 0, -1)
-	}
+	})
 
-	function input_keyup(key, shift, ctrl) {
+	e.input.on('keyup', function(key, shift, ctrl) {
 		if (key == 'ArrowLeft' || key == 'ArrowRight')
 			update_editor_state(key == 'ArrowRight')
-	}
+	})
 
 	e.editor_state = function(s) {
 		if (s) {
@@ -1109,12 +1103,12 @@ spin_input = component('x-spin-input', function(e) {
 		return 'Value must be multiple of {0}'.format(e.step)
 	}
 
-	e.validate = function(v) {
+	e.add_validator(function(v) {
 		if (v < e.min) return e.min_error(v)
 		if (v > e.max) return e.max_error(v)
 		if (v % e.step != 0) return e.step_error(v)
 		return true
-	}
+	})
 
 	e.from_text = function(s) {
 		return s !== '' ? Number(s) : null
@@ -1292,39 +1286,68 @@ dropdown = component('x-dropdown', function(e) {
 
 	e.value_div = H.span({class: 'x-dropdown-value'})
 	e.button = H.span({class: 'x-dropdown-button fa fa-caret-down'})
-	e.add(e.value_div, e.button)
+	e.inner_label_div = H.div({class: 'x-input-inner-label x-dropdown-inner-label'})
+	e.add(e.value_div, e.button, e.inner_label_div)
+
+	value_protocol(e)
+
+	let init = e.init
+	e.init = function() {
+		init()
+
+		if (e.inner_label != false) {
+			let s = e.label || e.field.text
+			if (s) {
+				e.inner_label_div.html = s
+				e.class('with-inner-label', true)
+			}
+		}
+
+		e.picker.on('value_changed', value_changed)
+		e.picker.on('value_picked' , value_picked)
+		e.picker.on('keydown', picker_keydown)
+
+		e.add_validator(function(v) {
+			return true // TODO: check with picker
+		})
+
+	}
+
+	let from_input
+
+	// value updating
+
+	e.update_value = function(v, source) {
+		if (!from_input) {
+			e.picker.pick_value(v, source)
+			//update_state(s)
+		}
+	}
 
 	function update_view() {
 		if (!e.isConnected)
 			return
 		let v = e.picker.display_value
-		if (v === '')
-			v = '&nbsp;'
-		e.value_div.html = v
+		let empty = v === ''
+		e.value_div.class('empty', empty)
+		e.inner_label_div.class('empty', empty)
+		e.value_div.html = empty ? '&nbsp;' : v
 	}
 
-	function onoff_events(on) {
+	function set_events(on) {
 		document.onoff('mousedown', document_mousedown, on)
 		document.onoff('stopped_event', document_stopped_event, on)
 	}
 
 	e.attach = function(parent) {
 		update_view()
-		onoff_events(true)
+		set_events(true)
 	}
 
 	e.detach = function() {
-		onoff_events(false)
+		set_events(false)
 		e.close()
 	}
-
-	// model
-
-	e.late_property('value', function() {
-		return e.picker.value
-	}, function(v) {
-		e.picker.pick_value(v)
-	})
 
 	// controller
 
@@ -1333,12 +1356,6 @@ dropdown = component('x-dropdown', function(e) {
 	e.on('keydown'  , view_keydown)
 	e.on('keypress' , view_keypress)
 	e.on('wheel'    , view_wheel)
-
-	e.init = function() {
-		e.picker.on('value_changed', value_changed)
-		e.picker.on('value_picked' , value_picked)
-		e.picker.on('keydown', picker_keydown)
-	}
 
 	// focusing
 
@@ -1407,11 +1424,7 @@ dropdown = component('x-dropdown', function(e) {
 
 	function value_picked(from_input) {
 		e.close(from_input)
-		e.fire('value_changed', e.picker.value) // input protocol
-		if (e.rowset) {
-			let err = e.rowset.set_value(e.value)
-			// TODO: show error
-		}
+		e.value = e.picker.value
 	}
 
 	// kb & mouse binding
@@ -1439,7 +1452,7 @@ dropdown = component('x-dropdown', function(e) {
 		return false
 	}
 
-	function picker_keydown(key, shift, ctrl, alt, ev) {
+	function picker_keydown(key) {
 		if (key == 'Escape' || key == 'Tab') {
 			e.cancel(true)
 			return false

@@ -561,6 +561,7 @@ function lots_of_items() {
 
 main.add(
 	dropdown({
+		field_name: 'Here we are',
 		picker: listbox({
 			items: [
 				'Apples',
@@ -573,6 +574,7 @@ main.add(
 		}),
 	}),
 	dropdown({
+		field_name: 'Here we are again',
 		picker: listbox({
 			items: lots_of_items(),
 		}),
@@ -832,7 +834,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 5
+demo_list.value = 5 + 8
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')
