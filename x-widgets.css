@@ -403,13 +403,11 @@
 	color: #777;
 }
 
-.x-input.with-inner-label > .x-input-input:not(.empty),
-.x-input.with-inner-label > .x-input-input:focus {
+.x-input.with-inner-label > .x-input-input:not(.empty) {
 	padding: var(--x-input-inner-label-padding-focused);
 }
 
-.x-input.with-inner-label > .x-input-input:not(.empty) + .x-input-inner-label,
-.x-input.with-inner-label > .x-input-input:focus       + .x-input-inner-label {
+.x-input.with-inner-label > .x-input-input:not(.empty) + .x-input-inner-label {
 
 	user-select: none;
 
