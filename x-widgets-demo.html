@@ -227,12 +227,13 @@ t4 = tooltip({text: s, side: 'left'  , align: 'end', target: b3, type: 'error'})
 
 main.add(checkbox({
 	text: 'Wassup homie',
-	checked: true,
+	value: 'wrong',
 }))
 
 c2 = checkbox({
 	text: 'Yo wasup<br>I am multiline and right-aligned.',
 	align: 'right',
+	checked: true,
 })
 
 c2.on('value_changed', function(v) { print(v, this.checked) })
@@ -381,9 +382,17 @@ main.add(H.div({}, spin_input({idx: 4, min: -2, max: 5, step: 1.5, button_placem
 </help>
 <script>
 
-main.add(H.div({}, slider()))
+main.add(H.div({},
+	'Slider 1',
+	slider({
+		validate: function(v) { return v >= .2 && v <= .8 || 'Value not between .2 and .8' },
+		value: .5,
+	})))
 
-main.add(H.div({}, slider({value: 50, min_value: 20, max_value: 100, step: 10})))
+main.add(H.div({},
+	'Slider 2',
+	slider({value: 1500, from: 1000, to: 2000, step: 200, min: 1200, max: 1800}))
+)
 
 </script>
 </template>
@@ -572,7 +581,9 @@ main.add(
 			selected_index: 1,
 			style: 'display: inline-flex',
 		}),
+		validate: function(v) { return v != 1 || 'Can\'t have mananas.' }
 	}),
+
 	dropdown({
 		field_name: 'Here we are again',
 		picker: listbox({
@@ -596,7 +607,8 @@ main.add(
 	dropdown({
 		picker: calendar({
 			value: now(),
-		})
+		}),
+		validate: function(v) { return v != day(now()) || 'Can\'t have today.' }
 	})
 )
 
@@ -834,7 +846,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 5 + 8
+demo_list.value = 7
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

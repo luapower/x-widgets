@@ -165,6 +165,7 @@
 
 	/* positioning */
 	position: absolute;
+	overflow: visible;
 	z-index: 1;
 
 	/* sizing */
@@ -175,6 +176,7 @@
 
 	/* animation */
 	opacity: 0;
+
 	animation-duration: .2s;
 	animation-timing-function: ease-out;
 	animation-fill-mode: forwards;
@@ -182,7 +184,9 @@
 
 /* visibility animation */
 
-.x-tooltip.visible { opacity: 1; }
+.x-tooltip.visible {
+	opacity: 1;
+}
 
 @keyframes x-tooltip-left   { from { opacity: 0; transform: translate(-1em, 0); } }
 @keyframes x-tooltip-right  { from { opacity: 0; transform: translate( 1em, 0); } }
@@ -207,7 +211,6 @@
 	background-color: white;
 
 	cursor: default;
-	pointer-events: auto;
 
 	box-shadow: 2px 2px 10px #00000044;
 }
@@ -300,6 +303,10 @@
 	color: var(--x-item-focused-bg-color);
 }
 
+.x-markbox.invalid > .x-markbox-icon {
+	color: var(--x-error-bg-color);
+}
+
 .x-markbox[align=right] > .x-markbox-icon {
 	order: 2;
 }
@@ -319,7 +326,7 @@
 .x-radiogroup {
 	display: inline-flex;
 	flex-flow: column wrap;
-	margin : .25em;
+	margin: .25em;
 	padding: 0;
 }
 
@@ -454,7 +461,8 @@
 .x-slider {
 	/* inline layouting */
 	display: inline-block;
-	margin: .5em;                 /* horizontal margin  */
+	vertical-align: middle;
+	margin: .75em;
 
 	/* sizing */
 	width: var(--x-input-min-width);
@@ -470,9 +478,14 @@
 }
 
 .x-slider-fill {
+	position: absolute;
 	height: 100%;
 	background-color: var(--x-item-unfocused-bg-color);
 	border-radius: 10em;
+}
+
+.x-slider-range-fill {
+	background-color: #ccc;
 }
 
 .x-slider-thumb {
@@ -495,11 +508,15 @@
 
 }
 
+.x-slider-value-thumb.different {
+	opacity: .5;
+}
+
 .x-slider:focus {
 	box-shadow: none;
 }
 
-.x-slider:focus > .x-slider-fill {
+.x-slider:focus > .x-slider-value-fill {
 	background-color: var(--x-item-focused-bg-color);
 }
 
@@ -508,8 +525,17 @@
 	background-color: #eee;
 }
 
-.x-slider.animated > .x-slider-thumb { transition: left  .1s; }
-.x-slider.animated > .x-slider-fill  { transition: width .1s; }
+.x-slider.invalid > .x-slider-input-thumb {
+	border: 1px solid var(--x-error-bg-color);
+	background-color: var(--x-error-bg-color);
+}
+
+.x-slider.invalid:focus > .x-slider-thumb {
+	border: 1px solid #ddd;
+}
+
+.x-slider.animated > .x-slider-thumb      { transition: left  .1s; }
+.x-slider.animated > .x-slider-value-fill { transition: width .1s; }
 
 /* dropdown --------------------------------------------------------------- */
 
@@ -582,7 +608,7 @@
 	overflow: hidden;
 }
 
-/* inner label */
+/* inner label: TODO: unify this with x-input. */
 .x-dropdown.with-inner-label > .x-dropdown-value {
 	padding: var(--x-input-inner-label-padding);
 }

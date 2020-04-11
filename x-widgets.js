@@ -186,6 +186,11 @@ rowset = function(...options) {
 		return field.format.call(d, d.value(row, field), field)
 	}
 
+	d.input_value = function(row, field) {
+		let v = d.cell_state(row, field, 'input_value')
+		return v === undefined ? v = d.value(row, field) : v
+	}
+
 	d.validate_value = function(field, val) {
 		if (val == null)
 			return field.allow_null || 'NULL not allowed'
@@ -220,29 +225,24 @@ rowset = function(...options) {
 		ret = ret === true ? d.validate_value(field, val) : ret
 
 		let invalid = ret !== true
+		if (!invalid) {
+			let old_val = row.values[field.index]
+			if (old_val !== val) {
+
+				row.values[field.index] = val
+
+				if (!d.cell_state(row, field, 'modified')) {
+					d.set_cell_state(row, field, 'old_value', old_val, source)
+					d.set_cell_state(row, field, 'modified', true, source)
+					row.modified = true
+				}
+				d.fire('value_changed', row, field, val, source)
+			}
+		}
 		d.set_cell_state(row, field, 'invalid', invalid, source)
 		d.set_cell_state(row, field, 'error', invalid ? ret : undefined, source)
-		if (invalid)
-			d.set_cell_state(row, field, 'wrong_value', val)
+		d.set_cell_state(row, field, 'input_value', val)
 
-		if (invalid)
-			return
-
-		let old_val = row.values[field.index]
-
-		if (old_val === val)
-			return
-
-		row.values[field.index] = val
-
-		if (!d.cell_state(row, field, 'modified')) {
-			d.set_cell_state(row, field, 'old_value', old_val, source)
-			d.set_cell_state(row, field, 'modified', true, source)
-			row.modified = true
-		}
-		d.fire('value_changed', row, field, val, source)
-
-		return
 	}
 
 	// add/remove rows --------------------------------------------------------
@@ -449,6 +449,10 @@ rowset_nav = function(...options) {
 		return nav.rowset.value(nav.rowset.rows[ri], nav.rowset.field(field))
 	}
 
+	nav.input_value = function(field) {
+		return nav.rowset.input_value(nav.rowset.rows[ri], nav.rowset.field(field))
+	}
+
 	nav.cell_state = function(field) {
 		return nav.rowset.cell_state(nav.rowset.rows[ri], nav.rowset.field(field))
 	}
@@ -494,10 +498,9 @@ function value_protocol(e) {
 		e.add_validator(e.validate)
 		e.nav.on('row_changed', row_changed)
 		e.nav.rowset.on('reload', reload)
-		e.nav.rowset.on('value_changed', set_value)
+		e.nav.rowset.on('input_value_changed', set_input_value)
 		e.nav.rowset.on('invalid_changed', set_invalid)
 		e.nav.rowset.on('error_changed', set_error)
-		e.nav.rowset.on('wrong_value_changed', set_wrong_value)
 	}
 
 	e.add_validator = function(validate) {
@@ -523,7 +526,7 @@ function value_protocol(e) {
 		e.update_value(e.value, source)
 	}
 
-	function set_value(row, field, val, source) {
+	function set_input_value(row, field, val, source) {
 		if (row != e.nav.row || field != e.field)
 			return
 		e.update_value(val, source)
@@ -542,19 +545,13 @@ function value_protocol(e) {
 		e.update_error(err, source)
 	}
 
-	function set_wrong_value(row, field, val, source) {
-		if (row != e.nav.row || field != e.field)
-			return
-		e.update_value(val, source)
-	}
-
 	e.late_property('value',
-		function() {
-			return e.nav.value(e.field)
-		},
-		function(v) {
-			e.nav.set_value(e.field, v, e)
-		}
+		function() { return e.nav.value(e.field) },
+		function(v) { e.nav.set_value(e.field, v, e) }
+	)
+
+	e.late_property('input_value',
+		function() { return e.nav.input_value(e.field) }
 	)
 
 	e.update_value = function(v, source) {} // stub
@@ -572,6 +569,54 @@ function value_protocol(e) {
 	}
 
 }
+
+// ---------------------------------------------------------------------------
+// tooltip
+// ---------------------------------------------------------------------------
+
+tooltip = component('x-tooltip', function(e) {
+
+	e.class('x-widget')
+	e.class('x-tooltip')
+
+	e.text_div = H.div({class: 'x-tooltip-text'})
+	e.pin = H.div({class: 'x-tooltip-tip'})
+	e.add(e.text_div, e.pin)
+
+	e.attrval('side', 'top')
+	e.attrval('align', 'center')
+
+	let target
+
+	e.popup_target_changed = function(target) {
+		let visible = !!(!e.check || e.check(target))
+		e.class('visible', visible)
+	}
+
+	e.update = function() {
+		e.popup(target, e.side, e.align)
+	}
+
+	e.property('text',
+		function()  { return e.text_div.html },
+		function(s) { e.text_div.html = s; e.update() }
+	)
+
+	e.property('visible',
+		function()  { return e.style.display != 'none' },
+		function(v) { return e.show(v); e.update() }
+	)
+
+	e.attr_property('side' , e.update)
+	e.attr_property('align', e.update)
+	e.attr_property('type' , e.update)
+
+	e.late_property('target',
+		function()  { return target },
+		function(v) { target = v; e.update() }
+	)
+
+})
 
 // ---------------------------------------------------------------------------
 // button
@@ -636,55 +681,6 @@ button = component('x-button', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// tooltip
-// ---------------------------------------------------------------------------
-
-tooltip = component('x-tooltip', function(e) {
-
-	e.class('x-widget')
-	e.class('x-tooltip')
-
-	e.text_div = H.div({class: 'x-tooltip-text'})
-	e.pin = H.div({class: 'x-tooltip-tip'})
-	e.add(e.text_div, e.pin)
-
-	e.attrval('side', 'top')
-	e.attrval('align', 'center')
-
-	let target
-
-	e.popup_target_changed = function(target) {
-		let visible = !e.check || e.check(target)
-		e.class('visible', !!visible)
-	}
-
-	e.update = function() {
-		e.popup(target, e.side, e.align)
-	}
-
-	e.property('text',
-		function()  { return e.text_div.html },
-		function(s) { e.text_div.html = s; e.update() }
-	)
-
-	e.property('visible',
-		function()  { return e.style.display != 'none' },
-		function(v) { return e.style.display = v ? null : 'none'; e.update() }
-	)
-
-	e.attr_property('side' , e.update)
-	e.attr_property('align', e.update)
-	e.attr_property('type' , e.update)
-
-	e.late_property('target',
-		function()  { return target },
-		function(v) { target = v; e.update() }
-	)
-
-})
-
-
-// ---------------------------------------------------------------------------
 // checkbox
 // ---------------------------------------------------------------------------
 
@@ -695,25 +691,41 @@ checkbox = component('x-checkbox', function(e) {
 	e.class('x-checkbox')
 	e.attrval('tabindex', 0)
 	e.attrval('align', 'left')
+	e.attr_property('align')
 
 	e.checked_value = true
 	e.unchecked_value = false
-	e.allow_invalid_values = false
 
 	e.icon_div = H.span({class: 'x-markbox-icon x-checkbox-icon fa fa-square'})
 	e.text_div = H.span({class: 'x-markbox-text x-checkbox-text'})
 	e.add(e.icon_div, e.text_div)
 
+	// model
+
+	value_protocol(e)
+
+	let init = e.init
 	e.init = function() {
+		init()
 		e.class('center', !!e.center)
-		e.on('click', click)
-		e.on('mousedown', mousedown)
-		e.on('keydown', keydown)
-		e.on('focus', focus)
-		e.on('blur', blur)
+		e.add_validator(validate)
 	}
 
-	e.attr_property('align')
+	function validate(v) {
+		return v === e.checked_value || v === e.unchecked_value
+			|| 'Value is not {0} or {1}'.format(e.checked_value, e.unchecked_value)
+	}
+
+	e.late_property('checked',
+		function() {
+			return e.value == e.checked_value
+		},
+		function(v) {
+			e.value = v ? e.checked_value : e.unchecked_value
+		}
+	)
+
+	// view
 
 	e.property('text', function() {
 		return e.text_div.html
@@ -721,71 +733,35 @@ checkbox = component('x-checkbox', function(e) {
 		e.text_div.html = s
 	})
 
-	function set_checked(v) {
+	e.update_value = function(v, source) {
+		v = v === e.checked_value
 		e.class('checked', v)
 		e.icon_div.class('fa-check-square', v)
 		e.icon_div.class('fa-square', !v)
-		e.fire(v ? 'checked' : 'unchecked')
 	}
 
-	e.show_error = function(err, focused) {
-		e.tooltip = e.tooltip || tooltip()
-		e.tooltip.text = err
-		e.tooltip.visible = focused
-	}
-
-	let error
-	function focus() { e.show_error(error, true ) }
-	function blur () { e.show_error(error, false) }
-	e.set_valid = function(err) {
-		error = err
-		e.class('invalid', err !== true)
-		e.show_error(err, e.focused)
-	}
-
-	e.late_property('value',
-		function() {
-			return e.hasclass('checked') ? e.checked_value : e.unchecked_value
-		},
-		function(v) {
-			let err = e.validate(v)
-			e.set_valid(err)
-			if (err !== true && !e.allow_invalid_values)
-				return
-			set_checked(v === e.checked_value)
-			e.fire('value_changed', v)
-		}
-	)
-
-	e.late_property('checked',
-		function() {
-			return e.hasclass('checked')
-		},
-		function(v) {
-			e.value = v ? e.checked_value : e.unchecked_value
-		}
-	)
+	// controller
 
 	e.toggle = function() {
 		e.checked = !e.checked
 	}
 
-	function mousedown(ev) {
+	e.on('mousedown', function(ev) {
 		ev.preventDefault() // prevent accidental selection by double-clicking.
 		e.focus()
-	}
+	})
 
-	function click() {
+	e.on('click', function() {
 		e.toggle()
 		return false
-	}
+	})
 
-	function keydown(key) {
+	e.on('keydown', function(key) {
 		if (key == 'Enter' || key == ' ') {
 			e.toggle()
 			return false
 		}
-	}
+	})
 
 })
 
@@ -878,8 +854,6 @@ input = component('x-input', function(e) {
 	e.attrval('align', 'left')
 	e.attr_property('align')
 
-	e.attr_property('label')
-
 	e.input = H.input({class: 'x-input-input'})
 	e.inner_label_div = H.div({class: 'x-input-inner-label'})
 	e.input.set_input_filter() // must be set as first event handler!
@@ -891,7 +865,7 @@ input = component('x-input', function(e) {
 	e.init = function() {
 		init()
 		if (e.inner_label != false) {
-			let s = e.label || e.field.text
+			let s = e.field.text
 			if (s) {
 				e.inner_label_div.html = s
 				e.class('with-inner-label', true)
@@ -932,7 +906,7 @@ input = component('x-input', function(e) {
 		from_input = false
 	})
 
-	// grid editor protocol
+	// grid editor protocol ---------------------------------------------------
 
 	e.focus = function() {
 		e.input.focus()
@@ -1087,6 +1061,8 @@ spin_input = component('x-spin-input', function(e) {
 			e.down.class('leftmost' )
 		}
 
+		e.add_validator(validate)
+
 	}
 
 	// controller
@@ -1095,20 +1071,16 @@ spin_input = component('x-spin-input', function(e) {
 		return /^[\-]?\d*\.?\d*$/.test(v) // allow digits and '.' only
 	}
 
-	e.min_error  = function() { return 'Value must be at least {0}'.format(e.min) }
-	e.max_error  = function() { return 'Value must be at most {0}'.format(e.max) }
-	e.step_error = function() {
-		if (e.step == null) return true
-		if (e.step == 1) return 'Value must be an integer'
-		return 'Value must be multiple of {0}'.format(e.step)
-	}
-
-	e.add_validator(function(v) {
-		if (v < e.min) return e.min_error(v)
-		if (v > e.max) return e.max_error(v)
-		if (v % e.step != 0) return e.step_error(v)
+	function validate(v) {
+		if (v < e.min) return 'Value must be at least {0}'.format(e.min)
+		if (v > e.max) return 'Value must be at most {0}'.format(e.max)
+		if (v % e.step != 0) {
+			if (e.step == null) return true
+			if (e.step == 1) return 'Value must be an integer'
+			return 'Value must be multiple of {0}'.format(e.step)
+		}
 		return true
-	})
+	}
 
 	e.from_text = function(s) {
 		return s !== '' ? Number(s) : null
@@ -1167,71 +1139,102 @@ spin_input = component('x-spin-input', function(e) {
 
 slider = component('x-slider', function(e) {
 
-	e.min_value = 0
-	e.max_value = 1
+	e.from = 0
+	e.to = 1
+	e.min = null
+	e.max = null
 	e.step = null
 
 	e.class('x-widget')
 	e.class('x-slider')
 	e.attrval('tabindex', 0)
 
-	e.fill = H.div({class: 'x-slider-fill'})
-	e.thumb = H.div({class: 'x-slider-thumb'})
-
-	e.add(e.fill, e.thumb)
-	e.thumb.on('mousedown', thumb_mousedown)
-	e.on('mousedown', view_mousedown)
-	e.on('keydown', view_keydown)
-
-	function update_view() {
-		let p = e.progress
-		e.fill.style.width = (p * 100)+'%'
-		e.thumb.style.left = (p * 100)+'%'
-	}
-
-	e.init = function() {
-		e.class('animated', e.step >= 5)
-	}
+	e.value_fill = H.div({class: 'x-slider-fill x-slider-value-fill'})
+	e.range_fill = H.div({class: 'x-slider-fill x-slider-range-fill'})
+	e.input_thumb = H.div({class: 'x-slider-thumb x-slider-input-thumb'})
+	e.value_thumb = H.div({class: 'x-slider-thumb x-slider-value-thumb'})
+	e.add(e.range_fill, e.value_fill, e.value_thumb, e.input_thumb)
 
 	// model
 
-	let value
+	value_protocol(e)
 
-	e.late_property('value',
-		function() {
-			return value
-		},
-		function(v) {
-			if (e.step != null)
-				v = floor(v / e.step + .5) * e.step
-			value = clamp(v, e.min_value, e.max_value)
-			update_view()
-			e.on('value_changed', value)
+	let init = e.init
+	e.init = function() {
+		init()
+		e.class('animated', e.step >= 5)
+		e.add_validator(validate)
+	}
+
+	function validate(v) {
+		if (e.min != null && v < e.min) return 'Value must be at least {0}'.format(e.min)
+		if (e.max != null && v > e.max) return 'Value must be at most {0}'.format(e.max)
+		if (e.step == null) return true
+		if (v % e.step != 0) {
+			if (e.step == 1) return 'Value must be an integer'
+			return 'Value must be multiple of {0}'.format(e.step)
 		}
-	)
+		return true
+	}
+
+	function progress_for(v) {
+		return lerp(v, e.from, e.to, 0, 1)
+	}
+
+	function cmin() { return max(or(e.min, -1/0), e.from) }
+	function cmax() { return min(or(e.max, 1/0), e.to) }
 
 	e.late_property('progress',
 		function() {
-			return lerp(value, e.min_value, e.max_value, 0, 1)
+			return progress_for(e.input_value)
 		},
 		function(p) {
-			e.value = lerp(p, 0, 1, e.min_value, e.max_value)
+			let v = lerp(p, 0, 1, e.from, e.to)
+			if (e.step != null)
+				v = floor(v / e.step + .5) * e.step
+			e.value = clamp(v, cmin(), cmax())
 		},
 		0
 	)
+
+	// view
+
+	function update_thumb(thumb, p, show) {
+		thumb.show(show)
+		thumb.style.left = (p * 100)+'%'
+	}
+
+	function update_fill(fill, p1, p2) {
+		fill.style.left  = (p1 * 100)+'%'
+		fill.style.width = ((p2 - p1) * 100)+'%'
+	}
+
+	e.update_value = function(v, source) {
+		let input_p = progress_for(e.input_value)
+		let value_p = progress_for(e.value)
+		let diff = input_p != value_p
+		update_thumb(e.value_thumb, value_p, diff)
+		update_thumb(e.input_thumb, input_p)
+		e.value_thumb.class('different', diff)
+		e.input_thumb.class('different', diff)
+		let p1 = progress_for(cmin())
+		let p2 = progress_for(cmax())
+		update_fill(e.value_fill, max(p1, 0), min(p2, value_p))
+		update_fill(e.range_fill, p1, p2)
+	}
 
 	// controller
 
 	let hit_x
 
-	function thumb_mousedown(ev) {
+	e.input_thumb.on('mousedown', function(ev) {
 		e.focus()
-		let r = e.thumb.client_rect()
+		let r = e.input_thumb.client_rect()
 		hit_x = ev.clientX - (r.left + r.width / 2)
 		document.on('mousemove', document_mousemove)
 		document.on('mouseup'  , document_mouseup)
 		return false
-	}
+	})
 
 	function document_mousemove(mx, my) {
 		let r = e.client_rect()
@@ -1245,12 +1248,12 @@ slider = component('x-slider', function(e) {
 		document.off('mouseup'  , document_mouseup)
 	}
 
-	function view_mousedown(ev) {
+	e.on('mousedown', function(ev) {
 		let r = e.client_rect()
 		e.progress = (ev.clientX - r.left) / r.width
-	}
+	})
 
-	function view_keydown(key, shift) {
+	e.on('keydown', function(key, shift) {
 		let d
 		switch (key) {
 			case 'ArrowLeft'  : d =  -.1; break
@@ -1266,7 +1269,7 @@ slider = component('x-slider', function(e) {
 			e.progress += d * (shift ? .1 : 1)
 			return false
 		}
-	}
+	})
 
 })
 
@@ -1296,7 +1299,7 @@ dropdown = component('x-dropdown', function(e) {
 		init()
 
 		if (e.inner_label != false) {
-			let s = e.label || e.field.text
+			let s = e.field.text
 			if (s) {
 				e.inner_label_div.html = s
 				e.class('with-inner-label', true)
@@ -1313,9 +1316,9 @@ dropdown = component('x-dropdown', function(e) {
 
 	}
 
-	let from_input
-
 	// value updating
+
+	let from_input
 
 	e.update_value = function(v, source) {
 		if (!from_input) {
@@ -1325,8 +1328,6 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	function update_view() {
-		if (!e.isConnected)
-			return
 		let v = e.picker.display_value
 		let empty = v === ''
 		e.value_div.class('empty', empty)
@@ -1975,7 +1976,7 @@ menu = component('x-menu', function(e) {
 	}
 
 	function update_check(tr) {
-		tr.check_div.style.display = tr.item.checked != null ? null : 'none'
+		tr.check_div.show(tr.item.checked != null)
 		tr.check_div.style.visibility = tr.item.checked ? null : 'hidden'
 	}
 
@@ -2148,7 +2149,7 @@ pagelist = component('x-pagelist', function(e) {
 			if (e.page_container)
 				e.page_container.clear()
 		}
-		e.selection_bar.style.display = idiv ? null : 'none'
+		e.selection_bar.show(idiv)
 		e.selected_item = idiv
 		if (idiv) {
 			idiv.class('selected', true)
@@ -2620,10 +2621,10 @@ grid = component('x-grid', function(e) {
 					&& e.rowset.can_edit
 					&& e.rowset.can_change_rows
 					&& !can_focus_cell(row, field, true))
-				td.style.display = null
+				td.show()
 			} else {
 				td.clear()
-				td.style.display = 'none'
+				td.hide()
 			}
 		}
 	}
