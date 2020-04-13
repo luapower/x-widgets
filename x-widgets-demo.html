@@ -228,6 +228,7 @@ t4 = tooltip({text: s, side: 'left'  , align: 'end', target: b3, type: 'error'})
 main.add(checkbox({
 	text: 'Wassup homie',
 	value: 'wrong',
+	validate: function(v) { return typeof(v) == 'boolean' || 'Value not a boolean' }
 }))
 
 c2 = checkbox({
@@ -269,6 +270,7 @@ main.add(
 			'Option 3<br>Multiple lines long text',
 		],
 		value: 1/0,
+		validate: function(v) { return v >= 0 && v < 3 || 'Selected option out of range' },
 	})
 )
 
@@ -326,7 +328,7 @@ main.add(b)
 <script>
 
 function say_my_name(v) {
-		return v == null || v == 'Klaus' || 'You have to type in "Klaus" or leave empty.'
+	return v == null || v == 'Klaus' || 'You have to type in "Klaus" or leave empty.'
 }
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
@@ -391,7 +393,7 @@ main.add(H.div({},
 
 main.add(H.div({},
 	'Slider 2',
-	slider({value: 1500, from: 1000, to: 2000, step: 200, min: 1200, max: 1800}))
+	slider({value: 1500, from: 1000, to: 2000, step: 200, min: 1300, max: 1700}))
 )
 
 </script>
@@ -412,7 +414,7 @@ main.add(
 			'Bananas',
 			'Something Else Entirely',
 		],
-		selected_index: 1,
+		value: 1,
 	})
 )
 
@@ -423,8 +425,8 @@ main.add(
 			'Horizontally',
 			'Too',
 		],
-		selected_index: 2,
-		style: 'margin: 0 20px; flex-direction: row;',
+		value: 2,
+		flow: 'horizontal',
 	})
 )
 
@@ -578,10 +580,10 @@ main.add(
 				'Bangos',
 				'Something Else Entirely',
 			],
-			selected_index: 1,
 			style: 'display: inline-flex',
 		}),
-		validate: function(v) { return v != 1 || 'Can\'t have mananas.' }
+		validate: function(v) { return v != 1 || 'Can\'t have mananas.' },
+		value: 1,
 	}),
 
 	dropdown({
@@ -605,9 +607,8 @@ main.add(
 
 main.add(
 	dropdown({
-		picker: calendar({
-			value: now(),
-		}),
+		picker: calendar(),
+		value: now(),
 		validate: function(v) { return v != day(now()) || 'Can\'t have today.' }
 	})
 )
@@ -699,22 +700,22 @@ function list() {
 
 main.add(
 	H.div({}, 'default mode: variable-width, no-wrap with min-width aligned with other inputs'),
-	dropdown({picker: calendar({value: now()})}),
+	dropdown({picker: calendar(), value: now()}),
 	H.div(),
 	dropdown({picker: list()}),
 
 	H.div({}, 'inline mode: variable-width, no-wrap, with no min-width (shrink-wrapped)'),
-	dropdown({classes: 'inline', picker: calendar({value: now()})}),
+	dropdown({classes: 'inline', picker: calendar(), value: now()}),
 	H.div(),
 	dropdown({classes: 'inline', picker: list()}),
 
 	H.div({}, 'wrap mode: fixed-width, auto-wrap'),
-	dropdown({classes: 'wrap', picker: calendar({value: now()})}),
+	dropdown({classes: 'wrap', picker: calendar(), value: now()}),
 	H.div(),
 	dropdown({classes: 'wrap', picker: list()}),
 
 	H.div({}, 'fixed mode: fixed-width, no-wrap, overflow hidden'),
-	dropdown({classes: 'fixed', picker: calendar({value: now()})}),
+	dropdown({classes: 'fixed', picker: calendar(), value: now()}),
 	H.div(),
 	dropdown({classes: 'fixed', picker: list()})
 )
@@ -791,6 +792,47 @@ main.add(H.div({}, g), i1)
 
 <!--------------------------------------------------------------------------->
 
+<template id=lookup_field_demo>
+<help>
+
+</help>
+<script>
+
+fruits = rowset({
+	fields: [
+		{w:  50, name: 'id', type: 'number'},
+		{w: 150, name: 'name'},
+	],
+	rows: [
+		{values: [1, 'apples']},
+		{values: [2, 'bananas']},
+	],
+})
+
+main.add(grid({w: 200, h: 200, rowset: fruits}))
+
+r = rowset({
+	fields: [
+		{w: 100, name: 'fruit_id', type: 'number', align: 'left', text: 'fruit',
+			lookup_rowset: fruits,
+			lookup_field: 'id',
+			display_field: 'name',
+		},
+	],
+	rows: [
+		{values: [1]},
+		{values: [2]},
+		{values: [1]},
+	],
+})
+
+main.add(grid({w: 200, h: 200, rowset: r}))
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
 <script>
 
 ace_editor = ace.edit(code, {
@@ -828,7 +870,8 @@ $('template').forEach(function(e) {
 
 demo_list = listbox({items: demos, attrs: {id: 'demo_list'}})
 
-demo_list.on('selected', function(demo) {
+demo_list.on('current_row_changed', function() {
+	let demo = this.current_item
 	ace_editor.getSession().setValue(demo.code)
 	ace_editor.initial_script = demo.code
 	run_script()
@@ -846,7 +889,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 7
+demo_list.value = 13
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

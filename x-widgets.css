@@ -45,6 +45,7 @@
 }
 
 .x-widget .disabled { color: #999; }
+.x-widget .null { color: #999; }
 
 //.x-grid-tr.new                          { background-color: #eef; }
 //.x-grid-tr.new.focused                  { background-color: #dde; }
@@ -299,7 +300,7 @@
 	outline: 1px dashed #aaf;
 }
 
-.x-markbox:focus > .x-markbox-icon {
+.x-markbox > .x-markbox-icon {
 	color: var(--x-item-focused-bg-color);
 }
 
@@ -337,6 +338,11 @@
 
 .x-radio-item:focus > .x-radio-icon {
 	color: #333;
+}
+
+.x-radiogroup.invalid > .x-markbox,
+.x-radiogroup.invalid > .x-markbox > .x-radio-icon {
+	color: var(--x-error-bg-color);
 }
 
 .x-radiogroup[align=right] > .x-markbox {
@@ -422,7 +428,7 @@
 
 	font-size: 85%;
 	padding-top: var(--x-input-inner-label-padding-aside-top);
-	animation: x-input-inner-label-focused .1s;
+	animation: x-input-inner-label-focused .2s;
 }
 
 @keyframes x-input-inner-label-focused {
@@ -578,7 +584,7 @@
 	border-left-width: 1px;
 }
 
-.x-dropdown.align-right > .x-dropdown-value {
+.x-dropdown[align=right] > .x-dropdown-value {
 	order: 2;
 	padding-left  : .25em;
 	padding-right : var(--x-input-padding-x);
@@ -654,13 +660,18 @@
 	/* layout */
 	display: inline-flex;        /* the only way for it to shrink-wrap */
 	flex-flow: column nowrap;
+	margin: .25em;
 
+}
+
+.x-listbox[flow=horizontal] {
+	flex-direction: row;
 }
 
 .x-listbox-item {
 
 	/* sizing */
-	padding: .25em .25em;
+	padding: var(--x-input-padding);
 
 	/* behavior */
 	cursor: default;
@@ -668,6 +679,7 @@
 }
 
 .x-widget.x-listbox.picker {
+	margin: 0;
 	max-height: 300px;
 	overflow: auto;
 }
@@ -946,6 +958,7 @@ td.x-menu-title-td {
 
 .x-grid {
 	display: inline-block;     /* required: don't expand to fit parent width */
+	margin: .25em;
 	overflow: hidden;          /* required: hide header overflow */
 	cursor: default;           /* required: don't show caret over text */
 	border: 0px solid #ccc;
@@ -1073,6 +1086,7 @@ td.x-menu-title-td {
 /* grid as picker --------------------------------------------------------- */
 
 .x-dropdown .x-widget.x-grid.picker {
+	margin: 0;
 	min-height: 100px;
 	max-height: 300px;
 	min-width: 100%;
