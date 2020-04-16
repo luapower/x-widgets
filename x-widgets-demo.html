@@ -90,7 +90,10 @@ h2 {
 
 <script src="glue.js"></script>
 <script src="divs.js"></script>
+<script src="x-rowset-widget.js"></script>
 <script src="x-widgets.js"></script>
+<script src="x-grid.js"></script>
+<script src="x-listbox.js"></script>
 
 </head>
 
@@ -609,7 +612,12 @@ main.add(
 	dropdown({
 		picker: calendar(),
 		value: now(),
-		validate: function(v) { return v != day(now()) || 'Can\'t have today.' }
+		validate: function(v) {
+			if (day(v) == day(now()))
+				return 'Can\'t have today.'
+			if (day(v) == day(now(), 1))
+				return 'Can\'t have tomorrow.'
+		}
 	})
 )
 
@@ -698,26 +706,30 @@ function list() {
 	})
 }
 
+function p(mode, ...args) {
+	return H.div({style: 'margin-top: 1em'}, H('<b>'+mode+'</b> mode:<br>'), ...args)
+}
+
 main.add(
-	H.div({}, 'default mode: variable-width, no-wrap with min-width aligned with other inputs'),
+	p('default', 'variable-width, no-wrap with min-width aligned with other inputs'),
 	dropdown({picker: calendar(), value: now()}),
 	H.div(),
 	dropdown({picker: list()}),
 
-	H.div({}, 'inline mode: variable-width, no-wrap, with no min-width (shrink-wrapped)'),
-	dropdown({classes: 'inline', picker: calendar(), value: now()}),
+	p('inline', 'variable-width, no-wrap, with no min-width (shrink-wrapped)'),
+	dropdown({mode: 'inline', picker: calendar(), value: now()}),
 	H.div(),
-	dropdown({classes: 'inline', picker: list()}),
+	dropdown({mode: 'inline', picker: list()}),
 
-	H.div({}, 'wrap mode: fixed-width, auto-wrap'),
-	dropdown({classes: 'wrap', picker: calendar(), value: now()}),
+	p('wrap', 'fixed-width, auto-wrap'),
+	dropdown({mode: 'wrap', picker: calendar(), value: now()}),
 	H.div(),
 	dropdown({classes: 'wrap', picker: list()}),
 
-	H.div({}, 'fixed mode: fixed-width, no-wrap, overflow hidden'),
-	dropdown({classes: 'fixed', picker: calendar(), value: now()}),
+	p('fixed', 'fixed-width, no-wrap, overflow hidden'),
+	dropdown({mode: 'fixed', picker: calendar(), value: now()}),
 	H.div(),
-	dropdown({classes: 'fixed', picker: list()})
+	dropdown({mode: 'fixed', picker: list()})
 )
 
 </script>
@@ -815,7 +827,7 @@ r = rowset({
 	fields: [
 		{w: 100, name: 'fruit_id', type: 'number', align: 'left', text: 'fruit',
 			lookup_rowset: fruits,
-			lookup_field: 'id',
+			lookup_col: 'id',
 			display_field: 'name',
 		},
 	],
@@ -870,8 +882,8 @@ $('template').forEach(function(e) {
 
 demo_list = listbox({items: demos, attrs: {id: 'demo_list'}})
 
-demo_list.on('current_row_changed', function() {
-	let demo = this.current_item
+demo_list.on('focused_row_changed', function() {
+	let demo = this.focused_item
 	ace_editor.getSession().setValue(demo.code)
 	ace_editor.initial_script = demo.code
 	run_script()

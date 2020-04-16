@@ -593,23 +593,23 @@
 }
 
 /* inline mode: variable-width, no-wrap with no min-width */
-.x-dropdown.inline {
+.x-dropdown[mode=inline] {
 	min-width: 0;            /* reset from x-input's min-width */
 }
 
 /* wrap mode: fixed-width, auto-wrap */
-.x-dropdown.wrap {
+.x-dropdown[mode=wrap] {
 	width: 0;                /* fixed width, constrained by x-input's min-width */
 }
-.x-dropdown.wrap > .x-dropdown-value {
+.x-dropdown[mode=wrap] > .x-dropdown-value {
 	white-space: normal;
 }
 
 /* fixed mode: fixed-width, no-wrap, hide-overflow */
-.x-dropdown.fixed {
+.x-dropdown[mode=fixed] {
 	width: 0;                /* fixed width, constrained by x-input's min-width */
 }
-.x-dropdown.fixed > .x-dropdown-value {
+.x-dropdown[mode=fixed] > .x-dropdown-value {
 	white-space: nowrap;
 	overflow: hidden;
 }
@@ -631,6 +631,7 @@
 
 /* override with more specificity: .x-widget.x-<foo>.picker */
 .x-widget.picker {
+	margin: 0;
 	position: absolute;
 	border: 1px solid #999;
 	background-color: var(--x-input-focused-bg-color);
@@ -679,7 +680,6 @@
 }
 
 .x-widget.x-listbox.picker {
-	margin: 0;
 	max-height: 300px;
 	overflow: auto;
 }

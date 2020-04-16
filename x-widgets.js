@@ -41,8 +41,8 @@
 
 	vlookup:
 		lookup_rowset  : rowset to look up values of this field into
-		lookup_field   : field in lookup_rowset that matches this field
-		display_field  : field in lookup_rowset to use as display_value of this field.
+		lookup_col     : field in lookup_rowset that matches this field
+		display_col    : field in lookup_rowset to use as display_value of this field.
 		lookup_failed_display_value : f(v) -> s; what to use when lookup fails.
 
 	sorting:
@@ -50,11 +50,15 @@
 		compare_types  : f(v1, v2) -> -1|0|1  (for sorting)
 		compare_values : f(v1, v2) -> -1|0|1  (for sorting)
 
-	d.rows: [{attr->val}, ...]
+	d.rows: [{k->v}, ...]
 		values         : [v1,...]
+		state          : [{k->v},...]
+			input_value : currently set value, whether valid or not.
+			error       : error message if invalid.
+			modified    : value was modified, change not on server yet.
+			old_value   : initial value before modifying.
 		is_new         : new row, not added on server yet.
 		removed        : removed row, not removed on server yet.
-		original_values: original values on an updated but not yet saved row.
 
 */
 
@@ -84,7 +88,7 @@ rowset = function(...options) {
 	let pk     // [field1,...]
 	let field_map = new Map()
 
-	install_events(d)
+	events_mixin(d)
 
 	d.field = function(v) {
 		return typeof(v) == 'string' ? field_map.get(v) :
@@ -109,9 +113,16 @@ rowset = function(...options) {
 			let f1 = d.fields[i]
 			let f0 = f1.type ? (d.types[f1.type] || rowset.types[f1.type]) : null
 			let field = update({index: i}, rowset.default_type, d.default_type, f0, f1)
+
 			if (field.text == null)
 				field.text = auto_display_name(field.name)
 			field.name = field.name || i+''
+
+			if (field.lookup_col)
+				field.lookup_field = field.lookup_rowset.field(field.lookup_col)
+			if (field.display_col)
+				field.display_field = field.lookup_rowset.field(field.display_col)
+
 			fields[i] = field
 			field_map.set(field.name, field)
 		}
@@ -120,6 +131,30 @@ rowset = function(...options) {
 			pk.push(d.field(field))
 		}
 
+	}
+
+	let owner
+	function set_owner_events(on) {
+		if (!owner)
+			return
+		owner.onoff('attach', d.attach, on)
+		owner.onoff('detach', d.detach, on)
+	}
+	property(d, 'owner', {
+		get: function() { return owner },
+		set: function(owner1) {
+			set_owner_events(false)
+			owner = owner1
+			set_owner_events(true)
+		},
+	})
+
+	d.attach = function() {
+		set_display_values_changed_events(true)
+	}
+
+	d.detach = function() {
+		set_display_values_changed_events(false)
 	}
 
 	// vlookup ----------------------------------------------------------------
@@ -187,14 +222,14 @@ rowset = function(...options) {
 		return v1 !== v2 ? (v1 < v2 ? -1 : 1) : 0
 	}
 
-	d.comparator = function(field) {
+	function field_comparator(field) {
 
 		var compare_rows = d.compare_rows
 		var compare_types  = field.compare_types  || d.compare_types
 		var compare_values = field.compare_values || d.compare_values
 		var field_index = field.index
 
-		return function (row1, row2) {
+		return function(row1, row2) {
 			var r = compare_rows(row1, row2)
 			if (r) return r
 
@@ -206,6 +241,34 @@ rowset = function(...options) {
 
 			return compare_values(v1, v2)
 		}
+	}
+
+	// order_by: [[field1,'desc'|'asc'],...]
+	d.comparator = function(order_by) {
+		let s = []
+		let cmps = []
+		for (let [field, dir] of order_by) {
+			let i = field.index
+			cmps[i] = field_comparator(field)
+			let r = dir == 'desc' ? -1 : 1
+			// invalid values come first
+			s.push('var v1 = !(r1.state && r1.state['+i+'].error)')
+			s.push('var v2 = !(r2.state && r2.state['+i+'].error)')
+			s.push('if (v1 < v2) return -1')
+			s.push('if (v1 > v2) return  1')
+			// modified values come second
+			s.push('var v1 = !(r1.state && r1.state['+i+'].modified)')
+			s.push('var v2 = !(r2.state && r2.state['+i+'].modified)')
+			s.push('if (v1 < v2) return -1')
+			s.push('if (v1 > v2) return  1')
+			// compare values using the rowset comparator
+			s.push('var cmp = cmps['+i+']')
+			s.push('var r = cmp(r1, r2, '+i+')')
+			s.push('if (r) return r * '+r)
+		}
+		s.push('return 0')
+		s = 'let f = function(r1, r2) {\n\t' + s.join('\n\t') + '\n}; f'
+		return eval(s)
 	}
 
 	// get/set cell state -----------------------------------------------------
@@ -237,36 +300,23 @@ rowset = function(...options) {
 		return v !== undefined ? v : d.value(row, field)
 	}
 
-	d.display_value = function(row, field) {
-		let v = d.input_value(row, field)
-		let lr = field.lookup_rowset
-		if (lr) {
-			let row = lr.lookup(lr.field(field.lookup_field), v)
-			if (!row)
-				return field.lookup_failed_display_value(v)
-			else
-				return lr.display_value(row, lr.field(field.display_field))
-		} else
-			return field.format.call(d, v, field)
-	}
-
 	d.validate_value = function(field, val, row) {
 
 		if (!d.can_change_value(row, field))
-			return 'cell is read-only'
+			return S('error_cell_read_only', 'cell is read-only')
 
 		if (val == null && !field.allow_null)
-			return 'NULL not allowed'
+			return S('error_not_null', 'NULL not allowed')
 
 		if (field.min != null && val < field.min)
-			return 'Value must be at least {0}'.format(field.min)
+			return S('error_min_value', 'value must be at least {0}').format(field.min)
 
 		if (field.max != null && val > field.max)
-			return 'Value must be at most {0}'.format(field.max)
+			return S('error_max_value', 'value must be at most {0}').format(field.max)
 
 		let lr = field.lookup_rowset
-		if (lr && !lr.lookup(lr.field(field.lookup_field), val))
-			return 'Value not found in lookup'
+		if (lr && !lr.lookup(field.lookup_field, val))
+			return S('error_lookup', 'value not found in lookup')
 
 		let err = field.validate && field.validate.call(d, val, field)
 		if (typeof(err) == 'string')
@@ -281,8 +331,8 @@ rowset = function(...options) {
 
 	d.validate_row = function(row) {
 
-		if (!d.can_change_value(row, field))
-			return 'row is read-only'
+		if (!d.can_change_value(row))
+			return S('error_row_read_only', 'row is read-only')
 
 		return d.fire('validate', row)
 	}
@@ -297,8 +347,13 @@ rowset = function(...options) {
 			&& d.can_focus_cell(row, field)
 	}
 
-	d.create_editor = function(row, field) {
-		return field.editor.call(d, field, row)
+	d.create_row_editor = function(row, ...options) {} // stub
+
+	d.create_editor = function(row, field, ...options) {
+		if (field)
+			return field.editor.call(d, field, row, ...options)
+		else
+			return d.create_row_editor(row, ...options)
 	}
 
 	d.set_value = function(row, field, val, ...args) {
@@ -323,11 +378,39 @@ rowset = function(...options) {
 				d.fire('value_changed', row, field, val, old_val, ...args)
 			}
 		}
-		d.set_cell_state(row, field, 'invalid', invalid, ...args)
 		d.set_cell_state(row, field, 'error', invalid ? err : undefined, ...args)
 		d.set_cell_state(row, field, 'input_value', val, ...args)
 
 		return !invalid
+	}
+
+	// get/set display value --------------------------------------------------
+
+	function set_display_values_changed_events(on) {
+		for (field of fields)
+			if (field.lookup_rowset) {
+				if (on && !field.display_values_changed)
+					field.display_values_changed = function() {
+						d.fire('display_values_changed', field)
+					}
+				field.lookup_rowset.onoff('reload'       , field.display_values_changed, on)
+				field.lookup_rowset.onoff('row_added'    , field.display_values_changed, on)
+				field.lookup_rowset.onoff('row_removed'  , field.display_values_changed, on)
+				field.lookup_rowset.onoff('value_changed', field.display_values_changed, on)
+			}
+	}
+
+	d.display_value = function(row, field) {
+		let v = d.input_value(row, field)
+		let lr = field.lookup_rowset
+		if (lr) {
+			let row = lr.lookup(field.lookup_field, v)
+			if (!row)
+				return field.lookup_failed_display_value(v)
+			else
+				return lr.display_value(row, field.display_field)
+		} else
+			return field.format.call(d, v, field)
 	}
 
 	// add/remove rows --------------------------------------------------------
@@ -350,7 +433,9 @@ rowset = function(...options) {
 		d.fire('row_added', row, ...args)
 		// set default client values as if they were added by the user.
 		for (let field of fields)
-			d.set_value(row, field, field.client_default)
+			if (field.client_default != null)
+				d.set_value(row, field, field.client_default, ...args)
+		row.modified = false // ...except we don't consider the row modified.
 		return row
 	}
 
@@ -377,31 +462,37 @@ rowset = function(...options) {
 
 	// changeset & resultset --------------------------------------------------
 
-	d.pack_changeset = function() {
-		let changes = {new_rows: [], updated_rows: [], removed_rows: []}
-		for (let row of rows) {
-			if (row.is_new) {
-				let t = {}
-				for (let fi = 0; fi < fields.length; fi++) {
-					let field = fields[fi]
-					let val = row.values[fi]
-					if (val === field.server_default)
-						val = null
-					t[field.name] = val
-				}
-				changes.new_rows.push(t)
-			} else if (row.modified) {
-				let t = {}
-				for (let fi = 0; fi < fields.length; fi++) {
-					let field = fields[fi]
-					if (d.cell_state(row, field, 'modified'))
-						t[field.name] = row.values[fi]
-				}
-				changes.updated_rows.push(t)
-			} else if (row.removed_rows) {
-				changes.removed_rows.push({})
+	function add_row_changes(row, changes) {
+		if (row.is_new) {
+			let t = {}
+			for (let fi = 0; fi < fields.length; fi++) {
+				let field = fields[fi]
+				let val = row.values[fi]
+				if (val === field.server_default)
+					val = null
+				t[field.name] = val
 			}
+			changes.new_rows.push(t)
+		} else if (row.modified) {
+			let t = {}
+			for (let fi = 0; fi < fields.length; fi++) {
+				let field = fields[fi]
+				if (d.cell_state(row, field, 'modified'))
+					t[field.name] = row.values[fi]
+			}
+			changes.updated_rows.push(t)
+		} else if (row.removed_rows) {
+			changes.removed_rows.push({})
 		}
+	}
+
+	d.pack_changeset = function(row) {
+		let changes = {new_rows: [], updated_rows: [], removed_rows: []}
+		if (!row) {
+			for (let row of rows)
+				add_row_changes(row, changes)
+		} else
+			add_row_changes(row, changes)
 		return changes
 	}
 
@@ -410,6 +501,17 @@ rowset = function(...options) {
 			//
 		}
 	}
+
+	// loading & saving -------------------------------------------------------
+
+	d.save = function(row, field) {
+		//d.pack_changeset()
+	}
+
+	d.load = function() {
+		//d.unpack_resultset()
+	}
+
 
 	init()
 
@@ -445,8 +547,8 @@ rowset = function(...options) {
 		return v == null ? 'null' : String(v)
 	}
 
-	rowset.default_type.editor = function(field, row) {
-		return input()
+	rowset.default_type.editor = function(field, row, ...options) {
+		return input(...options)
 	}
 
 	rowset.types = {
@@ -461,27 +563,27 @@ rowset = function(...options) {
 		val = parseFloat(val)
 
 		if (typeof(val) != 'number' || val !== val)
-			return 'invalid number'
+			return S('error_invalid_number', 'invalid number')
 
 		if (field.step != null)
 			if (val % field.step != 0) {
 				if (field.step == 1)
-					return 'Value must be an integer'
-				return 'Value must be multiple of {0}'.format(field.step)
+					return S('error_integer', 'value must be an integer')
+				return S('error_multiple', 'value must be multiple of {0}').format(field.step)
 			}
 	}
 
-	rowset.types.number.editor = function(field, row) {
-		return spin_input({
+	rowset.types.number.editor = function(field, row, ...options) {
+		return spin_input(update({
 			button_placement: 'left',
-		})
+		}, ...options))
 	}
 
 	// dates
 
 	rowset.types.date.validate = function(val, field) {
 		if (typeof(val) != 'number' || val !== val)
-			return 'invalid timestamp'
+			return S('error_date', 'invalid date')
 	}
 
 	rowset.types.date.format = function(t, field) {
@@ -492,58 +594,70 @@ rowset = function(...options) {
 	rowset.default_type.date_format =
 		{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
 
-	rowset.types.date.editor = function(field, row) {
-		return dropdown({
+	rowset.types.date.editor = function(field, row, ...options) {
+		return dropdown(update({
 			picker: calendar(),
-			classes: 'align-right fixed',
-		})
+			align: 'rignt',
+			mode: 'fixed',
+		}, ...options))
 	}
 
 	// booleans
 
 	rowset.types.bool.validate = function(val, field) {
 		if (typeof(val) != 'boolean')
-			return 'value not true or false'
+			return S('error_boolean', 'value not true or false')
 	}
 
 	rowset.types.bool.format = function(val, field) {
 		return val ? field.true_text : field.false_text
 	}
 
-	rowset.types.bool.editor = function(field, row) {
-		return checkbox({
+	rowset.types.bool.editor = function(field, row, ...options) {
+		return checkbox(update({
 			center: true,
-		})
+		}, ...options))
 	}
 
 }
 
 // ---------------------------------------------------------------------------
-// current_row mixin
+// focused_row mixin
 // ---------------------------------------------------------------------------
 
-function current_row_mixin(e) {
+function focused_row_mixin(e) {
 
-	let ri = null
+	let focused_row = null
 
-	e.set_current_row_index = function(i, ...args) {
-		if (i != null)
-			i = clamp(i, 0, e.rowset.rows.length-1)
-		if (i == ri)
+	e.set_focused_row = function(row, ...args) {
+		if (row == focused_row)
 			return
-		let ri0 = ri
-		ri = i
-		e.fire('current_row_changed', ri, ri0, e, ...args)
+		focused_row = row
+		e.fire('focused_row_changed', row, ...args)
 	}
 
-	property(e, 'current_row_index', {
-		get: function() { return ri },
-		set: e.set_current_row_index,
+	property(e, 'focused_row', {
+		get: function() { return focused_row },
+		set: function(row) { e.set_focused_row(row) },
 	})
 
-	property(e, 'current_row', {
-		get: function() { return e.rowset.rows[ri] }
-	})
+	e.bind_rowset = function(on) {
+		e.rowset.onoff('reload' , reload, on)
+		e.rowset.onoff('row_removed', row_removed, on)
+	}
+
+	// losing the focused row -------------------------------------------------
+
+	function reload() {
+		focused_row = null
+	}
+
+	// TODO: remove_by_index() that ends up calling set_focused_row_index()
+	// instead, in order to avoid creating the rowindex_map.
+	function row_removed(row) {
+		if (focused_row == row)
+			e.set_focused_row(null)
+	}
 
 }
 
@@ -551,26 +665,32 @@ function current_row_mixin(e) {
 
 rowset_nav = function(...options) {
 	let nav = {}
-	install_events(nav)
-	current_row_mixin(nav)
+	events_mixin(nav)
+	focused_row_mixin(nav)
 	update(nav, ...options)
 	return nav
 }
 
 // ---------------------------------------------------------------------------
-// value mixin
+// value_widget mixin
 // ---------------------------------------------------------------------------
 
-function value_mixin(e) {
+/*
+	value widgets must implement:
+		field_prop_map: {prop->field_prop}
+		update_value()
+		update_error(err)
+*/
+
+function value_widget(e) {
 
 	e.default_value = null
 	e.field_prop_map = {field_name: 'name', field_text: 'text',
 		min: 'min', max: 'max', step: 'step'}
 
-	let init = e.init
-	e.init = function() {
-		init()
+	e.init_nav = function() {
 		if (!e.nav) {
+			// create an internal one-row-one-field rowset and a rowset_nav.
 
 			// transfer value of e.foo to field.bar based on field_prop_map.
 			let field = {}
@@ -579,122 +699,124 @@ function value_mixin(e) {
 				field[field_k] = e[e_k]
 			}
 
+			let row = {values: [e.default_value]}
+
 			let internal_rowset = rowset({
 				fields: [field],
-				rows: [{values: [e.default_value]}],
+				rows: [row],
 			})
 
-			e.nav = rowset_nav({rowset: internal_rowset, current_row_index: 0})
+			e.nav = rowset_nav({rowset: internal_rowset, focused_row: row})
 
 			e.field = e.nav.rowset.field(0)
 
-			if (e.validate)
+			if (e.validate) // inline validator, only for internal-rowset widgets.
 				e.nav.rowset.on_validate_value(e.field, e.validate, true)
 
+			e.internal_nav = true
+
 		} else {
-			e.field = e.nav.rowset.field(e.field_name)
+			e.field = e.nav.rowset.field(e.col)
 		}
 	}
 
-	function bind_nav(on) {
-		e.nav.onoff('current_row_changed', reload, on)
-		e.nav.rowset.onoff('reload', reload, on)
-		e.nav.rowset.onoff('input_value_changed', input_value_changed, on)
-		e.nav.rowset.onoff('value_changed', value_changed, on)
-		e.nav.rowset.onoff('invalid_changed', invalid_changed, on)
-		e.nav.rowset.onoff('error_changed', error_changed, on)
+	e.bind_nav = function(on) {
+		let r = e.nav.rowset
+		e.nav.onoff('focused_row_changed', e.init_value           , on)
+		r.onoff('reload'                 , e.init_value           , on)
+		r.onoff('input_value_changed'    , input_value_changed    , on)
+		r.onoff('value_changed'          , value_changed          , on)
+		r.onoff('error_changed'          , error_changed          , on)
+		r.onoff('display_values_changed' , display_values_changed , on)
+		if (e.internal_nav)
+			if (on)
+				r.attach()
+			else
+				r.detach()
 	}
 
 	e.rebind_value = function(nav, field) {
-		detach()
+		e.bind_nav(false)
 		e.nav = nav
 		e.field = field
-		attach()
-	}
-
-	function attach() {
 		if (e.isConnected) {
-			bind_nav(true)
-			reload()
+			e.bind_nav(true)
+			e.init_value()
 		}
 	}
 
-	function detach() {
-		bind_nav(false)
-	}
-
-	e.on('attach', attach)
-	e.on('detach', detach)
-
 	function get_value() {
-		return e.nav.rowset.value(e.nav.current_row, e.field)
+		return e.nav.rowset.value(e.nav.focused_row, e.field)
 	}
 
 	e.set_value = function(v, ...args) {
-		e.nav.rowset.set_value(e.nav.current_row, e.field, v, e, ...args)
+		e.nav.rowset.set_value(e.nav.focused_row, e.field, v, e, ...args)
 	}
 
 	e.late_property('value', get_value, e.set_value)
 
 	e.cell_state = function(key, default_val) {
-		return e.nav.rowset.cell_state(e.nav.current_row, e.field, key, default_val)
+		return e.nav.rowset.cell_state(e.nav.focused_row, e.field, key, default_val)
 	}
 
 	e.set_cell_state = function(key, val, ...args) {
-		return e.nav.rowset.set_cell_state(e.nav.current_row, e.field, key, val, e, ...args)
+		return e.nav.rowset.set_cell_state(e.nav.focused_row, e.field, key, val, e, ...args)
 	}
 
 	e.property('input_value', function() {
-		return e.nav.rowset.input_value(e.nav.current_row, e.field)
+		return e.nav.rowset.input_value(e.nav.focused_row, e.field)
 	})
 
 	e.property('display_value', function() {
-		return e.nav.rowset.display_value(e.nav.current_row, e.field)
+		return e.nav.rowset.display_value(e.nav.focused_row, e.field)
 	})
 
-	function reload() {
-		e.update_value(e.input_value)
-		e.update_invalid_state(e.cell_state('invalid', false))
-		e.update_error(e.cell_state('error'))
+	e.init_value = function() {
+		e.update_value()
+		update_error_state(e.cell_state('error'))
 	}
 
 	function value_changed(row, field, val, old_val, ...args) {
-		if (row != e.nav.current_row || field != e.field)
+		if (row != e.nav.focused_row || field != e.field)
 			return
 		e.fire('value_changed', val, old_val, ...args)
 	}
 
 	function input_value_changed(row, field, val, old_val, ...args) {
-		if (row != e.nav.current_row || field != e.field)
+		if (row != e.nav.focused_row || field != e.field)
 			return
-		e.update_value(val, ...args)
-	}
-
-	function invalid_changed(row, field, invalid, ...args) {
-		if (row != e.nav.current_row || field != e.field)
-			return
-		e.update_invalid_state(invalid, ...args)
-	}
-
-	e.update_invalid_state = function(invalid) {
-		e.invalid = invalid
-		e.class('invalid', invalid)
+		e.update_value(...args)
 	}
 
 	function error_changed(row, field, err, old_err, ...args) {
-		if (row != e.nav.current_row || field != e.field)
+		if (row != e.nav.focused_row || field != e.field)
 			return
+		update_error_state(err, ...args)
+	}
+
+	function display_values_changed(field) {
+		if (field != e.field)
+			return
+		e.init_value()
+	}
+
+	function update_error_state(err, ...args) {
+		e.invalid = err != null
+		e.class('invalid', e.invalid)
 		e.update_error(err, ...args)
 	}
 
-	e.update_value = function() {} // stub
+	e.error_tooltip_check = function() {
+		return e.invalid && !e.hasclass('picker')
+			&& (e.hasfocus || e.hovered)
+	}
 
 	e.update_error = function(err) {
 		if (!e.error_tooltip) {
 			if (!e.invalid)
 				return // don't create it until needed.
-			function error_tooltip_check() { return e.invalid && (e.hasfocus || e.hovered) }
-			e.error_tooltip = tooltip({type: 'error', target: e, check: error_tooltip_check})
+			e.error_tooltip = tooltip({type: 'error', target: e,
+				check: e.error_tooltip_check})
 		}
 		if (e.invalid)
 			e.error_tooltip.text = err
@@ -835,12 +957,20 @@ checkbox = component('x-checkbox', function(e) {
 
 	// model
 
-	value_mixin(e)
+	value_widget(e)
 
-	let init = e.init
 	e.init = function() {
-		init()
+		e.init_nav()
 		e.class('center', !!e.center)
+	}
+
+	e.attach = function() {
+		e.init_value()
+		e.bind_nav(true)
+	}
+
+	e.detach = function() {
+		e.bind_nav(false)
 	}
 
 	e.late_property('checked',
@@ -860,8 +990,8 @@ checkbox = component('x-checkbox', function(e) {
 		e.text_div.html = s
 	})
 
-	e.update_value = function(v) {
-		v = v === e.checked_value
+	e.update_value = function() {
+		v = e.input_value === e.checked_value
 		e.class('checked', v)
 		e.icon_div.class('fa-check-square', v)
 		e.icon_div.class('fa-square', !v)
@@ -903,13 +1033,12 @@ radiogroup = component('x-radiogroup', function(e) {
 	e.attrval('align', 'left')
 	e.attr_property('align')
 
-	value_mixin(e)
+	value_widget(e)
 
 	e.items = []
 
-	let init = e.init
 	e.init = function() {
-		init()
+		e.init_nav()
 		for (let item of e.items) {
 			if (typeof(item) == 'string')
 				item = {text: item}
@@ -927,14 +1056,24 @@ radiogroup = component('x-radiogroup', function(e) {
 		}
 	}
 
+	e.attach = function() {
+		e.init_value()
+		e.bind_nav(true)
+	}
+
+	e.detach = function() {
+		e.bind_nav(false)
+	}
+
 	let sel_item
 
-	e.update_value = function(i) {
+	e.update_value = function() {
 		if (sel_item) {
 			sel_item.class('selected', false)
 			sel_item.at[0].class('fa-dot-circle', false)
 			sel_item.at[0].class('fa-circle', true)
 		}
+		let i = e.input_value
 		sel_item = i != null ? e.at[i] : null
 		if (sel_item) {
 			sel_item.class('selected', true)
@@ -987,11 +1126,9 @@ input = component('x-input', function(e) {
 	e.input.set_input_filter() // must be set as first event handler!
 	e.add(e.input, e.inner_label_div)
 
-	value_mixin(e)
+	value_widget(e)
 
-	let init = e.init
-	e.init = function() {
-		init()
+	e.init_inner_label = function() {
 		if (e.inner_label != false) {
 			let s = e.field.text
 			if (s) {
@@ -1000,6 +1137,20 @@ input = component('x-input', function(e) {
 			}
 		}
 		e.input.class('empty', e.input.value == '')
+	}
+
+	e.init = function() {
+		e.init_nav()
+		e.init_inner_label()
+	}
+
+	e.attach = function() {
+		e.init_value()
+		e.bind_nav(true)
+	}
+
+	e.detach = function() {
+		e.bind_nav(false)
 	}
 
 	// value updating
@@ -1019,9 +1170,9 @@ input = component('x-input', function(e) {
 		e.input.class('empty', s == '')
 	}
 
-	e.update_value = function(v) {
+	e.update_value = function() {
 		if (!from_input) {
-			let s = e.to_text(v)
+			let s = e.to_text(e.input_value)
 			e.input.value = s
 			update_state(s)
 		}
@@ -1144,10 +1295,10 @@ spin_input = component('x-spin-input', function(e) {
 	e.field_type = 'number'
 	update(e.field_prop_map, {field_type: 'type'})
 
-	let init = e.init
+	let init_input = e.init
 	e.init = function() {
 
-		init()
+		init_input()
 
 		let bs = e.button_style
 		let bp = e.button_placement
@@ -1267,15 +1418,23 @@ slider = component('x-slider', function(e) {
 
 	// model
 
-	value_mixin(e)
+	value_widget(e)
 
 	e.field_type = 'number'
 	update(e.field_prop_map, {field_type: 'type'})
 
-	let init = e.init
 	e.init = function() {
-		init()
+		e.init_nav()
 		e.class('animated', e.field.step >= 5)
+	}
+
+	e.attach = function() {
+		e.init_value()
+		e.bind_nav(true)
+	}
+
+	e.detach = function() {
+		e.bind_nav(false)
 	}
 
 	function progress_for(v) {
@@ -1310,7 +1469,7 @@ slider = component('x-slider', function(e) {
 		fill.style.width = ((p2 - p1) * 100)+'%'
 	}
 
-	e.update_value = function(v) {
+	e.update_value = function() {
 		let input_p = progress_for(e.input_value)
 		let value_p = progress_for(e.value)
 		let diff = input_p != value_p
@@ -1388,18 +1547,17 @@ dropdown = component('x-dropdown', function(e) {
 	e.attrval('tabindex', 0)
 	e.attrval('align', 'left')
 	e.attr_property('align')
+	e.attrval('mode', 'default')
+	e.attr_property('mode')
 
 	e.value_div = H.span({class: 'x-dropdown-value'})
 	e.button = H.span({class: 'x-dropdown-button fa fa-caret-down'})
 	e.inner_label_div = H.div({class: 'x-input-inner-label x-dropdown-inner-label'})
 	e.add(e.value_div, e.button, e.inner_label_div)
 
-	value_mixin(e)
+	value_widget(e)
 
-	let init = e.init
-	e.init = function() {
-		init()
-
+	e.init_inner_label = function() {
 		if (e.inner_label != false) {
 			let s = e.field.text
 			if (s) {
@@ -1407,6 +1565,12 @@ dropdown = component('x-dropdown', function(e) {
 				e.class('with-inner-label', true)
 			}
 		}
+	}
+
+	e.init = function() {
+
+		e.init_nav()
+		e.init_inner_label()
 
 		e.picker.rebind_value(e.nav, e.field)
 
@@ -1414,33 +1578,39 @@ dropdown = component('x-dropdown', function(e) {
 		e.picker.on('keydown', picker_keydown)
 	}
 
+	function bind_document(on) {
+		document.onoff('mousedown', document_mousedown, on)
+		document.onoff('stopped_event', document_stopped_event, on)
+	}
+
+	e.attach = function() {
+		e.init_value()
+		e.bind_nav(true)
+		bind_document(true)
+	}
+
+	e.detach = function() {
+		e.close()
+		bind_document(false)
+		e.bind_nav(false)
+	}
+
 	// value updating
 
-	e.update_value = function(v, source, focus) {
+	e.update_value = function(source, focus) {
 		let html = e.display_value
 		let empty = html === ''
 		e.value_div.class('empty', empty)
-		e.value_div.class('null', v == null)
+		e.value_div.class('null', e.input_value == null)
 		e.inner_label_div.class('empty', empty)
 		e.value_div.html = empty ? '&nbsp;' : html
 		if (source == e && focus)
 			e.focus()
 	}
 
-	// global events wiring
-
-	function set_events(on) {
-		document.onoff('mousedown', document_mousedown, on)
-		document.onoff('stopped_event', document_stopped_event, on)
-	}
-
-	e.attach = function(parent) {
-		set_events(true)
-	}
-
-	e.detach = function() {
-		set_events(false)
-		e.close()
+	let error_tooltip_check = e.error_tooltip_check
+	e.error_tooltip_check = function() {
+		return error_tooltip_check() || (e.invalid && e.isopen)
 	}
 
 	// focusing
@@ -1569,252 +1739,6 @@ dropdown = component('x-dropdown', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// listbox
-// ---------------------------------------------------------------------------
-
-listbox = component('x-listbox', function(e) {
-
-	e.class('x-widget')
-	e.class('x-listbox')
-	e.class('x-focusable')
-	e.attrval('tabindex', 0)
-	e.attrval('flow', 'vertical')
-	e.attr_property('flow')
-
-	current_row_mixin(e)
-	value_mixin(e)
-
-	let init = e.init
-	e.init = function() {
-		init()
-		if(e.items) {
-			assert(!e.rowset)
-			create_rowset_for_items()
-			update_rowset_from_items()
-		} else {
-			if (e.value_field_name)
-				e.value_field = e.rowset.field(e.value_field_name)
-			if (e.display_field_name)
-				e.display_field = e.rowset.field(e.display_field_name)
-			else
-				e.display_field = e.value_field
-		}
-		update_view()
-	}
-
-	function bind_rowset(on) {
-		e.rowset.onoff('reload', rowset_reload, on)
-		e.rowset.onoff('value_changed', rowset_value_changed, on)
-	}
-
-	e.attach = function() {
-		bind_rowset(true)
-		let item = e.at[e.current_row_index]
-		if (item)
-			item.make_visible()
-	}
-
-	e.detach = function() {
-		bind_rowset(false)
-	}
-
-	e.update_row = function(item, row) { // stub
-		if (e.display_field)
-			item.html = e.rowset.display_value(row, e.display_field)
-	}
-
-	let rowmap // {row->item}
-
-	function update_view() {
-		e.clear()
-		rowmap = new Map()
-		for (row of e.rowset.rows) {
-			let item = H.div({class: 'x-listbox-item x-item'})
-			e.update_row(item, row)
-			rowmap.set(row, item)
-			e.add(item)
-			item.row = row
-			item.on('mousedown', item_mousedown)
-		}
-		update_selected_item(e.current_row_index)
-	}
-
-	let rowset_reload = update_view
-
-	function rowset_value_changed(row, field, val) {
-		let item = rowmap.get(row)
-		e.update_row(item, row)
-	}
-
-	// item-based rowset.
-
-	function create_rowset_for_items() {
-		e.rowset = rowset({
-			fields: [{format: e.format_item}],
-			rows: [],
-		})
-		e.display_field = e.rowset.field(0)
-	}
-
-	function update_rowset_from_items() {
-		e.rowset.rows = []
-		for (let item of e.items)
-			e.rowset.rows.push({values: [item]})
-	}
-
-	e.format_item = function(item) {
-		return typeof(item) == 'string' ? item : item.text
-	}
-
-	e.property('current_item', function() {
-		return e.current_row ? e.current_row.values[0] : null
-	})
-
-	function update_selected_item(i, i0) {
-		let item1 = e.at[i]
-		let item0 = e.at[i0]
-		if (item0) {
-			item0.class('focused', false)
-			item0.class('selected', false)
-		}
-		if (item1) {
-			item1.class('focused')
-			item1.class('selected')
-			item1.make_visible()
-		}
-	}
-
-	e.update_value = function(v, source, do_update) {
-		if (source == e && do_update == false)
-			return
-		let i
-		if (e.value_field) {
-			let row = e.rowset.lookup(e.value_field, v)
-			i = row ? rowmap.get(row) : null
-		} else
-			i = v
-		update_selected_item(i, e.current_row_index)
-		e.set_current_row_index(i, false)
-	}
-
-	e.on('current_row_changed', function(i, i0, source, do_update) {
-		if (source == e && do_update == false)
-			return
-		let v = e.value_field ? e.rowset.value(e.current_row, e.value_field) : i
-		update_selected_item(i, i0)
-		e.set_value(v, false)
-	})
-
-	function select_item(item, pick, focus_dropdown) {
-		if (e.value_field)
-			e.value = e.rowset.value(item.row, e.value_field)
-		else
-			e.value = item.index
-		if (pick)
-			e.fire('value_picked', focus_dropdown) // picker protocol
-	}
-
-	function select_item_by_index(i, pick, focus_dropdown) {
-		e.current_row_index = i
-		if (pick)
-			e.fire('value_picked', focus_dropdown) // picker protocol
-	}
-
-	function item_mousedown() {
-		e.focus()
-		select_item(this, true, true)
-		return false
-	}
-
-	// find the next item before/after the selected item that would need
-	// scrolling, if the selected item would be on top/bottom of the viewport.
-	function page_item(forward) {
-		if (!e.current_row)
-			return forward ? e.first : e.last
-		let item = e.at[e.current_row_index]
-		let sy0 = item.offsetTop + (forward ? 0 : item.offsetHeight - e.clientHeight)
-		item = forward ? item.next : item.prev
-		while(item) {
-			let [sx, sy] = item.make_visible_scroll_offset(0, sy0)
-			if (sy != sy0)
-				return item
-			item = forward ? item.next : item.prev
-		}
-		return forward ? e.last : e.first
-	}
-
-	function rel_row_index(d) {
-		let i = e.current_row_index
-		return i != null ? i + d : strict_sign(d) * -1/0
-	}
-
-	e.on('keydown', function(key) {
-		let d
-		switch (key) {
-			case 'ArrowUp'   : d = -1; break
-			case 'ArrowDown' : d =  1; break
-			case 'ArrowLeft' : d = -1; break
-			case 'ArrowRight': d =  1; break
-			case 'Home'      : d = -1/0; break
-			case 'End'       : d =  1/0; break
-		}
-		if (d) {
-			let i = rel_row_index(d)
-			select_item_by_index(i, false, true)
-			return false
-		}
-		if (key == 'PageUp' || key == 'PageDown') {
-			select_item(page_item(key == 'PageDown'), false, true)
-			return false
-		}
-		if (key == 'Enter') {
-			if (e.current_row)
-				e.fire('value_picked', true) // picker protocol
-			return false
-		}
-	})
-
-	// crude quick-search only for the first letter.
-	let found_ri
-	function find_item(c, again) {
-		if (!e.display_field)
-			return
-		if (e.current_row_index != found_ri)
-			found_ri = null // user changed selection, start over.
-		let ri = found_ri != null ? found_ri+1 : 0
-		if (ri >= e.rowset.rows.length)
-			ri = null
-		while (ri != null) {
-			let s = e.rowset.display_value(e.rowset.rows[ri], e.display_field)
-			if (s.starts(c.toLowerCase()) || s.starts(c.toUpperCase())) {
-				select_item_by_index(ri, false, true)
-				break
-			}
-			ri++
-			if (ri >= e.rowset.rows.length)
-				ri = null
-		}
-		found_ri = ri
-		if (found_ri == null && !again)
-			find_item(c, true)
-	}
-	e.on('keypress', function(c) {
-		find_item(c)
-	})
-
-	// picker protocol
-
-	e.pick_near_value = function(delta) {
-		select_item_by_index(rel_row_index(delta), true)
-	}
-
-	e.pick_next_value_starting_with = function(s) {
-		find_item(s)
-	}
-
-})
-
-// ---------------------------------------------------------------------------
 // calendar
 // ---------------------------------------------------------------------------
 
@@ -1832,9 +1756,9 @@ calendar = component('x-calendar', function(e) {
 	e.class('x-focusable')
 	e.attrval('tabindex', 0)
 
-	e.format = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
+	e.format = {weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'}
 
-	value_mixin(e)
+	value_widget(e)
 
 	e.sel_day = H.div({class: 'x-calendar-sel-day'})
 	e.sel_day_suffix = H.div({class: 'x-calendar-sel-day-suffix'})
@@ -1855,8 +1779,21 @@ calendar = component('x-calendar', function(e) {
 	e.weekview = H.table({class: 'x-calendar-weekview'})
 	e.add(e.header, e.weekview)
 
-	e.update_value = function(t) {
-		t = day(t)
+	e.init = function() {
+		e.init_nav()
+	}
+
+	e.attach = function() {
+		e.init_value()
+		e.bind_nav(true)
+	}
+
+	e.detach = function() {
+		e.bind_nav(false)
+	}
+
+	e.update_value = function() {
+		t = day(e.input_value)
 		update_weekview(t, 6)
 		let y = year_of(t)
 		let n = floor(1 + days(t - month(t)))
@@ -1883,7 +1820,7 @@ calendar = component('x-calendar', function(e) {
 					let m = month(d)
 					let s = d == today ? ' today' : ''
 					s = s + (m == this_month ? ' current-month' : '')
-					s = s + (d == e.value ? ' focused selected' : '')
+					s = s + (d == day(e.input_value) ? ' focused selected' : '')
 					let td = H.td({class: 'x-calendar-day x-item'+s}, floor(1 + days(d - m)))
 					td.day = d
 					td.on('mousedown', day_mousedown)
@@ -1918,7 +1855,7 @@ calendar = component('x-calendar', function(e) {
 	})
 
 	e.weekview.on('wheel', function(dy) {
-		e.value = day(e.value, 7 * dy / 100)
+		e.value = day(e.input_value, 7 * dy / 100)
 		return false
 	})
 
@@ -1942,24 +1879,24 @@ calendar = component('x-calendar', function(e) {
 			case 'PageDown'   : m =  1; break
 		}
 		if (d) {
-			e.value = day(e.value, d)
+			e.value = day(e.input_value, d)
 			return false
 		}
 		if (m) {
-			_d.setTime(e.value)
+			_d.setTime(e.input_value)
 			if (shift)
-				_d.setFullYear(year_of(e.value) + m)
+				_d.setFullYear(year_of(e.input_value) + m)
 			else
-				_d.setMonth(month_of(e.value) + m)
+				_d.setMonth(month_of(e.input_value) + m)
 			e.value = _d.valueOf()
 			return false
 		}
 		if (key == 'Home') {
-			e.value = shift ? year(e.value) : month(e.value)
+			e.value = shift ? year(e.input_value) : month(e.input_value)
 			return false
 		}
 		if (key == 'End') {
-			e.value = day(shift ? year(e.value, 1) : month(e.value, 1), -1)
+			e.value = day(shift ? year(e.input_value, 1) : month(e.input_value, 1), -1)
 			return false
 		}
 		if (key == 'Enter') {
@@ -2000,7 +1937,7 @@ calendar = component('x-calendar', function(e) {
 	}
 
 	e.pick_near_value = function(delta, from_input) {
-		e.value = day(e.value, delta)
+		e.value = day(e.input_value, delta)
 		e.fire('value_picked', from_input)
 	}
 
@@ -2453,1175 +2390,4 @@ vsplit = component('x-split', function(e) {
 function hsplit(...args) {
 	return vsplit({horizontal: true}, ...args)
 }
-
-// ---------------------------------------------------------------------------
-// grid
-// ---------------------------------------------------------------------------
-
-grid = component('x-grid', function(e) {
-
-	// geometry
-	e.w = 400
-	e.h = 400
-	e.row_h = 26
-	e.row_border_h = 1
-	e.min_col_w = 20
-
-	// editing features
-	e.can_focus_cells = true
-	e.can_edit = true
-	e.can_add_rows = true
-	e.can_remove_rows = true
-	e.can_change_rows = true
-
-	// keyboard behavior
-	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
-	e.auto_advance = 'next_row' // advance on enter = false|'next_row'|'next_cell'
-	e.auto_advance_row = true   // jump row on horiz. navigation limits
-	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
-	e.keep_editing = true       // re-enter edit mode after navigating
-	e.save_cell_on = 'input'    // save cell on 'input'|'exit_edit'
-	e.save_row_on = 'exit_edit' // save row on 'input'|'exit_edit'|'exit_row'|false
-	e.prevent_exit_edit = false // prevent exiting edit mode on validation errors
-	e.prevent_exit_row = true   // prevent changing row on validation errors
-
-	e.class('x-widget')
-	e.class('x-grid')
-	e.class('x-focusable')
-	e.attrval('tabindex', 0)
-
-	value_mixin(e)
-
-	create_view()
-
-	let init = e.init
-	e.init = function() {
-		init()
-		create_fields()
-		create_rows()
-		update_header_table()
-	}
-
-	// model ------------------------------------------------------------------
-
-	// when: cols changed, rowset fields changed.
-	function create_fields() {
-		e.fields = []
-		if (e.cols) {
-			for (let fi of e.cols)
-				if (e.rowset.fields[fi].visible != false)
-					e.fields.push(e.rowset.fields[fi])
-		} else {
-			for (let field of e.rowset.fields)
-				if (field.visible != false)
-					e.fields.push(field)
-		}
-		if (e.pick_value_col)
-			e.pick_value_field = e.rowset.field(e.pick_value_col)
-		if (e.pick_display_col)
-			e.pick_display_field = e.rowset.field(e.pick_display_col)
-		else
-			e.pick_display_field = e.pick_value_field
-	}
-
-	function field_w(field, w) {
-		return max(e.min_col_w, clamp(or(w, field.w), field.min_w || -1/0, field.max_w || 1/0))
-	}
-
-	function create_row(row) {
-		return {row: row}
-	}
-
-	// NOTE: we load only the first 500K rows because of scrollbox
-	// implementation limitations of browser rendering engines:
-	// Chrome shows drawing artefacts over ~1.3mil rows at standard row height.
-	// Firefox resets the scrollbar over ~700K rows at standard row height.
-	// A custom scrollbar implementation is needed for rendering larger rowsets.
-
-	// when: entire rowset changed.
-	function create_rows() {
-		e.rows = []
-		let rows = e.rowset.rows
-		for (let i = 0; i < min(5e5, rows.length); i++) {
-			let row = rows[i]
-			if (!row.removed)
-				e.rows.push(create_row(row))
-		}
-	}
-
-	function row_index(row) {
-		for (let i = 0; i < e.rows.length; i++)
-			if (e.rows[i].row == row)
-				return i
-	}
-
-	function row_field_at(cell) {
-		let [ri, fi] = cell
-		return [ri != null ? e.rows[ri] : null, fi != null ? e.fields[fi] : null]
-	}
-
-	function can_change_value(row, field) {
-		return e.can_edit && e.can_change_rows
-			&& e.rowset.can_change_value(row.row, field)
-	}
-
-	function can_focus_cell(row, field, for_editing) {
-		return (field == null || e.can_focus_cells)
-			&& e.rowset.can_focus_cell(row.row, field)
-			&& (!for_editing || can_change_value(row, field))
-	}
-
-	function find_row(field, v) {
-		for (let ri = 0; ri < e.rows.length; ri++)
-			if (e.rows[ri].row.values[field.index] == v)
-				return ri
-	}
-
-	// rendering / geometry ---------------------------------------------------
-
-	function scroll_y(sy) {
-		return clamp(sy, 0, max(0, e.rows_h - e.rows_view_h))
-	}
-
-	e.scroll_to_cell = function(cell) {
-		let [ri, fi] = cell
-		if (ri == null)
-			return
-		let view = e.rows_view_div
-		let th = fi != null && e.header_tr.at[fi]
-		let h = e.row_h
-		let y = h * ri
-		let x = th ? th.offsetLeft  : 0
-		let w = th ? th.clientWidth : 0
-		view.scroll_to_view_rect(null, null, x, y, w, h)
-	}
-
-	function first_visible_row(sy) {
-		return floor(sy / e.row_h)
-	}
-
-	function rows_y_offset(sy) {
-		return floor(sy - sy % e.row_h)
-	}
-
-	// when: row count or height changed, rows viewport height changed, header height changed.
-	function update_heights() {
-		e.rows_h = e.row_h * e.rows.length - floor(e.row_border_h / 2)
-		if (e.picker_h != null && e.picker_max_h != null) {
-			e.h = 0 // compute e.offsetHeight with 0 clientHeight. relayouting...
-			e.h = max(e.picker_h, min(e.rows_h, e.picker_max_h)) + e.offsetHeight
-		}
-		e.rows_view_h = e.clientHeight - e.header_table.clientHeight
-		e.rows_div.h = e.rows_h
-		e.rows_view_div.h = e.rows_view_h
-		e.visible_row_count = floor(e.rows_view_h / e.row_h) + 2
-		e.page_row_count = floor(e.rows_view_h / e.row_h)
-		update_input_geometry()
-	}
-
-	function tr_at(ri) {
-		let sy = e.scroll_y
-		let i0 = first_visible_row(sy)
-		let i1 = i0 + e.visible_row_count
-		return e.rows_table.at[ri - i0]
-	}
-
-	function tr_td_at(cell) {
-		let [ri, fi] = cell
-		let tr = ri != null && tr_at(ri)
-		return [tr, tr && fi != null ? tr.at[fi] : null]
-	}
-
-	// rendering --------------------------------------------------------------
-
-	function create_view() {
-
-		e.header_tr = H.tr()
-		e.header_table = H.table({class: 'x-grid-header-table'}, e.header_tr)
-		e.rows_table = H.table({class: 'x-grid-rows-table'})
-		e.rows_div = H.div({class: 'x-grid-rows-div'}, e.rows_table)
-		e.rows_view_div = H.div({class: 'x-grid-rows-view-div'}, e.rows_div)
-		e.add(e.header_table, e.rows_view_div)
-
-		e.on('mousemove'    , view_mousemove)
-		e.on('keydown'      , view_keydown)
-		e.on('keypress'     , view_keypress)
-		e.on('attr_changed' , view_attr_changed)
-
-		e.rows_view_div.on('scroll', update_view)
-	}
-
-	// when: fields changed.
-	function update_header_table() {
-		set_header_visibility()
-		e.header_table.clear()
-		for (let field of e.fields) {
-
-			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
-			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
-			let e1 = H.td({class: 'x-grid-header-title-td'}, H(field.text) || field.name)
-			let e2 = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
-			if (field.align == 'right')
-				[e1, e2] = [e2, e1]
-			e1.attr('align', 'left')
-			e2.attr('align', 'right')
-			let title_table =
-				H.table({class: 'x-grid-header-th-table'},
-					H.tr(0, e1, e2))
-
-			let th = H.th({class: 'x-grid-header-th'}, title_table)
-
-			th.field = field
-			th.sort_icon = sort_icon
-			th.sort_icon_pri = sort_icon_pri
-
-			th.w = field_w(field)
-			th.style['border-right-width' ] = e.row_border_w + 'px'
-
-			th.on('mousedown', header_cell_mousedown)
-			th.on('rightmousedown', header_cell_rightmousedown)
-			th.on('contextmenu', function() { return false })
-
-			e.header_tr.add(th)
-		}
-		e.header_table.add(e.header_tr)
-	}
-
-	// when: fields changed, rows viewport height changed.
-	function update_rows_table() {
-		e.rows_table.clear()
-		for (let i = 0; i < e.visible_row_count; i++) {
-			let tr = H.tr({class: 'x-grid-tr'})
-			for (let i = 0; i < e.fields.length; i++) {
-				let th = e.header_tr.at[i]
-				let field = e.fields[i]
-				let td = H.td({class: 'x-grid-td'})
-				td.w = field_w(field)
-				td.h = e.row_h
-				td.style['border-right-width' ] = e.row_border_w + 'px'
-				td.style['border-bottom-width'] = e.row_border_h + 'px'
-				if (field.align)
-					td.attr('align', field.align)
-				td.on('mousedown', cell_mousedown)
-				tr.add(td)
-			}
-			e.rows_table.add(tr)
-		}
-	}
-
-	// when: widget height changed.
-	let cw, ch
-	function view_attr_changed() {
-		if (e.clientWidth === cw && e.clientHeight === ch)
-			return
-		if (e.clientHeight !== ch) {
-			let vrc = e.visible_row_count
-			update_heights()
-			if (e.visible_row_count != vrc) {
-				update_rows_table()
-				update_view()
-			}
-		}
-		cw = e.clientWidth
-		ch = e.clientHeight
-	}
-
-	// when: scroll_y changed.
-	function update_row(tr, ri) {
-		let row = e.rows[ri]
-		tr.row = row
-		tr.row_index = ri
-		if (row)
-			tr.class('x-item', can_focus_cell(row))
-		for (let fi = 0; fi < e.fields.length; fi++) {
-			let field = e.fields[fi]
-			let td = tr.at[fi]
-			td.field = field
-			td.field_index = fi
-			if (row) {
-				td.html = e.rowset.display_value(row.row, field)
-				td.class('x-item', can_focus_cell(row, field))
-				td.class('disabled',
-					e.can_focus_cells
-					&& e.can_edit
-					&& e.rowset.can_edit
-					&& e.rowset.can_change_rows
-					&& !can_focus_cell(row, field, true))
-				td.show()
-			} else {
-				td.clear()
-				td.hide()
-			}
-		}
-	}
-	function update_rows() {
-		let sy = e.scroll_y
-		let i0 = first_visible_row(sy)
-		e.rows_table.y = rows_y_offset(sy)
-		let n = e.visible_row_count
-		for (let i = 0; i < n; i++) {
-			let tr = e.rows_table.at[i]
-			update_row(tr, i0 + i)
-		}
-	}
-
-	// when: order_by changed.
-	function update_sort_icons() {
-		for (let th of e.header_tr.children) {
-			let dir = e.order_by_dir(th.field)
-			let pri = e.order_by_priority(th.field)
-			th.sort_icon.class('fa-sort'             , false)
-			th.sort_icon.class('fa-angle-up'         , false)
-			th.sort_icon.class('fa-angle-double-up'  , false)
-			th.sort_icon.class('fa-angle-down'       , false)
-			th.sort_icon.class('fa-angle-double-down', false)
-			th.sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-up'  , dir == 'asc')
-			th.sort_icon.class('fa-angle'+(pri ? '-double' : '')+'-down', dir == 'desc')
-			th.sort_icon_pri.html = pri > 1 ? pri : ''
-		}
-	}
-
-	function update_focus(set) {
-		let [tr, td] = tr_td_at(e.focused_cell)
-		if (tr) { tr.class('focused', set); tr.class('editing', e.input && set || false); }
-		if (td) { td.class('focused', set); td.class('editing', e.input && set || false); }
-	}
-
-	// when: input created, heights changed, column width changed.
-	function update_input_geometry() {
-		if (!e.input)
-			return
-		let [ri, fi] = e.focused_cell
-		let th = e.header_tr.at[fi]
-		let fix = floor(e.row_border_h / 2 + (window.chrome ? .5 : 0))
-		e.input.x = th.offsetLeft + th.clientLeft
-		e.input.y = e.row_h * ri + fix
-		e.input.w = th.clientWidth
-		e.input.h = e.row_h - e.row_border_h
-		e.input.style['padding-bottom'] = fix + 'px'
-	}
-
-	// when: col resizing.
-	function update_col_width(td_index, w) {
-		for (let tr of e.rows_table.children) {
-			let td = tr.at[td_index]
-			td.w = w
-		}
-	}
-
-	// when: horizontal scrolling, widget width changed.
-	function update_header_x(sx) {
-		e.header_table.x = -sx
-	}
-
-	function set_header_visibility() {
-		if (e.header_visible != false && !e.hasclass('picker'))
-			e.header_table.show()
-		else
-			e.header_table.hide()
-	}
-
-	function update_view() {
-		let sy = e.rows_view_div.scrollTop
-		let sx = e.rows_view_div.scrollLeft
-		update_focus(false)
-		sy = scroll_y(sy)
-		e.scroll_y = sy
-		update_rows()
-		update_focus(true)
-		update_header_x(sx)
-	}
-
-	function create_editor(editor_state) {
-		let [row, field] = row_field_at(e.focused_cell)
-		let [_, td] = tr_td_at(e.focused_cell)
-		update_focus(false)
-
-		e.input = e.rowset.create_editor(row, field)
-		e.input.value = e.rowset.value(row.row, field)
-
-		e.input.class('grid-editor')
-
-		if (e.input.enter_editor)
-			e.input.enter_editor(editor_state)
-
-		e.input.on('value_changed', input_value_changed)
-		e.input.on('lost_focus', editor_lost_focus)
-
-		e.rows_div.add(e.input)
-		update_input_geometry()
-		if (td)
-			td.html = null
-		update_focus(true)
-	}
-
-	function free_editor() {
-		let input = e.input
-		let [row, field] = row_field_at(e.focused_cell)
-		let [tr, td] = tr_td_at(e.focused_cell)
-		update_focus(false)
-		e.input = null // clear it before removing it for input_focusout!
-		e.rows_div.removeChild(input)
-		if (td)
-			td.html = e.rowset.display_value(row.row, field)
-		update_focus(true)
-	}
-
-	function reload() {
-		e.focused_cell = [null, null]
-		create_rows()
-		update_heights()
-		update_view()
-		e.focus_cell()
-	}
-
-	function hook_unhook_events(on) {
-		document.onoff('mousedown', document_mousedown, on)
-		document.onoff('mouseup'  , document_mouseup  , on)
-		document.onoff('mousemove', document_mousemove, on)
-		e.rowset.onoff('reload'       , reload       , on)
-		e.rowset.onoff('value_changed', value_changed, on)
-		e.rowset.onoff('row_added'    , row_added    , on)
-		e.rowset.onoff('row_removed'  , row_removed  , on)
-	}
-
-	function copy_keys(dst, src, keys) {
-		for (k in keys)
-			dst[k] = src[k]
-	}
-
-	let picker_forced_options = {can_edit: 1, can_focus_cells: 1, picker_h: 1, picker_max_h: 1}
-
-	function set_picker_options() {
-		let as_picker = e.hasclass('picker')
-		if (!as_picker)
-			return
-		e._saved = {}
-		copy_keys(e._saved, e, picker_forced_options)
-		e.can_edit        = false
-		e.can_focus_cells = false
-		e.picker_h     = or(e.picker_h    , 0)
-		e.picker_max_h = or(e.picker_max_h, 200)
-	}
-
-	function unset_picker_options() {
-		if (!e._saved)
-			return
-		copy_keys(e, e._saved, picker_forced_options)
-		e._saved = null
-	}
-
-	e.attach = function(parent) {
-		set_header_visibility()
-		set_picker_options()
-		update_heights()
-		update_rows_table()
-		update_view()
-		hook_unhook_events(true)
-		e.focus_cell(null, 0, 0, {force: true})
-	}
-
-	e.detach = function() {
-		hook_unhook_events(false)
-		unset_picker_options()
-	}
-
-	// focusing ---------------------------------------------------------------
-
-	e.focused_cell = [null, null]
-
-	e.first_focusable_cell = function(cell, rows, cols, options) {
-
-		cell = or(cell, e.focused_cell) // null cell means focused cell.
-		rows = or(rows, 0) // by default find the first focusable row.
-		cols = or(cols, 0) // by default find the first focusable col.
-
-		let for_editing = options && options.for_editing // skip non-editable cells.
-		let must_move = options && options.must_move // return only if moved.
-		let must_not_move_row = options && options.must_not_move_row // return only if row not moved.
-		let must_not_move_col = options && options.must_not_move_col // return only if col not moved.
-
-		let [ri, fi] = cell
-		let ri_inc = strict_sign(rows)
-		let fi_inc = strict_sign(cols)
-		rows = abs(rows)
-		cols = abs(cols)
-		let move_row = rows >= 1
-		let move_col = cols >= 1
-		let start_ri = ri
-		let start_fi = fi
-
-		// the default cell is the first or the last depending on direction.
-		ri = or(ri, ri_inc * -1/0)
-		fi = or(fi, fi_inc * -1/0)
-
-		// clamp out-of-bound row/col indices.
-		ri = clamp(ri, 0, e.rows.length-1)
-		fi = clamp(fi, 0, e.fields.length-1)
-
-		let last_valid_ri = null
-		let last_valid_fi = null
-		let last_valid_row
-
-		// find the last valid row, stopping after the specified row count.
-		while (ri >= 0 && ri < e.rows.length) {
-			let row = e.rows[ri]
-			if (can_focus_cell(row, null, for_editing)) {
-				last_valid_ri = ri
-				last_valid_row = row
-				if (rows <= 0)
-					break
-			}
-			rows--
-			ri += ri_inc
-		}
-		if (last_valid_ri == null)
-			return [null, null]
-
-		// if wanted to move the row but couldn't, don't move the col either.
-		let row_moved = last_valid_ri != start_ri
-		if (move_row && !row_moved)
-			cols = 0
-
-		while (fi >= 0 && fi < e.fields.length) {
-			let field = e.fields[fi]
-			if (can_focus_cell(last_valid_row, field, for_editing)) {
-				last_valid_fi = fi
-				if (cols <= 0)
-					break
-			}
-			cols--
-			fi += fi_inc
-		}
-
-		let col_moved = last_valid_fi != start_fi
-
-		if (must_move && !(row_moved || col_moved))
-			return [null, null]
-
-		if ((must_not_move_row && row_moved) || (must_not_move_col && col_moved))
-			return [null, null]
-
-		return [last_valid_ri, last_valid_fi]
-	}
-
-	e.focus_cell = function(cell, rows, cols, options) {
-
-		if (cell == false) { // false means remove focus only.
-			cell = [null, null]
-		} else {
-			cell = e.first_focusable_cell(cell, rows, cols, options)
-			if (cell[0] == null) // failure to find cell means cancel.
-				return false
-		}
-
-		if (e.focused_cell[0] != cell[0]) {
-			if (!e.exit_row())
-				return false
-		} else if (e.focused_cell[1] != cell[1]) {
-			if (!e.exit_edit())
-				return false
-		} else if (!(options && options.force))
-			return true // same cell.
-
-		update_focus(false)
-		let row_changed = e.focused_cell[0] != cell[0]
-		e.focused_cell = cell
-		update_focus(true)
-		if (!options || options.make_visible != false)
-			e.scroll_to_cell(cell)
-
-		if (row_changed) { // rowset_nav protocol
-			let [row] = row_field_at(e.focused_cell)
-			e.fire('row_changed', row.row)
-		}
-
-		return true
-	}
-
-	e.focus_next_cell = function(cols, auto_advance_row, for_editing) {
-		let dir = strict_sign(cols)
-		return e.focus_cell(null, dir * 0, cols, {must_move: true, for_editing: for_editing})
-			|| ((auto_advance_row || e.auto_advance_row)
-				&& e.focus_cell(null, dir, dir * -1/0, {for_editing: for_editing}))
-	}
-
-	function on_last_row() {
-		let [ri] = e.first_focusable_cell(null, 1, 0, {must_move: true})
-		return ri == null
-	}
-
-	function focused_row() {
-		let [ri] = e.focused_cell
-		return ri != null ? e.rows[ri] : null
-	}
-
-	function editor_lost_focus(ev) {
-		if (!e.input) // input is being removed.
-			return
-		if (ev.target != e.input) // other input that bubbled up.
-			return
-		e.exit_edit()
-	}
-
-	// editing ----------------------------------------------------------------
-
-	e.input = null
-
-	function input_value_changed(v) {
-		if (e.save_cell_on == 'input')
-			e.save_cell(e.focused_cell)
-	}
-
-	function td_input(td) {
-		return td.first
-	}
-
-	e.enter_edit = function(editor_state) {
-		if (e.input)
-			return
-		let [row, field] = row_field_at(e.focused_cell)
-		if (!can_focus_cell(row, field, true))
-			return
-		create_editor(editor_state)
-		e.input.focus()
-	}
-
-	e.exit_edit = function() {
-		if (!e.input)
-			return true
-
-		if (e.save_cell_on == 'exit_edit')
-			e.save_cell(e.focused_cell)
-		if (e.save_row_on == 'exit_edit')
-			e.save_row(e.focused_cell)
-
-		/*
-		if (e.prevent_exit_edit)
-			if (e.focused_td.hasclass('invalid'))
-				return false
-		*/
-
-		let had_focus = e.hasfocus
-		free_editor()
-		if (had_focus)
-			e.focus()
-
-		return true
-	}
-
-	e.exit_row = function() {
-		/*
-		let tr = e.focused_tr
-		if (!tr)
-			return true
-		let td = e.focused_td
-		if (e.save_row_on == 'exit_row')
-			e.save_row(tr)
-		if (e.prevent_exit_row)
-			if (tr.hasclass('invalid_values') || tr.hasclass('invalid'))
-				return false
-		*/
-		if (!e.exit_edit())
-			return false
-		return true
-	}
-
-	// saving -----------------------------------------------------------------
-
-	function cell_metadata(cell) {
-		let [row, field] = row_field_at(cell)
-		return attr(array_attr(row, 'metadata'), field.index)
-	}
-
-	e.save_cell = function(cell) {
-		let t = cell_metadata(cell)
-		let [row, field] = row_field_at(cell)
-		let ret = e.rowset.set_value(row.row, field, e.input.value, g)
-		let ok = ret === true
-		t.unsaved = false
-		t.invalid = !ok
-		td.class('unsaved', t.unsaved)
-		td.class('invalid', t.invalid)
-		tr.class('invalid_values', !no_child_has_class(tr, 'invalid'))
-		if (ok)
-			tr.class('unsaved', true)
-		e.tooltip(td, !ok && ret)
-		return ok
-	}
-
-	e.save_row = function(cell) {
-		let t = cell_metadata(cell)
-		if (!t.unsaved)
-			return !t.invalid
-		for (td of tr.children)
-			if (!e.save_cell(td))
-				return false
-		let ret = e.rowset.save_row(tr.row)
-		let ok = ret === true
-		tr.class('unsaved', false)
-		tr.class('saving', ok)
-		tr.class('invalid', !ok)
-		e.tooltip(tr, !ok && ret)
-		return ok
-	}
-
-	e.revert_cell = function(td) {
-		let row = td.parent.row
-		let field = e.fields[td.index]
-		let input = td_input(td)
-		input.value = e.rowset.value(row, field)
-	}
-
-	// adding & removing rows -------------------------------------------------
-
-	let adding
-
-	e.insert_row = function() {
-		if (!e.can_edit || !e.can_add_rows)
-			return false
-		adding = false
-		let row = e.rowset.add_row(e)
-		return row != null
-	}
-
-	e.add_row = function() {
-		if (!e.can_edit || !e.can_add_rows)
-			return false
-		adding = true
-		let row = e.rowset.add_row(e)
-		return row != null
-	}
-
-	e.remove_row = function(ri) {
-		if (!e.can_edit || !e.can_remove_rows) return false
-		let row = e.rows[ri]
-		return e.rowset.remove_row(row.row, e)
-	}
-
-	e.remove_focused_row = function() {
-		let [ri, fi] = e.focused_cell
-		if (ri == null)
-			return false
-		if (!e.remove_row(ri))
-			return false
-		if (!e.focus_cell([ri, fi]))
-			e.focus_cell([ri, fi], -0)
-		return true
-	}
-
-	// updating from rowset changes ------------------------------------------
-
-	function value_changed(row, field, val) {
-		let ri = row_index(row)
-		if (ri == null)
-			return
-	}
-
-	function row_added(row, source) {
-		row = create_row(row)
-		update_focus(false)
-		if (source == e) {
-			let reenter_edit = e.input && e.keep_editing
-			let [ri] = e.focused_cell
-			if (adding) {
-				ri = e.rows.length
-				e.focused_cell[0] = ri // move focus to added row index.
-			}
-			e.rows.insert(ri, row)
-			update_heights()
-			update_view()
-			e.scroll_to_cell(e.focused_cell)
-			if (reenter_edit)
-				e.enter_edit('select_all')
-		} else {
-			e.rows.push(row)
-			update_heights()
-			sort()
-		}
-	}
-
-	function row_removed(row, source) {
-		let ri = row_index(row)
-		if (ri == null)
-			return
-		if (e.focused_cell[0] == ri) {
-			// removing the focused row: unfocus it.
-			e.focus_cell(false)
-		} else if (e.focused_cell[0] > ri) {
-			// adjust focused row index to account for the removed row.
-			update_focus(false)
-			e.focused_cell[0]--
-		}
-		e.rows.remove(ri)
-		update_heights()
-		update_view()
-	}
-
-	// mouse bindings ---------------------------------------------------------
-
-	function header_cell_mousedown(ev) {
-		if (e.hasclass('col-resize'))
-			return
-		e.focus()
-		e.toggle_order(this.field, ev.shiftKey)
-		return false
-	}
-
-	function header_cell_rightmousedown(ev) {
-		if (e.hasclass('col-resize'))
-			return
-		e.focus()
-		if (ev.shiftKey) {
-			field_context_menu_popup(ev.target, this.field)
-			return false
-		}
-		e.clear_order()
-		return false
-	}
-
-	function cell_mousedown() {
-		if (e.hasclass('col-resize'))
-			return
-		let had_focus = e.hasfocus
-		if (!had_focus)
-			e.focus()
-		let ri = this.parent.row_index
-		let fi = this.field_index
-		if (e.focused_cell[0] == ri && e.focused_cell[1] == fi) {
-			if (had_focus) {
-				// TODO: what we want here is `e.enter_edit()` without `return false`
-				// to let mousedown click-through to the input box and focus the input
-				// and move the caret under the mouse all by itself.
-				// Unfortunately, this only works in Chrome no luck with Firefox.
-				e.enter_edit('select_all')
-				return false
-			}
-		} else {
-			e.focus_cell([ri, fi], 0, 0, {must_not_move_row: true})
-			e.fire('value_picked', true) // picker protocol.
-			return false
-		}
-	}
-
-	// make columns resizeable ------------------------------------------------
-
-	let hit_th, hit_x
-
-	function document_mousedown() {
-		if (window.grid_col_resizing || !hit_th)
-			return
-		e.focus()
-		window.grid_col_resizing = true
-		e.class('col-resizing')
-	}
-
-	function document_mouseup() {
-		window.grid_col_resizing = false
-		e.class('col-resizing', false)
-	}
-
-	function view_mousemove(mx, my, ev) {
-		if (window.grid_col_resizing)
-			return
-		// hit-test for column resizing.
-		hit_th = null
-		if (mx <= e.rows_view_div.offsetLeft + e.rows_view_div.clientWidth) {
-			// ^^ not over vertical scrollbar.
-			for (let th of e.header_tr.children) {
-				hit_x = mx - (e.header_table.offsetLeft + th.offsetLeft + th.offsetWidth)
-				if (hit_x >= -5 && hit_x <= 5) {
-					hit_th = th
-					break
-				}
-			}
-		}
-		e.class('col-resize', hit_th != null)
-	}
-
-	function document_mousemove(mx, my) {
-		if (!e.hasclass('col-resizing'))
-			return
-		let field = e.fields[hit_th.index]
-		let w = mx - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
-		field.w = field_w(field, w)
-		hit_th.w = field.w
-		update_col_width(hit_th.index, hit_th.clientWidth)
-		update_input_geometry()
-		return false
-	}
-
-	// keyboard bindings ------------------------------------------------------
-
-	function view_keydown(key, shift) {
-
-		// Arrows: horizontal navigation.
-		if (key == 'ArrowLeft' || key == 'ArrowRight') {
-
-			let cols = key == 'ArrowLeft' ? -1 : 1
-
-			let reenter_edit = e.input && e.keep_editing
-
-			let move = !e.input
-				|| (e.auto_jump_cells && !shift
-					&& (!e.input.editor_state
-						|| e.input.editor_state(cols < 0 ? 'left' : 'right')))
-
-			if (move && e.focus_next_cell(cols, null, reenter_edit)) {
-				if (reenter_edit)
-					e.enter_edit(cols > 0 ? 'left' : 'right')
-				return false
-			}
-		}
-
-		// Tab/Shift+Tab cell navigation.
-		if (key == 'Tab' && e.tab_navigation) {
-
-			let cols = shift ? -1 : 1
-
-			let reenter_edit = e.input && e.keep_editing
-
-			if (e.focus_next_cell(cols, true, reenter_edit))
-				if (reenter_edit)
-					e.enter_edit(cols > 0 ? 'left' : 'right')
-
-			return false
-		}
-
-		// insert with the arrow down key on the last focusable row.
-		if (key == 'ArrowDown') {
-			if (on_last_row())
-				if (e.add_row())
-					return false
-		}
-
-		// remove last row with the arrow up key if not edited.
-		if (key == 'ArrowUp') {
-			if (on_last_row()) {
-				let row = focused_row()
-				if (row && row.row.is_new && !row.modified) {
-					e.remove_focused_row()
-					return false
-				}
-			}
-		}
-
-		// vertical navigation.
-		if (  key == 'ArrowDown' || key == 'ArrowUp'
-			|| key == 'PageDown'  || key == 'PageUp'
-			|| key == 'Home'      || key == 'End'
-		) {
-			let rows
-			switch (key) {
-				case 'ArrowUp'   : rows = -1; break
-				case 'ArrowDown' : rows =  1; break
-				case 'PageUp'    : rows = -e.page_row_count; break
-				case 'PageDown'  : rows =  e.page_row_count; break
-				case 'Home'      : rows = -1/0; break
-				case 'End'       : rows =  1/0; break
-			}
-
-			let reenter_edit = e.input && e.keep_editing
-			let editor_state = e.input
-				&& e.input.editor_state && e.input.editor_state()
-
-			if (e.focus_cell(null, rows)) {
-				if (reenter_edit)
-					e.enter_edit(editor_state)
-				return false
-			}
-		}
-
-		// F2: enter edit mode
-		if (!e.input && key == 'F2') {
-			e.enter_edit('select_all')
-			return false
-		}
-
-		// Enter: toggle edit mode, and navigate on exit
-		if (key == 'Enter') {
-			if (e.hasclass('picker')) {
-				e.fire('value_picked', true)
-			} else if (!e.input) {
-				e.enter_edit('select_all')
-			} else if (e.exit_edit()) {
-				if (e.auto_advance == 'next_row') {
-					if (e.focus_cell(null, 1))
-						if (e.keep_editing)
-							e.enter_edit('select_all')
-				} else if (e.auto_advance == 'next_cell')
-					if (e.focus_next_cell(shift ? -1 : 1, null, e.keep_editing))
-						if (e.keep_editing)
-							e.enter_edit('select_all')
-			}
-			return false
-		}
-
-		// Esc: revert cell edits or row edits.
-		if (key == 'Escape') {
-			if (e.hasclass('picker'))
-				return
-			e.exit_edit()
-			e.focus()
-			return false
-		}
-
-		// insert key: insert row
-		if (key == 'Insert') {
-			e.insert_row()
-			return false
-		}
-
-		// delete key: delete active row
-		if (!e.input && key == 'Delete') {
-			if (e.remove_focused_row())
-				return false
-		}
-
-	}
-
-	// printable characters: enter quick edit mode.
-	function view_keypress() {
-		if (!e.input) {
-			e.enter_edit('select_all')
-			return false
-		}
-	}
-
-	// sorting ----------------------------------------------------------------
-
-	let order_by_dir = new Map()
-
-	e.late_property('order_by',
-		function() {
-			let a = []
-			for (let [field, dir] of order_by_dir) {
-				a.push(field.name + (dir == 'asc' ? '' : ' desc'))
-			}
-			return a.join(', ')
-		},
-		function(s) {
-			order_by_dir = new Map()
-			let ea = s.split(/\s*,\s*/)
-			for (let e of ea) {
-				let m = e.match(/^([^\s]*)\s*(.*)$/)
-				let name = m[1]
-				let field = e.rowset.field(name)
-				if (field && field.sortable) {
-					let dir = m[2] || 'asc'
-					if (dir == 'asc' || dir == 'desc')
-						order_by_dir.set(field, dir)
-				}
-			}
-		}
-	)
-
-	e.order_by_priority = function(field) {
-		let i = order_by_dir.size-1
-		for (let [field1] of order_by_dir) {
-			if (field1 == field)
-				return i
-			i--
-		}
-	}
-
-	e.order_by_dir = function(field) {
-		return order_by_dir.get(field)
-	}
-
-	e.toggle_order = function(field, keep_others) {
-		if (!field.sortable)
-			return
-		let dir = order_by_dir.get(field)
-		dir = dir == 'asc' ? 'desc' : 'asc'
-		if (!keep_others)
-			order_by_dir.clear()
-		order_by_dir.set(field, dir)
-		sort()
-	}
-
-	e.clear_order = function() {
-		order_by_dir.clear()
-		sort()
-	}
-
-	function sort() {
-
-		if (!order_by_dir)
-			return
-		if (!order_by_dir.size) {
-			update_sort_icons()
-			update_view()
-			return
-		}
-
-		let [focused_row] = row_field_at(e.focused_cell)
-		update_focus(false)
-
-		let s = []
-		let cmps = []
-		for (let [field, dir] of order_by_dir) {
-			let i = field.index
-			cmps[i] = e.rowset.comparator(field)
-			let r = dir == 'asc' ? 1 : -1
-			// invalid values come first
-			s.push('var v1 = !(r1.fields && r1.fields['+i+'].invalid)')
-			s.push('var v2 = !(r2.fields && r2.fields['+i+'].invalid)')
-			s.push('if (v1 < v2) return -1')
-			s.push('if (v1 > v2) return  1')
-			// modified values come second
-			s.push('var v1 = !(r1.fields && r1.fields['+i+'].modified)')
-			s.push('var v2 = !(r2.fields && r2.fields['+i+'].modified)')
-			s.push('if (v1 < v2) return -1')
-			s.push('if (v1 > v2) return  1')
-			// compare values using the rowset comparator
-			s.push('var cmp = cmps['+i+']')
-			s.push('var r = cmp(r1.row, r2.row, '+i+')')
-			s.push('if (r) return r * '+r)
-		}
-		s.push('return 0')
-		s = 'let f = function(r1, r2) {\n\t' + s.join('\n\t') + '\n}; f'
-		let cmp = eval(s)
-		e.rows.sort(cmp)
-
-		if (focused_row)
-			e.focused_cell[0] = row_index(focused_row.row)
-
-		update_sort_icons()
-		update_view()
-		update_focus(true)
-		e.scroll_to_cell(e.focused_cell)
-
-	}
-
-	// columns context menu ---------------------------------------------------
-
-	function field_context_menu_popup(th, field) {
-		if (th.menu)
-			th.menu.close()
-		function toggle_field(item) {
-			return false
-		}
-		let items = []
-		for (let field of e.rowset.fields) {
-			items.push({field: field, text: field.name, checked: true, click: toggle_field})
-		}
-		th.menu = menu({items: items})
-		th.menu.popup(th)
-	}
-
-	// picker protocol --------------------------------------------------------
-
-	e.pick_near_value = function(delta, from_input) {
-		let field = e.pick_value_field
-		if (e.focus_cell(e.focused_cell, delta))
-			e.fire('value_picked', from_input)
-	}
-
-	e.pick_next_value_starting_with = function(s) {
-		// TODO:
-	}
-
-
-})
 
