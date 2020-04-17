@@ -9,6 +9,7 @@
 		update_cell_value(ri, fi, old_val, ...set_value_args)
 		update_cell_error(ri, fi, err, old_err, ...set_value_args)
 		update_cell_focus(ri, [fi])
+		update_cell_editing(ri, [fi], editing)
 		scroll_to_cell(ri, [fi])
 */
 
@@ -396,12 +397,15 @@ function rowset_widget(e) {
 		e.editor = e.create_editor(e.focused_field, ...editor_options)
 		if (!e.editor)
 			return false
+		e.update_cell_editing(e.focused_row_index, e.focused_field_index, true)
 		e.editor.on('lost_focus', editor_lost_focus)
 		if (e.editor.enter_editor)
 			e.editor.enter_editor(editor_state)
 		e.editor.focus()
 		return true
 	}
+
+	e.free_editor = function() {}
 
 	e.exit_edit = function() {
 		if (!e.editor)
@@ -419,7 +423,7 @@ function rowset_widget(e) {
 		let editor = e.editor
 		e.editor = null // removing the editor first as a barrier for lost_focus().
 		editor.remove()
-		e.init_cell(e.focused_row_index, e.focused_field_index)
+		e.update_cell_editing(e.focused_row_index, e.focused_field_index, false)
 
 		if (had_focus)
 			e.focus()

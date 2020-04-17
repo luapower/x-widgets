@@ -1102,7 +1102,8 @@ td.x-menu-title-td {
 	font-family: inherit;
 	cursor: initial;
 	color: inherit;
-
+	background-color: white;
+	outline: none;
 }
 
 .x-widget.grid-editor,
@@ -1110,6 +1111,10 @@ td.x-menu-title-td {
 .x-widget.grid-editor:focus-within     /* more specificity over x-input */
 {
 	box-shadow: inset 2px 2px 6px -2px rgba(0,0,0,0.75);
+}
+
+.x-grid-td.editing {
+	visibility: hidden;
 }
 
 /* grid scrollbars -------------------------------------------------------- */

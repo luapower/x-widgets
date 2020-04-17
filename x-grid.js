@@ -333,10 +333,13 @@ grid = component('x-grid', function(e) {
 		editor.class('grid-editor')
 		init_editor_geometry(editor)
 		e.rows_div.add(editor)
-		let td = td_at(tr_at(e.focused_row_index), e.focused_field_index)
-		if (td)
-			td.html = null
 		return editor
+	}
+
+	e.update_cell_editing = function(ri, fi, editing) {
+		let td = td_at(tr_at(ri), fi)
+		if (td)
+			td.class('editing', editing)
 	}
 
 	// responding to rowset changes -------------------------------------------
