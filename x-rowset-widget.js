@@ -542,7 +542,7 @@ function rowset_widget(e) {
 			ri = null
 		while (ri != null) {
 			let s = e.rowset.display_value(e.rows[ri], field)
-			if (s.starts(c.toLowerCase()) || s.starts(c.toUpperCase())) {
+			if (s.starts(c.lower()) || s.starts(c.upper())) {
 				e.focus_cell(ri, true)
 				break
 			}

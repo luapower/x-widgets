@@ -72,7 +72,7 @@ listbox = component('x-listbox', function(e) {
 
 	// responding to rowset changes -------------------------------------------
 
-	e.update_row = function(item, row) { // stub
+	e.update_item = function(item, row) { // stub
 		if (e.display_field)
 			item.html = e.rowset.display_value(row, e.display_field)
 	}
@@ -83,7 +83,7 @@ listbox = component('x-listbox', function(e) {
 		e.clear()
 		for (let i = 0; i < e.rows.length; i++) {
 			let item = H.div({class: 'x-listbox-item x-item'})
-			e.update_row(item, e.rows[i])
+			e.update_item(item, e.rows[i])
 			e.add(item)
 			item.row_index = i
 			item.on('mousedown', item_mousedown)
@@ -91,14 +91,10 @@ listbox = component('x-listbox', function(e) {
 	}
 
 	e.update_cell_value = function(ri, fi) {
-		let item = e.at[ri]
-		e.update_row(item, e.rows[ri])
+		e.update_item(e.at[ri], e.rows[ri])
 	}
 
-	e.update_cell_error = function(ri, fi, err) {
-		let item = e.at[ri]
-		item.class('invalid', err != null)
-	}
+	e.update_cell_error = function(ri, fi, err) {} // stub
 
 	let selected_row_index
 	e.update_cell_focus = function(ri, fi) {

@@ -530,11 +530,15 @@ main.add(calendar({value: day(now(), 2)}))
 
 var checked = '<div class="fa fa-check"></div>'
 
+function starts_with_a(s) {
+	return s.lower().starts('a') || 'Name must start with "A"'
+}
+
 var data = {
 	fields: [
 		{name: 'id'        , w:  60, min_w:  30, type: 'number', editable: false},
 		{name: 'X'         , w:  30, type: 'bool', true_text: checked, false_text: ''},
-		{name: 'name'      , w:  70, min_w:  50, max_w: 200},
+		{name: 'name'      , w:  70, min_w:  50, max_w: 200, validate: starts_with_a},
 		{name: 'parent_id' , w:  60, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: false},
 		{name: 'random_num', w: 130, allow_null: true, type: 'number', text: 'Random<br>Number'},
 		{name: 'date'      , w: 140, allow_null: true, type: 'date'},
@@ -547,7 +551,7 @@ for (var i = 1; i <= 1e5; i++) {
 	let name       = 'record '+i
 	let parent_id  = floor((random() * i))
 	let random_num = floor(random() * 1e9)
-	let random_date = i * 24 * 3600 * 1000
+	let random_date = day(i * 24 * 3600 * 1000)
 	data.rows.push({
 		focusable: i % 10 >= 2,
 		values: [id, i % 5 == 0, name, parent_id, random_num, random_date]

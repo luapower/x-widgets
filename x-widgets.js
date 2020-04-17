@@ -371,7 +371,7 @@ rowset = function(...options) {
 		let invalid = typeof(err) == 'string'
 		if (!invalid) {
 			let old_val = row.values[field.index]
-			if (old_val !== val) {
+			if (val !== old_val) {
 
 				row.values[field.index] = val
 
@@ -379,6 +379,8 @@ rowset = function(...options) {
 					d.set_cell_state(row, field, 'old_value', old_val, ...args)
 					d.set_cell_state(row, field, 'modified', true, ...args)
 					row.modified = true
+				} else if (val === d.cell_state(row, field, 'old_value')) {
+					d.set_cell_state(row, field, 'modified', false, ...args)
 				}
 				d.fire('value_changed', row, field, val, old_val, ...args)
 			}
@@ -809,8 +811,10 @@ function value_widget(e) {
 			return
 		if (key == 'input_value')
 			e.update_value(...args)
-		if (key == 'error')
+		else if (key == 'error')
 			update_error_state(val, ...args)
+		else if (key == 'modified')
+			e.class('modified', val)
 	}
 
 	function display_values_changed(field) {

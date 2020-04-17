@@ -2,15 +2,23 @@
 /* variables -------------------------------------------------------------- */
 
 :root {
+
 	--x-input-padding               : .25em .5em; /* padding for inputs and grid cells */
 	--x-input-padding-x             : .5em;  /* x-padding for inputs and grid cells */
+
 	--x-input-il-padding            : 1em .5em;
 	--x-input-il-padding-value      : 1.6em .5em .4em .5em;
 	--x-input-il-padding-top-label  : .2em;
 	--x-input-il-padding-top-label-animation-start : .6em;
+
+	--x-inverted-fg-color           : white; /* fg color for inverted backgrounds */
+
 	--x-input-focused-bg-color      : #fff;  /* bg color for focused inputs, dropdowns and pickers */
+	--x-modified-bg-color           : #ddffdd;
+	--x-new-bg-color                : #eeeeff;
 	--x-info-bg-color               : #069;  /* bg color for info bubbles */
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
+
 	--x-focus-shadow                : 0 0 0 1px #99f; /* to be used in place of focus outline */
 	--x-item-unfocused-bg-color     : #333;
 	--x-item-focused-bg-color       : #47a;
@@ -48,12 +56,19 @@
 .x-widget .disabled { color: #999; }
 .x-widget .null { color: #999; }
 
-//.x-grid-tr.new                          { background-color: #eef; }
-//.x-grid-tr.new.focused                  { background-color: #dde; }
-//.x-grid-td.modified                     { background-color: #ddffdd; }
-//.x-grid-tr.focused .x-grid-td.modified  { background-color: #cceecc; }
-//.x-grid-td.invalid                      { background-color: #ffcccc; }
-//.x-grid-tr.focused .x-grid-td.invalid   { background-color: #eebbbb; }
+.x-item:not(.focused):not(:hover) > .x-item:not(.invalid).new {
+	background-color: var(--x-new-bg-color);
+}
+
+.x-item:not(.focused):not(:hover) > .x-item:not(.invalid).modified {
+	background-color: var(--x-modified-bg-color);
+}
+
+.x-item.invalid,
+.x-item > .x-item.invalid:hover {
+	background-color: var(--x-error-bg-color);
+	color: var(--x-inverted-fg-color);
+}
 
                   .x-item.focused           { color: #fff; }
                   .x-item.disabled.focused  { color: #ccc; }
@@ -63,11 +78,11 @@
                   .x-item:hover             { background-color: var(--x-item-hover-bg-color); }
 .x-item         > .x-item:hover             { background-color: #f8f8f8; }
 
-                  .x-item.focused           { background-color: var(--x-item-unfocused-bg-color); }
-                  .x-item.focused:hover     { background-color: #444; }
-.x-item.focused > .x-item:hover             { background-color: #555; }
-.x-item.focused > .x-item.focused           { background-color: #666; }
-.x-item.focused > .x-item.focused:hover     { background-color: #777; }
+                  .x-item.focused           { background-color: var(--x-item-unfocused-bg-color); color: var(--x-inverted-fg-color); }
+                  .x-item.focused:hover     { background-color: #444; color: var(--x-inverted-fg-color); }
+.x-item.focused > .x-item:hover             { background-color: #555; color: var(--x-inverted-fg-color); }
+.x-item.focused > .x-item.focused           { background-color: #666; color: var(--x-inverted-fg-color); }
+.x-item.focused > .x-item.focused:hover     { background-color: #777; color: var(--x-inverted-fg-color); }
 
 .x-focusable:focus-within                   .x-item.focused       { background-color: var(--x-item-focused-bg-color); }
 .x-focusable:focus-within                   .x-item.focused:hover { background-color: #58b; }
@@ -269,10 +284,10 @@
 
 /* styling based on type attr */
 
-.x-tooltip[type=info] > .x-tooltip-text { background-color: var(--x-info-bg-color); color: white; }
+.x-tooltip[type=info] > .x-tooltip-text { background-color: var(--x-info-bg-color); color: var(--x-inverted-fg-color); }
 .x-tooltip[type=info] > .x-tooltip-tip  { color: var(--x-info-bg-color); }
 
-.x-tooltip[type=error] > .x-tooltip-text { background-color: var(--x-error-bg-color); color: white; }
+.x-tooltip[type=error] > .x-tooltip-text { background-color: var(--x-error-bg-color); color: var(--x-inverted-fg-color); }
 .x-tooltip[type=error] > .x-tooltip-tip  { color: var(--x-error-bg-color); }
 
 /* checkbox & radiogroup = markbox ---------------------------------------- */
@@ -385,7 +400,6 @@
 	height: 100%;            /* stretch vertically */
 	flex: auto;              /* stretch horizontally */
 	min-width: 0;            /* reset, let parent set this */
-	//TODO: width: 100vw;
 	color: inherit;
 	background: none;
 	text-align: left;
@@ -414,6 +428,10 @@
 
 .x-input[mode=inline]:focus-within {
 	box-shadow: none;
+}
+
+.x-input.modified {
+	background-color: var(--x-modified-bg-color);
 }
 
 /* input with animated inner label/placeholder ---------------------------- */
@@ -691,7 +709,7 @@
 
 .x-input.invalid {
 	background-color: var(--x-error-bg-color);
-	color: white;
+	color: var(--x-inverted-fg-color);
 }
 
 /* listbox ---------------------------------------------------------------- */
@@ -1101,7 +1119,6 @@ td.x-menu-title-td {
 	font-size: inherit;
 	font-family: inherit;
 	cursor: initial;
-	color: inherit;
 	outline: none;
 }
 
@@ -1141,8 +1158,12 @@ td.x-menu-title-td {
 /* ------------------------------------------------------------------------ */
 
 .x-dark {
+
 	color: white;
 	background-color: #1f1f22;
+
+	--x-inverted-fg-color           : white; /* fg color for inverted backgrounds */
+
 	--x-item-unfocused-bg-color     : #444;
 	--x-item-bg-only-bg-color       : #444;
 	--x-item-bg-only-hover-bg-color : #555;
