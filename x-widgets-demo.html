@@ -355,6 +355,9 @@ main.add(
 			input({
 				field_name: "santa's_name",
 				validate: say_my_name,
+			}),
+			input({
+				field_name: "devil's name",
 			})
 		)
 	)
@@ -371,10 +374,22 @@ main.add(
 </help>
 <script>
 
-main.add(H.div({}, spin_input({idx: 1, value: 42})))
-main.add(H.div({}, spin_input({idx: 2, value: 42, button_style: 'up-down'})))
-main.add(H.div({}, spin_input({idx: 3, value: 42, button_style: 'left-right'})))
-main.add(H.div({}, spin_input({idx: 4, min: -2, max: 5, step: 1.5, button_placement: 'right'})))
+main.add(H.div({},
+	spin_input({value: 42}),
+	spin_input({value: 42, label: 'Heeey'})
+))
+main.add(H.div({},
+	spin_input({button_style: 'up-down', value: 42}),
+	spin_input({button_style: 'up-down', label: 'Hey hey'})
+))
+main.add(H.div({},
+	spin_input({button_style: 'left-right', value: 42}),
+	spin_input({button_style: 'left-right', label: 'Dis look good?'})
+))
+main.add(H.div({},
+	spin_input({min: -2, max: 5, step: 1.5, button_placement: 'right', value: 1}),
+	spin_input({min: -2, max: 5, step: 1.5, button_placement: 'right', label: 'How bout dis?'}),
+))
 
 </script>
 </template>
@@ -566,7 +581,7 @@ main.add(g)
 </help>
 <script>
 
-function lots_of_items() {
+function thousand_items() {
 	let a = []
 	for (let i = 1; i <= 1000; i++)
 		a.push('Record '+i)
@@ -583,7 +598,6 @@ main.add(
 				'Bangos',
 				'Something Else Entirely',
 			],
-			style: 'display: inline-flex',
 		}),
 		validate: function(v) { return v != 1 || 'Can\'t have mananas.' },
 		value: 1,
@@ -592,8 +606,9 @@ main.add(
 	dropdown({
 		field_name: 'Here we are again',
 		picker: listbox({
-			items: lots_of_items(),
+			items: thousand_items(),
 		}),
+		value: 'not-in-list',
 	}),
 )
 
@@ -743,22 +758,25 @@ main.add(
 </help>
 <script>
 
-main.add(H.div({style: 'line-height: 3; font-size: 120%'},
+main.add(H.div({style: 'line-height: 3'},
 	'All ',
 	input({
-			style: 'min-width: 4em; border: 0; border-radius: 0; border-bottom: 1px dashed black',
-			value: 'inputs',
+		style: 'min-width: 4em',
+		label: 'imma input',
+		mode: 'inline',
+		value: 'inputs',
 	}),
 	'are baseline-aligned',
 	spin_input({
-		style: 'min-width: 6em; border: 0',
+		label: 'imma spinner',
+		style: 'min-width: 6em',
+		mode: 'inline',
 		value: 42,
 	}),
 	', including dropdowns ',
 	dropdown({
-		field_text: 'imma date',
+		label: 'imma date',
 		mode: 'inline',
-		style: 'border: 0',
 		picker: calendar(),
 	}),
 	', which can be made to wrap-to-fit or grow-to-fit, and even',

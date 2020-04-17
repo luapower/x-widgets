@@ -24,6 +24,8 @@
 		server_default : default value that the server sets.
 		editable       : allow modifying (true).
 		editor         : f(field) -> editor instance
+		from_text      : f(s) -> v
+		to_text        : f(v) -> s
 
 	validation:
 		allow_null     : allow null (true).
@@ -285,7 +287,7 @@ rowset = function(...options) {
 		if (old_val === val)
 			return
 		t[key] = val
-		d.fire(key+'_changed', row, field, val, old_val, ...args)
+		d.fire('cell_state_changed', row, field, key, val, old_val, ...args)
 	}
 
 	// get/set cell values ----------------------------------------------------
@@ -305,8 +307,11 @@ rowset = function(...options) {
 		if (!d.can_change_value(row, field))
 			return S('error_cell_read_only', 'cell is read-only')
 
-		if (val == null && !field.allow_null)
-			return S('error_not_null', 'NULL not allowed')
+		if (val == null)
+			if (!field.allow_null)
+				return S('error_not_null', 'NULL not allowed')
+			else
+				return
 
 		if (field.min != null && val < field.min)
 			return S('error_min_value', 'value must be at least {0}').format(field.min)
@@ -551,6 +556,15 @@ rowset = function(...options) {
 		return input(...options)
 	}
 
+	rowset.default_type.to_text = function(v) {
+		return v != null ? String(v) : ''
+	}
+
+	rowset.default_type.from_text = function(s) {
+		s = s.trim()
+		return s !== '' ? s : null
+	}
+
 	rowset.types = {
 		number: {align: 'right'},
 		date  : {align: 'right'},
@@ -577,6 +591,14 @@ rowset = function(...options) {
 		return spin_input(update({
 			button_placement: 'left',
 		}, ...options))
+	}
+
+	rowset.types.number.from_text = function(s) {
+		return s !== '' ? Number(s) : null
+	}
+
+	rowset.types.number.to_text = function(x) {
+		return x != null ? String(x) : ''
 	}
 
 	// dates
@@ -685,7 +707,7 @@ rowset_nav = function(...options) {
 function value_widget(e) {
 
 	e.default_value = null
-	e.field_prop_map = {field_name: 'name', field_text: 'text',
+	e.field_prop_map = {field_name: 'name', label: 'text',
 		min: 'min', max: 'max', step: 'step'}
 
 	e.init_nav = function() {
@@ -725,9 +747,8 @@ function value_widget(e) {
 		let r = e.nav.rowset
 		e.nav.onoff('focused_row_changed', e.init_value           , on)
 		r.onoff('reload'                 , e.init_value           , on)
-		r.onoff('input_value_changed'    , input_value_changed    , on)
 		r.onoff('value_changed'          , value_changed          , on)
-		r.onoff('error_changed'          , error_changed          , on)
+		r.onoff('cell_state_changed'     , cell_state_changed     , on)
 		r.onoff('display_values_changed' , display_values_changed , on)
 		if (e.internal_nav)
 			if (on)
@@ -783,16 +804,13 @@ function value_widget(e) {
 		e.fire('value_changed', val, old_val, ...args)
 	}
 
-	function input_value_changed(row, field, val, old_val, ...args) {
+	function cell_state_changed(row, field, key, val, old_val, ...args) {
 		if (row != e.nav.focused_row || field != e.field)
 			return
-		e.update_value(...args)
-	}
-
-	function error_changed(row, field, err, old_err, ...args) {
-		if (row != e.nav.focused_row || field != e.field)
-			return
-		update_error_state(err, ...args)
+		if (key == 'input_value')
+			e.update_value(...args)
+		if (key == 'error')
+			update_error_state(val, ...args)
 	}
 
 	function display_values_changed(field) {
@@ -1116,6 +1134,11 @@ radiogroup = component('x-radiogroup', function(e) {
 
 function input_widget(e) {
 
+	e.attrval('align', 'left')
+	e.attr_property('align')
+	e.attrval('mode', 'default')
+	e.attr_property('mode')
+
 	e.init_inner_label = function() {
 		if (e.inner_label != false) {
 			let s = e.field.text
@@ -1132,9 +1155,6 @@ input = component('x-input', function(e) {
 
 	e.class('x-widget')
 	e.class('x-input')
-
-	e.attrval('align', 'left')
-	e.attr_property('align')
 
 	e.input = H.input({class: 'x-input-value'})
 	e.inner_label_div = H.div({class: 'x-input-inner-label'})
@@ -1158,17 +1178,6 @@ input = component('x-input', function(e) {
 		e.bind_nav(false)
 	}
 
-	// value updating
-
-	e.to_text = function(v) {
-		return v != null ? String(v) : ''
-	}
-
-	e.from_text = function(s) {
-		s = s.trim()
-		return s !== '' ? s : null
-	}
-
 	let from_input
 
 	function update_state(s) {
@@ -1178,7 +1187,7 @@ input = component('x-input', function(e) {
 
 	e.update_value = function() {
 		if (!from_input) {
-			let s = e.to_text(e.input_value)
+			let s = e.field.to_text(e.input_value)
 			e.input.value = s
 			update_state(s)
 		}
@@ -1186,7 +1195,7 @@ input = component('x-input', function(e) {
 
 	e.input.on('input', function() {
 		from_input = true
-		e.value = e.from_text(e.input.value)
+		e.value = e.field.from_text(e.input.value)
 		update_state(e.input.value)
 		from_input = false
 	})
@@ -1292,8 +1301,10 @@ spin_input = component('x-spin-input', function(e) {
 
 	e.align = 'right'
 
-	e.button_style     = 'plus-minus'
-	e.button_placement = 'each-side'
+	e.attrval('button-style', 'plus-minus')
+	e.attrval('button-placement', 'each-side')
+	e.attr_property('button-style')
+	e.attr_property('button-placement')
 
 	e.up   = H.div({class: 'x-spin-input-button fa'})
 	e.down = H.div({class: 'x-spin-input-button fa'})
@@ -1348,14 +1359,6 @@ spin_input = component('x-spin-input', function(e) {
 
 	e.input.input_filter = function(v) {
 		return /^[\-]?\d*\.?\d*$/.test(v) // allow digits and '.' only
-	}
-
-	e.from_text = function(s) {
-		return s !== '' ? Number(s) : null
-	}
-
-	e.to_text = function(x) {
-		return x != null ? String(x) : ''
 	}
 
 	e.input.on('wheel', function(dy) {
@@ -1551,10 +1554,6 @@ dropdown = component('x-dropdown', function(e) {
 	e.class('x-input')
 	e.class('x-dropdown')
 	e.attrval('tabindex', 0)
-	e.attrval('align', 'left')
-	e.attr_property('align')
-	e.attrval('mode', 'default')
-	e.attr_property('mode')
 
 	e.value_div = H.span({class: 'x-input-value x-dropdown-value'})
 	e.button = H.span({class: 'x-dropdown-button fa fa-caret-down'})
@@ -1670,8 +1669,8 @@ dropdown = component('x-dropdown', function(e) {
 
 	// picker protocol
 
-	function picker_value_picked(focus_dropdown) {
-		e.close(focus_dropdown)
+	function picker_value_picked() {
+		e.close(true)
 	}
 
 	// kb & mouse binding
@@ -1695,8 +1694,10 @@ dropdown = component('x-dropdown', function(e) {
 	})
 
 	e.on('keypress', function(c) {
-		e.picker.pick_next_value_starting_with(c)
-		return false
+		if (e.picker.quicksearch) {
+			e.picker.quicksearch(c)
+			return false
+		}
 	})
 
 	function picker_keydown(key) {
@@ -1835,7 +1836,7 @@ calendar = component('x-calendar', function(e) {
 		e.value = this.day
 		e.sel_month.cancel()
 		e.focus()
-		e.fire('value_picked', true) // picker protocol
+		e.fire('value_picked') // picker protocol
 		return false
 	}
 
@@ -1897,7 +1898,7 @@ calendar = component('x-calendar', function(e) {
 			return false
 		}
 		if (key == 'Enter') {
-			e.fire('value_picked', true) // picker protocol
+			e.fire('value_picked') // picker protocol
 			return false
 		}
 	})
@@ -1933,12 +1934,10 @@ calendar = component('x-calendar', function(e) {
 		return builtin_contains.call(this, e1) || e.sel_month.picker.contains(e1)
 	}
 
-	e.pick_near_value = function(delta, from_input) {
+	e.pick_near_value = function(delta) {
 		e.value = day(e.input_value, delta)
-		e.fire('value_picked', from_input)
+		e.fire('value_picked')
 	}
-
-	e.pick_next_value_starting_with = function(s) {}
 
 })
 

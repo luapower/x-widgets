@@ -10,7 +10,7 @@ grid = component('x-grid', function(e) {
 	// geometry
 	e.w = 400
 	e.h = 400
-	e.row_h = 56
+	e.row_h = 26
 	e.row_border_h = 1
 	e.min_col_w = 20
 
@@ -18,6 +18,7 @@ grid = component('x-grid', function(e) {
 	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
 	e.auto_advance = 'next_row' // advance on enter = false|'next_row'|'next_cell'
 	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
+	e.quick_edit = false        // quick edit (vs. quick-search) when pressing keys
 	e.keep_editing = true       // re-enter edit mode after navigating
 
 	e.class('x-widget')
@@ -32,16 +33,11 @@ grid = component('x-grid', function(e) {
 	e.rows_view_div = H.div({class: 'x-grid-rows-view-div'}, e.rows_div)
 	e.add(e.header_table, e.rows_view_div)
 
-	e.on('mousemove'    , view_mousemove)
-	e.on('keydown'      , view_keydown)
-	e.on('keypress'     , view_keypress)
-	e.on('attr_changed' , view_attr_changed)
-
 	e.rows_view_div.on('scroll', update_view)
 
 	e.init = function() {
-		e.init_vfields()
-		e.init_vrows()
+		e.init_fields_array()
+		e.init_rows_array()
 		e.init_nav()
 		init_header()
 	}
@@ -101,7 +97,7 @@ grid = component('x-grid', function(e) {
 
 	// when: row count or height changed, rows viewport height changed, header height changed.
 	function update_heights() {
-		e.rows_h = e.row_h * e.vrows.length - floor(e.row_border_h / 2)
+		e.rows_h = e.row_h * e.rows.length - floor(e.row_border_h / 2)
 		if (e.picker_h != null && e.picker_max_h != null) {
 			e.h = 0 // compute e.offsetHeight with 0 clientHeight. relayouting...
 			e.h = max(e.picker_h, min(e.rows_h, e.picker_max_h)) + e.offsetHeight
@@ -137,8 +133,7 @@ grid = component('x-grid', function(e) {
 		set_header_visibility()
 
 		e.header_table.clear()
-		for (let vfield of e.vfields) {
-			let field = vfield.field
+		for (let field of e.fields) {
 			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
 			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
 			let e1 = H.td({class: 'x-grid-header-title-td'}, H(field.text) || field.name)
@@ -176,9 +171,9 @@ grid = component('x-grid', function(e) {
 		e.rows_table.clear()
 		for (let i = 0; i < e.visible_row_count; i++) {
 			let tr = H.tr({class: 'x-grid-tr'})
-			for (let i = 0; i < e.vfields.length; i++) {
+			for (let i = 0; i < e.fields.length; i++) {
 				let th = e.header_tr.at[i]
-				let field = e.vfields[i].field
+				let field = e.fields[i]
 				let td = H.td({class: 'x-grid-td'})
 				td.w = field_w(field)
 				td.h = e.row_h
@@ -195,7 +190,7 @@ grid = component('x-grid', function(e) {
 
 	// when: widget height changed.
 	let cw, ch
-	function view_attr_changed() {
+	e.on('attr_changed' , function() {
 		if (e.clientWidth === cw && e.clientHeight === ch)
 			return
 		if (e.clientHeight !== ch) {
@@ -208,29 +203,29 @@ grid = component('x-grid', function(e) {
 		}
 		cw = e.clientWidth
 		ch = e.clientHeight
-	}
+	})
 
 	// when: scroll_y changed.
 	function update_row(tr, ri) {
-		let vrow = e.vrows[ri]
-		tr.vrow = vrow
+		let row = e.rows[ri]
+		tr.row = row
 		tr.row_index = ri
-		if (vrow)
-			tr.class('x-item', e.can_focus_cell(vrow))
-		for (let fi = 0; fi < e.vfields.length; fi++) {
-			let vfield = e.vfields[fi]
+		if (row)
+			tr.class('x-item', e.can_focus_cell(row))
+		for (let fi = 0; fi < e.fields.length; fi++) {
+			let field = e.fields[fi]
 			let td = tr.at[fi]
 			td.field = field
 			td.field_index = fi
-			if (vrow) {
-				td.html = e.rowset.display_value(vrow.row, vfield.field)
-				td.class('x-item', e.can_focus_cell(vrow, vfield))
+			if (row) {
+				td.html = e.rowset.display_value(row, field)
+				td.class('x-item', e.can_focus_cell(row, field))
 				td.class('disabled',
 					e.can_focus_cells
 					&& e.can_edit
 					&& e.rowset.can_edit
 					&& e.rowset.can_change_rows
-					&& !e.can_focus_cell(vrow, vfield, true))
+					&& !e.can_focus_cell(row, field, true))
 				td.show()
 			} else {
 				td.clear()
@@ -336,11 +331,11 @@ grid = component('x-grid', function(e) {
 		if (!editor)
 			return
 		editor.class('grid-editor')
-		//e.editor.on('value_changed', input_value_changed)
 		init_editor_geometry(editor)
 		e.rows_div.add(editor)
 		let td = td_at(tr_at(e.focused_row_index), e.focused_field_index)
-		td.html = null
+		if (td)
+			td.html = null
 		return editor
 	}
 
@@ -357,49 +352,14 @@ grid = component('x-grid', function(e) {
 
 	e.update_cell_value = function(ri, fi) {
 		let td = td_at(tr_at(ri), fi)
-		td.html = e.rowset.display_value(e.vrows[ri].row, e.vfields[fi].field)
+		if (td)
+			td.html = e.rowset.display_value(e.rows[ri], e.fields[fi])
 	}
 
 	e.update_cell_error = function(ri, fi, err) {
-
-	}
-
-	function row_added(row, source, ri) {
-		row = create_row(row)
-		if (source == e) {
-			let reenter_edit = e.editor && e.keep_editing
-			let [ri] = e.focused_cell
-			if (adding) {
-				ri = e.vrows.length
-				e.focused_cell[0] = ri // move focus to added row index.
-			}
-			e.vrows.insert(ri, row)
-			update_heights()
-			update_view()
-			e.scroll_to_cell(e.focused_cell)
-			if (reenter_edit)
-				e.enter_edit('select_all')
-		} else {
-			e.vrows.push(row)
-			update_heights()
-			sort()
-		}
-	}
-
-	function row_removed(row, source) {
-		let ri = e.row_index(row)
-		if (ri == null)
-			return
-		if (e.focused_cell[0] == ri) {
-			// removing the focused row: unfocus it.
-			e.focus_cell(false)
-		} else if (e.focused_cell[0] > ri) {
-			// adjust focused row index to account for the removed row.
-			e.focused_cell[0]--
-		}
-		e.rows.remove(ri)
-		update_heights()
-		update_view()
+		let td = td_at(tr_at(ri), fi)
+		if (td)
+			td.class('invalid', err != null)
 	}
 
 	// mouse bindings ---------------------------------------------------------
@@ -442,8 +402,8 @@ grid = component('x-grid', function(e) {
 				return false
 			}
 		} else {
-			e.focus_cell(ri, fi, 0, 0, {must_not_move_row: true})
-			e.fire('value_picked', true) // picker protocol.
+			if (e.focus_cell(ri, fi, 0, 0, {must_not_move_row: true}))
+				e.fire('value_picked') // picker protocol.
 			return false
 		}
 	}
@@ -465,7 +425,7 @@ grid = component('x-grid', function(e) {
 		e.class('col-resizing', false)
 	}
 
-	function view_mousemove(mx, my, ev) {
+	e.on('mousemove', function(mx, my, ev) {
 		if (window.grid_col_resizing)
 			return
 		// hit-test for column resizing.
@@ -481,12 +441,12 @@ grid = component('x-grid', function(e) {
 			}
 		}
 		e.class('col-resize', hit_th != null)
-	}
+	})
 
 	function document_mousemove(mx, my) {
 		if (!e.hasclass('col-resizing'))
 			return
-		let field = e.vfields[hit_th.index].field
+		let field = e.fields[hit_th.index]
 		let w = mx - (e.header_table.offsetLeft + hit_th.offsetLeft + hit_x)
 		field.w = field_w(field, w)
 		hit_th.w = field.w
@@ -497,7 +457,7 @@ grid = component('x-grid', function(e) {
 
 	// keyboard bindings ------------------------------------------------------
 
-	function view_keydown(key, shift) {
+	e.on('keydown', function(key, shift) {
 
 		// Arrows: horizontal navigation.
 		if (key == 'ArrowLeft' || key == 'ArrowRight') {
@@ -551,29 +511,25 @@ grid = component('x-grid', function(e) {
 		}
 
 		// vertical navigation.
-		if (  key == 'ArrowDown' || key == 'ArrowUp'
-			|| key == 'PageDown'  || key == 'PageUp'
-			|| key == 'Home'      || key == 'End'
-		) {
-			let rows
-			switch (key) {
-				case 'ArrowUp'   : rows = -1; break
-				case 'ArrowDown' : rows =  1; break
-				case 'PageUp'    : rows = -e.page_row_count; break
-				case 'PageDown'  : rows =  e.page_row_count; break
-				case 'Home'      : rows = -1/0; break
-				case 'End'       : rows =  1/0; break
-			}
-
+		let rows
+		switch (key) {
+			case 'ArrowUp'   : rows = -1; break
+			case 'ArrowDown' : rows =  1; break
+			case 'PageUp'    : rows = -e.page_row_count; break
+			case 'PageDown'  : rows =  e.page_row_count; break
+			case 'Home'      : rows = -1/0; break
+			case 'End'       : rows =  1/0; break
+		}
+		if (rows) {
 			let reenter_edit = e.editor && e.keep_editing
 			let editor_state = e.editor
 				&& e.editor.editor_state && e.editor.editor_state()
 
-			if (e.focus_cell(true, true, rows)) {
+			if (e.focus_cell(true, true, rows))
 				if (reenter_edit)
 					e.enter_edit(editor_state)
-				return false
-			}
+
+			return false
 		}
 
 		// F2: enter edit mode
@@ -585,7 +541,7 @@ grid = component('x-grid', function(e) {
 		// Enter: toggle edit mode, and navigate on exit
 		if (key == 'Enter') {
 			if (e.hasclass('picker')) {
-				e.fire('value_picked', true)
+				e.fire('value_picked')
 			} else if (!e.editor) {
 				e.enter_edit('select_all')
 			} else if (e.exit_edit()) {
@@ -622,15 +578,20 @@ grid = component('x-grid', function(e) {
 				return false
 		}
 
-	}
+	})
 
 	// printable characters: enter quick edit mode.
-	function view_keypress() {
-		if (!e.editor) {
-			e.enter_edit('select_all')
-			return false
-		}
-	}
+	e.on('keypress', function(c) {
+		if (e.quick_edit) {
+			if (!e.editor && e.focused_row && e.focused_field) {
+				e.enter_edit('select_all')
+				let v = e.focused_field.from_text(c)
+				e.rowset.set_value(e.focused_row, e.focused_field, v)
+				return false
+			}
+		} else if (!e.editor)
+			e.quicksearch(c, e.focused_field)
+	})
 
 	// columns context menu ---------------------------------------------------
 
@@ -641,25 +602,11 @@ grid = component('x-grid', function(e) {
 			return false
 		}
 		let items = []
-		for (let vfield of e.rowset.vfields) {
-			let field = vfield.field
+		for (let field of e.fields) {
 			items.push({field: field, text: field.name, checked: true, click: toggle_field})
 		}
 		th.menu = menu({items: items})
 		th.menu.popup(th)
 	}
-
-	// picker protocol --------------------------------------------------------
-
-	e.pick_near_value = function(delta, from_input) {
-		let field = e.pick_value_field
-		if (e.focus_cell(e.focused_row_index, e.focused_field_index, delta))
-			e.fire('value_picked', from_input)
-	}
-
-	e.pick_next_value_starting_with = function(s) {
-		// TODO:
-	}
-
 
 })

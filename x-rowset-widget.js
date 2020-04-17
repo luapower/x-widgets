@@ -6,7 +6,7 @@
 /*
 	rowset widgets must implement:
 		init_rows()
-		update_cell_value(ri, fi, val, old_val, ...set_value_args)
+		update_cell_value(ri, fi, old_val, ...set_value_args)
 		update_cell_error(ri, fi, err, old_err, ...set_value_args)
 		update_cell_focus(ri, [fi])
 		scroll_to_cell(ri, [fi])
@@ -41,8 +41,8 @@ function rowset_widget(e) {
 			return e.focused_row_index
 		if (!rowmap) {
 			rowmap = new Map()
-			for (let i = 0; i < e.vrows.length; i++) {
-				rowmap.set(e.vrows[i].row, i)
+			for (let i = 0; i < e.rows.length; i++) {
+				rowmap.set(e.rows[i], i)
 			}
 		}
 		return rowmap.get(row)
@@ -61,38 +61,37 @@ function rowset_widget(e) {
 			return e.focused_field_index
 		if (!fieldmap) {
 			fieldmap = new Map()
-			for (let i = 0; i < e.vfields.length; i++) {
-				fieldmap.set(e.vfields[i].field, i)
+			for (let i = 0; i < e.fields.length; i++) {
+				fieldmap.set(e.fields[i], i)
 			}
 		}
 		return fieldmap.get(field)
 	}
 
-	// vrows array ------------------------------------------------------------
+	// rows array -------------------------------------------------------------
 
-	e.init_vrows = function() {
-		e.vrows = []
+	e.init_rows_array = function() {
+		e.rows = []
 		let rows = e.rowset.rows
 		for (let i = 0; i < rows.length; i++) {
 			let row = rows[i]
 			if (!row.removed)
-				e.vrows.push({row: row})
+				e.rows.push(row)
 		}
 	}
 
-	// vfields array ----------------------------------------------------------
+	// fields array -----------------------------------------------------------
 
-	e.init_vfields = function() {
-		e.vfields = []
-		let i = 0
+	e.init_fields_array = function() {
+		e.fields = []
 		if (e.cols) {
 			for (let fi of e.cols)
 				if (e.rowset.fields[fi].visible != false)
-					e.vfields.push({field: e.rowset.fields[fi], index: i++})
+					e.fields.push(e.rowset.fields[fi])
 		} else
 			for (let field of e.rowset.fields)
 				if (field.visible != false)
-					e.vfields.push({field: field, index: i++})
+					e.fields.push(field)
 	}
 
 	// rowset binding ---------------------------------------------------------
@@ -102,9 +101,8 @@ function rowset_widget(e) {
 		e.rowset.onoff('reload'      , reload     , on)
 		e.rowset.onoff('row_added'   , row_added  , on)
 		e.rowset.onoff('row_removed' , row_removed, on)
-		// cell & cell state changes.
-		e.rowset.onoff('input_value_changed'    , input_value_changed    , on)
-		e.rowset.onoff('error_changed'          , error_changed          , on)
+		// cell value & state changes.
+		e.rowset.onoff('cell_state_changed'     , cell_state_changed     , on)
 		e.rowset.onoff('display_values_changed' , display_values_changed , on)
 	}
 
@@ -127,8 +125,13 @@ function rowset_widget(e) {
 	e.remove_row = function(ri, refocus, ...args) {
 		if (!e.can_edit || !e.can_remove_rows)
 			return false
-		let vrow = e.vrows[ri]
-		return e.rowset.remove_row(vrow.row, e, ri, refocus, ...args)
+		let row = e.rows[ri]
+		return e.rowset.remove_row(row, e, ri, refocus, ...args)
+	}
+
+	e.remove_focused_row = function(refocus) {
+		if (e.focused_row)
+			return e.remove_row(e.focused_row_index, refocus)
 	}
 
 	// responding to structural updates ---------------------------------------
@@ -136,17 +139,16 @@ function rowset_widget(e) {
 	function reload() {
 		e.focused_row_index = null
 		e.focused_field_index = null
-		e.init_vrows()
+		e.init_rows_array()
 		rowmap = null
 		e.init_rows()
 	}
 
 	function row_added(row, source, ri, focus) {
-		let vrow = {row: row}
 		if (source == e && ri != null)
-			e.vrows.insert(ri, vrow)
+			e.rows.insert(ri, row)
 		else
-			ri = e.vrows.push(vrow)
+			ri = e.rows.push(row)
 		rowmap = null
 		e.init_rows()
 		if (source == e && focus)
@@ -154,7 +156,7 @@ function rowset_widget(e) {
 	}
 
 	function row_removed(row, source, ri, refocus) {
-		e.vrows.remove(e.row_index(row, source == e && ri))
+		e.rows.remove(e.row_index(row, source == e && ri))
 		rowmap = null
 		e.init_rows()
 		if (source == e && refocus)
@@ -165,22 +167,19 @@ function rowset_widget(e) {
 	// responding to cell updates ---------------------------------------------
 
 	e.init_cell = function(ri, fi, ...args) {
-		let row = e.vrows[ri].row
+		let row = e.rows[ri]
 		let err = e.rowset.cell_state(row, field, 'error')
 		e.update_cell_value(ri, fi, ...args)
 		e.update_cell_error(ri, fi, err, ...args)
 	}
 
-	function input_value_changed(row, field, val, old_val, source, ri, fi, ...args) {
-		e.update_cell_value(
-			e.row_index  (row  , source == e && ri),
-			e.field_index(field, source == e && fi), ...args)
-	}
-
-	function error_changed(row, field, err, old_err, source, ri, fi, ...args) {
-		e.update_cell_error(
-			e.row_index  (row  , source == e && ri),
-			e.field_index(field, source == e && fi), ...args)
+	function cell_state_changed(row, field, key, val, old_val, source, ri, fi, ...args) {
+		ri = e.row_index  (row  , source == e && ri)
+		fi = e.field_index(field, source == e && fi)
+		if (key == 'input_value')
+			e.update_cell_value(ri, fi, ...args)
+		else if (key == 'error')
+			e.update_cell_error(ri, fi, val, ...args)
 	}
 
 	function display_values_changed(field) {
@@ -205,33 +204,24 @@ function rowset_widget(e) {
 			return
 		}
 
-		e.set_focused_row(ri != null ? e.vrows[ri].row : null, e, ri, fi, ...args)
+		e.set_focused_row(ri != null ? e.rows[ri] : null, e, ri, fi, ...args)
 	}
 
-	e.property('focused_vrow', function() {
-		return e.vrows[e.focused_row_index]
-	})
-
-	e.property('focused_vfield', function() {
-		return e.vfields[e.focused_field_index]
-	})
-
 	e.property('focused_field', function() {
-		let fi = e.focused_field_index
-		return fi ? e.vfields[fi].field : null
+		return e.fields[e.focused_field_index]
 	})
 
 	// navigating -------------------------------------------------------------
 
-	e.can_change_value = function(vrow, vfield) {
+	e.can_change_value = function(row, field) {
 		return e.can_edit && e.can_change_rows
-			&& e.rowset.can_change_value(vrow.row, vfield.field)
+			&& e.rowset.can_change_value(row, field)
 	}
 
-	e.can_focus_cell = function(vrow, vfield, for_editing) {
-		return (vfield == null || e.can_focus_cells)
-			&& e.rowset.can_focus_cell(vrow.row, vfield && vfield.field)
-			&& (!for_editing || e.can_change_value(vrow, vfield))
+	e.can_focus_cell = function(row, field, for_editing) {
+		return (field == null || e.can_focus_cells)
+			&& e.rowset.can_focus_cell(row, field)
+			&& (!for_editing || e.can_change_value(row, field))
 	}
 
 	e.first_focusable_cell = function(ri, fi, rows, cols, options) {
@@ -250,6 +240,13 @@ function rowset_widget(e) {
 		let fi_inc = strict_sign(cols)
 		rows = abs(rows)
 		cols = abs(cols)
+
+		// if starting from nowhere, include the first/last row/col into the count.
+		if (ri == null && rows)
+			rows--
+		if (fi == null && cols)
+			cols--
+
 		let move_row = rows >= 1
 		let move_col = cols >= 1
 		let start_ri = ri
@@ -260,19 +257,19 @@ function rowset_widget(e) {
 		fi = or(fi, fi_inc * -1/0)
 
 		// clamp out-of-bound row/col indices.
-		ri = clamp(ri, 0, e.vrows.length-1)
-		fi = clamp(fi, 0, e.vfields.length-1)
+		ri = clamp(ri, 0, e.rows.length-1)
+		fi = clamp(fi, 0, e.fields.length-1)
 
 		let last_valid_ri = null
 		let last_valid_fi = null
-		let last_valid_vrow
+		let last_valid_row
 
 		// find the last valid row, stopping after the specified row count.
-		while (ri >= 0 && ri < e.vrows.length) {
-			let vrow = e.vrows[ri]
-			if (e.can_focus_cell(vrow, null, for_editing)) {
+		while (ri >= 0 && ri < e.rows.length) {
+			let row = e.rows[ri]
+			if (e.can_focus_cell(row, null, for_editing)) {
 				last_valid_ri = ri
-				last_valid_vrow = vrow
+				last_valid_row = row
 				if (rows <= 0)
 					break
 			}
@@ -288,9 +285,9 @@ function rowset_widget(e) {
 		if (move_row && !row_moved)
 			cols = 0
 
-		while (fi >= 0 && fi < e.vfields.length) {
-			let vfield = e.vfields[fi]
-			if (e.can_focus_cell(last_valid_vrow, vfield, for_editing)) {
+		while (fi >= 0 && fi < e.fields.length) {
+			let field = e.fields[fi]
+			if (e.can_focus_cell(last_valid_row, field, for_editing)) {
 				last_valid_fi = fi
 				if (cols <= 0)
 					break
@@ -312,7 +309,7 @@ function rowset_widget(e) {
 
 	e.focus_cell = function(ri, fi, rows, cols, options) {
 
-		if (ri == false) { // false means remove focus only.
+		if (ri === false) { // explicit `false` means remove focus only.
 			[ri, fi] = [null, null]
 		} else {
 			[ri, fi] = e.first_focusable_cell(ri, fi, rows, cols, options)
@@ -332,7 +329,8 @@ function rowset_widget(e) {
 		set_focused_cell(ri, fi)
 
 		if (!options || options.make_visible != false)
-			e.scroll_to_cell(ri, fi)
+			if (e.isConnected)
+				e.scroll_to_cell(ri, fi)
 
 		return true
 	}
@@ -367,7 +365,14 @@ function rowset_widget(e) {
 		if (source == e && do_update == false) // got here from `focused_row_changed`.
 			return
 		let v = e.input_value
-		let ri = e.value_field ? e.row_index(e.rowset.lookup(e.value_field, v)) : v
+		let ri
+		if (e.value_field)
+			ri = e.row_index(e.rowset.lookup(e.value_field, v))
+		else {
+			ri = v
+			if (!(typeof(v) == 'number' && v >= 0 && v < e.rows.length))
+				ri = null
+		}
 		set_focused_cell(ri, null, e, false)
 		e.update_cell_focus(ri)
 	}
@@ -386,10 +391,9 @@ function rowset_widget(e) {
 	e.enter_edit = function(editor_state, ...editor_options) {
 		if (e.editor)
 			return true
-		if (!e.can_focus_cell(e.focused_vrow, e.focused_vfield, true))
+		if (!e.can_focus_cell(e.focused_row, e.focused_field, true))
 			return false
-		let field = e.focused_vfield && e.focused_vfield.field
-		e.editor = e.create_editor(field, ...editor_options)
+		e.editor = e.create_editor(e.focused_field, ...editor_options)
 		if (!e.editor)
 			return false
 		e.editor.on('lost_focus', editor_lost_focus)
@@ -404,7 +408,7 @@ function rowset_widget(e) {
 			return true
 
 		if (e.save_row_on == 'exit_edit')
-			e.save(e.focused_vrow)
+			e.save(e.focused_row)
 
 		if (e.prevent_exit_edit)
 			if (e.focused_td.hasclass('invalid'))
@@ -448,15 +452,8 @@ function rowset_widget(e) {
 		return true
 	}
 
-	e.save = function(vrow) {
-		e.rowset.save(vrow && vrow.row)
-	}
-
-	// adding & removing rows -------------------------------------------------
-
-	e.remove_focused_row = function(refocus) {
-		if (e.focused_row)
-			return e.remove_row(e.focused_row_index, refocus)
+	e.save = function(row) {
+		e.rowset.save(row)
 	}
 
 	// sorting ----------------------------------------------------------------
@@ -522,14 +519,51 @@ function rowset_widget(e) {
 			return
 
 		let cmp = e.rowset.comparator(order_by)
-		e.vrows.sort(function(vrow1, vrow2) {
-			return cmp(vrow1.row, vrow2.row)
-		})
+		e.rows.sort(cmp)
 
 		rowmap = null
 		e.init_rows()
 		e.fire('sort_order_changed')
 
+	}
+
+	// crude quick-search only for the first letter ---------------------------
+
+	let found_row_index
+	function quicksearch(c, field, again) {
+		if (e.focused_row_index != found_row_index)
+			found_row_index = null // user changed selection, start over.
+		let ri = found_row_index != null ? found_row_index+1 : 0
+		if (ri >= e.rows.length)
+			ri = null
+		while (ri != null) {
+			let s = e.rowset.display_value(e.rows[ri], field)
+			if (s.starts(c.toLowerCase()) || s.starts(c.toUpperCase())) {
+				e.focus_cell(ri, true)
+				break
+			}
+			ri++
+			if (ri >= e.rows.length)
+				ri = null
+		}
+		found_row_index = ri
+		if (found_row_index == null && !again)
+			quicksearch(c, field, true)
+	}
+
+	e.quicksearch = function(c, field) {
+		field = field
+			||	e.quicksearch_field
+			|| (e.quicksearch_col && e.rowset.field(e.quicksearch_col))
+		if (field)
+			quicksearch(c, field)
+	}
+
+	// picker protocol --------------------------------------------------------
+
+	e.pick_near_value = function(delta) {
+		if (e.focus_cell(e.focused_row_index, e.focused_field_index, delta))
+			e.fire('value_picked')
 	}
 
 }

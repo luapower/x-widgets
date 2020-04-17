@@ -4,10 +4,10 @@
 :root {
 	--x-input-padding               : .25em .5em; /* padding for inputs and grid cells */
 	--x-input-padding-x             : .5em;  /* x-padding for inputs and grid cells */
-	--x-input-il-padding              : 1em .5em;
-	--x-input-il-padding-value        : 1.6em .5em .4em .5em;
-	--x-input-il-padding-top-label    : .2em;
-	--x-input-il-padding-top-label-ff : .6em;
+	--x-input-il-padding            : 1em .5em;
+	--x-input-il-padding-value      : 1.6em .5em .4em .5em;
+	--x-input-il-padding-top-label  : .2em;
+	--x-input-il-padding-top-label-animation-start : .6em;
 	--x-input-focused-bg-color      : #fff;  /* bg color for focused inputs, dropdowns and pickers */
 	--x-info-bg-color               : #069;  /* bg color for info bubbles */
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
@@ -101,6 +101,7 @@
 	border-radius: .25em;
 	font-size: 100%;
 	font-weight: bold;
+	line-height: initial;
 
 	/* behavior */
 	cursor: pointer;
@@ -355,7 +356,7 @@
 .x-input {
 	/* layouting */
 	display: inline-flex;    /* the only way to get variable-width inputs */
-	align-items: baseline;   /* that are baseline-aligned */
+	align-items: baseline;   /* ...that are baseline-aligned */
 	position: relative;      /* anchor the inner label to it */
 
 	/* sizing */
@@ -390,18 +391,40 @@
 	text-align: left;
 }
 
+.x-input-value:focus {
+	outline: none;
+}
+
 .x-input[align=right] .x-input-value {
 	text-align: right;
 }
 
-.x-input-value:focus {
-	outline: none;
+.x-input[mode=inline] {
+	border: 0;
+	border-radius: 0;
+}
+
+.x-input[mode=inline] {
+	border-bottom: 1px dashed black;
+}
+
+.x-input[mode=inline] > .x-input-value {
+	padding-bottom: .1em;
+}
+
+.x-input[mode=inline]:focus-within {
+	box-shadow: none;
 }
 
 /* input with animated inner label/placeholder ---------------------------- */
 
 .x-input.with-inner-label {
 	border-radius: .3em;
+	line-height: initial;  /* prevent inheriting it */
+}
+
+.x-input.with-inner-label[mode=inline] {
+	border-radius: 0;
 }
 
 .x-input.with-inner-label > .x-input-value {
@@ -409,15 +432,22 @@
 }
 
 .x-input-inner-label {
+	vertical-align: top;
+	align-self: flex-start;
 	position: absolute;
 	padding: var(--x-input-il-padding);
 	pointer-events: none;       /* click-through */
 	color: #777;
+	white-space: nowrap;
 }
 
 .x-input.with-inner-label > .x-input-value:not(.empty) {
 	top: 0; /* fixate to top so we only have to set the top padding */
 	padding: var(--x-input-il-padding-value);
+}
+
+.x-input[mode=inline].with-inner-label > .x-input-value:not(.empty) {
+	padding-bottom: .1em;
 }
 
 .x-input.with-inner-label > .x-input-inner-label:not(.empty) {
@@ -429,10 +459,15 @@
 	animation: x-input-inner-label-focused .2s;
 }
 
+.x-input[mode=inline].with-inner-label > .x-input-inner-label:not(.empty) {
+	font-weight: bold;
+	opacity: .5;
+}
+
 @keyframes x-input-inner-label-focused {
 	from {
 		opacity: 0;
-		padding-top: var(--x-input-il-padding-top-label-ff);
+		padding-top: var(--x-input-il-padding-top-label-animation-start);
 	}
 }
 
@@ -459,6 +494,23 @@
 
 .x-spin-input-button.fa-caret-left  { padding-right : calc(.5 * var(--x-input-padding-x)); }
 .x-spin-input-button.fa-caret-right { padding-left  : calc(.5 * var(--x-input-padding-x)); }
+
+/* inner label adjustments */
+
+.x-spin-input[button-placement=left]      > .x-input-inner-label.empty,
+.x-spin-input[button-placement=each-side] > .x-input-inner-label.empty {
+	padding-left: 2em;
+}
+
+.x-spin-input[button-style=left-right][button-placement=left]      > .x-input-inner-label.empty,
+.x-spin-input[button-style=left-right][button-placement=each-side] > .x-input-inner-label.empty {
+	padding-left: 1.5em;
+}
+
+.x-spin-input.with-inner-label > .x-spin-input-button.fa-plus,
+.x-spin-input.with-inner-label > .x-spin-input-button.fa-minus {
+	align-self: baseline;
+}
 
 /* slider ----------------------------------------------------------------- */
 
@@ -631,6 +683,10 @@
 	outline: none;
 	background-color: var(--x-input-focused-bg-color);
 	box-shadow: var(--x-focus-shadow);
+}
+.x-dropdown[mode=inline]:focus,
+.x-dropdown[mode=inline].open {
+	box-shadow: none;
 }
 
 .x-input.invalid {
