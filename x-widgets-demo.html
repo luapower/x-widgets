@@ -716,7 +716,7 @@ main.add(
 	H.div(),
 	dropdown({picker: list()}),
 
-	p('inline', 'variable-width, no-wrap, with no min-width (shrink-wrapped)'),
+	p('inline', 'variable-width, no-wrap, with no min-width (shrink-wrapped), baseline-aligned'),
 	dropdown({mode: 'inline', picker: calendar(), value: now()}),
 	H.div(),
 	dropdown({mode: 'inline', picker: list()}),
@@ -756,7 +756,8 @@ main.add(H.div({style: 'line-height: 3; font-size: 120%'},
 	}),
 	', including dropdowns ',
 	dropdown({
-		classes: 'inline',
+		field_text: 'imma date',
+		mode: 'inline',
 		style: 'border: 0',
 		picker: calendar(),
 	}),
@@ -901,7 +902,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 13
+demo_list.value = 12
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

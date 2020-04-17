@@ -4,9 +4,10 @@
 :root {
 	--x-input-padding               : .25em .5em; /* padding for inputs and grid cells */
 	--x-input-padding-x             : .5em;  /* x-padding for inputs and grid cells */
-	--x-input-inner-label-padding           : 1em .5em;
-	--x-input-inner-label-padding-aside     : 1.6em .5em .4em .5em;
-	--x-input-inner-label-padding-aside-top : .3em;
+	--x-input-il-padding              : 1em .5em;
+	--x-input-il-padding-value        : 1.6em .5em .4em .5em;
+	--x-input-il-padding-top-label    : .2em;
+	--x-input-il-padding-top-label-ff : .6em;
 	--x-input-focused-bg-color      : #fff;  /* bg color for focused inputs, dropdowns and pickers */
 	--x-info-bg-color               : #069;  /* bg color for info bubbles */
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
@@ -373,7 +374,7 @@
 	border-style: solid;
 }
 
-.x-input-input {
+.x-input-value {
 	/* defaults */
 	margin: 0;
 	border: 0;
@@ -383,17 +384,17 @@
 	height: 100%;            /* stretch vertically */
 	flex: auto;              /* stretch horizontally */
 	min-width: 0;            /* reset, let parent set this */
-	width: 100vw;
+	//TODO: width: 100vw;
 	color: inherit;
 	background: none;
 	text-align: left;
 }
 
-.x-input[align=right] .x-input-input {
+.x-input[align=right] .x-input-value {
 	text-align: right;
 }
 
-.x-input-input:focus {
+.x-input-value:focus {
 	outline: none;
 }
 
@@ -403,38 +404,35 @@
 	border-radius: .3em;
 }
 
-.x-input.with-inner-label > .x-input-input {
-	padding: var(--x-input-inner-label-padding);
+.x-input.with-inner-label > .x-input-value {
+	padding: var(--x-input-il-padding);
 }
 
 .x-input-inner-label {
 	position: absolute;
-	padding: var(--x-input-inner-label-padding);
-
+	padding: var(--x-input-il-padding);
 	pointer-events: none;       /* click-through */
-
 	color: #777;
 }
 
-.x-input.with-inner-label > .x-input-input:not(.empty) {
-	padding: var(--x-input-inner-label-padding-aside);
+.x-input.with-inner-label > .x-input-value:not(.empty) {
+	top: 0; /* fixate to top so we only have to set the top padding */
+	padding: var(--x-input-il-padding-value);
 }
 
-.x-input.with-inner-label > .x-input-input:not(.empty) + .x-input-inner-label {
-
+.x-input.with-inner-label > .x-input-inner-label:not(.empty) {
+	top: 0; /* fixate to top so we only have to set the top padding */
 	user-select: none;
-
 	color: inherit;
-
 	font-size: 85%;
-	padding-top: var(--x-input-inner-label-padding-aside-top);
+	padding-top: var(--x-input-il-padding-top-label);
 	animation: x-input-inner-label-focused .2s;
 }
 
 @keyframes x-input-inner-label-focused {
 	from {
 		opacity: 0;
-		padding-top: calc(var(--x-input-inner-label-padding-aside-top) * 2);
+		padding-top: var(--x-input-il-padding-top-label-ff);
 	}
 }
 
@@ -550,7 +548,7 @@
 .x-dropdown {
 
 	/* content layouting */
-	align-items: baseline;
+	align-items: center;
 	line-height: initial;       /* prevent y-stretching to surrounding text's line height */
 
 	/* styling */
@@ -565,6 +563,7 @@
 
 	/* self positioning & alignment */
 	flex: 1;                 /* stretch horizontally */
+	width: auto;
 	padding: var(--x-input-padding);
 	padding-right : .25em;
 	padding-left  : var(--x-input-padding-x);
@@ -575,7 +574,6 @@
 }
 
 .x-dropdown-button {
-	align-self: center;
 	padding-left : var(--x-input-padding-x);
 	padding-right: var(--x-input-padding-x);
 
@@ -595,6 +593,7 @@
 /* inline mode: variable-width, no-wrap with no min-width */
 .x-dropdown[mode=inline] {
 	min-width: 0;            /* reset from x-input's min-width */
+	align-items: baseline;
 }
 
 /* wrap mode: fixed-width, auto-wrap */
@@ -612,21 +611,6 @@
 .x-dropdown[mode=fixed] > .x-dropdown-value {
 	white-space: nowrap;
 	overflow: hidden;
-}
-
-/* inner label: TODO: unify this with x-input. */
-.x-dropdown.with-inner-label > .x-dropdown-value {
-	padding: var(--x-input-inner-label-padding);
-}
-.x-dropdown.with-inner-label > .x-dropdown-value:not(.empty) {
-	padding: var(--x-input-inner-label-padding-aside);
-}
-.x-dropdown.with-inner-label > .x-dropdown-inner-label:not(.empty) {
-	user-select: none;
-	color: inherit;
-	font-size: 85%;
-	padding-top: var(--x-input-inner-label-padding-aside-top);
-	animation: x-input-inner-label-focused .1s;
 }
 
 /* override with more specificity: .x-widget.x-<foo>.picker */
@@ -1146,7 +1130,7 @@ td.x-menu-title-td {
 }
 
 .x-dark .x-input:focus-within,
-.x-dark .x-input-input:focus,
+.x-dark .x-input-value:focus,
 .x-dark .x-dropdown.open {
 	background-color: #080808;
 }
@@ -1155,7 +1139,7 @@ td.x-menu-title-td {
 	background-color: #2a303e;
 }
 
-.x-dark .x-input.invalid > .x-input-input {
+.x-dark .x-input.invalid > .x-input-value {
 	background-color: var(--x-error-bg-color);
 }
 

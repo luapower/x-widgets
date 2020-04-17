@@ -349,11 +349,11 @@ rowset = function(...options) {
 
 	d.create_row_editor = function(row, ...options) {} // stub
 
-	d.create_editor = function(row, field, ...options) {
+	d.create_editor = function(field, ...options) {
 		if (field)
-			return field.editor.call(d, field, row, ...options)
+			return field.editor.call(d, ...options)
 		else
-			return d.create_row_editor(row, ...options)
+			return d.create_row_editor(...options)
 	}
 
 	d.set_value = function(row, field, val, ...args) {
@@ -547,7 +547,7 @@ rowset = function(...options) {
 		return v == null ? 'null' : String(v)
 	}
 
-	rowset.default_type.editor = function(field, row, ...options) {
+	rowset.default_type.editor = function(...options) {
 		return input(...options)
 	}
 
@@ -573,7 +573,7 @@ rowset = function(...options) {
 			}
 	}
 
-	rowset.types.number.editor = function(field, row, ...options) {
+	rowset.types.number.editor = function(...options) {
 		return spin_input(update({
 			button_placement: 'left',
 		}, ...options))
@@ -594,10 +594,10 @@ rowset = function(...options) {
 	rowset.default_type.date_format =
 		{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
 
-	rowset.types.date.editor = function(field, row, ...options) {
+	rowset.types.date.editor = function(...options) {
 		return dropdown(update({
 			picker: calendar(),
-			align: 'rignt',
+			align: 'right',
 			mode: 'fixed',
 		}, ...options))
 	}
@@ -613,7 +613,7 @@ rowset = function(...options) {
 		return val ? field.true_text : field.false_text
 	}
 
-	rowset.types.bool.editor = function(field, row, ...options) {
+	rowset.types.bool.editor = function(...options) {
 		return checkbox(update({
 			center: true,
 		}, ...options))
@@ -653,7 +653,7 @@ function focused_row_mixin(e) {
 	}
 
 	// TODO: remove_by_index() that ends up calling set_focused_row_index()
-	// instead, in order to avoid creating the rowindex_map.
+	// instead, in order to avoid creating a rowmap.
 	function row_removed(row) {
 		if (focused_row == row)
 			e.set_focused_row(null)
@@ -716,7 +716,8 @@ function value_widget(e) {
 			e.internal_nav = true
 
 		} else {
-			e.field = e.nav.rowset.field(e.col)
+			if (e.col)
+				e.field = e.nav.rowset.field(e.col)
 		}
 	}
 
@@ -1113,20 +1114,7 @@ radiogroup = component('x-radiogroup', function(e) {
 // input
 // ---------------------------------------------------------------------------
 
-input = component('x-input', function(e) {
-
-	e.class('x-widget')
-	e.class('x-input')
-
-	e.attrval('align', 'left')
-	e.attr_property('align')
-
-	e.input = H.input({class: 'x-input-input'})
-	e.inner_label_div = H.div({class: 'x-input-inner-label'})
-	e.input.set_input_filter() // must be set as first event handler!
-	e.add(e.input, e.inner_label_div)
-
-	value_widget(e)
+function input_widget(e) {
 
 	e.init_inner_label = function() {
 		if (e.inner_label != false) {
@@ -1136,8 +1124,25 @@ input = component('x-input', function(e) {
 				e.class('with-inner-label', true)
 			}
 		}
-		e.input.class('empty', e.input.value == '')
 	}
+
+}
+
+input = component('x-input', function(e) {
+
+	e.class('x-widget')
+	e.class('x-input')
+
+	e.attrval('align', 'left')
+	e.attr_property('align')
+
+	e.input = H.input({class: 'x-input-value'})
+	e.inner_label_div = H.div({class: 'x-input-inner-label'})
+	e.input.set_input_filter() // must be set as first event handler!
+	e.add(e.input, e.inner_label_div)
+
+	value_widget(e)
+	input_widget(e)
 
 	e.init = function() {
 		e.init_nav()
@@ -1168,6 +1173,7 @@ input = component('x-input', function(e) {
 
 	function update_state(s) {
 		e.input.class('empty', s == '')
+		e.inner_label_div.class('empty', s == '')
 	}
 
 	e.update_value = function() {
@@ -1550,22 +1556,13 @@ dropdown = component('x-dropdown', function(e) {
 	e.attrval('mode', 'default')
 	e.attr_property('mode')
 
-	e.value_div = H.span({class: 'x-dropdown-value'})
+	e.value_div = H.span({class: 'x-input-value x-dropdown-value'})
 	e.button = H.span({class: 'x-dropdown-button fa fa-caret-down'})
 	e.inner_label_div = H.div({class: 'x-input-inner-label x-dropdown-inner-label'})
 	e.add(e.value_div, e.button, e.inner_label_div)
 
 	value_widget(e)
-
-	e.init_inner_label = function() {
-		if (e.inner_label != false) {
-			let s = e.field.text
-			if (s) {
-				e.inner_label_div.html = s
-				e.class('with-inner-label', true)
-			}
-		}
-	}
+	input_widget(e)
 
 	e.init = function() {
 

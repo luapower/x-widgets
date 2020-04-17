@@ -14,14 +14,16 @@
 
 function rowset_widget(e) {
 
-	e.can_focus_cells = true
-	e.auto_advance_row = true   // jump row on horiz. navigation limits
-	e.save_row_on = 'exit_edit' // save row on 'input'|'exit_edit'|'exit_row'|false
-
 	e.can_edit = true
 	e.can_add_rows = true
 	e.can_remove_rows = true
 	e.can_change_rows = true
+
+	e.can_focus_cells = true
+	e.auto_advance_row = true   // jump row on horiz. navigation limits
+	e.save_row_on = 'exit_edit' // save row on 'input'|'exit_edit'|'exit_row'|false
+	e.prevent_exit_edit = false // prevent exiting edit mode on validation errors
+	e.prevent_exit_row = true   // prevent changing row on validation errors
 
 	focused_row_mixin(e)
 	value_widget(e)
@@ -374,19 +376,27 @@ function rowset_widget(e) {
 
 	e.editor = null
 
-	e.create_editor = function(vrow, vfield, ...options) {
-		return e.rowset.create_editor(vrow && vrow.row, vfield && vfield.field, ...options)
+	e.create_editor = function(field, ...editor_options) {
+		return e.rowset.create_editor(field, {
+			nav: e,
+			field: field,
+		}, ...editor_options)
 	}
 
-	e.enter_edit = function(editor_state) {
+	e.enter_edit = function(editor_state, ...editor_options) {
 		if (e.editor)
-			return
+			return true
 		if (!e.can_focus_cell(e.focused_vrow, e.focused_vfield, true))
-			return
-		e.editor = e.rowset.create_editor(e.focused_vrow, e.focused_vfield)
+			return false
+		let field = e.focused_vfield && e.focused_vfield.field
+		e.editor = e.create_editor(field, ...editor_options)
 		if (!e.editor)
-			return
+			return false
+		e.editor.on('lost_focus', editor_lost_focus)
+		if (e.editor.enter_editor)
+			e.editor.enter_editor(editor_state)
 		e.editor.focus()
+		return true
 	}
 
 	e.exit_edit = function() {
@@ -396,18 +406,29 @@ function rowset_widget(e) {
 		if (e.save_row_on == 'exit_edit')
 			e.save(e.focused_vrow)
 
-		/*
 		if (e.prevent_exit_edit)
 			if (e.focused_td.hasclass('invalid'))
 				return false
-		*/
 
 		let had_focus = e.hasfocus
-		free_editor()
+
+		let editor = e.editor
+		e.editor = null // removing the editor first as a barrier for lost_focus().
+		editor.remove()
+		e.init_cell(e.focused_row_index, e.focused_field_index)
+
 		if (had_focus)
 			e.focus()
 
 		return true
+	}
+
+	function editor_lost_focus(ev) {
+		if (!e.editor) // editor is being removed.
+			return
+		if (ev.target != e.editor) // other input that bubbled up.
+			return
+		e.exit_edit()
 	}
 
 	e.exit_row = function() {

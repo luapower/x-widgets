@@ -10,7 +10,7 @@ grid = component('x-grid', function(e) {
 	// geometry
 	e.w = 400
 	e.h = 400
-	e.row_h = 26
+	e.row_h = 56
 	e.row_border_h = 1
 	e.min_col_w = 20
 
@@ -19,8 +19,6 @@ grid = component('x-grid', function(e) {
 	e.auto_advance = 'next_row' // advance on enter = false|'next_row'|'next_cell'
 	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
 	e.keep_editing = true       // re-enter edit mode after navigating
-	e.prevent_exit_edit = false // prevent exiting edit mode on validation errors
-	e.prevent_exit_row = true   // prevent changing row on validation errors
 
 	e.class('x-widget')
 	e.class('x-grid')
@@ -113,7 +111,7 @@ grid = component('x-grid', function(e) {
 		e.rows_view_div.h = e.rows_view_h
 		e.visible_row_count = floor(e.rows_view_h / e.row_h) + 2
 		e.page_row_count = floor(e.rows_view_h / e.row_h)
-		update_input_geometry()
+		init_editor_geometry()
 	}
 
 	function tr_at(ri) {
@@ -278,16 +276,17 @@ grid = component('x-grid', function(e) {
 	}
 
 	// when: input created, heights changed, column width changed.
-	function update_input_geometry() {
-		if (!e.editor)
+	function init_editor_geometry(editor) {
+		editor = editor || e.editor
+		if (!editor)
 			return
 		let th = e.header_tr.at[e.focused_field_index]
 		let fix = floor(e.row_border_h / 2 + (window.chrome ? .5 : 0))
-		e.editor.x = th.offsetLeft + th.clientLeft
-		e.editor.y = e.row_h * e.focused_row_index + fix
-		e.editor.w = th.clientWidth
-		e.editor.h = e.row_h - e.row_border_h
-		e.editor.style['padding-bottom'] = fix + 'px'
+		editor.x = th.offsetLeft + th.clientLeft
+		editor.y = e.row_h * e.focused_row_index + fix
+		editor.w = th.clientWidth
+		editor.h = e.row_h - e.row_border_h
+		editor.style['padding-bottom'] = fix + 'px'
 	}
 
 	// when: col resizing.
@@ -331,44 +330,19 @@ grid = component('x-grid', function(e) {
 		e.picker_max_h = or(e.picker_max_h, 200)
 	}
 
-	/*
-	function create_editor(editor_state) {
+	let create_editor = e.create_editor
+	e.create_editor = function(field, ...editor_options) {
+		let editor = create_editor(field, {inner_label: false}, ...editor_options)
+		if (!editor)
+			return
+		editor.class('grid-editor')
+		//e.editor.on('value_changed', input_value_changed)
+		init_editor_geometry(editor)
+		e.rows_div.add(editor)
 		let td = td_at(tr_at(e.focused_row_index), e.focused_field_index)
-
-		e.editor = e.rowset.create_editor(e, e.focused_field)
-
-		e.editor.class('grid-editor')
-
-		if (e.editor.enter_editor)
-			e.editor.enter_editor(editor_state)
-
-		e.editor.on('value_changed', input_value_changed)
-		e.editor.on('lost_focus', editor_lost_focus)
-
-		e.rows_div.add(e.editor)
-		update_input_geometry()
-		if (td)
-			td.html = null
-		update_focus()
+		td.html = null
+		return editor
 	}
-
-	function free_editor() {
-		let input = e.editor
-		e.editor = null // clear it before removing it for input_focusout!
-		input.remove()
-		if (e.focused_row_index != null)
-			e.init_cell(e.focused_row_index, e.focused_field)
-	}
-
-	function editor_lost_focus(ev) {
-		if (!e.editor) // input is being removed.
-			return
-		if (ev.target != e.editor) // other input that bubbled up.
-			return
-		e.exit_edit()
-	}
-
-	*/
 
 	// responding to rowset changes -------------------------------------------
 
@@ -381,8 +355,9 @@ grid = component('x-grid', function(e) {
 		update_focus()
 	}
 
-	e.update_cell_value = function(ri, fi, val) {
-
+	e.update_cell_value = function(ri, fi) {
+		let td = td_at(tr_at(ri), fi)
+		td.html = e.rowset.display_value(e.vrows[ri].row, e.vfields[fi].field)
 	}
 
 	e.update_cell_error = function(ri, fi, err) {
@@ -516,7 +491,7 @@ grid = component('x-grid', function(e) {
 		field.w = field_w(field, w)
 		hit_th.w = field.w
 		update_col_width(hit_th.index, hit_th.clientWidth)
-		update_input_geometry()
+		init_editor_geometry()
 		return false
 	}
 
