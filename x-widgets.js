@@ -129,7 +129,7 @@ rowset = function(...options) {
 			field_map.set(field.name, field)
 		}
 
-		for (field of d.pk) {
+		for (let field of d.pk) {
 			pk.push(d.field(field))
 		}
 
@@ -157,6 +157,7 @@ rowset = function(...options) {
 
 	d.detach = function() {
 		set_display_values_changed_events(false)
+		abort_ajax_requests()
 	}
 
 	// vlookup ----------------------------------------------------------------
@@ -166,7 +167,7 @@ rowset = function(...options) {
 
 		let rebuild = function() {
 			let fi = field.index
-			for (row of rows) {
+			for (let row of rows) {
 				index.set(row.values[fi], row)
 			}
 		}
@@ -394,7 +395,7 @@ rowset = function(...options) {
 	// get/set display value --------------------------------------------------
 
 	function set_display_values_changed_events(on) {
-		for (field of fields)
+		for (let field of fields)
 			if (field.lookup_rowset) {
 				if (on && !field.display_values_changed)
 					field.display_values_changed = function() {
@@ -503,6 +504,10 @@ rowset = function(...options) {
 		return changes
 	}
 
+	d.apply_changeset = function(changeset) {
+		//
+	}
+
 	d.unpack_resultset = function(resultset) {
 		for (let row of resultset) {
 			//
@@ -511,12 +516,17 @@ rowset = function(...options) {
 
 	// loading & saving -------------------------------------------------------
 
-	d.save = function(row, field) {
-		//d.pack_changeset()
+	d.save = function(row) {
+		let changeset = d.pack_changeset(row)
+		d.ajax()
 	}
 
 	d.load = function() {
 		//d.unpack_resultset()
+	}
+
+	function abort_ajax_requests() {
+
 	}
 
 
@@ -718,7 +728,7 @@ function value_widget(e) {
 
 			// transfer value of e.foo to field.bar based on field_prop_map.
 			let field = {}
-			for (e_k in e.field_prop_map) {
+			for (let e_k in e.field_prop_map) {
 				let field_k = e.field_prop_map[e_k]
 				field[field_k] = e[e_k]
 			}

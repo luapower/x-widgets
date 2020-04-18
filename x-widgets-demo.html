@@ -94,6 +94,7 @@ h2 {
 <script src="x-widgets.js"></script>
 <script src="x-grid.js"></script>
 <script src="x-listbox.js"></script>
+<script src="ajax.js"></script>
 
 </head>
 
@@ -546,7 +547,7 @@ var data = {
 	rows: [],
 }
 
-for (var i = 1; i <= 1e5; i++) {
+for (let i = 1; i <= 1e5; i++) {
 	let id         = i
 	let name       = 'record '+i
 	let parent_id  = floor((random() * i))
@@ -862,6 +863,55 @@ r = rowset({
 })
 
 main.add(grid({w: 200, h: 200, rowset: r}))
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=ajax_demo>
+<help>
+
+</help>
+<script>
+
+pre = tag('pre')
+main.add(pre)
+function log(...args) { pre.add(args.join(' '), '\n') }
+
+let req = ajax({
+	url: '/ajax-test.txt',
+	// timeout: 2,
+	slow_timeout: .5,
+})
+req.on('slow'       , function(...args) { log('slow'       , ...args) })
+req.on('progress'   , function(...args) { log('progress'   , ...args) })
+req.on('done'       , function(...args) { log('done'       , ...args) })
+req.send()
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=ajax_json_demo>
+<help>
+
+</help>
+<script>
+
+pre = tag('pre')
+main.add(pre)
+function log(...args) { pre.add(args.join(' '), '\n') }
+
+let req = ajax({
+	url: '/ajax-test.json',
+	upload: {a: 5, b: 7},
+})
+req.on('slow'       , function(...args) { log('slow'       , ...args) })
+req.on('progress'   , function(...args) { log('progress'   , ...args) })
+req.on('done'       , function(...args) { log('done'       , ...args) })
+req.send()
 
 </script>
 </template>

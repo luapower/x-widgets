@@ -79,7 +79,7 @@ grid = component('x-grid', function(e) {
 		if (ri == null)
 			return
 		let view = e.rows_view_div
-		let th = field != null && e.header_tr.at[fi]
+		let th = fi != null && e.header_tr.at[fi]
 		let h = e.row_h
 		let y = h * ri
 		let x = th ? th.offsetLeft  : 0
