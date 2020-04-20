@@ -57,9 +57,9 @@ listbox = component('x-listbox', function(e) {
 	}
 
 	function update_rowset_from_items() {
-		e.rowset.rows = []
+		e.rowset.rows = new Set()
 		for (let item of e.items)
-			e.rowset.rows.push({values: [item]})
+			e.rowset.rows.add({values: [item]})
 	}
 
 	e.format_item = function(item) {

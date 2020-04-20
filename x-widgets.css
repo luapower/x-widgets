@@ -1012,6 +1012,12 @@ td.x-menu-title-td {
 	border-style: solid none;
 }
 
+/* notifystack ------------------------------------------------------------ */
+
+.x-notifystack {
+	position: absolute;
+}
+
 /* grid ------------------------------------------------------------------- */
 
 .x-grid {
@@ -1056,6 +1062,24 @@ td.x-menu-title-td {
 	vertical-align: bottom;
 	padding-bottom: .3em;
 	border-bottom: 1px solid #999;
+}
+
+/* progress bar */
+
+.x-grid-progress-bar {
+	position: absolute;
+	width: 0%;
+	height: 3px;
+	bottom: 0;
+	pointer-events: none;
+}
+
+.x-grid.loading > .x-grid-header-table > .x-grid-progress-bar {
+	background-color: green;
+}
+
+.x-grid.loading {
+	opacity: .7;
 }
 
 /* rows */

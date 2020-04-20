@@ -26,8 +26,9 @@ grid = component('x-grid', function(e) {
 	e.class('x-focusable')
 	e.attrval('tabindex', 0)
 
+	e.progress_bar = H.div({class: 'x-grid-progress-bar'})
 	e.header_tr = H.tr()
-	e.header_table = H.table({class: 'x-grid-header-table'}, e.header_tr)
+	e.header_table = H.table({class: 'x-grid-header-table'}, e.header_tr, e.progress_bar)
 	e.rows_table = H.table({class: 'x-grid-rows-table'})
 	e.rows_div = H.div({class: 'x-grid-rows-div'}, e.rows_table)
 	e.rows_view_div = H.div({class: 'x-grid-rows-view-div'}, e.rows_div)
@@ -129,10 +130,8 @@ grid = component('x-grid', function(e) {
 
 	// when: fields changed.
 	function init_header() {
-
 		set_header_visibility()
-
-		e.header_table.clear()
+		e.header_tr.clear()
 		for (let field of e.fields) {
 			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
 			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
@@ -161,7 +160,6 @@ grid = component('x-grid', function(e) {
 
 			e.header_tr.add(th)
 		}
-		e.header_table.add(e.header_tr)
 	}
 
 	// when: fields changed, rows viewport height changed.
@@ -377,6 +375,10 @@ grid = component('x-grid', function(e) {
 		let td = td_at(tr_at(ri), fi)
 		if (td)
 			e.update_td_error(td, e.rows[ri], e.fields[fi], true, err)
+	}
+
+	e.update_load_progress = function(p) {
+		e.progress_bar.style.width = (p * 100) + '%'
 	}
 
 	// mouse bindings ---------------------------------------------------------

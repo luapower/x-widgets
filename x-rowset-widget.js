@@ -73,9 +73,8 @@ function rowset_widget(e) {
 
 	e.init_rows_array = function() {
 		e.rows = []
-		let rows = e.rowset.rows
-		for (let i = 0; i < rows.length; i++) {
-			let row = rows[i]
+		let i = 0
+		for (let row of e.rowset.rows) {
 			if (!row.removed)
 				e.rows.push(row)
 		}
@@ -86,9 +85,11 @@ function rowset_widget(e) {
 	e.init_fields_array = function() {
 		e.fields = []
 		if (e.cols) {
-			for (let fi of e.cols)
-				if (e.rowset.fields[fi].visible != false)
-					e.fields.push(e.rowset.fields[fi])
+			for (let col of e.cols.split(' ')) {
+				let field = e.rowset.field(col)
+				if (field && field.visible != false)
+					e.fields.push(field)
+			}
 		} else
 			for (let field of e.rowset.fields)
 				if (field.visible != false)
@@ -105,6 +106,12 @@ function rowset_widget(e) {
 		// cell value & state changes.
 		e.rowset.onoff('cell_state_changed'     , cell_state_changed     , on)
 		e.rowset.onoff('display_values_changed' , display_values_changed , on)
+		// network events
+		e.rowset.on('loading', rowset_loading, on)
+		e.rowset.on('load_slow', rowset_load_slow, on)
+		e.rowset.on('load_progress', rowset_load_progress, on)
+		// misc.
+		e.rowset.on('notify', rowset_notify, on)
 	}
 
 	// adding & removing rows -------------------------------------------------
@@ -185,6 +192,31 @@ function rowset_widget(e) {
 
 	function display_values_changed(field) {
 		e.init_rows()
+	}
+
+	// responding to notifications from rowset --------------------------------
+
+	function rowset_notify(type, message) {
+		console.log(type, message)
+	}
+
+	function rowset_loading(on) {
+		e.disabled = !on
+		e.class('loading', on)
+	}
+
+	e.update_load_progress = noop // stub
+	function rowset_load_progress(...args) {
+		e.update_load_progress(...args)
+	}
+
+	e.update_load_slow = noop // stub
+	function rowset_load_slow(on) {
+		e.update_load_slow(on)
+	}
+
+	function rowset_saving(on) {
+		//
 	}
 
 	// focusing ---------------------------------------------------------------

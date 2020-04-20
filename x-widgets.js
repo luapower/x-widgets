@@ -52,7 +52,7 @@
 		compare_types  : f(v1, v2) -> -1|0|1  (for sorting)
 		compare_values : f(v1, v2) -> -1|0|1  (for sorting)
 
-	d.rows: [{k->v}, ...]
+	d.rows: Set({k->v})
 		values         : [v1,...]
 		state          : [{k->v},...]
 			input_value : currently set value, whether valid or not.
@@ -86,9 +86,8 @@ rowset = function(...options) {
 	d.can_change_rows = true
 
 	let fields // [fi: {name:, client_default: v, server_default: v, ...}]
-	let rows   // [ri: row]; row = {values: [fi: val], attr: val, ...}
-	let pk     // [field1,...]
-	let field_map = new Map()
+	let rows   // Set(row); row = {values: [fi: val], attr: val, ...}
+	let field_map = new Map() // field_name->field
 
 	events_mixin(d)
 
@@ -103,13 +102,12 @@ rowset = function(...options) {
 		update(d, rowset, ...options)
 
 		d.fields = d.fields || []
-		d.rows = d.rows || []
-		d.pk = d.pk || []
+		d.rows = (!d.rows || isarray(d.rows)) && new Set(d.rows) || d.rows
+		d.pk_fields = d.pk_fields || []
 
 		// init locals.
 		fields = d.fields
 		rows = d.rows
-		pk = []
 
 		for (let i = 0; i < d.fields.length; i++) {
 			let f1 = d.fields[i]
@@ -129,9 +127,12 @@ rowset = function(...options) {
 			field_map.set(field.name, field)
 		}
 
-		for (let field of d.pk) {
-			pk.push(d.field(field))
-		}
+		if (d.pk)
+			for (let col of d.pk.split(' ')) {
+				let field = d.field(col)
+				d.pk_fields.push(field)
+				field.is_pk = true
+			}
 
 	}
 
@@ -291,6 +292,16 @@ rowset = function(...options) {
 		d.fire('cell_state_changed', row, field, key, val, old_val, ...args)
 	}
 
+	// get/set row state ------------------------------------------------------
+
+	d.set_row_state = function(row, key, val, ...args) {
+		let old_val = row[key]
+		if (old_val === val)
+			return
+		row[key] = val
+		d.fire('row_state_changed', row, key, val, old_val, ...args)
+	}
+
 	// get/set cell values ----------------------------------------------------
 
 	d.value = function(row, field) {
@@ -300,6 +311,11 @@ rowset = function(...options) {
 
 	d.input_value = function(row, field) {
 		let v = d.cell_state(row, field, 'input_value')
+		return v !== undefined ? v : d.value(row, field)
+	}
+
+	d.old_value = function(row, field) {
+		let v = d.cell_state(row, field, 'old_value')
 		return v !== undefined ? v : d.value(row, field)
 	}
 
@@ -384,6 +400,7 @@ rowset = function(...options) {
 					d.set_cell_state(row, field, 'modified', false, ...args)
 				}
 				d.fire('value_changed', row, field, val, old_val, ...args)
+				row_changed(row)
 			}
 		}
 		d.set_cell_state(row, field, 'error', invalid ? err : undefined, ...args)
@@ -437,13 +454,16 @@ rowset = function(...options) {
 		if (!d.can_add_rows)
 			return
 		let row = create_row()
-		rows.push(row)
+		rows.add(row)
 		d.fire('row_added', row, ...args)
 		// set default client values as if they were added by the user.
 		for (let field of fields)
 			if (field.client_default != null)
 				d.set_value(row, field, field.client_default, ...args)
-		row.modified = false // ...except we don't consider the row modified.
+		// ... except we don't consider the row modified so that we can
+		// remove it with the up-arrow key if no further edits are made.
+		row.modified = false
+		row_changed(row)
 		return row
 	}
 
@@ -452,83 +472,237 @@ rowset = function(...options) {
 			return false
 		if (row.can_remove === false)
 			return false
+		if (row.is_new && row.save_request) {
+			d.fire('notify', 'error',
+				S('cannot remove a row that is in the process of being added to the server'))
+			return false
+		}
 		return true
 	}
 
 	d.remove_row = function(row, ...args) {
 		if (!d.can_remove_row(row))
 			return
-		if (row.is_new) {
-			rows.remove(rows.indexOf(row))
-		} else {
-			// mark row as removed
-			row.removed = true
-		}
+		row.removed = true
+		rows.delete(row)
 		d.fire('row_removed', row, ...args)
+		row_changed(row)
 		return row
 	}
 
-	// changeset & resultset --------------------------------------------------
+	// ajax requests ----------------------------------------------------------
 
-	function add_row_changes(row, changes) {
+	let requests
+
+	function add_request(req) {
+		if (!requests)
+			requests = new Set()
+		requests.add(req)
+	}
+
+	function abort_ajax_requests() {
+		if (d.requests)
+			for (let req of requests)
+				req.abort()
+	}
+
+	// loading ----------------------------------------------------------------
+
+	d.load = function() {
+		if (!d.url)
+			return
+		if (d.save_request)
+			return
+		if (d.load_request)
+			d.load_request.abort()
+		let req = ajax({
+			url: d.url,
+			progress: load_progress,
+			success: load_success,
+			fail: load_fail,
+			done: load_done,
+			slow: load_slow,
+		})
+		add_request(req)
+		d.load_request = req
+		d.loading = true
+		d.fire('loading', true)
+		req.send()
+	}
+
+	function load_progress(p, loaded, total) {
+		d.fire('load_progress', p, loaded, total)
+	}
+
+	function load_slow(show) {
+		d.fire('loading_slow', show)
+		if (show)
+			d.fire('notify', 'info', S('slow', 'Still working on it...'))
+	}
+
+	function load_done() {
+		requests.delete(this)
+		d.load_request = null
+		d.loading = false
+		d.fire('loading', false)
+	}
+
+	function check_fields(server_fields) {
+		let fi = 0
+		let ok = false
+		if (fields.length == server_fields.length) {
+			for (sf of server_fields) {
+				let cf = fields[fi]
+				if (cf.name != sf.name)
+					break
+				if (cf.type != sf.type)
+					break
+				fi++
+			}
+			ok = true
+		}
+		if (!ok)
+			d.fire('notify', 'error', 'client fields do not match server fields')
+		return ok
+	}
+
+	function load_success(result) {
+		if (!check_fields(result.fields))
+			return
+		rows = new Set(result.rows)
+		d.rows = rows
+		d.fire('reload')
+	}
+
+	function load_fail(type, status, message, body) {
+		if (type == 'http')
+			d.fire('notify', 'error',
+				S('rowset_load_http_error',
+					'Server returned {0} {1}<pre>{2}</pre>'.format(status, message, body)))
+		else if (type == 'network')
+			d.fire('notify', 'error', S('rowset_load_network_error', 'Loading failed: network error.'))
+		else if (type == 'timeout')
+			d.fire('notify', 'error', S('rowset_load_timeout_error', 'Loading failed: timed out.'))
+	}
+
+	// saving changes ---------------------------------------------------------
+
+	let changeset
+
+	function row_changed(row) {
+		if (!changeset)
+			changeset = new Set()
+		if (row.is_new && row.removed)
+			changeset.delete(row)
+		else
+			changeset.add(row)
+		d.fire('row_changed', row)
+	}
+
+	function where_fields(row) {
+		let t = {}
+		for (let field of d.pk_fields)
+			t[field.name] = d.old_value(row, field)
+		return t
+	}
+
+	function add_row_changes(row, upload) {
+		if (row.save_request)
+			return
 		if (row.is_new) {
 			let t = {}
 			for (let fi = 0; fi < fields.length; fi++) {
 				let field = fields[fi]
 				let val = row.values[fi]
-				if (val === field.server_default)
-					val = null
-				t[field.name] = val
+				if (val !== field.server_default)
+					t[field.name] = val
 			}
-			changes.new_rows.push(t)
+			upload.new_rows.push(t)
+		} else if (row.removed) {
+			upload.removed_rows.push(where_fields(row))
 		} else if (row.modified) {
 			let t = {}
-			for (let fi = 0; fi < fields.length; fi++) {
-				let field = fields[fi]
-				if (d.cell_state(row, field, 'modified'))
-					t[field.name] = row.values[fi]
+			let found
+			for (let field of fields) {
+				if (d.cell_state(row, field, 'modified')) {
+					t[field.name] = row.values[field.index]
+					found = true
+				}
 			}
-			changes.updated_rows.push(t)
-		} else if (row.removed_rows) {
-			changes.removed_rows.push({})
+			if (found)
+				upload.updated_rows.push({values: t, where: where_fields(row)})
 		}
 	}
 
 	d.pack_changeset = function(row) {
-		let changes = {new_rows: [], updated_rows: [], removed_rows: []}
+		let upload = {new_rows: [], updated_rows: [], removed_rows: []}
 		if (!row) {
-			for (let row of rows)
-				add_row_changes(row, changes)
+			for (let row of changeset)
+				add_row_changes(row, upload)
 		} else
-			add_row_changes(row, changes)
-		return changes
+			add_row_changes(row, upload)
+		return upload
 	}
 
-	d.apply_changeset = function(changeset) {
-		//
-	}
-
-	d.unpack_resultset = function(resultset) {
+	d.apply_resultset = function(resultset) {
 		for (let row of resultset) {
-			//
+			//d.set_cell_state(
+			//d.set_row_state(
 		}
 	}
 
-	// loading & saving -------------------------------------------------------
+	function set_save_state(rows, req) {
+		for (let row of rows)
+			d.set_row_state(row, 'save_request', req)
+	}
 
 	d.save = function(row) {
-		let changeset = d.pack_changeset(row)
-		d.ajax()
+		if (!d.url)
+			return
+		if (!d.changeset)
+			return
+		let req = ajax({
+			url: d.url,
+			upload: d.pack_changeset(row),
+			rows: changeset,
+			success: save_success,
+			fail: save_fail,
+			done: save_done,
+			slow: save_slow,
+		})
+		changeset = null
+		add_request(req)
+		set_save_state(req.rows, req)
+		d.fire('saving', true)
+		req.send()
 	}
 
-	d.load = function() {
-		//d.unpack_resultset()
+	function save_slow(show) {
+		d.fire('saving_slow', show)
+		if (show)
+			d.fire('notify', 'info', S('slow', 'Still working on it...'))
 	}
 
-	function abort_ajax_requests() {
-
+	function save_done() {
+		requests.delete(this)
+		set_save_state(this.rows, null)
+		d.fire('saving', false)
 	}
 
+	function save_success(resultset) {
+		d.apply_resultset(resultset)
+	}
+
+	function save_fail(...args) {
+		if (type == 'http')
+			d.fire('notify', 'error',
+				S('rowset_save_http_error',
+					'Server returned {0} {1}<pre>{2}</pre>'.format(status, message, body)))
+		else if (type == 'network')
+			d.fire('notify', 'error', S('rowset_save_network_error', 'Saving failed: network error.'))
+		else if (type == 'timeout')
+			d.filre('notify', 'error', S('rowset_save_timeout_error', 'Saving failed: timed out.'))
+	}
 
 	init()
 
@@ -579,7 +753,7 @@ rowset = function(...options) {
 
 	rowset.types = {
 		number: {align: 'right'},
-		date  : {align: 'right'},
+		date  : {align: 'right', min: -(2**52), max: 2**52},
 		bool  : {align: 'center'},
 	}
 
@@ -2400,4 +2574,25 @@ vsplit = component('x-split', function(e) {
 function hsplit(...args) {
 	return vsplit({horizontal: true}, ...args)
 }
+
+// ---------------------------------------------------------------------------
+// notifystack
+// ---------------------------------------------------------------------------
+
+notifystack = component('x-notifystack', function(e) {
+
+	e.class('x-widget')
+	e.class('x-notifystack')
+
+	e.notify = function(text, type) {
+
+		let t = tooltip({
+			type: type,
+			target: e,
+			text: text,
+
+		})
+	}
+
+})
 

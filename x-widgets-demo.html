@@ -79,6 +79,8 @@ h2 {
 
 #demo_list {
 	display: flex;
+	height: 520px;
+	overflow: auto;
 }
 
 .x-dark #layout, .x-dark #code, .x-dark .lb { border-color: #333; }
@@ -216,6 +218,25 @@ t1 = tooltip({text: s, side: 'right' , align: 'end', target: b3, type: 'error'})
 t2 = tooltip({text: s, side: 'top'   , align: 'end', target: b3, type: 'error'})
 t3 = tooltip({text: s, side: 'bottom', align: 'end', target: b3, type: 'error'})
 t4 = tooltip({text: s, side: 'left'  , align: 'end', target: b3, type: 'error'})
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=notifystack_demo>
+<help>
+
+</help>
+<script>
+
+ns = notifystack({
+	//
+})
+
+main.add(ns)
+
+ns.notify('Hello there')
 
 </script>
 </template>
@@ -544,6 +565,7 @@ var data = {
 		{name: 'random_num', w: 130, allow_null: true, type: 'number', text: 'Random<br>Number'},
 		{name: 'date'      , w: 140, allow_null: true, type: 'date'},
 	],
+	pk: 'id',
 	rows: [],
 }
 
@@ -564,7 +586,7 @@ d = rowset(data)
 g = grid({
 	rowset: d,
 	w: 500,
-	//h: 200,
+	h: 200,
 	//row_border_h: 1,
 	//row_h: 40,
 	//row_border_h: 1,
@@ -574,6 +596,13 @@ g = grid({
 g.style.resize = 'both'
 
 main.add(g)
+
+log = tag('pre')
+main.add(log)
+
+d.on('row_changed', function() {
+	log.html = json(d.pack_changeset(), null, 3)
+})
 
 </script>
 </template>
@@ -883,11 +912,10 @@ let req = ajax({
 	url: '/ajax-test.txt',
 	// timeout: 2,
 	slow_timeout: .5,
-})
-req.on('slow'       , function(...args) { log('slow'       , ...args) })
-req.on('progress'   , function(...args) { log('progress'   , ...args) })
-req.on('done'       , function(...args) { log('done'       , ...args) })
-req.send()
+	slow     : function(...args) { log('slow'       , ...args) },
+	progress : function(...args) { log('progress'   , ...args) },
+	done     : function(...args) { log('done'       , ...args) },
+}).send()
 
 </script>
 </template>
@@ -907,11 +935,55 @@ function log(...args) { pre.add(args.join(' '), '\n') }
 let req = ajax({
 	url: '/ajax-test.json',
 	upload: {a: 5, b: 7},
+	slow     : function(...args) { log('slow'       , ...args) },
+	progress : function(...args) { log('progress'   , ...args) },
+	fail     : function(...args) { log('fail'       , ...args) },
+	success  : function(j)       { log('success'    , json(j)) },
+}).send()
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=data_grid_demo>
+<help>
+
+</help>
+<script>
+
+function starts_with_a(s) {
+	return s.lower().starts('a') || 'Name must start with "A"'
+}
+
+var data = {
+	fields: [
+		{name: 'id'        , w:  60, min_w:  30, type: 'number', editable: false},
+		{name: 'name'      , w:  70, min_w:  50, max_w: 200, validate: starts_with_a},
+		{name: 'date'      , w: 140, allow_null: true, type: 'date'},
+	],
+	pk: 'id',
+	url: 'rowset-test.json',
+}
+
+d = rowset(data)
+
+g = grid({
+	rowset: d,
+	w: 500,
+	h: 200,
 })
-req.on('slow'       , function(...args) { log('slow'       , ...args) })
-req.on('progress'   , function(...args) { log('progress'   , ...args) })
-req.on('done'       , function(...args) { log('done'       , ...args) })
-req.send()
+
+main.add(g)
+
+log = tag('pre')
+main.add(log)
+
+d.on('row_changed', function() {
+	log.html = json(d.pack_changeset(), null, 3)
+})
+
+d.load()
 
 </script>
 </template>
@@ -974,7 +1046,7 @@ reload_button.on('click', function() {
 
 demo_list_ct.add(demo_list)
 
-demo_list.value = 12
+demo_list.value = 23
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')
