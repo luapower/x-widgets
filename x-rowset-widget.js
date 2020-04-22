@@ -15,6 +15,8 @@
 
 function rowset_widget(e) {
 
+	e.rowset_owner = true
+
 	e.can_edit = true
 	e.can_add_rows = true
 	e.can_remove_rows = true
@@ -100,9 +102,9 @@ function rowset_widget(e) {
 
 	e.bind_rowset = function(on) {
 		// structural changes.
-		e.rowset.onoff('reload'      , reload     , on)
-		e.rowset.onoff('row_added'   , row_added  , on)
-		e.rowset.onoff('row_removed' , row_removed, on)
+		e.rowset.onoff('loaded'      , rowset_loaded , on)
+		e.rowset.onoff('row_added'   , row_added     , on)
+		e.rowset.onoff('row_removed' , row_removed   , on)
 		// cell value & state changes.
 		e.rowset.onoff('cell_state_changed'     , cell_state_changed     , on)
 		e.rowset.onoff('display_values_changed' , display_values_changed , on)
@@ -112,6 +114,9 @@ function rowset_widget(e) {
 		e.rowset.on('load_progress', rowset_load_progress, on)
 		// misc.
 		e.rowset.on('notify', rowset_notify, on)
+		// take/release ownership of the rowset.
+		if (e.rowset_owner)
+			e.rowset.owner = on ? e : null
 	}
 
 	// adding & removing rows -------------------------------------------------
@@ -144,11 +149,13 @@ function rowset_widget(e) {
 
 	// responding to structural updates ---------------------------------------
 
-	function reload() {
+	function rowset_loaded() {
 		e.focused_row_index = null
 		e.focused_field_index = null
+		e.init_fields_array()
 		e.init_rows_array()
 		rowmap = null
+		e.init_fields()
 		e.init_rows()
 	}
 
@@ -213,10 +220,6 @@ function rowset_widget(e) {
 	e.update_load_slow = noop // stub
 	function rowset_load_slow(on) {
 		e.update_load_slow(on)
-	}
-
-	function rowset_saving(on) {
-		//
 	}
 
 	// focusing ---------------------------------------------------------------

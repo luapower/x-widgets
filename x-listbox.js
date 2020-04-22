@@ -20,18 +20,13 @@ listbox = component('x-listbox', function(e) {
 			assert(!e.rowset)
 			create_rowset_for_items()
 			update_rowset_from_items()
-		} else {
-			if (e.value_col)
-				e.value_field = e.rowset.field(e.value_col)
-			if (e.display_col)
-				e.display_field = e.rowset.field(e.display_col)
-			else
-				e.display_field = e.value_field
 		}
 
+		e.rowset = global_rowset(e.rowset)
 		e.init_fields_array()
 		e.init_rows_array()
 		e.init_nav()
+		e.init_fields()
 	}
 
 	e.attach = function() {
@@ -75,6 +70,15 @@ listbox = component('x-listbox', function(e) {
 	e.update_item = function(item, row) { // stub
 		if (e.display_field)
 			item.html = e.rowset.display_value(row, e.display_field)
+	}
+
+	e.init_fields = function() {
+		if (e.value_col)
+			e.value_field = e.rowset.field(e.value_col)
+		if (e.display_col)
+			e.display_field = e.rowset.field(e.display_col)
+		else
+			e.display_field = e.value_field
 	}
 
 	e.init_rows = function() {

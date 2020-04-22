@@ -11,6 +11,7 @@ grid = component('x-grid', function(e) {
 	e.w = 400
 	e.h = 400
 	e.row_h = 26
+	e.row_border_w = 1
 	e.row_border_h = 1
 	e.min_col_w = 20
 
@@ -37,10 +38,11 @@ grid = component('x-grid', function(e) {
 	e.rows_view_div.on('scroll', update_view)
 
 	e.init = function() {
+		e.rowset = global_rowset(e.rowset)
 		e.init_fields_array()
 		e.init_rows_array()
 		e.init_nav()
-		init_header()
+		e.init_fields()
 	}
 
 	function bind_document(on) {
@@ -125,17 +127,20 @@ grid = component('x-grid', function(e) {
 	// rendering --------------------------------------------------------------
 
 	function field_w(field, w) {
-		return max(e.min_col_w, clamp(or(w, field.w), field.min_w || -1/0, field.max_w || 1/0))
+		return max(e.min_col_w, clamp(or(w, field.w), field.min_w, field.max_w))
 	}
 
 	// when: fields changed.
-	function init_header() {
+	e.init_fields = function() {
 		set_header_visibility()
 		e.header_tr.clear()
 		for (let field of e.fields) {
 			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
 			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
-			let e1 = H.td({class: 'x-grid-header-title-td'}, H(field.text) || field.name)
+			let e1 = H.td({
+					class: 'x-grid-header-title-td',
+					title: field.text || field.name
+				}, H(field.text) || field.name)
 			let e2 = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
 			if (field.align == 'right')
 				[e1, e2] = [e2, e1]
@@ -188,7 +193,7 @@ grid = component('x-grid', function(e) {
 
 	// when: widget height changed.
 	let cw, ch
-	e.on('attr_changed' , function() {
+	e.on('attr_changed', function() {
 		if (e.clientWidth === cw && e.clientHeight === ch)
 			return
 		if (e.clientHeight !== ch) {
@@ -358,6 +363,7 @@ grid = component('x-grid', function(e) {
 
 	e.init_rows = function() {
 		update_heights()
+		init_rows_table()
 		update_view()
 	}
 

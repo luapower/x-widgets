@@ -1112,7 +1112,7 @@ td.x-menu-title-td {
 
 	/* sizing & styling */
 	padding: var(--x-input-padding);
-	border-right: 0px solid #ccc;
+	border-right: 0px solid #eee;   /* border width set from code */
 }
 
 .x-grid-td {
