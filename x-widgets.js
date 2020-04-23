@@ -32,7 +32,7 @@
 		validate       : f(v, field) -> undefined|true|err
 		min            : min value.
 		max            : max value.
-		step           : number that the value must be multiple of.
+		multiple_of    : number that the value must be multiple of.
 
 	formatting:
 		align          : 'left'|'right'|'center'
@@ -85,64 +85,55 @@ rowset = function(...options) {
 	d.can_remove_rows = true
 	d.can_change_rows = true
 
-	let fields // [fi: {name:, client_default: v, server_default: v, ...}]
-	let rows   // Set(row); row = {values: [fi: val], attr: val, ...}
-	let field_map = new Map() // field_name->field
-
 	events_mixin(d)
+
+	let field_map = new Map() // field_name->field
 
 	d.field = function(v) {
 		return typeof(v) == 'string' ? field_map.get(v) :
-			(typeof(v) == 'number' ? fields[v] : v)
+			(typeof(v) == 'number' ? d.fields[v] : v)
 	}
 
-	function init_fields(server_fields, server_pk, extra_defs) {
-
-		d.fields = server_fields || []
-		d.pk_fields = []
-		fields = d.fields
-
+	function init_fields(fields) {
+		d.fields = fields || []
 		for (let i = 0; i < d.fields.length; i++) {
 			let f1 = d.fields[i]
 			let f0 = f1.type ? (d.types[f1.type] || rowset.types[f1.type]) : null
-			let f2 = extra_defs ? extra_defs[f1.name] : null
-			let field = update({index: i}, rowset.default_type, d.default_type, f0, f1, f2)
-
+			let f2 = d.field_attrs ? d.field_attrs[f1.name] : null
+			let field = update({index: i, rowset: d},
+				rowset.default_type, d.default_type, f0, f1, f2)
 			if (field.text == null)
 				field.text = auto_display_name(field.name)
 			field.name = field.name || i+''
-			let lr = global_rowset(field.lookup_rowset)
-			if (lr) {
-				field.lookup_rowset = lr
-				field.lookup_field  = lr.field(field.lookup_col)
-				field.display_field = lr.field(field.display_col)
-			}
-
-			fields[i] = field
+			if (field.lookup_rowset)
+				field.lookup_rowset = global_rowset(field.lookup_rowset)
+			d.fields[i] = field
 			field_map.set(field.name, field)
 		}
+	}
 
-		if (server_pk)
-			for (let col of d.pk.split(' ')) {
+	function init_pk(pk) {
+		d.pk_fields = []
+		if (pk)
+			for (let col of pk.split(' ')) {
 				let field = d.field(col)
 				d.pk_fields.push(field)
 				field.is_pk = true
 			}
-
 	}
 
-	function init_rows() {
-		d.rows = (!d.rows || isarray(d.rows)) && new Set(d.rows) || d.rows
-		rows = d.rows
+	function init_rows(rows) {
+		d.rows = (!rows || isarray(rows)) && new Set(rows) || rows
 	}
 
-	property(d, 'row_count', { get: function() { return rows.size } })
+	property(d, 'row_count', { get: function() { return d.rows.size } })
 
 	function init() {
 		update(d, rowset, ...options) // set options/override.
 		d.client_fields = d.fields
-		init_fields(d.fields, d.pk, d.field_attrs)
-		init_rows()
+		init_fields(d.fields)
+		init_pk(d.pk)
+		init_rows(d.rows)
 	}
 
 	let owner
@@ -162,11 +153,11 @@ rowset = function(...options) {
 	})
 
 	d.attach = function() {
-		set_display_values_changed_events(true)
+		bind_lookup_rowsets(true)
 	}
 
 	d.detach = function() {
-		set_display_values_changed_events(false)
+		bind_lookup_rowsets(false)
 		abort_ajax_requests()
 	}
 
@@ -177,7 +168,7 @@ rowset = function(...options) {
 
 		let rebuild = function() {
 			let fi = field.index
-			for (let row of rows) {
+			for (let row of d.rows) {
 				index.set(row.values[fi], row)
 			}
 		}
@@ -299,6 +290,7 @@ rowset = function(...options) {
 			return
 		t[key] = val
 		d.fire('cell_state_changed', row, field, key, val, old_val, ...args)
+		d.fire(key+'_changed_for_'+field.name, row, val, old_val, ...args)
 	}
 
 	// get/set row state ------------------------------------------------------
@@ -315,7 +307,7 @@ rowset = function(...options) {
 
 	d.value = function(row, field) {
 		let get_value = field.get_value // computed value?
-		return get_value ? get_value(field, row, fields) : row.values[field.index]
+		return get_value ? field.get_value(row) : row.values[field.index]
 	}
 
 	d.input_value = function(row, field) {
@@ -365,10 +357,8 @@ rowset = function(...options) {
 	}
 
 	d.validate_row = function(row) {
-
 		if (!d.can_change_value(row))
 			return S('error_row_read_only', 'row is read-only')
-
 		return d.fire('validate', row)
 	}
 
@@ -416,6 +406,7 @@ rowset = function(...options) {
 					d.set_cell_state(row, field, 'modified', false, ...args)
 				}
 				d.fire('value_changed', row, field, val, old_val, ...args)
+				d.fire('value_changed_for_'+field.name, row, val, old_val, ...args)
 				row_changed(row)
 			}
 		}
@@ -425,8 +416,8 @@ rowset = function(...options) {
 
 	// get/set display value --------------------------------------------------
 
-	function set_display_values_changed_events(on) {
-		for (let field of fields) {
+	function bind_lookup_rowsets(on) {
+		for (let field of d.fields) {
 			let lr = field.lookup_rowset
 			if (lr) {
 				if (on && !field.lookup_rowset_loaded) {
@@ -434,20 +425,21 @@ rowset = function(...options) {
 						field.lookup_field  = lr.field(field.lookup_col)
 						field.display_field = lr.field(field.display_col)
 						d.fire('display_values_changed', field)
+						d.fire('display_values_changed_for_'+field.name)
 					}
-					field.lookup_row_changed = function() {
+					field.lookup_display_values_changed = function() {
 						d.fire('display_values_changed', field)
+						d.fire('display_values_changed_for_'+field.name)
 					}
-					field.lookup_cell_state_changed = function(row, ch_field, key, val) {
-						if (key == 'input_value')
-							if (ch_field == field.lookup_field || ch_field == field.display_field)
-								d.fire('display_values_changed', field)
-					}
+					field.lookup_rowset_loaded()
 				}
-				lr.onoff('loaded'             , field.lookup_rowset_loaded, on)
-				lr.onoff('row_added'          , field.lookup_row_changed, on)
-				lr.onoff('row_removed'        , field.lookup_row_changed, on)
-				lr.onoff('cell_state_changed' , field.lookup_cell_state_changed, on)
+				lr.onoff('loaded'      , field.lookup_rowset_loaded, on)
+				lr.onoff('row_added'   , field.lookup_display_values_changed, on)
+				lr.onoff('row_removed' , field.lookup_display_values_changed, on)
+				lr.onoff('input_value_changed_for_'+field.lookup_col,
+					field.lookup_display_values_changed, on)
+				lr.onoff('input_value_changed_for_'+field.display_col,
+					field.lookup_display_values_changed, on)
 			}
 		}
 	}
@@ -455,15 +447,16 @@ rowset = function(...options) {
 	d.display_value = function(row, field) {
 		let v = d.input_value(row, field)
 		let lr = field.lookup_rowset
-		let lf = field.lookup_field
-		if (lr && lf) {
-			let row = lr.lookup(field.lookup_field, v)
-			if (!row)
-				return field.lookup_failed_display_value(v)
-			else
-				return lr.display_value(row, field.display_field)
+		if (lr) {
+			let lf = field.lookup_field
+			if (lf) {
+				let row = lr.lookup(lf, v)
+				if (row)
+					return lr.display_value(row, field.display_field)
+			}
+			return field.lookup_failed_display_value(v)
 		} else
-			return field.format.call(d, v, field)
+			return field.format(v)
 	}
 
 	// add/remove rows --------------------------------------------------------
@@ -471,7 +464,7 @@ rowset = function(...options) {
 	function create_row() {
 		let values = []
 		// add server_default values or null
-		for (let field of fields) {
+		for (let field of d.fields) {
 			let val = field.server_default
 			values.push(val != null ? val : null)
 		}
@@ -482,10 +475,10 @@ rowset = function(...options) {
 		if (!d.can_add_rows)
 			return
 		let row = create_row()
-		rows.add(row)
+		d.rows.add(row)
 		d.fire('row_added', row, ...args)
 		// set default client values as if they were added by the user.
-		for (let field of fields)
+		for (let field of d.fields)
 			if (field.client_default != null)
 				d.set_value(row, field, field.client_default, ...args)
 		// ... except we don't consider the row modified so that we can
@@ -512,7 +505,7 @@ rowset = function(...options) {
 		if (!d.can_remove_row(row))
 			return
 		row.removed = true
-		rows.delete(row)
+		d.rows.delete(row)
 		d.fire('row_removed', row, ...args)
 		row_changed(row)
 		return row
@@ -597,12 +590,13 @@ rowset = function(...options) {
 	}
 
 	function load_success(result) {
-		if (result.fields)
+		if (result.fields) {
 			if (!check_fields(result.fields))
 				return
-		if (result.fields || result.pk)
-			init_fields(result.fields, result.pk)
-		d.rows = result.rows
+			init_fields(result.fields)
+			init_pk(result.pk)
+			d.fire('fields_changed')
+		}
 		init_rows(result.rows)
 		d.fire('loaded')
 	}
@@ -644,8 +638,8 @@ rowset = function(...options) {
 			return
 		if (row.is_new) {
 			let t = {}
-			for (let fi = 0; fi < fields.length; fi++) {
-				let field = fields[fi]
+			for (let fi = 0; fi < d.fields.length; fi++) {
+				let field = d.fields[fi]
 				let val = row.values[fi]
 				if (val !== field.server_default)
 					t[field.name] = val
@@ -656,7 +650,7 @@ rowset = function(...options) {
 		} else if (row.modified) {
 			let t = {}
 			let found
-			for (let field of fields) {
+			for (let field of d.fields) {
 				if (d.cell_state(row, field, 'modified')) {
 					t[field.name] = row.values[field.index]
 					found = true
@@ -685,7 +679,7 @@ rowset = function(...options) {
 	}
 
 	function set_save_state(rows, req) {
-		for (let row of rows)
+		for (let row of d.rows)
 			d.set_row_state(row, 'save_request', req)
 	}
 
@@ -761,7 +755,7 @@ rowset = function(...options) {
 
 {
 	let default_lookup_failed_display_value = function(v) {
-		return v != null ? v+'' : ''
+		return this.format(v)
 	}
 
 	rowset.default_type = {
@@ -778,7 +772,7 @@ rowset = function(...options) {
 		false_text: 'false',
 		min: 0,
 		max: 1/0,
-		step: 1,
+		multiple_of: 1,
 		lookup_failed_display_value: default_lookup_failed_display_value,
 	}
 
@@ -813,11 +807,11 @@ rowset = function(...options) {
 		if (typeof(val) != 'number' || val !== val)
 			return S('error_invalid_number', 'invalid number')
 
-		if (field.step != null)
-			if (val % field.step != 0) {
-				if (field.step == 1)
+		if (field.multiple_of != null)
+			if (val % field.multiple_of != 0) {
+				if (field.multiple_of == 1)
 					return S('error_integer', 'value must be an integer')
-				return S('error_multiple', 'value must be multiple of {0}').format(field.step)
+				return S('error_multiple', 'value must be multiple of {0}').format(field.multiple_of)
 			}
 	}
 
@@ -842,9 +836,9 @@ rowset = function(...options) {
 			return S('error_date', 'invalid date')
 	}
 
-	rowset.types.date.format = function(t, field) {
+	rowset.types.date.format = function(t) {
 		_d.setTime(t)
-		return _d.toLocaleString(locale, field.date_format)
+		return _d.toLocaleString(locale, this.date_format)
 	}
 
 	rowset.default_type.date_format =
@@ -865,8 +859,8 @@ rowset = function(...options) {
 			return S('error_boolean', 'value not true or false')
 	}
 
-	rowset.types.bool.format = function(val, field) {
-		return val ? field.true_text : field.false_text
+	rowset.types.bool.format = function(val) {
+		return val ? this.true_text : this.false_text
 	}
 
 	rowset.types.bool.editor = function(...options) {
@@ -885,17 +879,11 @@ function focused_row_mixin(e) {
 
 	let focused_row = null
 
-	function compare_values(r0, r1) {
-		//for (let i = 0
-	}
-
 	e.set_focused_row = function(row, ...args) {
 		if (row == focused_row)
 			return
-		let old_focused_row = focused_row
 		focused_row = row
 		e.fire('focused_row_changed', row, ...args)
-		compare_values(old_focused_row, focused_row)
 	}
 
 	property(e, 'focused_row', {
@@ -903,23 +891,19 @@ function focused_row_mixin(e) {
 		set: function(row) { e.set_focused_row(row) },
 	})
 
-	e.bind_rowset = function(on) {
-		e.rowset.onoff('loaded'                 , rowset_loaded          , on)
-		e.rowset.onoff('row_removed'            , row_removed            , on)
-		e.rowset.onoff('value_changed'          , value_changed          , on)
-		e.rowset.onoff('cell_state_changed'     , cell_state_changed     , on)
+	e.focused_row_bind_rowset = function(on) {
+		e.rowset.onoff('loaded'             , rowset_loaded      , on)
+		e.rowset.onoff('row_removed'        , row_removed        , on)
+		e.rowset.onoff('value_changed'      , value_changed      , on)
+		e.rowset.onoff('cell_state_changed' , cell_state_changed , on)
 	}
 
 	// losing the focused row -------------------------------------------------
 
 	function rowset_loaded() {
-		let old_focused_row = focused_row
-		focused_row = null
-		compare_values(old_focused_row, focused_row)
+		e.set_focused_row(null)
 	}
 
-	// TODO: remove_by_index() that ends up calling set_focused_row_index()
-	// instead, in order to avoid creating a rowmap.
 	function row_removed(row) {
 		if (focused_row == row)
 			e.set_focused_row(null)
@@ -930,13 +914,41 @@ function focused_row_mixin(e) {
 	function value_changed(row, field, val, old_val, ...args) {
 		if (row != focused_row)
 			return
-		e.fire('focused_row_value_changed', field, val, old_val, ...args)
+		e.fire('focused_row_value_changed_for_'+field.name, val, old_val, ...args)
 	}
 
 	function cell_state_changed(row, field, key, val, old_val, ...args) {
 		if (row != focused_row)
 			return
-		e.fire('focused_row_cell_state_changed', field, key, val, old_val, ...args)
+		e.fire('focused_row_'+key+'_changed_for_'+field.name, val, old_val, ...args)
+	}
+
+	// getters/setters --------------------------------------------------------
+
+	e.focused_row_value = function(field) {
+		return focused_row ? e.rowset.value(focused_row, field) : null
+	}
+
+	e.focused_row_set_value = function(field, v, ...args) {
+		if (focused_row)
+			e.rowset.set_value(focused_row, field, v, ...args)
+	}
+
+	e.focused_row_cell_state = function(field, key, default_val) {
+		return focused_row ? e.rowset.cell_state(focused_row, field, key, default_val) : undefined
+	}
+
+	e.focused_row_set_cell_state = function(field, key, val, ...args) {
+		if (focused_row)
+			e.rowset.set_cell_state(focused_row, field, key, val, e, ...args)
+	}
+
+	e.focused_row_input_value = function(field) {
+		return focused_row ? e.rowset.input_value(focused_row, field) : null
+	}
+
+	e.focused_row_display_value = function(field) {
+		return focused_row ? e.rowset.display_value(focused_row, field) : ''
 	}
 
 }
@@ -949,6 +961,20 @@ rowset_nav = function(...options) {
 	focused_row_mixin(nav)
 	update(nav, ...options)
 	nav.rowset = global_rowset(nav.rowset)
+	property(nav, 'owner', {
+		get: function() { return nav.rowset.owner },
+		set: function(owner) { nav.rowset.owner = owner }
+	})
+	let rowset_attach = nav.rowset.attach
+	nav.rowset.attach = function() {
+		rowset_attach()
+		nav.focused_row_bind_rowset(true)
+	}
+	let rowset_detach = nav.rowset.detach
+	nav.rowset.detach = function() {
+		rowset_detach()
+		nav.focused_row_bind_rowset(false)
+	}
 	return nav
 }
 
@@ -967,7 +993,7 @@ function value_widget(e) {
 
 	e.default_value = null
 	e.field_prop_map = {field_name: 'name', label: 'text',
-		min: 'min', max: 'max', step: 'step'}
+		min: 'min', max: 'max', multiple_of: 'multiple_of'}
 
 	e.init_nav = function() {
 		if (!e.nav) {
@@ -988,95 +1014,76 @@ function value_widget(e) {
 			})
 
 			e.nav = rowset_nav({rowset: internal_rowset, focused_row: row})
+			e.nav.owner = e
 
 			e.field = e.nav.rowset.field(0)
+			e.col = e.field.name
 
 			if (e.validate) // inline validator, only for internal-rowset widgets.
 				e.nav.rowset.on_validate_value(e.field, e.validate, true)
 
 			e.internal_nav = true
-
+		} else {
+			if (e.field)
+				e.col = e.field.name
+			e.field = e.nav.rowset.field(e.col)
 		}
+		if (e.field)
+			e.init_field()
 	}
 
 	e.bind_nav = function(on) {
-		let r = e.nav.rowset
-		e.nav.onoff('focused_row_changed', e.init_value           , on)
-		r.onoff('loaded'                 , e.init_value           , on)
-		r.onoff('value_changed'          , value_changed          , on)
-		r.onoff('cell_state_changed'     , cell_state_changed     , on)
-		r.onoff('display_values_changed' , display_values_changed , on)
+		e.nav.onoff('focused_row_changed'                        , e.init_value, on)
+		e.nav.onoff('focused_row_value_changed_for_'+e.col       , value_changed, on)
+		e.nav.onoff('focused_row_input_value_changed_for_'+e.col , input_value_changed, on)
+		e.nav.onoff('focused_row_error_changed_for_'+e.col       , error_changed, on)
+		e.nav.onoff('focused_row_modified_changed_for_'+e.col    , modified_changed, on)
+		e.nav.rowset.onoff('display_values_changed_for_'+e.col   , e.init_value, on)
+		e.nav.rowset.onoff('fields_changed', fields_changed)
 		if (e.internal_nav)
 			if (on)
-				r.attach()
+				e.nav.rowset.attach()
 			else
-				r.detach()
+				e.nav.rowset.detach()
 	}
 
-	e.rebind_value = function(nav, field) {
+	e.rebind_value = function(nav, col) {
 		e.bind_nav(false)
 		e.nav = nav
-		e.field = field
+		e.col = col
+		e.init_field()
 		if (e.isConnected) {
 			e.bind_nav(true)
 			e.init_value()
 		}
 	}
 
-	function get_value() {
-		return e.nav.rowset.value(e.nav.focused_row, e.field)
+	e.init_field = function() {} // stub
+
+	function fields_changed() {
+		e.field = e.nav.rowset.field(e.col)
+		e.init_field()
 	}
-
-	e.set_value = function(v, ...args) {
-		e.nav.rowset.set_value(e.nav.focused_row, e.field, v, e, ...args)
-	}
-
-	e.late_property('value', get_value, e.set_value)
-
-	e.cell_state = function(key, default_val) {
-		return e.nav.rowset.cell_state(e.nav.focused_row, e.field, key, default_val)
-	}
-
-	e.set_cell_state = function(key, val, ...args) {
-		return e.nav.rowset.set_cell_state(e.nav.focused_row, e.field, key, val, e, ...args)
-	}
-
-	e.property('input_value', function() {
-		return e.nav.rowset.input_value(e.nav.focused_row, e.field)
-	})
-
-	e.property('display_value', function() {
-		return e.nav.rowset.display_value(e.nav.focused_row, e.field)
-	})
 
 	e.init_value = function() {
-		if (e.col)
-			e.field = e.nav.rowset.field(e.col)
 		e.update_value()
 		update_error_state(e.cell_state('error'))
 	}
 
-	function value_changed(row, field, val, old_val, ...args) {
-		if (row != e.nav.focused_row || field != e.field)
-			return
+	function value_changed(val, old_val, ...args) {
 		e.fire('value_changed', val, old_val, ...args)
 	}
 
-	function cell_state_changed(row, field, key, val, old_val, ...args) {
-		if (row != e.nav.focused_row || field != e.field)
-			return
-		if (key == 'input_value')
-			e.update_value(...args)
-		else if (key == 'error')
-			update_error_state(val, ...args)
-		else if (key == 'modified')
-			e.class('modified', val)
+	function input_value_changed(val, old_val, ...args) {
+		e.update_value(...args)
 	}
 
-	function display_values_changed(field) {
-		if (field != e.field)
-			return
-		e.init_value()
+	function error_changed(val, old_val, ...args) {
+		update_error_state(val, ...args)
+	}
+
+	function modified_changed(val) {
+		e.class('modified', val)
 	}
 
 	function update_error_state(err, ...args) {
@@ -1101,6 +1108,31 @@ function value_widget(e) {
 			e.error_tooltip.text = err
 		e.error_tooltip.update()
 	}
+
+	// getters/setters --------------------------------------------------------
+
+	function get_value() { return e.nav.focused_row_value(e.field) }
+	e.set_value = function(v, ...args) {
+		e.nav.focused_row_set_value(e.field, v, e, ...args)
+	}
+
+	e.late_property('value', get_value, e.set_value)
+
+	e.cell_state = function(key, default_val) {
+		return e.nav.focused_row_cell_state(e.field, key, default_val)
+	}
+
+	e.set_cell_state = function(key, val, ...args) {
+		return e.nav.focused_row_set_cell_state(e.field, key, val, e, ...args)
+	}
+
+	e.property('input_value', function() {
+		return e.nav.focused_row_input_value(e.field)
+	})
+
+	e.property('display_value', function() {
+		return e.nav.focused_row_display_value(e.field)
+	})
 
 }
 
@@ -1399,7 +1431,7 @@ function input_widget(e) {
 	e.attrval('mode', 'default')
 	e.attr_property('mode')
 
-	e.init_inner_label = function() {
+	e.init_field = function() {
 		if (e.inner_label != false) {
 			let s = e.field.text
 			if (s) {
@@ -1426,7 +1458,6 @@ input = component('x-input', function(e) {
 
 	e.init = function() {
 		e.init_nav()
-		e.init_inner_label()
 	}
 
 	e.attach = function() {
@@ -1632,7 +1663,9 @@ spin_input = component('x-spin-input', function(e) {
 	let increment
 	function increment_value() {
 		if (!increment) return
-		e.value = e.input_value + increment
+		let v = e.input_value + increment
+		let r = v % or(e.field.multiple_of, 1)
+		e.value = v - r
 		e.input.select(0, -1)
 	}
 	let increment_timer
@@ -1646,7 +1679,7 @@ spin_input = component('x-spin-input', function(e) {
 			if (start_incrementing_timer || increment_timer)
 				return
 			e.input.focus()
-			increment = or(e.field.step, 1) * sign
+			increment = or(e.field.multiple_of, 1) * sign
 			increment_value()
 			start_incrementing_timer = setTimeout(start_incrementing, 500)
 			return false
@@ -1694,7 +1727,7 @@ slider = component('x-slider', function(e) {
 
 	e.init = function() {
 		e.init_nav()
-		e.class('animated', e.field.step >= 5)
+		e.class('animated', e.field.multiple_of >= 5)
 	}
 
 	e.attach = function() {
@@ -1719,8 +1752,8 @@ slider = component('x-slider', function(e) {
 		},
 		function(p) {
 			let v = lerp(p, 0, 1, e.from, e.to)
-			if (e.field.step != null)
-				v = floor(v / e.field.step + .5) * e.field.step
+			if (e.field.multiple_of != null)
+				v = floor(v / e.field.multiple_of + .5) * e.field.multiple_of
 			e.value = clamp(v, cmin(), cmax())
 		},
 		0
@@ -1826,9 +1859,8 @@ dropdown = component('x-dropdown', function(e) {
 	e.init = function() {
 
 		e.init_nav()
-		e.init_inner_label()
 
-		e.picker.rebind_value(e.nav, e.field)
+		e.picker.rebind_value(e.nav, e.field.name)
 
 		e.picker.on('value_picked', picker_value_picked)
 		e.picker.on('keydown', picker_keydown)

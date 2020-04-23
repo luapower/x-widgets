@@ -114,6 +114,8 @@ grid = component('x-grid', function(e) {
 	}
 
 	function tr_at(ri) {
+		if (ri == null)
+			return
 		let sy = e.scroll_y
 		let i0 = first_visible_row(sy)
 		let i1 = i0 + e.visible_row_count

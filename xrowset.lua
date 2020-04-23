@@ -183,7 +183,7 @@ action['ajax_test.json'] = function()
 	out_json(t)
 end
 
-action['rowset_test_static.json'] = function()
+function rowset.test_static()
 	if method'post' then
 		--
 	else
@@ -205,3 +205,6 @@ action['rowset_test_static.json'] = function()
 	end
 end
 
+function rowset.test_query()
+	return query_rowset'select * from tables'
+end

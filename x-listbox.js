@@ -15,13 +15,11 @@ listbox = component('x-listbox', function(e) {
 	e.attr_property('flow')
 
 	e.init = function() {
-
 		if(e.items) {
 			assert(!e.rowset)
 			create_rowset_for_items()
 			update_rowset_from_items()
 		}
-
 		e.rowset = global_rowset(e.rowset)
 		e.init_fields_array()
 		e.init_rows_array()
@@ -77,7 +75,7 @@ listbox = component('x-listbox', function(e) {
 			e.value_field = e.rowset.field(e.value_col)
 		if (e.display_col)
 			e.display_field = e.rowset.field(e.display_col)
-		else
+		else if (!e.items)
 			e.display_field = e.value_field
 	}
 

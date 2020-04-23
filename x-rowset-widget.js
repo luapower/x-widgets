@@ -101,6 +101,7 @@ function rowset_widget(e) {
 	// rowset binding ---------------------------------------------------------
 
 	e.bind_rowset = function(on) {
+		e.focused_row_bind_rowset(on)
 		// structural changes.
 		e.rowset.onoff('loaded'      , rowset_loaded , on)
 		e.rowset.onoff('row_added'   , row_added     , on)
@@ -150,6 +151,7 @@ function rowset_widget(e) {
 	// responding to structural updates ---------------------------------------
 
 	function rowset_loaded() {
+		free_editor()
 		e.focused_row_index = null
 		e.focused_field_index = null
 		e.init_fields_array()
@@ -386,13 +388,16 @@ function rowset_widget(e) {
 	// responding to navigation -----------------------------------------------
 
 	e.on('focused_row_changed', function(row, source, ri, fi, source1, do_update) {
-		if (source1 == e && do_update == false) // got here from update_value().
-			return
-		if (source != e || ri == null) // didn't get here from set_focused_cell().
-			ri = e.row_index(row)
-		let v = e.value_field ? e.rowset.value(e.focused_row, e.value_field) : ri
-		e.set_value(v, false)
-		e.update_cell_focus(ri, fi)
+		if (source != e) { // got here from outside: focus row's index and same col.
+			e.focused_row_index = e.row_index(row)
+			e.update_cell_focus(e.focused_row_index, e.focused_cell_index)
+		} else if (source1 == e && do_update == false) { // got here from update_value().
+			e.update_cell_focus(ri, fi)
+		} else {  // got here from focus_cell().
+			let v = e.value_field ? (row ? e.rowset.value(row, e.value_field) : null) : ri
+			e.set_value(v, false)
+			e.update_cell_focus(ri, fi)
+		}
 	})
 
 	// responding to value changes --------------------------------------------
@@ -410,7 +415,6 @@ function rowset_widget(e) {
 				ri = null
 		}
 		set_focused_cell(ri, null, e, false)
-		e.update_cell_focus(ri)
 	}
 
 	// editing ----------------------------------------------------------------
@@ -440,7 +444,13 @@ function rowset_widget(e) {
 		return true
 	}
 
-	e.free_editor = function() {}
+	function free_editor() {
+		let editor = e.editor
+		if (editor) {
+			e.editor = null // removing the editor first as a barrier for lost_focus().
+			editor.remove()
+		}
+	}
 
 	e.exit_edit = function() {
 		if (!e.editor)
@@ -454,12 +464,8 @@ function rowset_widget(e) {
 				return false
 
 		let had_focus = e.hasfocus
-
-		let editor = e.editor
-		e.editor = null // removing the editor first as a barrier for lost_focus().
-		editor.remove()
+		free_editor()
 		e.update_cell_editing(e.focused_row_index, e.focused_field_index, false)
-
 		if (had_focus)
 			e.focus()
 

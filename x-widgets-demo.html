@@ -407,8 +407,8 @@ main.add(H.div({},
 	spin_input({button_style: 'left-right', label: 'Dis look good?'})
 ))
 main.add(H.div({},
-	spin_input({min: -2, max: 5, step: 1.5, button_placement: 'right', value: 1}),
-	spin_input({min: -2, max: 5, step: 1.5, button_placement: 'right', label: 'How bout dis?'}),
+	spin_input({min: -2, max: 5, multiple_of: 1.5, button_placement: 'right', value: 1}),
+	spin_input({min: -2, max: 5, multiple_of: 1.5, button_placement: 'right', label: 'How bout dis?'}),
 ))
 
 </script>
@@ -431,7 +431,7 @@ main.add(H.div({},
 
 main.add(H.div({},
 	'Slider 2',
-	slider({value: 1500, from: 1000, to: 2000, step: 200, min: 1300, max: 1700}))
+	slider({value: 1500, from: 1000, to: 2000, multiple_of: 200, min: 1300, max: 1700}))
 )
 
 </script>
@@ -844,18 +844,21 @@ r = rowset({
 
 g = grid({w: 200, h: 200, rowset: r})
 
-i1 = input({rowset: r, navigator: g, field: 'name'})
-
-// nav = navigator({rowset: r, value: 1})
+i1 = input({rowset: r, nav: g, col: 'name'})
 
 main.add(H.div({}, g), i1)
+
+main.add(button({
+	text: 'unfocus row',
+	onclick: function() { g.focused_row = null },
+}))
 
 </script>
 </template>
 
 <!--------------------------------------------------------------------------->
 
-<template id=lookup_field_demo>
+<template id=lookup_col_demo>
 <help>
 
 </help>
@@ -961,7 +964,7 @@ var data = {
 		{name: 'date'      , w: 140, allow_null: true, type: 'date'},
 	],
 	pk: 'id',
-	url: 'rowset_test_static.json',
+	url: 'rowset.json/test_static',
 }
 
 d = rowset(data)
@@ -1061,7 +1064,7 @@ run_button.on('click', function() {
 })
 
 reload_button.on('click', function() {
-	acec_editor.getSession().setValue(editor.initial_script)
+	ace_editor.getSession().setValue(editor.initial_script)
 	run_script()
 })
 
