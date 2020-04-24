@@ -23,7 +23,7 @@
 		client_default : default value that new rows are initialized with.
 		server_default : default value that the server sets.
 		editable       : allow modifying (true).
-		editor         : f(field) -> editor instance
+		editor         : f() -> editor instance
 		from_text      : f(s) -> v
 		to_text        : f(v) -> s
 
@@ -133,6 +133,7 @@ rowset = function(...options) {
 		d.client_fields = d.fields
 		init_fields(d.fields)
 		init_pk(d.pk)
+		init_params(d.params)
 		init_rows(d.rows)
 	}
 
@@ -140,8 +141,8 @@ rowset = function(...options) {
 	function set_owner_events(on) {
 		if (!owner)
 			return
-		owner.onoff('attach', d.attach, on)
-		owner.onoff('detach', d.detach, on)
+		owner.on('attach', d.attach, on)
+		owner.on('detach', d.detach, on)
 	}
 	property(d, 'owner', {
 		get: function() { return owner },
@@ -154,11 +155,15 @@ rowset = function(...options) {
 
 	d.attach = function() {
 		bind_lookup_rowsets(true)
+		bind_param_nav(true)
+		d.isConnected = true
 	}
 
 	d.detach = function() {
 		bind_lookup_rowsets(false)
+		bind_param_nav(false)
 		abort_ajax_requests()
+		d.isConnected = false
 	}
 
 	// vlookup ----------------------------------------------------------------
@@ -353,7 +358,7 @@ rowset = function(...options) {
 	}
 
 	d.on_validate_value = function(field, validate, on) {
-		d.onoff('validate_'+field.name, validate, on === undefined || on)
+		d.on('validate_'+field.name, validate, on === undefined || on)
 	}
 
 	d.validate_row = function(row) {
@@ -376,7 +381,7 @@ rowset = function(...options) {
 
 	d.create_editor = function(field, ...options) {
 		if (field)
-			return field.editor.call(d, ...options)
+			return field.editor(...options)
 		else
 			return d.create_row_editor(...options)
 	}
@@ -433,12 +438,12 @@ rowset = function(...options) {
 					}
 					field.lookup_rowset_loaded()
 				}
-				lr.onoff('loaded'      , field.lookup_rowset_loaded, on)
-				lr.onoff('row_added'   , field.lookup_display_values_changed, on)
-				lr.onoff('row_removed' , field.lookup_display_values_changed, on)
-				lr.onoff('input_value_changed_for_'+field.lookup_col,
+				lr.on('loaded'      , field.lookup_rowset_loaded, on)
+				lr.on('row_added'   , field.lookup_display_values_changed, on)
+				lr.on('row_removed' , field.lookup_display_values_changed, on)
+				lr.on('input_value_changed_for_'+field.lookup_col,
 					field.lookup_display_values_changed, on)
-				lr.onoff('input_value_changed_for_'+field.display_col,
+				lr.on('input_value_changed_for_'+field.display_col,
 					field.lookup_display_values_changed, on)
 			}
 		}
@@ -527,9 +532,69 @@ rowset = function(...options) {
 				req.abort()
 	}
 
+	// params -----------------------------------------------------------------
+
+	function init_params(params) {
+
+		if (typeof params == 'string')
+			params = params.split(' ')
+		else if (!params)
+			params = []
+
+		bind_param_nav(false)
+		d.params = params
+
+		if (params.length == 0)
+			return
+
+		if (!d.param_nav) {
+			let param_fields = []
+			let params_row = []
+			for (let param of d.params) {
+				param_fields.push({
+					name: param,
+				})
+				params_row.push(null)
+			}
+			let params_rowset = rowset({fields: param_fields, rows: [params_row]})
+			d.param_nav = rowset_nav({rowset: params_rowset})
+		}
+
+		if (d.isConnected)
+			bind_param_nav(true)
+	}
+
+	function params_changed(row) {
+		d.load()
+	}
+
+	function bind_param_nav(on) {
+		if (!d.param_nav)
+			return
+		if (!d.params || !d.params.length)
+			return
+		d.param_nav.on('focused_row_changed', params_changed, on)
+		//for (let param of d.params)
+		//	d.param_nav.on('focused_row_value_changed_for_'+param, params_changed, on)
+	}
+
+	function make_url(params) {
+		if (!d.param_nav)
+			return d.url
+		if (params)
+			return url(d.url, params)
+		params = {}
+		for (let param of d.params) {
+			let field = d.param_nav.rowset.field(param)
+			let v = d.param_nav.focused_row_value(field)
+			params[field.name] = v
+		}
+		return url(d.url, params)
+	}
+
 	// loading ----------------------------------------------------------------
 
-	d.load = function() {
+	d.load = function(params) {
 		if (!d.url)
 			return
 		if (d.save_request)
@@ -537,7 +602,7 @@ rowset = function(...options) {
 		if (d.load_request)
 			d.load_request.abort()
 		let req = ajax({
-			url: d.url,
+			url: make_url(params),
 			progress: load_progress,
 			success: load_success,
 			fail: load_fail,
@@ -597,6 +662,8 @@ rowset = function(...options) {
 			init_pk(result.pk)
 			d.fire('fields_changed')
 		}
+		if (result.params)
+			init_params(result.params)
 		init_rows(result.rows)
 		d.fire('loaded')
 	}
@@ -739,10 +806,10 @@ rowset = function(...options) {
 {
 	let rowsets = {}
 
-	function global_rowset(name) {
+	function global_rowset(name, ...options) {
 		let d = name
 		if (typeof(name) == 'string') {
-			d = rowset({url: 'rowset.json/'+name})
+			d = rowset({url: 'rowset.json/'+name}, ...options)
 			rowsets[name] = d
 		}
 		return d
@@ -781,7 +848,7 @@ rowset = function(...options) {
 	}
 
 	rowset.default_type.editor = function(...options) {
-		return input(...options)
+		return input({nolabel: true}, ...options)
 	}
 
 	rowset.default_type.to_text = function(v) {
@@ -817,6 +884,7 @@ rowset = function(...options) {
 
 	rowset.types.number.editor = function(...options) {
 		return spin_input(update({
+			nolabel: true,
 			button_placement: 'left',
 		}, ...options))
 	}
@@ -846,6 +914,7 @@ rowset = function(...options) {
 
 	rowset.types.date.editor = function(...options) {
 		return dropdown(update({
+			nolabel: true,
 			picker: calendar(),
 			align: 'right',
 			mode: 'fixed',
@@ -892,10 +961,10 @@ function focused_row_mixin(e) {
 	})
 
 	e.focused_row_bind_rowset = function(on) {
-		e.rowset.onoff('loaded'             , rowset_loaded      , on)
-		e.rowset.onoff('row_removed'        , row_removed        , on)
-		e.rowset.onoff('value_changed'      , value_changed      , on)
-		e.rowset.onoff('cell_state_changed' , cell_state_changed , on)
+		e.rowset.on('loaded'             , rowset_loaded      , on)
+		e.rowset.on('row_removed'        , row_removed        , on)
+		e.rowset.on('value_changed'      , value_changed      , on)
+		e.rowset.on('cell_state_changed' , cell_state_changed , on)
 	}
 
 	// losing the focused row -------------------------------------------------
@@ -960,7 +1029,7 @@ rowset_nav = function(...options) {
 	events_mixin(nav)
 	focused_row_mixin(nav)
 	update(nav, ...options)
-	nav.rowset = global_rowset(nav.rowset)
+	nav.rowset = global_rowset(nav.rowset, {param_nav: nav.param_nav})
 	property(nav, 'owner', {
 		get: function() { return nav.rowset.owner },
 		set: function(owner) { nav.rowset.owner = owner }
@@ -992,8 +1061,11 @@ rowset_nav = function(...options) {
 function value_widget(e) {
 
 	e.default_value = null
-	e.field_prop_map = {field_name: 'name', label: 'text',
-		min: 'min', max: 'max', multiple_of: 'multiple_of'}
+	e.field_prop_map = {
+		field_name: 'name', label: 'text',
+		min: 'min', max: 'max', multiple_of: 'multiple_of',
+		lookup_rowset: 'lookup_rowset', lookup_col: 'lookup_col', display_col: 'display_col',
+	}
 
 	e.init_nav = function() {
 		if (!e.nav) {
@@ -1033,21 +1105,18 @@ function value_widget(e) {
 	}
 
 	e.bind_nav = function(on) {
-		e.nav.onoff('focused_row_changed'                        , e.init_value, on)
-		e.nav.onoff('focused_row_value_changed_for_'+e.col       , value_changed, on)
-		e.nav.onoff('focused_row_input_value_changed_for_'+e.col , input_value_changed, on)
-		e.nav.onoff('focused_row_error_changed_for_'+e.col       , error_changed, on)
-		e.nav.onoff('focused_row_modified_changed_for_'+e.col    , modified_changed, on)
-		e.nav.rowset.onoff('display_values_changed_for_'+e.col   , e.init_value, on)
-		e.nav.rowset.onoff('fields_changed', fields_changed)
-		if (e.internal_nav)
-			if (on)
-				e.nav.rowset.attach()
-			else
-				e.nav.rowset.detach()
+		e.nav.on('focused_row_changed'                        , e.init_value, on)
+		e.nav.on('focused_row_value_changed_for_'+e.col       , value_changed, on)
+		e.nav.on('focused_row_input_value_changed_for_'+e.col , input_value_changed, on)
+		e.nav.on('focused_row_error_changed_for_'+e.col       , error_changed, on)
+		e.nav.on('focused_row_modified_changed_for_'+e.col    , modified_changed, on)
+		e.nav.rowset.on('display_values_changed_for_'+e.col   , e.init_value, on)
+		e.nav.rowset.on('fields_changed', fields_changed)
 	}
 
 	e.rebind_value = function(nav, col) {
+		if (e.nav.owner == e)
+			e.nav.owner = null
 		e.bind_nav(false)
 		e.nav = nav
 		e.col = col
@@ -1428,17 +1497,17 @@ function input_widget(e) {
 
 	e.attrval('align', 'left')
 	e.attr_property('align')
+
 	e.attrval('mode', 'default')
 	e.attr_property('mode')
 
+	e.bool_attr_property('nolabel', function(v) {
+		e.class('with-inner-label', !v)
+	})
+	e.class('with-inner-label', true)
+
 	e.init_field = function() {
-		if (e.inner_label != false) {
-			let s = e.field.text
-			if (s) {
-				e.inner_label_div.html = s
-				e.class('with-inner-label', true)
-			}
-		}
+		e.inner_label_div.html = e.field.text
 	}
 
 }
@@ -1458,6 +1527,8 @@ input = component('x-input', function(e) {
 
 	e.init = function() {
 		e.init_nav()
+		if (e.internal_nav)
+			e.nolabel = !e.field.text
 	}
 
 	e.attach = function() {
@@ -1867,8 +1938,8 @@ dropdown = component('x-dropdown', function(e) {
 	}
 
 	function bind_document(on) {
-		document.onoff('mousedown', document_mousedown, on)
-		document.onoff('stopped_event', document_stopped_event, on)
+		document.on('mousedown', document_mousedown, on)
+		document.on('stopped_event', document_stopped_event, on)
 	}
 
 	e.attach = function() {

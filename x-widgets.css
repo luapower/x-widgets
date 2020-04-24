@@ -457,6 +457,11 @@
 	pointer-events: none;       /* click-through */
 	color: #777;
 	white-space: nowrap;
+	visibility: hidden;
+}
+
+.x-input.with-inner-label > .x-input-inner-label {
+	visibility: visible;
 }
 
 .x-input.with-inner-label > .x-input-value:not(.empty) {

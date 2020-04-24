@@ -103,12 +103,12 @@ function rowset_widget(e) {
 	e.bind_rowset = function(on) {
 		e.focused_row_bind_rowset(on)
 		// structural changes.
-		e.rowset.onoff('loaded'      , rowset_loaded , on)
-		e.rowset.onoff('row_added'   , row_added     , on)
-		e.rowset.onoff('row_removed' , row_removed   , on)
+		e.rowset.on('loaded'      , rowset_loaded , on)
+		e.rowset.on('row_added'   , row_added     , on)
+		e.rowset.on('row_removed' , row_removed   , on)
 		// cell value & state changes.
-		e.rowset.onoff('cell_state_changed'     , cell_state_changed     , on)
-		e.rowset.onoff('display_values_changed' , display_values_changed , on)
+		e.rowset.on('cell_state_changed'     , cell_state_changed     , on)
+		e.rowset.on('display_values_changed' , display_values_changed , on)
 		// network events
 		e.rowset.on('loading', rowset_loading, on)
 		e.rowset.on('load_slow', rowset_load_slow, on)

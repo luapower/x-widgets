@@ -100,7 +100,7 @@ local mysql_charsize = {
 }
 
 local function field_defs_from_query_cols(cols, extra_defs)
-	local t = {}
+	local t, pk = {}, {}
 	for i,col in ipairs(cols) do
 		local field = {}
 		field.name = col.name
@@ -119,29 +119,42 @@ local function field_defs_from_query_cols(cols, extra_defs)
 			field.maxlen = col.length * (mysql_charsize[col.charsetnr] or 1)
 		end
 		t[i] = update(field, extra_defs and extra_defs[col.name])
+		if col.pri_key or col.unique_key then
+			add(pk, col.name)
+		end
 	end
-	return t
+	return t, pk
 end
 
-function query_result_rowset(t, cols, extra_defs)
+function query_result_rowset(extra_defs, t, cols, params)
 	if not t then return t, cols end
-	local fields = field_defs_from_query_cols(cols, extra_defs)
+	local fields, pk = field_defs_from_query_cols(cols, extra_defs)
 	local rows = {}
 	for i,row in ipairs(t) do
 		rows[i] = {values = row}
 	end
 	return {
 		fields = fields,
+		pk = #pk > 0 and concat(pk, ' ') or nil,
 		rows = rows,
+		params = params,
 	}
 end
 
-function query_on_rowset(...)
-	return query_result_rowset(query_on(...))
+function query_on_rowset(extra_defs, ...)
+	if type(extra_defs) == 'table' then
+		return query_result_rowset(extra_defs, query_on(...))
+	else
+		return query_result_rowset(nil, query_on(extra_defs, ...))
+	end
 end
 
-function query_rowset(...)
-	return query_result_rowset(query(...))
+function query_rowset(extra_defs, ...)
+	if type(extra_defs) == 'table' then
+		return query_result_rowset(extra_defs, query(...))
+	else
+		return query_result_rowset(nil, query(extra_defs, ...))
+	end
 end
 
 --testing --------------------------------------------------------------------
