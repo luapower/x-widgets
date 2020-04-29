@@ -658,16 +658,13 @@ grid = component('x-grid', function(e) {
 
 grid_dropdown = component('x-grid-dropdown', function(e) {
 
-	e.lookup_col = '0'
-	e.display_col = '0'
-
 	dropdown.construct(e)
 
 	init = e.init
 	e.init = function() {
-		e.picker = grid({
-			// TODO
-		})
+		e.picker = grid(update({
+			col: e.pick_col || '0',
+		}, e.grid))
 		init()
 	}
 

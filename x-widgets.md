@@ -1,6 +1,10 @@
 
 Data-driven web components in pure JavaScript.
 
+## Status
+
+<warn>In active development. See [TODO](https://github.com/luapower/x-widgets/blob/master/x-widgets-todo.txt)</warn>
+
 ## Overview
 
 Better [check out the demo](http://luapower.com/x-widgets-demo.html)
