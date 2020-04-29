@@ -586,17 +586,13 @@ function rowset_widget(e) {
 	}
 
 	function sort() {
-
-		if (!order_by || !order_by.size)
-			return
-
-		let cmp = e.rowset.comparator(order_by)
-		e.rows.sort(cmp)
-
-		rowmap = null
-		e.init_rows()
+		if (order_by && order_by.size) {
+			let cmp = e.rowset.comparator(order_by)
+			e.rows.sort(cmp)
+			rowmap = null
+			e.init_rows()
+		}
 		e.fire('sort_order_changed')
-
 	}
 
 	// crude quick-search only for the first letter ---------------------------
