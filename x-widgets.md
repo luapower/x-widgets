@@ -1,14 +1,13 @@
 
 Data-driven web components in pure JavaScript.
 
-## Status
-
-<warn>In active development. See [TODO](https://github.com/luapower/x-widgets/blob/master/x-widgets-todo.txt)</warn>
-
 ## Overview
 
 Better [check out the demo](http://luapower.com/x-widgets-demo.html)
 before anything, which also includes some quick-reference documentation.
+
+Also see the [TODO list](https://github.com/luapower/x-widgets/blob/master/x-widgets-todo.txt)
+because this is still in active development.
 
 This library is designed for data-dense business-type apps with a focus
 on data entry and data navigation.
