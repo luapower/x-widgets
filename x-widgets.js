@@ -1898,6 +1898,7 @@ slider = component('x-slider', function(e) {
 
 	e.from = 0
 	e.to = 1
+	e.multiple_of = null
 
 	e.class('x-widget')
 	e.class('x-slider')
@@ -1918,7 +1919,7 @@ slider = component('x-slider', function(e) {
 
 	e.init = function() {
 		e.init_nav()
-		e.class('animated', e.field.multiple_of >= 5)
+		e.class('animated', e.field.multiple_of >= 5) // TODO: that's not the point of this.
 	}
 
 	e.attach = function() {
