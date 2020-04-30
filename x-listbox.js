@@ -32,6 +32,7 @@ listbox = component('x-listbox', function(e) {
 	e.attach = function() {
 		e.init_rows()
 		e.init_value()
+		e.init_focused_row()
 		e.bind_rowset(true)
 		e.bind_nav(true)
 	}
@@ -183,6 +184,7 @@ listbox = component('x-listbox', function(e) {
 list_dropdown = component('x-list-dropdown', function(e) {
 
 	dropdown.construct(e)
+	e.auto_focus_first_cell = false
 
 	init = e.init
 	e.init = function() {
