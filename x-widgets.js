@@ -2843,7 +2843,7 @@ vsplit = component('x-split', function(e) {
 		document.on('mouseup'  , document_mouseup)
 
 		e.tooltip = e.tooltip || tooltip({
-			side: left ? 'right' : 'left',
+			side: horiz ? (left ? 'right' : 'left') : (left ? 'bottom' : 'top'),
 		})
 		e.tooltip.target = e.sizer
 	}

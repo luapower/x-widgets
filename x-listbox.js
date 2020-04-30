@@ -184,12 +184,12 @@ listbox = component('x-listbox', function(e) {
 list_dropdown = component('x-list-dropdown', function(e) {
 
 	dropdown.construct(e)
-	e.auto_focus_first_cell = false
 
 	init = e.init
 	e.init = function() {
 		e.picker = listbox(update({
 			items: e.items,
+			auto_focus_first_cell: false,
 		}, e.listbox))
 		init()
 	}
