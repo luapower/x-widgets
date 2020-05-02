@@ -513,7 +513,6 @@ grid = component('x-grid', function(e) {
 		e.focus()
 		window.grid_col_resizing = true
 		e.class('col-resizing')
-		if (e.auto_cols_w)
 	}
 
 	function document_mouseup() {
