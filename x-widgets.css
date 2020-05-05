@@ -897,6 +897,7 @@
 	background: white;         /* required: submenus overlap their parent */
 
 	/* styling */
+	font-size: 12px;
 	color: #000;
 	min-width: 200px;
 	border: 1px solid #ccc;
