@@ -81,8 +81,12 @@
 }
 
 .x-item.focused {
-	background-color: var(--x-item-focused-bg-color);
+	background-color: var(--x-item-unfocused-bg-color);
 	color: var(--x-inverted-fg-color);
+}
+
+.x-focusable:focus-within .x-item.focused {
+	background-color: var(--x-item-focused-bg-color);
 }
 
 /* scrollbars ------------------------------------------------------------- */
