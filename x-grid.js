@@ -686,7 +686,7 @@ grid = component('x-grid', function(e) {
 				field: field,
 				text: hide_text,
 				action: hide_field,
-				separator: true,
+				//separator: true,
 			})
 		}
 
