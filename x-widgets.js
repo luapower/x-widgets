@@ -3011,7 +3011,7 @@ toaster = component('x-toaster', function(e) {
 	let t
 	function notify(...args) {
 		t = t || toaster({classes: 'x-notify-toaster'})
-		t.message(...args)
+		t.post(...args)
 	}
 }
 
