@@ -481,7 +481,7 @@
 	padding-bottom: .1em;
 }
 
-.x-input.with-inner-label > .x-input-inner-label {
+.x-input.with-inner-label > .x-input-inner-label:not(.empty) {
 	top: 0; /* fixate to top so we only have to set the top padding */
 	user-select: none;
 	color: inherit;
@@ -490,7 +490,7 @@
 	animation: x-input-inner-label-focused .2s;
 }
 
-.x-input[mode=inline].with-inner-label > .x-input-inner-label {
+.x-input[mode=inline].with-inner-label > .x-input-inner-label:not(.empty) {
 	font-weight: bold;
 	opacity: .5;
 }
