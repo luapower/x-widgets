@@ -153,6 +153,8 @@ rowset = function(...options) {
 	function init_fields(fields) {
 		unbind_fields()
 		d.fields = []
+		if (!fields)
+			return
 		for (let i = 0; i < fields.length; i++) {
 			let f = fields[i]
 			let custom_attrs = d.field_attrs && d.field_attrs[f.name]
@@ -475,7 +477,7 @@ rowset = function(...options) {
 			d.fire('notify', 'error', err)
 			print(err)
 		}
-		if (d.set_row_state(row, 'error', err))
+		if (d.set_row_state(row, 'row_error', err))
 			row_state_changed(row, 'row_error', ev)
 	}
 
