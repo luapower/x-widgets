@@ -79,6 +79,7 @@ cssgrid = component('x-cssgrid', function(e) {
 				tip[Y] = 0
 				tip.guide[type == 'column' ? 'h' : 'w'] = guide_w
 				tip.guide[X] = x
+				tip.show()
 				x += gap
 			}
 	}
@@ -88,6 +89,7 @@ cssgrid = component('x-cssgrid', function(e) {
 		let side = type == 'column' ? 'top' : 'left'
 		for (let i = 0; i < t.length-1; i++) {
 			let tip = div({class: 'x-cssgrid-resize-tip', side: side})
+			tip.hide()
 			tip.guide = div({class: 'x-cssgrid-resize-guide', side: side})
 			tip.track_index = i
 			tip.type = type
