@@ -172,7 +172,7 @@ cssgrid = component('x-cssgrid', function(e) {
 		let dragging, drag_mx, cx, s0, z0
 
 		function tip_mousedown(ev) {
-			if (ev.shiftKey) {
+			if (ev.ctrlKey) {
 				remove_line(this.type, this.track_index+1)
 				create_lines()
 				update()
@@ -187,7 +187,17 @@ cssgrid = component('x-cssgrid', function(e) {
 			cx = cr[left] - pcr[left]
 			drag_mx = ev[this.type == 'column' ? 'clientX' : 'clientY'] - cr[left]
 			s0 = sizes[this.track_index]
-			z0 = num(template_sizes(this.type)[this.track_index])
+
+			let tsizes = template_sizes(this.type)
+			z0 = tsizes[this.track_index]
+			if (z0 == 'auto') {
+				z0 = track_sizes(this.type)[this.track_index]
+				z0 = z0.toFixed(0) + 'px'
+				tsizes[this.track_index] = z0
+				set_template_sizes(this.type, tsizes)
+			}
+			z0 = num(z0)
+
 			return false
 		}
 
