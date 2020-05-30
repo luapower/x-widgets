@@ -259,9 +259,9 @@ grid = component('x-grid', function(e) {
 	e.scroll_to_cell = function(ri, fi) {
 		if (ri == null)
 			return
-		let x = cell_x(ri, fi)
+		let x = fi != null ? cell_x(ri, fi) : 0
 		let y = cell_y(ri, fi)
-		let w = cell_w(fi)
+		let w = fi != null ? cell_w(fi) : 0
 		let h = e.cell_h
 		e.cells_view.scroll_to_view_rect(null, null, x, y, w, h)
 	}
