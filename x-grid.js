@@ -28,6 +28,7 @@ grid = component('x-grid', function(e) {
 	e.can_sort_rows = true
 	e.can_reorder_fields = true
 	e.auto_enter_edit = false
+	e.exit_edit_on_escape = true
 
 	// context menu features
 	e.enable_context_menu = true
@@ -939,10 +940,10 @@ grid = component('x-grid', function(e) {
 	e.on('pointerleave', pointerup)
 
 	e.cells.on('mousedown', function(ev) {
-		let cell = ev.target
 		if (hit.state)
 			return
 
+		let cell = ev.target.closest('.x-grid-cell')
 		let had_focus = e.hasfocus
 		if (!had_focus)
 			e.focus()
@@ -1089,7 +1090,8 @@ grid = component('x-grid', function(e) {
 		if (key == 'Escape') {
 			if (e.hasclass('picker'))
 				return
-			e.exit_edit()
+			if (e.exit_edit_on_escape)
+				e.exit_edit()
 			e.focus()
 			return false
 		}
@@ -1278,7 +1280,10 @@ property_inspector = component('x-property-inspector', function(e) {
 	e.exit_edit_on_lost_focus = false
 	e.can_sort_rows = false
 	e.enable_context_menu = false
+
+	e.auto_edit_first_cell = true
 	e.auto_enter_edit = true
+	e.exit_edit_on_escape = false
 
 	e.rowset = rowset({
 		can_change_rows: true,

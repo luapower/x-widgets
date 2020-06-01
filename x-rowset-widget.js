@@ -22,6 +22,7 @@ function rowset_widget(e) {
 
 	e.can_focus_cells = true
 	e.auto_focus_first_cell = true   // focus first cell automatically on loading.
+	e.auto_edit_first_cell = false   // automatically enter edit mode on loading.
 	e.auto_advance_row = true        // jump row on horiz. navigation limits
 	e.save_row_on = 'exit_edit'      // save row on 'input'|'exit_edit'|'exit_row'|false
 	e.insert_row_on = 'exit_edit'    // insert row on 'input'|'exit_edit'|'exit_row'|false
@@ -528,7 +529,11 @@ function rowset_widget(e) {
 	}
 
 	e.init_focused_cell = function() {
-		e.focus_cell(true, true, 0, 0, {must_not_move_row: !e.auto_focus_first_cell})
+		if (e.focus_cell(true, true, 0, 0, {
+			must_not_move_row: !e.auto_focus_first_cell,
+			for_editing: e.auto_edit_first_cell
+		}))
+			e.enter_edit()
 	}
 
 	// responding to value changes --------------------------------------------
