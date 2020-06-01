@@ -205,6 +205,7 @@ grid = component('x-grid', function(e) {
 
 			e.cells_view_w = client_w - header_w
 			e.cells_ct.w = e.cells_w
+			e.cells_ct.h = 1 // horiz. scrollbar doesn't show on height 0.
 			e.cells_view.w = e.cells_view_w
 			e.visible_row_count = floor(e.cells_view_w / e.cell_w) + 2
 
@@ -697,7 +698,7 @@ grid = component('x-grid', function(e) {
 		else if (prop == 'row_removed')
 			cls = 'removed'
 		if (cls)
-			e.each_cell_of_row(ri, null, null, function(cell, fi, cls, val) {
+			each_cell_of_row(ri, null, null, function(cell, fi, cls, val) {
 				cell.class(cls, val)
 			}, cls, val)
 	}
