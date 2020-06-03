@@ -43,23 +43,61 @@
 <script>
 body = document.body
 
-let test_elem = button()
-body.add(test_elem)
+root_widget = vsplit({
+	1: button(),
+	2: button(),
+})
+
+body.add(root_widget)
 
 function properties_toolbox() {
 	let pg = property_inspector({
-		element: test_elem,
+		element: root_widget[1],
 	})
 	let tb = toolbox({
 		title: 'properties',
 		content: pg,
 	})
+	tb.inspector = pg
 	return tb
 }
 
 function tree_toolbox() {
+	function widget_name(e) {
+		return e.tagName.lower()
+	}
+	let rows = new Set()
+
+	function add_widget(e, pe) {
+		if (!e) return
+		rows.add([e, pe])
+		if (e.child_widgets)
+			for (let ce of e.child_widgets())
+				add_widget(ce, e)
+	}
+	add_widget(root_widget)
+
+	let rs = rowset({
+		fields: [
+			{name: 'widget', format: widget_name},
+			{name: 'parent_widget', visible: false},
+		],
+		rows: rows,
+		pk: 'widget',
+		parent_col: 'parent_widget',
+	})
+	let g = grid({
+		rowset: rs,
+		tree_col: 'widget',
+		//header_visible: false,
+	})
+	g.on('cell_dblclick', function(ri) {
+		let e = g.rows[ri][0]
+		props_tb.inspector.element = e
+	})
 	let tb = toolbox({
 		title: 'widget tree',
+		content: g,
 	})
 	return tb
 }
