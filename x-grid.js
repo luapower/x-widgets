@@ -690,6 +690,7 @@ grid = component('x-grid', function(e) {
 	// responding to rowset changes -------------------------------------------
 
 	e.init_rows = function() {
+		if (!e.isConnected) return
 		update_sizes()
 		init_cells()
 		update_viewport()
