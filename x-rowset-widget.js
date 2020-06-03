@@ -504,7 +504,7 @@ function rowset_widget(e) {
 			e.last_focused_field_index = or(fi, e.last_focused_field_index)
 			e.update_cell_focus(ri, fi, ev)
 			let row = e.rows[ri]
-			let val = row ? e.rowset.value(row, e.value_field) : null
+			let val = row && e.value_field ? e.rowset.value(row, e.value_field) : null
 			e.set_value(val, update({input: e}, ev))
 			if (row_changed)
 				e.fire('focused_row_changed', row, ev)
