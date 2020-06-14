@@ -149,6 +149,7 @@ component('x-cssgrid', function(e) {
 				update_focused_item_span()
 			} else if (k == 'pos_y' || k == 'span_y') {
 				update_guides_for('y')
+				update_focused_item_overlay()
 				update_focused_item_span()
 			}
 	})
@@ -312,6 +313,7 @@ component('x-cssgrid', function(e) {
 			fs.style['grid-row-end'     ] = fi.style['grid-row-end'     ]
 		}
 		fs.show(show)
+		update_focused_item_overlay()
 	}
 
 	// item overlays ----------------------------------------------------------
