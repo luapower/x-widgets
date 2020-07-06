@@ -154,7 +154,8 @@ function rowset_widget(e) {
 		let adjust_ri = e.focused_row && ri != null
 		if (adjust_ri)
 			e.focused_row_index++
-		let row = e.rowset.add_row(update({row_index: ri, focus_it: focus_it, parent_row: parent_row}, ev))
+		let row = e.rowset.add_row(update({
+			row_index: ri, focus_it: focus_it, parent_row: parent_row}, ev))
 		if (!row && adjust_ri)
 			e.focused_row_index--
 		if (row && e.save_row_on && e.insert_row_on == 'input')
@@ -829,7 +830,7 @@ function rowset_widget(e) {
 
 	e.child_row_count = function(ri) {
 		let n = 0
-		if (d.parent_field) {
+		if (e.rowset.parent_field) {
 			let row = e.rows[ri]
 			let min_parent_count = row.parent_rows.length + 1
 			for (ri++; ri < e.rows.length; ri++) {
@@ -882,6 +883,7 @@ function rowset_widget(e) {
 			}
 
 		e.focused_row_index = insert_ri
+
 		if (e.isConnected)
 			e.scroll_to_cell(e.focused_row_index, e.focused_cell_index)
 

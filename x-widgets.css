@@ -1540,6 +1540,9 @@
 	padding: var(--x-input-padding);
 	border-right: 1px solid #ddd;
 	min-width: 20px;
+}
+
+.x-grid-header-cell {
 	height: 100%;
 }
 
@@ -1658,6 +1661,7 @@
 
 .x-grid-cells-ct {
 	overflow: hidden;          /* required: hide surplus bottom rows */
+	position: relative;        /* required: to activate `overflow: hidden` on abs. pos. child */
 }
 
 .x-grid-cells {
@@ -1705,13 +1709,7 @@
 	z-index: 1;
 }
 
-.x-grid.row-moving .x-grid-cell:not(.row-moving),
-.x-grid.row-moving .x-grid-editor:not(.row-moving) {
-	transition: top .1s, left .1s;
-}
-
 .x-moving-parent-row {
-	outline: 1px dashed #999;
 	background-color: var(--x-item-hover-bg-color);
 }
 

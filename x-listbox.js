@@ -142,7 +142,7 @@ component('x-listbox', function(e) {
 			if (dragging) {
 				for (let item of e.children)
 					item._offset = item[e.axis == 'x' ? 'offsetLeft' : 'offsetTop']
-				e.move_element_start(this.index, e.child_count)
+				e.move_element_start(this.index, 1, 0, e.child_count)
 				drag_mx = down_mx - this.offsetLeft
 				drag_my = down_my - this.offsetTop
 				e.class('x-moving', true)
@@ -154,18 +154,19 @@ component('x-listbox', function(e) {
 
 	function item_pointerup() {
 		if (dragging) {
-			let i0 = this.index
-			let i1 = e.move_element_stop()
+			let move_i = this.index
+			let over_i = e.move_element_stop()
+			let insert_i = over_i - (over_i > move_i ? 1 : 0)
 
 			this.remove()
-			e.insert(i1, this)
+			e.insert(insert_i, this)
 			for (let item of e.children)
 				item[e.axis] = null
 
-			e.move_row(i0, i1)
+			e.move_row(move_i, over_i)
 
-			selected_row_index = i1
-			e.focused_row_index = i1
+			selected_row_index = insert_i
+			e.focused_row_index = insert_i
 		}
 		dragging = false
 		e.class('x-moving', false)
