@@ -886,10 +886,10 @@ var data = {
 	can_change_rows: true,
 }
 
-for (let i = 0; i <= 500; i++) {
+for (let i = 0; i <= 30; i++) {
 	let id         = i
 	let name       = 'record '+i
-	let parent_id  = null // i > 1 ? (i-1) % 3 : null // floor((random() * i))
+	let parent_id  = i > 1 ? (i-1) % 3 : null // floor((random() * i))
 	let random_num = floor(random() * 1e9)
 	let random_date = i * 24 * 3600 * 1000
 	let active = i % 5 == 0
@@ -909,8 +909,8 @@ g = grid({
 	//order_by: 'parent_id name:desc',
 	tree_col: 'name',
 	can_move_rows: true,
-	enter_edit_on_click_focused: false,
-	can_change_parent: false,
+	//enter_edit_on_click_focused: false,
+	//can_change_parent: false,
 })
 
 g.style.resize = 'both'

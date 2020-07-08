@@ -135,6 +135,8 @@ component('x-grid', function(e) {
 		e.cells_ct.w = header_w
 	}
 
+	let cells_h, cells_w, header_h, cells_view_w, cells_view_h, page_row_count, vrn
+
 	function update_sizes() {
 
 		if (horiz) {
@@ -145,11 +147,11 @@ component('x-grid', function(e) {
 			e.cells.x = null
 			e.cells_view.w = null
 
-			e.cells_h = e.cell_h * e.rows.length
+			cells_h = e.cell_h * e.rows.length
 
 			let client_h = e.clientHeight
 			let border_h = e.offsetHeight - client_h
-			e.header_h = e.header.offsetHeight
+			header_h = e.header.offsetHeight
 
 			if (e.auto_w) {
 
@@ -164,12 +166,12 @@ component('x-grid', function(e) {
 			}
 
 			if (e.auto_h)
-				e.h = e.cells_h + e.header_h + border_h
+				e.h = cells_h + header_h + border_h
 
-			e.cells_view_h = floor(e.cells_view.client_rect().height)
-			e.cells_ct.h = max(1, e.cells_h) // need at least 1px to show scrollbar.
-			e.max_visible_row_count = floor(e.cells_view_h / e.cell_h) + 2
-			e.page_row_count = floor(e.cells_view_h / e.cell_h)
+			cells_view_h = floor(e.cells_view.client_rect().height)
+			e.cells_ct.h = max(1, cells_h) // need at least 1px to show scrollbar.
+			vrn = floor(cells_view_h / e.cell_h) + 2
+			page_row_count = floor(cells_view_h / e.cell_h)
 
 			update_cell_widths()
 
@@ -178,13 +180,13 @@ component('x-grid', function(e) {
 			e.header.w = e.header_w
 			e.header.h = e.cell_h * e.fields.length
 
-			e.cells_w = e.cell_w * e.rows.length
-			e.cells_h = e.cell_h * e.fields.length
+			cells_w = e.cell_w * e.rows.length
+			cells_h = e.cell_h * e.fields.length
 
 			let border_w = e.offsetWidth - e.clientWidth
 
 			if (e.auto_w)
-				e.w = e.cells_w + e.header_w + border_w
+				e.w = cells_w + e.header_w + border_w
 
 			let client_w = e.clientWidth
 			border_w = e.offsetWidth - client_w
@@ -194,14 +196,14 @@ component('x-grid', function(e) {
 				let client_h = e.cells_view.clientHeight
 				let border_h = e.offsetHeight - e.clientHeight
 				let hscrollbar_h = e.cells_view.offsetHeight - client_h
-				e.h = e.cells_h + border_h + hscrollbar_h
+				e.h = cells_h + border_h + hscrollbar_h
 			}
 
-			e.cells_view_w = client_w - header_w
-			e.cells_ct.w = e.cells_w
-			e.cells_ct.h = e.cells_h
-			e.cells_view.w = e.cells_view_w
-			e.max_visible_row_count = floor(e.cells_view_w / e.cell_w) + 2
+			cells_view_w = client_w - header_w
+			e.cells_ct.w = cells_w
+			e.cells_ct.h = cells_h
+			e.cells_view.w = cells_view_w
+			vrn = floor(cells_view_w / e.cell_w) + 2
 
 			for (let fi = 0; fi < e.fields.length; fi++) {
 				let hcell = e.header.at[fi]
@@ -210,7 +212,7 @@ component('x-grid', function(e) {
 
 		}
 
-		e.max_visible_row_count = min(e.max_visible_row_count, e.rows.length)
+		vrn = min(vrn, e.rows.length)
 
 		if (e.editor)
 			update_editor(e.editor)
@@ -219,25 +221,26 @@ component('x-grid', function(e) {
 
 	}
 
+	let vri1, vri2
+	let scroll_x, scroll_y
+
 	function update_scroll() {
 		let sy = e.cells_view.scrollTop
 		let sx = e.cells_view.scrollLeft
-		sx =  horiz ? sx : clamp(sx, 0, max(0, e.cells_w - e.cells_view_w))
-		sy = !horiz ? sy : clamp(sy, 0, max(0, e.cells_h - e.cells_view_h))
-		e.scroll_x = sx
-		e.scroll_y = sy
+		sx =  horiz ? sx : clamp(sx, 0, max(0, cells_w - cells_view_w))
+		sy = !horiz ? sy : clamp(sy, 0, max(0, cells_h - cells_view_h))
+		scroll_x = sx
+		scroll_y = sy
 		if (horiz) {
 			e.header.x = -sx
 			e.cells.y = floor(sy - sy % e.cell_h)
-			e.first_visible_row = floor(sy / e.cell_h)
+			vri1 = floor(sy / e.cell_h)
 		} else {
 			e.header.y = -sy
 			e.cells.x = floor(sx - sx % e.cell_w)
-			e.first_visible_row = floor(sx / e.cell_w)
+			vri1 = floor(sx / e.cell_w)
 		}
-		e.visible_row_count =
-			min(e.first_visible_row + e.max_visible_row_count, e.rows.length)
-			- e.first_visible_row
+		vri2 = vri1 + vrn
 	}
 
 	function cell_x(vri, fi) {
@@ -292,10 +295,8 @@ component('x-grid', function(e) {
 	function cell_index(ri, fi) {
 		if (ri == null || fi == null)
 			return
-		let ri1 = e.first_visible_row
-		let ri2 = min(ri1 + e.visible_row_count, e.rows.length)
-		if (ri >= ri1 && ri < ri2)
-			return (ri - ri1) * e.fields.length + fi
+		if (ri >= vri1 && ri < vri2)
+			return (ri - vri1) * e.fields.length + fi
 	}
 
 	function each_cell_of_col(fi, f, ...args) {
@@ -328,9 +329,9 @@ component('x-grid', function(e) {
 			if (w1 == 0 && h1 == 0)
 				return // hidden
 			if (h1 !== h0 || w1 !== w0) {
-				let vrc = e.max_visible_row_count
+				let last_vrn = vrn
 				update_sizes()
-				if (e.max_visible_row_count != vrc) {
+				if (vrn != last_vrn) {
 					init_cells()
 					update_viewport()
 				}
@@ -450,11 +451,11 @@ component('x-grid', function(e) {
 
 	function init_cells(moving) {
 		e.cells.clear()
-		let vn = e.visible_row_count * (moving ? 2 : 1)
-		for (let vri = 0; vri < vn; vri++) {
+		let n = vrn * (moving ? 2 : 1)
+		for (let i = 0; i < n; i++) {
 			for (let fi = 0; fi < e.fields.length; fi++) {
 				let classes = 'x-grid-cell x-item'
-				if (moving && vri >= e.visible_row_count)
+				if (moving && i >= vrn)
 					classes += ' row-moving'
 				let cell = div({class: classes})
 				e.cells.add(cell)
@@ -485,14 +486,20 @@ component('x-grid', function(e) {
 		cell.indent.style['padding-left'] = (indent_offset(indent) - 4)+'px'
 	}
 
-	function update_cell_content(cell, row, ri, fi, indent) {
-		let field = e.fields[fi]
+	function update_cell_content(cell, row, ri, fi, row_focused, indent) {
 
 		cell.ri = ri
 		cell.fi = fi
 
+		if (!row) {
+			cell.hide()
+			return
+		}
+
 		cell.w = cell_w(fi)
 		cell.h = e.cell_h
+
+		let field = e.fields[fi]
 
 		cell.attr('align', field.align)
 		cell.class('focusable', e.can_focus_cell(row, field))
@@ -501,7 +508,7 @@ component('x-grid', function(e) {
 		cell.class('removed', !!row.removed)
 		cell.class('modified', e.rowset.cell_modified(row, field))
 
-		if (horiz && field == e.tree_field) {
+		if (field_has_indent(field)) {
 			if (!cell.indent) {
 				cell.indent = div({class: 'x-grid-cell-indent'})
 				cell.set(cell.indent)
@@ -510,7 +517,7 @@ component('x-grid', function(e) {
 			cell.indent.class('far', has_children)
 			cell.indent.class('fa-plus-square' , has_children && !!row.collapsed)
 			cell.indent.class('fa-minus-square', has_children && !row.collapsed)
-			set_cell_indent(cell, or(indent, field_has_indent(field) ? row_indent(row) : 0))
+			set_cell_indent(cell, or(indent, row_indent(row)))
 		} else if (cell.indent) {
 			cell.set(null)
 			cell.indent = null
@@ -519,27 +526,23 @@ component('x-grid', function(e) {
 		e.update_cell_val(cell, row, field, e.rowset.input_val(row, field))
 		e.update_cell_error(cell, row, field, e.rowset.cell_error(row, field))
 
-		let row_focused = e.focused_row_index == ri
+		row_focused = or(row_focused, e.focused_row_index == ri)
 		let cell_focused = row_focused && (!e.can_focus_cells || fi == e.focused_field_index)
 		let editing = !!e.editor
 		cell.class('focused', cell_focused)
 		cell.class('editing', cell_focused && editing)
 		cell.class('row-focused', row_focused)
 
-		cell.class('x-moving-parent-row', ri == hit.parent_row_index)
-
 		cell.show()
 	}
 
 	function update_cells() {
-		let ri1 = e.first_visible_row
-		for (let vri = 0; vri < e.visible_row_count; vri++) {
-			let ri = ri1 + vri
+		for (let ri = vri1; ri < vri2; ri++) {
 			for (let fi = 0; fi < e.fields.length; fi++) {
-				let cell = e.cells.at[vri * e.fields.length + fi]
+				let cell = e.cells.at[(ri - vri1) * e.fields.length + fi]
 				if (cell) {
-					cell.x = cell_x(vri, fi)
-					cell.y = cell_y(vri, fi)
+					cell.x = cell_x(ri - vri1, fi)
+					cell.y = cell_y(ri - vri1, fi)
 					update_cell_content(cell, e.rows[ri], ri, fi)
 				}
 			}
@@ -547,9 +550,9 @@ component('x-grid', function(e) {
 	}
 
 	e.cells_view.on('scroll', function() {
-		let fvr = e.first_visible_row
+		let last_vri1 = vri1
 		update_scroll()
-		if (e.first_visible_row != fvr)
+		if (vri1 != last_vri1)
 			update_viewport()
 	})
 
@@ -601,7 +604,7 @@ component('x-grid', function(e) {
 			guide.x = field.align == 'right'
 				? hcell._x + hcell._w - field.w
 				: hcell._x + field.w
-			guide.h = e.header_h + e.cells_view_h
+			guide.h = header_h + cells_view_h
 		}
 	}
 
@@ -845,44 +848,13 @@ component('x-grid', function(e) {
 
 	// row moving -------------------------------------------------------------
 
-		/*
-		row_mover.set_movable_element_pos = function(ri, y, vis_ri, moving) {
-			let animated = !moving && set_row_y(ri, vis_ri, y)
-			each_cell_of_row(vis_ri,
-				horiz ? set_cell_of_row_horiz : set_cell_of_row_vert,
-				ri, y, hit.indent, moving ? hit.ri : null, animated)
-			if (e.editor && ri == e.focused_row_index)
-				update_editor(e.editor, horiz ? null : y, horiz ? y : null, hit.indent)
-		}
-		*/
-
-		/*
-		function(ri, before_ri1, over_ri, over_p) {
-			hit.indent = null
-			hit.parent_row = e.rows[ri].parent_row
-			if (horiz && e.tree_field && e.can_change_parent) {
-				let row1 = e.rows[before_ri1]
-				let row2 = e.rows[over_ri]
-				let i1 = row1 ? row_indent(row1) : 0
-				let i2 = row2 ? row_indent(row2) : 0
-				// if the row can be a child of the row above, the indent is increased one unit.
-				let ii1 = i1 + (row1 && !row1.collapsed && e.rowset.can_have_children(row1) ? 1 : 0)
-				hit.indent = min(floor(lerp(over_p, 0, 1, ii1 + 1, i2)), ii1)
-				let parent_i = i1 - hit.indent
-				hit.parent_row = parent_i >= 0 ? row1 && row1.parent_rows[parent_i] : row1
-			}
-			if (hit.parent_row)
-				hit.parent_row_index = e.row_index(hit.parent_row)
-		}
-		*/
-
 	function ht_row_move(mx, my, hit) {
 		if (!e.can_move_rows) return
 		if (e.focused_row_index != hit.cell.ri) return
 		if ( horiz && abs(hit.my - my) < 8) return
 		if (!horiz && abs(hit.mx - mx) < 8) return
 		if (!horiz && e.rowset.parent_field) return
-		if (e.order_by.size > 0) return
+		if (e.order_by) return
 		if (e.filter_rowsets && e.filter_rowsets.size > 0) return
 		return true
 	}
@@ -910,6 +882,8 @@ component('x-grid', function(e) {
 
 		let parent_row = e.rows[move_ri1].parent_row
 
+		let tree_fi = e.fields.indexOf(e.tree_field)
+
 		let ri1 = 0
 		let ri2 = e.rows.length
 		if (!e.can_change_parent && e.rowset.parent_field) {
@@ -919,50 +893,59 @@ component('x-grid', function(e) {
 				ri2 = parent_ri + 1 + e.child_row_count(parent_ri)
 			}
 		}
-
-		ri2 = ri2 - move_n
+		ri2 -= move_n // adjust to after removal.
 
 		let moved_rows = e.rows.splice(move_ri1, move_n)
 
 		// state
 
-		let hit_x, hit_ri, hit_p
+		let hit_x
+		let hit_ri = move_ri1
+		let hit_parent_row = parent_row
+		let hit_indent
 
 		let xof       = (ri => ri * w)
 		let final_xof = (ri => xof(ri) + (ri < hit_ri ? 0 : move_n) * w)
 
 		// view update
 
-		function update_row(moving, vri, row, ri, vxy) {
+		function update_row(moving, vri, row, ri, xy, vxy1, focused) {
 			if (moving)
-				vri += e.visible_row_count
+				vri += (vri2 - vri1)
+
 			let ci0 = vri * e.fields.length
 			for (let fi = 0; fi < e.fields.length; fi++) {
 				let cell = e.cells.at[ci0 + fi]
-				if (cell) {
-					if (row) {
-						if (horiz) {
-							cell.y = vxy
-							cell.x = cell_x(vri, fi)
-						} else {
-							cell.x = vxy
-							cell.y = cell_y(vri, fi)
-						}
-						/*
-						let indent
-						if (row0_indent != null && ri0 != null && cell.indent)
-							indent = row0_indent + (row_indent(e.rows[ri]) - row_indent(e.rows[ri0]))
-						else if (indent != null)
-							set_cell_indent(cell, indent)
-						*/
-						if (cell.ri != ri)
-							update_cell_content(cell, row, ri, fi)
-						cell.class('row-moving', moving)
-						cell.show()
-					} else
-						cell.hide()
+				if (horiz) {
+					cell.y = xy - vxy1
+					cell.x = cell_x(vri, fi)
+				} else {
+					cell.x = xy - vxy1
+					cell.y = cell_y(vri, fi)
 				}
+
+				let indent
+				if (moving && row && field_has_indent(e.fields[fi]))
+					indent = hit_indent
+						+ row_indent(row)
+						- row_indent(moved_rows[0])
+
+				if (cell.ri != ri || ri == null)
+					update_cell_content(cell, row, ri, fi, focused, indent)
+				else if (cell.indent)
+					set_cell_indent(cell, indent)
+
+				cell.class('row-moving', moving)
+
+
+				cell.class('x-moving-parent-cell',
+					row == hit_parent_row && fi == tree_fi)
 			}
+
+			if (e.editor && ri != null && focused)
+				update_editor(e.editor,
+					 horiz ? null : xy,
+					!horiz ? null : xy, hit_indent)
 		}
 
 		// hit testing
@@ -981,6 +964,23 @@ component('x-grid', function(e) {
 			if ((over_row && over_row.parent_row) == hit_row.parent_row)
 				return 1
 			return 1 + e.child_row_count(before_ri)
+		}
+
+		function update_hit_parent_row(hit_p) {
+			hit_indent = null
+			hit_parent_row = e.rows[hit_ri].parent_row
+			if (horiz && e.tree_field && e.can_change_parent) {
+				let row1 = e.rows[hit_ri-1]
+				let row2 = e.rows[hit_ri]
+				let i1 = row1 ? row_indent(row1) : 0
+				let i2 = row2 ? row_indent(row2) : 0
+				// if the row can be a child of the row above,
+				// the indent right limit is increased one unit.
+				let ii1 = i1 + (row1 && !row1.collapsed && e.rowset.can_have_children(row1) ? 1 : 0)
+				hit_indent = min(floor(lerp(hit_p, 0, 1, ii1 + 1, i2)), ii1)
+				let parent_i = i1 - hit_indent
+				hit_parent_row = parent_i >= 0 ? row1 && row1.parent_rows[parent_i] : row1
+			}
 		}
 
 		{
@@ -1006,7 +1006,8 @@ component('x-grid', function(e) {
 				hit_ri = or(is[ci], ri2)
 				let x1 = or(xs[ci  ], xof(ri2))
 				let x0 = or(xs[ci-1], xof(ri1))
-				hit_p = lerp(hit_x, x0, x1, 0, 1)
+				let hit_p = lerp(hit_x, x0, x1, 0, 1)
+				update_hit_parent_row(hit_p)
 				return hit_ri != last_hit_ri
 			}
 
@@ -1024,31 +1025,21 @@ component('x-grid', function(e) {
 				xs[ri] = zs[ri]
 			}
 
-			let ari1 = 0 //  1/0
-			let ari2 = xs.length // -1/0
+			let ari1 = 1/0
+			let ari2 = -1/0
 
 			function move() {
 				let last_hit_ri = hit_ri
 				if (hit_test()) {
 
 					// find the range of elements that must make way for the
-					// moving elements to insert at hit_i.
-					let mri1, mri2
-					if (hit_ri > last_hit_ri) {
-						mri1 = last_hit_ri
-						mri2 = hit_ri
-					} else {
-						mri1 = hit_ri - move_n
-						mri2 = last_hit_ri - move_n
-					}
+					// moving elements to be inserted at hit_ri.
+					let mri1 = min(hit_ri, last_hit_ri)
+					let mri2 = max(hit_ri, last_hit_ri)
 
 					// extend the animation range with the newfound range.
 					ari1 = min(ari1, mri1)
 					ari2 = max(ari2, mri2)
-
-					//print(hit_ri, last_hit_ri, ari1, ari2)
-					ari1 = 0
-					ari2 = xs.length
 
 					// reset animations for the newfound elements.
 					let t = clock()
@@ -1088,30 +1079,24 @@ component('x-grid', function(e) {
 				ari1 = max(ari1, or(aari1, ari1))
 				ari2 = min(ari2, or(aari2, ari1))
 
-				print('.', ari1, ari2)
-
-				let view_x = horiz ? e.scroll_y : e.scroll_x
-				let view_w = horiz ? e.cells_view_h : e.cells_view_w
-
-				//let vri1 = floor(view_x / w)
-				//let vri2 = ceil((view_x + view_w) / w)
-
-				let vri1 = xs.binsearch(view_x, '<=') - 1
-				let vri2 = xs.binsearch(view_x + view_w)
-
-				vri1 = clamp(vri1, 0, e.rows.length-1)
-				vri2 = clamp(vri2, 0, e.rows.length)
-
-				let vn = vri2 - vri1
 				let vri1x = xof(vri1)
+
+				let view_x = horiz ? scroll_y : scroll_x
+				let view_w = horiz ? cells_view_h : cells_view_w
 
 				// update positions for the visible range of non-moving elements.
 				{
+					let vri1 = xs.binsearch(view_x, '<=') - 1
+					let vri2 = xs.binsearch(view_x + view_w)
+
+					vri1 = clamp(vri1, 0, e.rows.length-1)
+
 					let vri = 0
 					for (let ri = vri1; ri < vri2; ri++)
-						update_row(false, vri++, e.rows[ri], ri, xs[ri] - vri1x)
+						update_row(false, vri++, e.rows[ri], ri, xs[ri], vri1x, false)
+
 					// hide leftover rows.
-					while(vri < vn)
+					while(vri < vrn)
 						update_row(false, vri++)
 				}
 
@@ -1119,19 +1104,21 @@ component('x-grid', function(e) {
 				{
 					// moving cells use a second block of cells temporarily
 					// allocated for this purpose.
-					let hit_ri1 = floor(hit_x / w)
-					let hit_ri2 = hit_ri1 + move_n
-					let dx = hit_x - xof(hit_ri1)
-					let move_vri1 = move_ri1 + max(0, vri1 - hit_ri1)
-					let move_vri2 = move_ri2 - max(0, hit_ri2 - vri2)
+					let dx1 = max(0, view_x - hit_x)
+					let di1 = floor(dx1 / w)
+					let move_vri1x = hit_x + dx1
+					let move_vri1 = move_ri1 + di1
+					let move_vrn = min(vrn, move_ri2 - move_vri1)
+					let move_vri2 = move_ri1 + move_vrn
 					let vri = 0
-					let x = xof(max(hit_ri1, vri1)) + dx - vri1x
+					let x = move_vri1x
 					for (let ri = move_vri1; ri < move_vri2; ri++) {
-						update_row(true, vri++, moved_rows[ri - move_ri1], ri, x)
+						update_row(true, vri++, moved_rows[ri - move_ri1], ri, x, vri1x, ri == move_ri1)
 						x += w
 					}
+
 					// hide leftover rows.
-					while(vri < vn)
+					while(vri < vrn)
 						update_row(true, vri++)
 				}
 
@@ -1187,14 +1174,20 @@ component('x-grid', function(e) {
 		}
 
 		mu_row_move = function() {
-			hit.state = null
 			if (af != null)
 				cancelAnimationFrame(af)
 			clearInterval(scroll_timer)
+
+			mm_row_move = null
+			mu_row_move = null
+			update_cells_moving = null
+			hit.state = null
+
 			e.class('row-moving', false)
 			if (e.editor)
 				e.editor.class('row-moving', false)
-			e.move_row(move_ri1, hit_ri, parent_row)
+
+			e.move_row(moved_rows, hit_ri, hit_parent_row)
 			e.init_rows()
 		}
 
@@ -1203,6 +1196,7 @@ component('x-grid', function(e) {
 		e.class('row-moving')
 		if (e.editor)
 			e.editor.class('row-moving')
+
 		init_cells(true)
 
 		let scroll_timer = every(.1, mm_row_move)
@@ -1457,8 +1451,8 @@ component('x-grid', function(e) {
 		switch (key) {
 			case up_arrow    : rows = -1; break
 			case down_arrow  : rows =  1; break
-			case 'PageUp'    : rows = -e.page_row_count; break
-			case 'PageDown'  : rows =  e.page_row_count; break
+			case 'PageUp'    : rows = -page_row_count; break
+			case 'PageDown'  : rows =  page_row_count; break
 			case 'Home'      : rows = -1/0; break
 			case 'End'       : rows =  1/0; break
 		}

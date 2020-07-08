@@ -855,19 +855,12 @@ function rowset_widget(e) {
 		}
 	}
 
-	e.move_row = function(ri, over_ri, parent_row) {
+	e.move_row = function(moved_rows, over_ri, parent_row) {
 
-		assert(ri != over_ri)
-		assert(ri == e.focused_row_index)
-
-		let row = e.rows[ri]
-		let row_count = 1 + e.child_row_count(ri)
-
-		let moved_rows = e.rows.splice(ri, row_count)
-		let insert_ri = over_ri - (over_ri > ri ? row_count : 0)
-		e.rows.splice(insert_ri, 0, ...moved_rows)
+		e.rows.splice(over_ri, 0, ...moved_rows)
 		e.rows_array_changed()
 
+		let row = moved_rows[0]
 		let old_parent_row = row.parent_row
 		e.rowset.move_row(row, parent_row)
 
@@ -882,7 +875,7 @@ function rowset_widget(e) {
 					e.rowset.set_val(e.rows[ri], e.rowset.index_field, index++)
 			}
 
-		e.focused_row_index = insert_ri
+		e.focused_row_index = over_ri
 
 		if (e.isConnected)
 			e.scroll_to_cell(e.focused_row_index, e.focused_cell_index)
