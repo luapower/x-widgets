@@ -80,7 +80,7 @@ component('x-grid', function(e) {
 
 	// geometry ---------------------------------------------------------------
 
-	function update_cell_widths(col_resizing) {
+	function update_cell_widths_horiz(col_resizing) {
 
 		let cols_w = 0
 		for (let field of e.fields)
@@ -173,7 +173,7 @@ component('x-grid', function(e) {
 			vrn = floor(cells_view_h / e.cell_h) + 2
 			page_row_count = floor(cells_view_h / e.cell_h)
 
-			update_cell_widths()
+			update_cell_widths_horiz()
 
 		} else {
 
@@ -540,11 +540,9 @@ component('x-grid', function(e) {
 		for (let ri = vri1; ri < vri2; ri++) {
 			for (let fi = 0; fi < e.fields.length; fi++) {
 				let cell = e.cells.at[(ri - vri1) * e.fields.length + fi]
-				if (cell) {
-					cell.x = cell_x(ri - vri1, fi)
-					cell.y = cell_y(ri - vri1, fi)
-					update_cell_content(cell, e.rows[ri], ri, fi)
-				}
+				cell.x = cell_x(ri - vri1, fi)
+				cell.y = cell_y(ri - vri1, fi)
+				update_cell_content(cell, e.rows[ri], ri, fi)
 			}
 		}
 	}
@@ -770,8 +768,10 @@ component('x-grid', function(e) {
 	function ht_col_resize_vert(mx, my, hit) {
 		let x = ((mx + 5) % e.cell_w) - 5
 		if (!(x >= -5 && x <= 5)) return
-		//hit.ri = floor(x / e.cell_w)
-		//hit.x = x + e.cell_w * hit.ri
+		hit.ri = floor((mx - 6) / e.cell_w)
+		hit.dx = e.cell_w * hit.ri - scroll_x
+		let r = e.cells_view.client_rect()
+		hit.mx = r.x + hit.dx + x
 		return true
 	}
 
@@ -785,25 +785,46 @@ component('x-grid', function(e) {
 			return ht_col_resize_vert(mx, my, hit)
 	}
 
-	function mm_col_resize_horiz(mx, my, hit) {
-		let w = mx - e.header.at[hit.fi]._x - hit.x
-		set_col_w(hit.fi, w)
-		update_cell_widths(true)
-		update_resize_guides()
-	}
+	let mm_col_resize, mu_col_resize
 
-	function mm_col_resize_vert(mx, my, hit) {
-		//
-	}
+	function md_col_resize(mx, my, hit) {
 
-	function mm_col_resize(mx, my, hit) {
-		let r = e.cells_ct.client_rect()
-		mx -= r.x
-		my -= r.y
-		if (horiz)
-			return mm_col_resize_horiz(mx, my, hit)
-		else
-			return mm_col_resize_vert(mx, my, hit)
+		if (horiz) {
+
+			mm_col_resize = function(mx, my, hit) {
+				let r = e.cells_ct.client_rect()
+				let w = mx - r.x - e.header.at[hit.fi]._x - hit.x
+				set_col_w(hit.fi, w)
+				update_cell_widths_horiz(true)
+				update_resize_guides()
+			}
+
+		} else {
+
+			mm_col_resize = function(mx, my, hit) {
+				e.cell_w = mx - hit.mx
+				let sx = hit.ri * e.cell_w - hit.dx
+				e.cells_view.scrollLeft = sx
+				let last_vrn = vrn
+				update_sizes()
+				if (vrn != last_vrn)
+					e.init_rows()
+				else
+					update_viewport()
+			}
+
+		}
+
+		e.class('col-resize', true)
+
+		mu_col_resize = function() {
+			mm_col_resize = null
+			mu_col_resize = null
+			e.class('col-resizing', false)
+			remove_resize_guides()
+			update_sizes()
+		}
+
 	}
 
 	// cell clicking ----------------------------------------------------------
@@ -1154,9 +1175,9 @@ component('x-grid', function(e) {
 		}
 
 		function scroll_to_moving_cell() {
-			let x = move_fi != null ? cell_x(null, move_fi) : 0
 			update_hit_x()
-			let y = hit_x
+			let x =  horiz ? (move_fi != null ? cell_x(null, move_fi) : 0) : hit_x
+			let y = !horiz ? (move_fi != null ? cell_y(null, move_fi) : 0) : hit_x
 			let w = move_fi != null ? cell_w(move_fi) : 0
 			let h = e.cell_h
 			e.cells_view.scroll_to_view_rect(null, null, x, y, w, h)
@@ -1305,7 +1326,7 @@ component('x-grid', function(e) {
 					e.class('col-resize', true)
 				} else if (ht_col_resize(mx, my, hit)) {
 					hit.state = 'col_resize'
-					e.class('col-resize', true)
+					md_col_resize(mx, my, hit)
 				} else if (ht_col_drag(mx, my, hit, ev)) {
 					hit.state = 'col_drag'
 				} else if (ht_row_drag(mx, my, hit, ev)) {
@@ -1349,9 +1370,7 @@ component('x-grid', function(e) {
 			e.class('col-resizing', false)
 			e.init_rows()
 		} else if (hit.state == 'col_resizing') {
-			e.class('col-resizing', false)
-			remove_resize_guides()
-			update_sizes()
+			mu_col_resize()
 		} else if (hit.state == 'col_dragging') {
 			if (e.can_sort_rows)
 				e.set_order_by_dir(e.fields[hit.fi], 'toggle', ev.shiftKey)
