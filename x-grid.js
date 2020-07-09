@@ -528,10 +528,12 @@ component('x-grid', function(e) {
 
 		row_focused = or(row_focused, e.focused_row_index == ri)
 		let cell_focused = row_focused && (!e.can_focus_cells || fi == e.focused_field_index)
+		let row_selected = e.selected_rows.has(row)
 		let editing = !!e.editor
 		cell.class('focused', cell_focused)
 		cell.class('editing', cell_focused && editing)
 		cell.class('row-focused', row_focused)
+		cell.class('row-selected', row_selected)
 
 		cell.show()
 	}
@@ -754,6 +756,8 @@ component('x-grid', function(e) {
 	// col resizing -----------------------------------------------------------
 
 	function ht_col_resize_horiz(mx, my, hit) {
+		if (mx >= e.header.offsetWidth)
+			return
 		for (let fi = 0; fi < e.fields.length; fi++) {
 			let hcell = e.header.at[fi]
 			let x = mx - (hcell._x + hcell._w)
@@ -766,8 +770,11 @@ component('x-grid', function(e) {
 	}
 
 	function ht_col_resize_vert(mx, my, hit) {
+		if (my >= e.header.offsetHeight)
+			return
 		let x = ((mx + 5) % e.cell_w) - 5
-		if (!(x >= -5 && x <= 5)) return
+		if (!(x >= -5 && x <= 5))
+			return
 		hit.ri = floor((mx - 6) / e.cell_w)
 		hit.dx = e.cell_w * hit.ri - scroll_x
 		let r = e.cells_view.client_rect()
@@ -802,7 +809,7 @@ component('x-grid', function(e) {
 		} else {
 
 			mm_col_resize = function(mx, my, hit) {
-				e.cell_w = mx - hit.mx
+				e.cell_w = max(20, mx - hit.mx)
 				let sx = hit.ri * e.cell_w - hit.dx
 				e.cells_view.scrollLeft = sx
 				let last_vrn = vrn
@@ -858,6 +865,8 @@ component('x-grid', function(e) {
 				|| (e.enter_edit_on_click_focused && already_on_it)),
 			focus_editor: true,
 			editor_state: 'select_all',
+			expand_selection: ev.shiftKey,
+			keep_selection: ev.ctrlKey,
 			input: e,
 		})) {
 			if (over_indent)
@@ -1403,7 +1412,7 @@ component('x-grid', function(e) {
 
 	// keyboard bindings ------------------------------------------------------
 
-	e.on('keydown', function(key, shift) {
+	e.on('keydown', function(key, shift, ctrl) {
 
 		if (e.disabled)
 			return
@@ -1486,6 +1495,7 @@ component('x-grid', function(e) {
 			if (move)
 				if (e.focus_cell(true, true, rows, 0, {
 					editor_state: rows > 0 ? 'left' : 'right',
+					expand_selection: shift,
 					input: e
 				}))
 					return false
@@ -1538,6 +1548,12 @@ component('x-grid', function(e) {
 		if (!e.editor && key == ' ') {
 			if (e.focused_row_index)
 				e.toggle_collapsed(e.focused_row_index, shift)
+			return false
+		}
+
+		if (key == 'a' && ctrl) {
+			e.selected_rows = new Set(e.rows)
+			update_viewport()
 			return false
 		}
 

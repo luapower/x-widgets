@@ -92,6 +92,7 @@ function rowset_widget(e) {
 			if (!row.parent_collapsed && passes(row))
 				e.rows.push(row)
 		e.rows_array_changed()
+		e.selected_rows = new Set()
 	}
 
 	// fields array -----------------------------------------------------------
@@ -558,6 +559,8 @@ function rowset_widget(e) {
 		let focus_editor = (ev && ev.focus_editor) || (e.editor && e.editor.hasfocus)
 		let enter_edit = (ev && ev.enter_edit) || (was_editing && e.stay_in_edit_mode)
 		let editable = (ev && ev.editable) || enter_edit
+		let expand_selection = ev && ev.expand_selection
+		let keep_selection = ev && ev.keep_selection
 
 		let opt = update({editable: editable}, ev)
 		;[ri, fi] = e.first_focusable_cell(ri, fi, rows, cols, opt)
@@ -578,18 +581,32 @@ function rowset_widget(e) {
 		}
 
 		if (row_changed || field_changed) {
+			let old_focused_row_index = e.focused_row_index
 			let old_focused_row = e.focused_row
+			let old_focused_field = e.focused_field
 			e.focused_row_index = ri
 			e.focused_field_index = fi
 			if (fi != null)
 				e.focused_field_name = e.fields[fi].name
-			e.update_cell_focus(ri, fi, ev)
 			let row = e.rows[ri]
 			let val = row && e.val_field ? e.rowset.val(row, e.val_field) : null
 			e.set_val(val, update({input: e}, ev))
-			if (row_changed)
+			if (row_changed) {
+				if (expand_selection) {
+					if (old_focused_row) {
+						let ri1 = min(old_focused_row_index, ri)
+						let ri2 = max(old_focused_row_index, ri)
+						for (let ri = ri1; ri <= ri2; ri++)
+							e.selected_rows.add(e.rows[ri])
+					}
+				} else {
+					if (!keep_selection)
+						e.selected_rows.clear()
+					e.selected_rows.add(e.focused_row)
+				}
 				e.fire('focused_row_changed', row, old_focused_row, ev)
-
+			}
+			e.update_cell_focus(ri, fi, ev)
 		}
 
 		if (enter_edit && ri != null && fi != null)
