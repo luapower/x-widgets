@@ -528,12 +528,13 @@ component('x-grid', function(e) {
 
 		row_focused = or(row_focused, e.focused_row_index == ri)
 		let cell_focused = row_focused && (!e.can_focus_cells || fi == e.focused_field_index)
-		let row_selected = e.selected_rows.has(row)
+		let sel_fields = e.selected_rows.get(row)
+		let selected = (isarray(sel_fields) ? sel_fields[fi] : sel_fields) || false
 		let editing = !!e.editor
 		cell.class('focused', cell_focused)
 		cell.class('editing', cell_focused && editing)
 		cell.class('row-focused', row_focused)
-		cell.class('row-selected', row_selected)
+		cell.class('selected', selected)
 
 		cell.show()
 	}
@@ -1436,6 +1437,7 @@ component('x-grid', function(e) {
 			if (move)
 				if (e.focus_next_cell(cols, {
 					editor_state: horiz ? (cols > 0 ? 'left' : 'right') : 'select_all',
+					expand_selection: shift,
 					input: e,
 				}))
 					return false
@@ -1552,7 +1554,9 @@ component('x-grid', function(e) {
 		}
 
 		if (key == 'a' && ctrl) {
-			e.selected_rows = new Set(e.rows)
+			e.selected_rows = new Map()
+			for (let row of e.rows)
+				e.selected_rows.set(row, true)
 			update_viewport()
 			return false
 		}

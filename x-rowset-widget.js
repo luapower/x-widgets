@@ -92,7 +92,7 @@ function rowset_widget(e) {
 			if (!row.parent_collapsed && passes(row))
 				e.rows.push(row)
 		e.rows_array_changed()
-		e.selected_rows = new Set()
+		e.selected_rows = new Map()
 	}
 
 	// fields array -----------------------------------------------------------
@@ -581,31 +581,60 @@ function rowset_widget(e) {
 		}
 
 		if (row_changed || field_changed) {
-			let old_focused_row_index = e.focused_row_index
-			let old_focused_row = e.focused_row
-			let old_focused_field = e.focused_field
+			let ri0 = e.selected_row_index
+			let fi0 = e.selected_field_index
+			let row0 = e.focused_row
 			e.focused_row_index = ri
 			e.focused_field_index = fi
 			if (fi != null)
 				e.focused_field_name = e.fields[fi].name
+
 			let row = e.rows[ri]
 			let val = row && e.val_field ? e.rowset.val(row, e.val_field) : null
 			e.set_val(val, update({input: e}, ev))
-			if (row_changed) {
+
+			if (e.can_focus_cells) {
 				if (expand_selection) {
-					if (old_focused_row) {
-						let ri1 = min(old_focused_row_index, ri)
-						let ri2 = max(old_focused_row_index, ri)
-						for (let ri = ri1; ri <= ri2; ri++)
-							e.selected_rows.add(e.rows[ri])
+					let ri1 = min(ri0, ri)
+					let ri2 = max(ri0, ri)
+					let fi1 = min(fi0, fi)
+					let fi2 = max(fi0, fi)
+					for (let ri = ri1; ri <= ri2; ri++) {
+						let row = e.rows[ri]
+						let a = e.selected_rows.get(row) || []
+						for (let fi = fi1; fi <= fi2; fi++)
+							a[fi] = true
+						e.selected_rows.set(row, a)
 					}
 				} else {
 					if (!keep_selection)
 						e.selected_rows.clear()
-					e.selected_rows.add(e.focused_row)
+					let a = []
+					a[fi] = true
+					e.selected_rows.set(row, a)
+					e.selected_row_index = ri
+					e.selected_field_index = fi
 				}
-				e.fire('focused_row_changed', row, old_focused_row, ev)
+			} else {
+				if (expand_selection) {
+					if (old_focused_row) {
+						let ri1 = min(ri0, ri)
+						let ri2 = max(ri0, ri)
+						for (let ri = ri1; ri <= ri2; ri++)
+							e.selected_rows.set(e.rows[ri], true)
+					}
+				} else {
+					if (!keep_selection) {
+						e.selected_rows.clear()
+						e.selected_row_index = ri
+						e.selected_field_index = null
+					}
+					e.selected_rows.set(row, true)
+				}
 			}
+
+			if (row_changed)
+				e.fire('focused_row_changed', row, row0, ev)
 			e.update_cell_focus(ri, fi, ev)
 		}
 

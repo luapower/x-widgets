@@ -24,8 +24,8 @@
 	--x-item-focused-bg-color       : #258;
 	--x-item-focused-invalid-bg-color : #f33;
 	--x-row-focused-bg-color        : #f0f0f0;
-	--x-row-unselected-bg-color     : #888;
-	--x-row-selected-bg-color       : #69c;
+	--x-unselected-bg-color         : #888;
+	--x-selected-bg-color           : #69c;
 	--x-item-hover-bg-color         : #e0e0e0aa;
 	--x-item-bg-only-bg-color       : #eee;  /* slider background */
 	--x-item-bg-only-hover-bg-color : #ddd;  /* slider background */
@@ -68,11 +68,11 @@
 	color: var(--x-inverted-fg-color);
 }
 
-.x-item:not(.focused):not(.row-selected):not(:hover):not(.invalid).new {
+.x-item:not(.focused):not(.selected):not(:hover):not(.invalid).new {
 	background-color: var(--x-new-bg-color);
 }
 
-.x-item:not(.focused):not(.row-selected):not(:hover):not(.invalid).modified {
+.x-item:not(.focused):not(.selected):not(:hover):not(.invalid).modified {
 	background-color: var(--x-modified-bg-color);
 }
 
@@ -80,13 +80,13 @@
 	background-color: var(--x-item-hover-bg-color);
 }
 
-.x-focusable .x-item.row-selected:not(.invalid) {
-	background-color: var(--x-row-unselected-bg-color);
+.x-focusable .x-item.selected:not(.invalid) {
+	background-color: var(--x-unselected-bg-color);
 	color: var(--x-inverted-fg-color);
 }
 
-.x-focusable:focus-within .x-item.row-selected:not(.invalid) {
-	background-color: var(--x-row-selected-bg-color);
+.x-focusable:focus-within .x-item.selected:not(.invalid) {
+	background-color: var(--x-selected-bg-color);
 	color: var(--x-inverted-fg-color);
 }
 
