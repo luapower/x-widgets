@@ -6,6 +6,7 @@
 component('x-listbox', function(e) {
 
 	rowset_widget(e)
+	e.can_focus_cells = false
 	e.align_x = 'stretch'
 	e.align_y = 'stretch'
 	tabindex_widget(e)
@@ -66,6 +67,7 @@ component('x-listbox', function(e) {
 	}
 
 	e.update_item = function(item, row) { // stub
+		item.row = row
 		item.set(e.row_display_val(row))
 	}
 
@@ -76,7 +78,6 @@ component('x-listbox', function(e) {
 	e.init_rows = function() {
 		if (!e.isConnected)
 			return
-		selected_row_index = null
 		found_row_index = null
 		e.clear()
 		for (let i = 0; i < e.rows.length; i++) {
@@ -85,7 +86,7 @@ component('x-listbox', function(e) {
 			e.add(item)
 			item.on('pointerdown', item_pointerdown)
 		}
-		e.update_cell_focus(e.focused_row_index, e.focused_cell_index)
+		e.update_cell_focus()
 	}
 
 	e.update_cell_val = function(ri, fi) {
@@ -94,19 +95,11 @@ component('x-listbox', function(e) {
 
 	e.update_cell_error = function(ri, fi, err) {} // stub
 
-	let selected_row_index
-	e.update_cell_focus = function(ri, fi) {
-		let item1 = e.at[ri]
-		let item0 = e.at[selected_row_index]
-		if (item0) {
-			item0.class('focused', false)
-			item0.class('selected', false)
+	e.update_cell_focus = function() {
+		for (let item of e.children) {
+			item.class('focused', e.focused_row == item.row)
+			item.class('selected', !!e.selected_rows.get(item.row))
 		}
-		if (item1) {
-			item1.class('focused')
-			item1.class('selected')
-		}
-		selected_row_index = ri
 	}
 
 	// drag-move items --------------------------------------------------------
@@ -129,7 +122,12 @@ component('x-listbox', function(e) {
 	function item_pointerdown(ev, mx, my) {
 		e.focus()
 		let ri = this.index
-		if (!e.focus_cell(ri, null, 0, 0, {must_not_move_row: true, input: e}))
+		if (!e.focus_cell(ri, null, 0, 0, {
+			input: e,
+			must_not_move_row: true,
+			expand_selection: ev.shiftKey,
+			keep_selection: ev.ctrlKey,
+		}))
 			return false
 		e.fire('val_picked', {input: e}) // picker protocol.
 		return this.capture_pointer(ev, item_pointermove, item_pointerup)
@@ -158,15 +156,16 @@ component('x-listbox', function(e) {
 			let over_i = e.move_element_stop()
 			let insert_i = over_i - (over_i > move_i ? 1 : 0)
 
+			let moved_rows = e.rows.splice(move_i)
+			e.move_row(moved_rows, over_i)
+
 			this.remove()
 			e.insert(insert_i, this)
-			for (let item of e.children)
+			let ri = 0
+			for (let item of e.children) {
 				item[e.axis] = null
-
-			e.move_row(move_i, over_i)
-
-			selected_row_index = insert_i
-			e.focused_row_index = insert_i
+				item.row = e.rows[ri++]
+			}
 		}
 		dragging = false
 		e.class('x-moving', false)
@@ -192,7 +191,7 @@ component('x-listbox', function(e) {
 		return forward ? e.last : e.first
 	}
 
-	e.on('keydown', function(key) {
+	e.on('keydown', function(key, shift) {
 		let rows
 		switch (key) {
 			case 'ArrowUp'   : rows = -1; break
@@ -203,14 +202,20 @@ component('x-listbox', function(e) {
 			case 'End'       : rows =  1/0; break
 		}
 		if (rows) {
-			e.focus_cell(true, null, rows, 0, {input: e})
+			e.focus_cell(true, null, rows, 0, {
+				input: e,
+				expand_selection: shift,
+			})
 			return false
 		}
 
 		if (key == 'PageUp' || key == 'PageDown') {
 			let item = page_item(key == 'PageDown')
 			if (item)
-				e.focus_cell(item.index, null, 0, 0, {input: e})
+				e.focus_cell(item.index, null, 0, 0, {
+					input: e,
+					expand_selection: shift,
+				})
 			return false
 		}
 
@@ -219,6 +224,12 @@ component('x-listbox', function(e) {
 				e.fire('val_picked', {input: e}) // picker protocol
 			return false
 		}
+
+		if (key == 'a' && ctrl) {
+			e.select_all()
+			return false
+		}
+
 	})
 
 	e.scroll_to_cell = function(ri, fi) {

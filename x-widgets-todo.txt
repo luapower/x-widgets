@@ -41,9 +41,7 @@ FEATURES
 
 - CALENDAR select range
 - SLIDER select range
-- ROWSET_WIDGET select range
 - LISTBOX select range
-- GRID select range
 
 - LISTBOX drag-move row to other list
 - GRID drag-move row to other grid

@@ -581,6 +581,8 @@ function rowset_widget(e) {
 		}
 
 		if (row_changed || field_changed) {
+			let last_ri = e.focused_row_index
+			let last_fi = e.focused_field_index
 			let ri0 = e.selected_row_index
 			let fi0 = e.selected_field_index
 			let row0 = e.focused_row
@@ -617,12 +619,10 @@ function rowset_widget(e) {
 				}
 			} else {
 				if (expand_selection) {
-					if (old_focused_row) {
-						let ri1 = min(ri0, ri)
-						let ri2 = max(ri0, ri)
-						for (let ri = ri1; ri <= ri2; ri++)
-							e.selected_rows.set(e.rows[ri], true)
-					}
+					let ri1 = min(ri0, ri)
+					let ri2 = max(ri0, ri)
+					for (let ri = ri1; ri <= ri2; ri++)
+						e.selected_rows.set(e.rows[ri], true)
 				} else {
 					if (!keep_selection) {
 						e.selected_rows.clear()
@@ -635,7 +635,7 @@ function rowset_widget(e) {
 
 			if (row_changed)
 				e.fire('focused_row_changed', row, row0, ev)
-			e.update_cell_focus(ri, fi, ev)
+			e.update_cell_focus(ev)
 		}
 
 		if (enter_edit && ri != null && fi != null)
@@ -666,6 +666,13 @@ function rowset_widget(e) {
 			must_not_move_row: !e.auto_focus_first_cell,
 			enter_edit: e.auto_edit_first_cell,
 		}, ev))
+	}
+
+	e.select_all = function() {
+		e.selected_rows = new Map()
+		for (let row of e.rows)
+			e.selected_rows.set(row, true)
+		e.update_cell_focus()
 	}
 
 	// responding to val changes ----------------------------------------------

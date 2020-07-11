@@ -698,8 +698,8 @@ component('x-grid', function(e) {
 		update_viewport()
 	}
 
-	e.update_cell_focus = function(ri, fi) {
-		update_cells()
+	e.update_cell_focus = function() {
+		update_viewport()
 	}
 
 	e.update_cell_state = function(ri, fi, prop, val) {
@@ -1554,10 +1554,7 @@ component('x-grid', function(e) {
 		}
 
 		if (key == 'a' && ctrl) {
-			e.selected_rows = new Map()
-			for (let row of e.rows)
-				e.selected_rows.set(row, true)
-			update_viewport()
+			e.select_all()
 			return false
 		}
 
