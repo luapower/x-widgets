@@ -862,7 +862,7 @@ component('x-grid', function(e) {
 
 		if (e.focus_cell(cell.ri, cell.fi, 0, 0, {
 			must_not_move_row: true,
-			enter_edit: !over_indent && (e.enter_edit_on_click
+			enter_edit: !over_indent && e.can_edit && (e.enter_edit_on_click
 				|| (e.enter_edit_on_click_focused && already_on_it)),
 			focus_editor: true,
 			editor_state: 'select_all',
@@ -1286,17 +1286,26 @@ component('x-grid', function(e) {
 	}
 
 	function mu_col_move() {
-		let before_fi = e.move_element_stop() // sets x of moved element.
+		let over_fi = e.move_element_stop() // sets x of moved element.
 		e.class('col-moving', false)
 		each_cell_of_col(hit.fi, (cell) => cell.class('col-moving', false))
 		if (e.editor)
 			e.editor.class('col-moving', false)
-		if (before_fi != hit.fi) {
-			let insert_fi = before_fi - (before_fi > hit.fi ? 1 : 0)
-			let focused_field = e.fields[e.focused_field_index]
+		if (over_fi != hit.fi) {
+			let focused_field  = e.focused_field
+			let selected_field = e.selected_field
+
+			let insert_fi = over_fi - (over_fi > hit.fi ? 1 : 0)
 			let field = e.fields.remove(hit.fi)
 			e.fields.insert(insert_fi, field)
-			e.focused_field_index = focused_field && e.fields.indexOf(focused_field)
+
+			e.fields_array_changed()
+			e.focused_field_index  = e.field_index(focused_field)
+			e.selected_field_index = e.field_index(selected_field)
+			for (let [row, a] of e.selected_rows)
+				if (isarray(a))
+					a.insert(insert_fi, a.remove(hit.fi))
+
 			e.init_fields()
 			update_sizes()
 			update_viewport()

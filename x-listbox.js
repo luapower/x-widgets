@@ -78,7 +78,6 @@ component('x-listbox', function(e) {
 	e.init_rows = function() {
 		if (!e.isConnected)
 			return
-		found_row_index = null
 		e.clear()
 		for (let i = 0; i < e.rows.length; i++) {
 			let item = H.div({class: 'x-listbox-item x-item'})
@@ -117,59 +116,68 @@ component('x-listbox', function(e) {
 		return e.at[i][e.axis == 'x' ? 'offsetWidth' : 'offsetHeight']
 	}
 
-	let dragging, drag_mx, drag_my
-
 	function item_pointerdown(ev, mx, my) {
+
 		e.focus()
-		let ri = this.index
-		if (!e.focus_cell(ri, null, 0, 0, {
+
+		if (!e.focus_cell(this.index, null, 0, 0, {
 			input: e,
 			must_not_move_row: true,
 			expand_selection: ev.shiftKey,
 			keep_selection: ev.ctrlKey,
 		}))
 			return false
+
 		e.fire('val_picked', {input: e}) // picker protocol.
-		return this.capture_pointer(ev, item_pointermove, item_pointerup)
-	}
 
-	function item_pointermove(mx, my, ev, down_mx, down_my) {
-		if (!dragging) {
-			dragging = e.can_move_items
-				&& e.axis == 'x' ? abs(down_mx - mx) > 4 : abs(down_my - my) > 4
+		let dragging, drag_mx, drag_my
+
+		let ri1 = e.focused_row_index
+		let ri2 = e.selected_row_index
+
+		let move_ri = min(ri1, ri2)
+		let move_n = abs(ri1 - ri2) + 1
+
+		function item_pointermove(mx, my, ev, down_mx, down_my) {
+			if (!dragging) {
+				dragging = e.can_move_items
+					&& e.axis == 'x' ? abs(down_mx - mx) > 4 : abs(down_my - my) > 4
+				if (dragging) {
+					e.class('x-moving')
+					for (let item of e.children) {
+						item._offset = item[e.axis == 'x' ? 'offsetLeft' : 'offsetTop']
+						item.class('x-moving', !!e.selected_rows.get(item.row))
+					}
+					e.move_element_start(move_ri, move_n, 0, e.child_count)
+					drag_mx = down_mx - e.at[move_ri].offsetLeft
+					drag_my = down_my - e.at[move_ri].offsetTop
+				}
+			} else
+				e.move_element_update(e.axis == 'x' ? mx - drag_mx : my - drag_my)
+		}
+
+		function item_pointerup() {
 			if (dragging) {
-				for (let item of e.children)
-					item._offset = item[e.axis == 'x' ? 'offsetLeft' : 'offsetTop']
-				e.move_element_start(this.index, 1, 0, e.child_count)
-				drag_mx = down_mx - this.offsetLeft
-				drag_my = down_my - this.offsetTop
-				e.class('x-moving', true)
-				this.class('x-moving', true)
-			}
-		} else
-			e.move_element_update(e.axis == 'x' ? mx - drag_mx : my - drag_my)
-	}
+				e.class('x-moving', false)
 
-	function item_pointerup() {
-		if (dragging) {
-			let move_i = this.index
-			let over_i = e.move_element_stop()
-			let insert_i = over_i - (over_i > move_i ? 1 : 0)
+				let over_ri = e.move_element_stop()
+				let insert_ri = over_ri - (over_ri > move_ri ? move_n : 0)
 
-			let moved_rows = e.rows.splice(move_i)
-			e.move_row(moved_rows, over_i)
+				let moved_rows = e.rows.splice(move_ri, move_n)
+				e.move_row(moved_rows, insert_ri)
 
-			this.remove()
-			e.insert(insert_i, this)
-			let ri = 0
-			for (let item of e.children) {
-				item[e.axis] = null
-				item.row = e.rows[ri++]
+				for (let ri = 0; ri < e.rows.length; ri++) {
+					let item = e.at[ri]
+					e.update_item(item, e.rows[ri])
+					item.class('x-moving', false)
+					item.x = null
+					item.y = null
+				}
+				e.update_cell_focus()
 			}
 		}
-		dragging = false
-		e.class('x-moving', false)
-		this.class('x-moving', false)
+
+		return this.capture_pointer(ev, item_pointermove, item_pointerup)
 	}
 
 	// key bindings -----------------------------------------------------------
