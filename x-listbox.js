@@ -133,7 +133,7 @@ component('x-listbox', function(e) {
 		let dragging, drag_mx, drag_my
 
 		let ri1 = e.focused_row_index
-		let ri2 = e.selected_row_index
+		let ri2 = or(e.selected_row_index, ri1)
 
 		let move_ri = min(ri1, ri2)
 		let move_n = abs(ri1 - ri2) + 1
@@ -144,9 +144,10 @@ component('x-listbox', function(e) {
 					&& e.axis == 'x' ? abs(down_mx - mx) > 4 : abs(down_my - my) > 4
 				if (dragging) {
 					e.class('x-moving')
-					for (let item of e.children) {
+					for (let ri = 0; ri < e.rows.length; ri++) {
+						let item = e.at[ri]
 						item._offset = item[e.axis == 'x' ? 'offsetLeft' : 'offsetTop']
-						item.class('x-moving', !!e.selected_rows.get(item.row))
+						item.class('x-moving', ri >= move_ri && ri < move_ri + move_n)
 					}
 					e.move_element_start(move_ri, move_n, 0, e.child_count)
 					drag_mx = down_mx - e.at[move_ri].offsetLeft
@@ -165,6 +166,8 @@ component('x-listbox', function(e) {
 
 				let moved_rows = e.rows.splice(move_ri, move_n)
 				e.move_row(moved_rows, insert_ri)
+
+				e.focused_row_index = insert_ri + (move_ri == ri1 ? 0 : move_n - 1)
 
 				for (let ri = 0; ri < e.rows.length; ri++) {
 					let item = e.at[ri]

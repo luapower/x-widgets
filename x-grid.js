@@ -1219,6 +1219,8 @@ component('x-grid', function(e) {
 				e.editor.class('row-moving', false)
 
 			e.move_row(moved_rows, hit_ri, hit_parent_row)
+
+			e.focused_row_index = hit_ri
 			e.init_rows()
 		}
 
