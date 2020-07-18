@@ -135,8 +135,17 @@ component('x-listbox', function(e) {
 		let ri1 = e.focused_row_index
 		let ri2 = or(e.selected_row_index, ri1)
 
-		let move_ri = min(ri1, ri2)
-		let move_n = abs(ri1 - ri2) + 1
+		let move_ri1 = min(ri1, ri2)
+		let move_ri2 = max(ri1, ri2)
+		let move_n = move_ri2 - move_ri1 + 1
+
+		let item1 = e.at[move_ri1]
+		let item2 = e.at[move_ri2]
+		let horiz = e.axis == 'x'
+		let move_w = horiz ? 0 : item1.offsetWidth
+		let move_h = horiz ? 0 : item2.offsetTop + item2.offsetHeight - item1.offsetTop
+
+		let scroll_timer, mx0, my0
 
 		function item_pointermove(mx, my, ev, down_mx, down_my) {
 			if (!dragging) {
@@ -147,27 +156,39 @@ component('x-listbox', function(e) {
 					for (let ri = 0; ri < e.rows.length; ri++) {
 						let item = e.at[ri]
 						item._offset = item[e.axis == 'x' ? 'offsetLeft' : 'offsetTop']
-						item.class('x-moving', ri >= move_ri && ri < move_ri + move_n)
+						item.class('x-moving', ri >= move_ri1 && ri <= move_ri2)
 					}
-					e.move_element_start(move_ri, move_n, 0, e.child_count)
-					drag_mx = down_mx - e.at[move_ri].offsetLeft
-					drag_my = down_my - e.at[move_ri].offsetTop
+					e.move_element_start(move_ri1, move_n, 0, e.child_count)
+					drag_mx = down_mx + e.scrollLeft - e.at[move_ri1].offsetLeft
+					drag_my = down_my + e.scrollTop  - e.at[move_ri1].offsetTop
+					mx0 = mx
+					my0 = my
+					scroll_timer = every(.1, item_pointermove)
 				}
-			} else
-				e.move_element_update(e.axis == 'x' ? mx - drag_mx : my - drag_my)
+			} else {
+				mx = or(mx, mx0)
+				my = or(my, my0)
+				mx0 = mx
+				my0 = my
+				let x = mx - drag_mx + e.scrollLeft
+				let y = my - drag_my + e.scrollTop
+				e.move_element_update(horiz ? x : y)
+				e.scroll_to_view_rect(null, null, x, y, move_w, move_h)
+			}
 		}
 
 		function item_pointerup() {
 			if (dragging) {
+				clearInterval(scroll_timer)
 				e.class('x-moving', false)
 
 				let over_ri = e.move_element_stop()
-				let insert_ri = over_ri - (over_ri > move_ri ? move_n : 0)
+				let insert_ri = over_ri - (over_ri > move_ri1 ? move_n : 0)
 
-				let moved_rows = e.rows.splice(move_ri, move_n)
+				let moved_rows = e.rows.splice(move_ri1, move_n)
 				e.move_row(moved_rows, insert_ri)
 
-				e.focused_row_index = insert_ri + (move_ri == ri1 ? 0 : move_n - 1)
+				e.focused_row_index = insert_ri + (move_ri1 == ri1 ? 0 : move_n - 1)
 
 				for (let ri = 0; ri < e.rows.length; ri++) {
 					let item = e.at[ri]
