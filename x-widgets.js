@@ -508,7 +508,7 @@ function serializable_widget(e) {
 // focusable widget mixin ----------------------------------------------------
 // ---------------------------------------------------------------------------
 
-function focusable_widget(e) {
+function focusable_widget(e, fe) {
 	e.get_tabindex = function() {
 		return or(e._tabindex, e.attr('tabindex'))
 	}
@@ -516,7 +516,7 @@ function focusable_widget(e) {
 		if (e._tabindex != null)
 			e._tabindex = i
 		else
-			e.attr('tabindex', i)
+			(fe || e).attr('tabindex', i)
 	}
 	e.prop('tabindex', {default: 0})
 }
@@ -1098,7 +1098,6 @@ function input_widget(e) {
 
 component('x-input', function(e) {
 
-	focusable_widget(e)
 	val_widget(e)
 	input_widget(e)
 
@@ -1147,7 +1146,9 @@ component('x-input', function(e) {
 		return s.length <= or(e.maxlen, e.field.maxlen)
 	}
 
-	// grid editor protocol ---------------------------------------------------
+	// focusing
+
+	focusable_widget(e, e.input)
 
 	focus = e.focus
 	e.focus = function() {
@@ -1156,6 +1157,8 @@ component('x-input', function(e) {
 		else
 			e.input.focus()
 	}
+
+	// grid editor protocol ---------------------------------------------------
 
 	e.input.on('blur', function() {
 		e.fire('lost_focus')
@@ -1469,28 +1472,16 @@ component('x-slider', function(e) {
 
 	// controller
 
-	let hit_x
-
 	e.input_thumb.on('pointerdown', function(ev) {
 		e.focus()
 		let r = e.input_thumb.rect()
-		hit_x = ev.clientX - (r.x + r.w / 2)
-		document.on('pointermove', document_pointermove)
-		document.on('pointerup'  , document_pointerup)
-		return false
+		let hit_x = ev.clientX - (r.x + r.w / 2)
+		return this.capture_pointer(ev, function(mx, my) {
+			let r = e.rect()
+			e.set_progress((mx - r.x - hit_x) / r.w, {input: e})
+			return false
+		})
 	})
-
-	function document_pointermove(mx, my) {
-		let r = e.rect()
-		e.set_progress((mx - r.x - hit_x) / r.w, {input: e})
-		return false
-	}
-
-	function document_pointerup() {
-		hit_x = null
-		document.off('pointermove', document_pointermove)
-		document.off('pointerup'  , document_pointerup)
-	}
 
 	e.on('pointerdown', function(ev) {
 		let r = e.rect()

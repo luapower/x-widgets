@@ -224,6 +224,10 @@
 	cursor: initial;
 }
 
+.x-button.widget-editing:focus-within {
+	outline-offset: -4px;
+}
+
 .x-cssgrid > .x-button {
 	align-items: center;
 }
@@ -1358,7 +1362,7 @@
 .x-cssgrid-span {
 	justify-self: stretch;
 	align-self: stretch;
-	border: 1px dashed #888;
+	border: 1px dotted #888;
 	pointer-events: none;
 	position: relative;
 	z-index: 3;
