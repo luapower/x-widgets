@@ -692,6 +692,7 @@ function rowset_widget(e) {
 			sel_rows_changed = true
 		} else if (e.can_focus_cells) {
 			if (expand_selection) {
+				e.selected_rows.clear()
 				let ri1 = min(ri0, ri)
 				let ri2 = max(ri0, ri)
 				let fi1 = min(fi0, fi)
@@ -699,13 +700,11 @@ function rowset_widget(e) {
 				for (let ri = ri1; ri <= ri2; ri++) {
 					let row = e.rows[ri]
 					if (e.can_select_cell(row)) {
-						let a = e.selected_rows.get(row) || []
+						let a = []
 						for (let fi = fi1; fi <= fi2; fi++)
 							if (e.can_select_cell(row, e.fields[fi])) {
-								if (!a[fi]) {
-									a[fi] = true
-									sel_rows_changed = true
-								}
+								a[fi] = true
+								sel_rows_changed = true
 							}
 						if (a.length)
 							e.selected_rows.set(row, a)
@@ -729,6 +728,7 @@ function rowset_widget(e) {
 			}
 		} else {
 			if (expand_selection) {
+				e.selected_rows.clear()
 				let ri1 = min(ri0, ri)
 				let ri2 = max(ri0, ri)
 				for (let ri = ri1; ri <= ri2; ri++) {
