@@ -1511,6 +1511,7 @@ function global_rowset(name, ...options) {
 		return list_dropdown(update({
 			nolabel: true,
 			items: this.enum_values,
+			mode: 'fixed',
 		}, ...options))
 	}
 

@@ -1527,6 +1527,8 @@ component('x-dropdown', function(e) {
 
 	e.classes = 'x-widget x-input x-dropdown'
 
+	e.props.mode.enum_values = ['default', 'inline', 'wrap', 'fixed']
+
 	e.val_div = span({class: 'x-input-value x-dropdown-value'})
 	e.button = span({class: 'x-dropdown-button fa fa-caret-down'})
 	e.inner_label_div = div({class: 'x-input-inner-label x-dropdown-inner-label'})
