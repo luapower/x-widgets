@@ -1579,7 +1579,7 @@
 	display: grid;
 }
 
-/* x-rowset-widget -------------------------------------------------------- */
+/* x-nav ------------------------------------------------------------------ */
 
 .x-loading-overlay {
 	padding: .5em;
@@ -1746,9 +1746,13 @@
 	background-color: green;
 }
 
+.x-widget.x-grid.loading {
+	opacity: 1;
+}
+
 .x-grid.loading > .x-grid-header,
 .x-grid.loading > .x-grid-cells-view {
-	opacity: .7;
+	opacity: .9;
 }
 
 /* grid rows */
