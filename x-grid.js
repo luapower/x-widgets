@@ -1,6 +1,6 @@
 
 // ---------------------------------------------------------------------------
-// grid
+// grid widget
 // ---------------------------------------------------------------------------
 
 component('x-grid', function(e) {
@@ -27,7 +27,6 @@ component('x-grid', function(e) {
 	e.quick_edit = false        // quick edit (vs. quick-search) when pressing a key
 
 	// mouse behavior
-	e.prop('can_sort_rows'               , {store: 'var', default: true})
 	e.prop('can_reorder_fields'          , {store: 'var', default: true})
 	e.prop('enter_edit_on_click'         , {store: 'var', default: false})
 	e.prop('enter_edit_on_click_focused' , {store: 'var', default: true})
@@ -772,7 +771,7 @@ component('x-grid', function(e) {
 	}
 
 	e.row_display_val = function(row) { // stub
-		e.display_field = e.rowset && e.rowset.field(e.display_col)
+		e.display_field = e.field(e.display_col)
 		if (!e.display_field)
 			return 'no display field'
 		return e.rowset.display_val(row, e.display_field)
@@ -881,7 +880,7 @@ component('x-grid', function(e) {
 		return true
 	}
 
-	function md_row_drag(ev, mx, my) {
+	function md_row_drag(ev, mx, my, shift, ctrl) {
 
 		let cell = hit.cell
 		let over_indent = ev.target.closest('.x-grid-cell-indent')
@@ -893,23 +892,23 @@ component('x-grid', function(e) {
 			return
 
 		let already_on_it =
-			e.focused_row_index   == cell.ri &&
+			e.focused_row_index == cell.ri &&
 			e.focused_field_index == cell.fi
 
 		if (e.focus_cell(cell.ri, cell.fi, 0, 0, {
 			must_not_move_row: true,
 			enter_edit: !over_indent && e.can_edit
-				&& !ev.ctrlKey && !ev.shiftKey
+				&& !ctrl && !shift
 				&& (e.enter_edit_on_click
 					|| (e.enter_edit_on_click_focused && already_on_it)),
 			focus_editor: true,
 			editor_state: 'select_all',
-			expand_selection: ev.shiftKey,
-			invert_selection: ev.ctrlKey,
+			expand_selection: shift,
+			invert_selection: ctrl,
 			input: e,
 		})) {
 			if (over_indent)
-				e.toggle_collapsed(e.focused_row_index, ev.shiftKey)
+				e.toggle_collapsed(e.focused_row_index, shift)
 			if (!already_on_it)
 				e.pick_val()
 		}
@@ -950,7 +949,7 @@ component('x-grid', function(e) {
 
 		let parent_row = e.rows[move_ri1].parent_row
 
-		let tree_fi = e.fields.indexOf(e.tree_field)
+		let tree_fi = e.field_index(e.tree_field)
 
 		let ri1 = 0
 		let ri2 = e.rows.length
@@ -1337,7 +1336,7 @@ component('x-grid', function(e) {
 
 	let hit = {}
 
-	function pointermove(mx, my, ev) {
+	function pointermove(ev, mx, my) {
 		if (hit.state == 'header_resizing') {
 			mm_header_resize(mx, my, hit)
 		} else if (hit.state == 'col_resizing') {
@@ -1381,7 +1380,7 @@ component('x-grid', function(e) {
 	function pointerdown(ev, mx, my) {
 
 		if (!hit.state)
-			pointermove(mx, my, ev)
+			pointermove(ev, mx, my)
 		if (!hit.state)
 			return
 
@@ -1398,7 +1397,7 @@ component('x-grid', function(e) {
 			hit.state = 'col_dragging'
 		} else if (hit.state == 'row_drag') {
 			hit.state = 'row_dragging'
-			md_row_drag(ev, mx, my)
+			md_row_drag(ev, mx, my, ev.shiftKey, ev.ctrlKey)
 		} else
 			assert(false)
 
@@ -1408,7 +1407,7 @@ component('x-grid', function(e) {
 		return 'capture'
 	}
 
-	function pointerup(ev, mx, my) {
+	function pointerup(ev) {
 		if (!hit.state)
 			return
 		if (hit.state == 'header_resizing') {
@@ -1748,7 +1747,7 @@ component('x-grid', function(e) {
 			}
 			let items_added
 			if (e.rowset)
-				for (let field of e.rowset.fields) {
+				for (let field of e.all_fields) {
 					if (e.fields.indexOf(field) == -1) {
 						items_added = true
 						items.push({
@@ -1786,6 +1785,14 @@ component('x-grid', function(e) {
 		let px = mx - r.x
 		let py = my - r.y
 		context_menu.popup(e, 'inner-top', null, px, py)
+	}
+
+	// serialization
+
+	e.serialize = function() {
+		let t = e.serialize_props()
+		//
+		return t
 	}
 
 })

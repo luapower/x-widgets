@@ -226,13 +226,13 @@ prop_inspector = component('x-prop-inspector', function(e) {
 		let props = {}
 		let prop_vals = {}
 
-		for (let e of widgets) {
-			for (let prop in e.props) {
-				prop_counts[prop] = (prop_counts[prop] || 0) + 1
-				props[prop] = e.props[prop]
-				prop_vals[prop] = prop in prop_vals && prop_vals[prop] !== e[prop] ? undefined : e[prop]
-			}
-		}
+		for (let e of widgets)
+			for (let prop in e.props)
+					if (widgets.size == 1 || !e.props[prop].unique) {
+						prop_counts[prop] = (prop_counts[prop] || 0) + 1
+						props[prop] = e.props[prop]
+						prop_vals[prop] = prop in prop_vals && prop_vals[prop] !== e[prop] ? undefined : e[prop]
+					}
 
 		for (let prop in prop_counts)
 			if (prop_counts[prop] == widgets.size) {
@@ -248,7 +248,9 @@ prop_inspector = component('x-prop-inspector', function(e) {
 	}
 
 	// prevent unselecting all widgets by default on document.pointerdown.
-	e.on('pointerdown', function(ev) { ev.stopPropagation() })
+	e.on('pointerdown', function(ev) {
+		ev.stopPropagation()
+	})
 
 })
 

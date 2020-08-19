@@ -79,7 +79,7 @@ component('x-listbox', function(e) {
 	}
 
 	e.serialize = function() {
-		let t = e.serialize_fields()
+		let t = e.serialize_props()
 		if (e.items) {
 			t.items = []
 			for (let ce of e.child_widgets)
@@ -91,7 +91,7 @@ component('x-listbox', function(e) {
 	// responding to rowset changes -------------------------------------------
 
 	e.row_display_val = function(row) { // stub
-		e.display_field = e.rowset && e.rowset.field(e.display_col)
+		e.display_field = e.rowset && e.field(e.display_col)
 		if (!e.display_field)
 			return 'no display field'
 		return e.rowset.display_val(row, e.display_field)
@@ -191,7 +191,7 @@ component('x-listbox', function(e) {
 
 		let scroll_timer, mx0, my0
 
-		function item_pointermove(mx, my, ev, down_mx, down_my) {
+		function item_pointermove(ev, mx, my, down_mx, down_my) {
 			if (!dragging) {
 				dragging = e.can_move_items
 					&& (e.axis == 'x' ? abs(down_mx - mx) > 4 : abs(down_my - my) > 4)
@@ -221,7 +221,7 @@ component('x-listbox', function(e) {
 			}
 		}
 
-		function item_pointerup(mx, my, ev) {
+		function item_pointerup(ev, mx, my) {
 			if (dragging) {
 
 				clearInterval(scroll_timer)

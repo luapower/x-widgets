@@ -101,13 +101,11 @@ h2 {
 <script src="divs.js"></script>
 <script src="ajax.js"></script>
 <script src="url.js"></script>
-<script src="x-rowset.js"></script>
-<script src="x-widgets.js"></script>
 <script src="x-nav.js"></script>
+<script src="x-widgets.js"></script>
 <script src="x-listbox.js"></script>
 <script src="x-grid.js"></script>
 <script src="x-calendar.js"></script>
-<script src="x-country-dropdown.js"></script>
 <script src="x-cssgrid.js"></script>
 
 </head>
@@ -653,30 +651,23 @@ main.add(calendar({
 <template id=grid_demo>
 <script>
 
-var checked = () => H('<div class="fa fa-check"></div>')
+let checked = () => H('<div class="fa fa-check"></div>')
 
 function starts_with_a(s) {
 	return s.lower().starts('a') || 'Name must start with "A"'
 }
 
-var data = {
-	fields: [
-		{name: 'id'        , w:  50, min_w:  30, type: 'number', editable: false},
-		{name: 'index'     , w:  50, type: 'number', editable: false},
-		{name: 'active'    , w:  30, type: 'bool', true_text: checked, false_text: ''},
-		{name: 'name'      , w: 150, min_w:  50, max_w: 400, validate: starts_with_a, filter_by: true},
-		{name: 'parent_id' , w:  50, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: true},
-		{name: 'random_num', w: 130, allow_null: true, type: 'number', text: () => H('<i>Random</i><br>Number')},
-		{name: 'date'      , w: 120, allow_null: true, type: 'date', filter_by: true},
-	],
-	pk: 'id',
-	parent_col: 'parent_id',
-	index_col: 'index',
-	rows: new Set(),
-	can_add_rows: true,
-	can_remove_rows: true,
-	can_change_rows: true,
+let fields = [
+	{name: 'id'        , w:  50, min_w:  30, type: 'number', editable: false},
+	{name: 'index'     , w:  50, type: 'number', editable: false},
+	{name: 'active'    , w:  30, type: 'bool', true_text: checked, false_text: ''},
+	{name: 'name'      , w: 150, min_w:  50, max_w: 400, validate: starts_with_a, filter_by: true},
+	{name: 'parent_id' , w:  50, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: true},
+	{name: 'random_num', w: 130, allow_null: true, type: 'number', text: () => H('<i>Random</i><br>Number')},
+	{name: 'date'      , w: 120, allow_null: true, type: 'date', filter_by: true},
 }
+
+let rows = []
 
 for (let i = 0; i <= 10000; i++) {
 	let id         = i
@@ -687,20 +678,24 @@ for (let i = 0; i <= 10000; i++) {
 	let active = i % 5 == 0
 	let row = [id, id, active, name, parent_id, random_num, random_date]
 	//row.focusable = i % 10 >= 2
-	data.rows.add(row)
+	rows.push(row)
 }
 
 d = rowset(data)
 
 g = grid({
-	rowset: d,
+	fields: fields,
+	rows: rows,
+	pk: 'id',
+	parent_col: 'parent_id',
+	index_col: 'index',
+	tree_col: 'name',
 	w: 606,
 	h: 400,
 	//can_edit: false,
 	can_change_header_visibility: true,
 	//can_focus_cells: false,
 	//order_by: 'parent_id name:desc',
-	tree_col: 'name',
 	can_move_rows: true,
 	//enter_edit_on_click_focused: false,
 	//can_change_parent: false,

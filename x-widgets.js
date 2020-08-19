@@ -102,7 +102,13 @@ function up_widget_which(e, which) {
 
 function selectable_widget(e) {
 
-	attr(e, 'props').id = {name: 'id'}
+	attr(e, 'props').id = {
+		name: 'id',
+		unique: true,
+		validate: function(id) {
+			return window[id] === undefined || window[id] == e || 'id already in use'
+		},
+	}
 
 	override_property_setter(e, 'id', function(inherited, id) {
 		if (!id) id = ''
@@ -213,6 +219,9 @@ function selectable_widget(e) {
 		if (!e.can_select_widget)
 			return
 
+		if (e.widget_selected)
+			return false // prevent dropdown from opening.
+
 		if (ev.ctrlKey && (!e.ctrl_click_used || ev.shiftKey)) {
 
 			// prevent accidentally clicking on the parent of any of the selected widgets.
@@ -242,11 +251,8 @@ function selectable_widget(e) {
 
 	})
 
-	e.on('detach', function() { e.widget_selected = false })
-
-	e.on('pointerdown', function(ev) {
-		if (e.widget_selected)
-			return false // prevent dropdown from opening.
+	e.on('detach', function() {
+		e.widget_selected = false
 	})
 
 }
@@ -442,7 +448,7 @@ function cssgrid_item_widget_editing(e) {
 			return this.capture_pointer(ev, so_pointermove)
 		}
 
-		function so_pointermove(mx, my) {
+		function so_pointermove(ev, mx, my) {
 			resize_span(mx, my)
 		}
 
@@ -512,7 +518,7 @@ function cssgrid_item_widget_editing(e) {
 
 function serializable_widget(e) {
 
-	e.serialize_fields = function() {
+	e.serialize_props = function() {
 		let t = {typename: e.typename}
 		if (e.props)
 			for (let prop in e.props) {
@@ -530,7 +536,7 @@ function serializable_widget(e) {
 		return t
 	}
 
-	e.serialize = e.serialize_fields
+	e.serialize = e.serialize_props
 
 }
 
@@ -714,31 +720,31 @@ function val_widget(e, always_enabled) {
 
 	function get_val() {
 		let row = e.row
-		return row && e.field ? nav.rowset.val(row, e.field) : null
+		return row && e.field ? nav.cell_val(row, e.field) : null
 	}
 	e.set_val = function(v, ev) {
-		nav.rowset.set_val(e.row, e.field, e.to_val(v), ev)
+		nav.set_cell_val(e.row, e.field, e.to_val(v), ev)
 	}
 	e.property('val', get_val, e.set_val)
 
 	e.property('input_val', function() {
 		let row = e.row
-		return row && e.field ? e.from_val(nav.rowset.input_val(e.row, e.field)) : null
+		return row && e.field ? e.from_val(nav.cell_input_val(e.row, e.field)) : null
 	})
 
 	e.property('error', function() {
 		let row = e.row
-		return row && e.field ? nav.rowset.cell_error(row, e.field) : undefined
+		return row && e.field ? nav.cell_error(row, e.field) : undefined
 	})
 
 	e.property('modified', function() {
 		let row = e.row
-		return row && e.field ? nav.rowset.cell_modified(row, e.field) : false
+		return row && e.field ? nav.cell_modified(row, e.field) : false
 	})
 
 	e.display_val = function() {
 		let row = e.row
-		return row && e.field ? nav.rowset.display_val(row, e.field) : ''
+		return row && e.field ? nav.cell_display_val(row, e.field) : ''
 	}
 
 }
@@ -893,7 +899,7 @@ component('x-button', function(e) {
 
 	e.on('pointerdown', function(ev) {
 		if (e.widget_editing && ev.target != e.text_div) // prevent :active state
-			return this.capture_pointer(ev, noop, function() {
+			return this.capture_pointer(ev, null, function() {
 				e.text_div.focus()
 				e.text_div.select_all()
 			})
@@ -1007,7 +1013,7 @@ component('x-checkbox', function(e) {
 
 	e.on('pointerdown', function(ev) {
 		if (e.widget_editing && ev.target != e.text_div)
-			return this.capture_pointer(ev, noop, function() {
+			return this.capture_pointer(ev, null, function() {
 				e.text_div.focus()
 				e.text_div.select_all()
 			})
@@ -1466,7 +1472,7 @@ component('x-slider', function(e) {
 		e.focus()
 		let r = e.input_thumb.rect()
 		let hit_x = ev.clientX - (r.x + r.w / 2)
-		return this.capture_pointer(ev, function(mx, my) {
+		return this.capture_pointer(ev, function(ev, mx, my) {
 			let r = e.rect()
 			e.set_progress((mx - r.x - hit_x) / r.w, {input: e})
 			return false
@@ -2211,7 +2217,7 @@ component('x-pagelist', function(e) {
 	}
 
 	e.serialize = function() {
-		let t = e.serialize_fields()
+		let t = e.serialize_props()
 		t.items = []
 		for (let item of e.items) {
 			let sitem = {text: item.text}
@@ -2319,7 +2325,7 @@ component('x-pagelist', function(e) {
 		return this.capture_pointer(ev, idiv_pointermove, idiv_pointerup)
 	}
 
-	function idiv_pointermove(mx, my, ev, down_mx, down_my) {
+	function idiv_pointermove(ev, mx, my, down_mx, down_my) {
 		if (!dragging) {
 			dragging = e.can_move_items
 				&& abs(down_mx - mx) > 4 || abs(down_my - my) > 4
@@ -2534,7 +2540,7 @@ component('x-split', function(e) {
 
 	let hit, hit_x, mx0, w0, resizing, resist
 
-	e.on('pointermove', function(rmx, rmy) {
+	e.on('pointermove', function(ev, rmx, rmy) {
 		if (resizing) {
 
 			let mx = horiz ? rmx : rmy
@@ -2646,7 +2652,7 @@ component('x-split', function(e) {
 	}
 
 	e.serialize = function() {
-		let t = e.serialize_fields()
+		let t = e.serialize_props()
 		t[1] = e[1].serialize()
 		t[2] = e[2].serialize()
 		return t
@@ -2902,7 +2908,7 @@ component('x-toolbox', function(e) {
 		let r = e.rect()
 		let drag_x = mx - r.x
 		let drag_y = my - r.y
-		return this.capture_pointer(ev, function(mx, my) {
+		return this.capture_pointer(ev, function(ev, mx, my) {
 			let r = this.rect()
 			e.x = clamp(0, mx - drag_x, window.innerWidth  - r.w)
 			e.y = clamp(0, my - drag_y, window.innerHeight - r.h)

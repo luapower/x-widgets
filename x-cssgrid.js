@@ -20,7 +20,7 @@ component('x-cssgrid', function(e) {
 	}
 
 	e.serialize = function() {
-		let t = e.serialize_fields()
+		let t = e.serialize_props()
 		t.items = []
 		for (let item of e.items)
 			t.items.push(item.serialize())
@@ -317,7 +317,7 @@ function cssgrid_widget_editing(e) {
 		}
 		z0 = num(z0)
 
-		return this.capture_pointer(ev, function(mx, my, ev) {
+		return this.capture_pointer(ev, function(ev, mx, my) {
 			let dx = (this.axis == 'x' ? mx : my) - drag_mx - e.rect()[this.axis]
 			let tz = get_sizes(this.axis)
 			let z = tz[this.i]
@@ -392,7 +392,7 @@ function cssgrid_widget_editing(e) {
 		return true
 	}
 
-	e.on('pointermove', function(mx, my, ev) {
+	e.on('pointermove', function(ev, mx, my) {
 		if (ev.buttons)
 			return
 		if (!e.widget_editing)
