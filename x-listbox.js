@@ -14,16 +14,15 @@ component('x-listbox', function(e) {
 
 	e.classes = 'x-widget x-focusable x-listbox'
 
-	e.prop('orientation', {attr: 'orientation', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical'})
+	e.prop('orientation'   , {store: 'var', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical'})
 	e.prop('can_move_items', {store: 'var', type: 'bool', default: true})
-	e.prop('item_typename', {store: 'var', default: 'richtext'})
+	e.prop('item_typename' , {store: 'var', default: 'richtext'})
 
 	e.display_col = 0
 
 	e.init = function() {
 		if(e.items) {
-			assert(!e.rowset)
-			create_rowset_from_items()
+			create_rows_items()
 		}
 	}
 
@@ -34,28 +33,27 @@ component('x-listbox', function(e) {
 		item.on('pointerdown', item_pointerdown)
 	}
 
-	function create_rowset_from_items() {
+	function create_rows_items() {
 		function row_added(row) {
 			let item = e.create_item()
 			item.ctrl_click_used = true
 			setup_item(item)
 			row[0] = item
 		}
-		let rs = rowset({
-			fields: [{format: e.format_item}],
-			rows: [],
-		})
-		rs.on('row_added', row_added)
-		e.display_field = rs.field(0)
-		rs.rows = new Set()
+		e.on('row_added', row_added)
+		e.display_field = e.field(0)
+		let rows = []
 		for (let item of e.items) {
 			if (isobject(item) && item.typename)
 				item = component.create(item)
 			if (item instanceof HTMLElement)
 				setup_item(item)
-			rs.rows.add([item])
+			rows.push([item])
 		}
-		e.rowset = rs
+		e.reset({
+			fields: [{format: e.format_item}],
+			rows: rows,
+		})
 	}
 
 	e.create_item = function() {
@@ -88,13 +86,13 @@ component('x-listbox', function(e) {
 		return t
 	}
 
-	// responding to rowset changes -------------------------------------------
+	// responding to nav changes ----------------------------------------------
 
 	e.row_display_val = function(row) { // stub
-		e.display_field = e.rowset && e.field(e.display_col)
+		e.display_field = e.field(e.display_col)
 		if (!e.display_field)
 			return 'no display field'
-		return e.rowset.display_val(row, e.display_field)
+		return e.cell_display_val(row, e.display_field)
 	}
 
 	e.update_item = function(item, row) { // stub

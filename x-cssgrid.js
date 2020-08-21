@@ -137,7 +137,7 @@ function cssgrid_widget_editing(e) {
 	// get/set template sizes from/to array
 
 	function get_sizes(axis) {
-		return e['sizes_'+axis].split(' ')
+		return e['sizes_'+axis].split(/\s+/)
 	}
 
 	function set_sizes(axis, ts, prevent_recreate_guides) {

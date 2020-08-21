@@ -103,37 +103,36 @@ function nav_widget(e) {
 
 	e.is_nav = true // for resolver
 
-	e.prop('can_edit'                , {store: 'var', default: true, hint: 'can change anything at all'})
-	e.prop('can_add_rows'            , {store: 'var', default: true})
-	e.prop('can_remove_rows'         , {store: 'var', default: true})
-	e.prop('can_change_rows'         , {store: 'var', default: true})
-	e.prop('can_sort_rows'           , {store: 'var', default: true})
-	e.prop('can_focus_cells'         , {store: 'var', default: true , hint: 'can focus individual cells vs entire rows'})
-	e.prop('can_select_multiple'     , {store: 'var', default: true})
-	e.prop('can_select_non_siblings' , {store: 'var', default: true})
-	e.prop('auto_focus_first_cell'   , {store: 'var', default: true , hint: 'focus first cell automatically on loading'})
-	e.prop('auto_edit_first_cell'    , {store: 'var', default: false, hint: 'automatically enter edit mode on loading'})
-	e.prop('stay_in_edit_mode'       , {store: 'var', default: true , hint: 're-enter edit mode after navigating'})
-	e.prop('auto_advance_row'        , {store: 'var', default: true , hint: 'jump row on horiz. navigation limits'})
+	e.prop('can_edit'                , {store: 'var', type: 'bool', default: true, hint: 'can change anything at all'})
+	e.prop('can_add_rows'            , {store: 'var', type: 'bool', default: true})
+	e.prop('can_remove_rows'         , {store: 'var', type: 'bool', default: true})
+	e.prop('can_change_rows'         , {store: 'var', type: 'bool', default: true})
+	e.prop('can_sort_rows'           , {store: 'var', type: 'bool', default: true})
+	e.prop('can_focus_cells'         , {store: 'var', type: 'bool', default: true , hint: 'can focus individual cells vs entire rows'})
+	e.prop('can_select_multiple'     , {store: 'var', type: 'bool', default: true})
+	e.prop('can_select_non_siblings' , {store: 'var', type: 'bool', default: true})
+	e.prop('auto_focus_first_cell'   , {store: 'var', type: 'bool', default: true , hint: 'focus first cell automatically on loading'})
+	e.prop('auto_edit_first_cell'    , {store: 'var', type: 'bool', default: false, hint: 'automatically enter edit mode on loading'})
+	e.prop('stay_in_edit_mode'       , {store: 'var', type: 'bool', default: true , hint: 're-enter edit mode after navigating'})
+	e.prop('auto_advance_row'        , {store: 'var', type: 'bool', default: true , hint: 'jump row on horiz. navigation limits'})
 	e.prop('save_row_on'             , {store: 'var', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual']})
 	e.prop('insert_row_on'           , {store: 'var', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual']})
 	e.prop('remove_row_on'           , {store: 'var', default: 'input'    , enum_values: ['input', 'exit_row', 'manual']})
-	e.prop('can_exit_edit_on_errors' , {store: 'var', default: true  , hint: 'allow exiting edit mode on validation errors'})
-	e.prop('can_exit_row_on_errors'  , {store: 'var', default: false , hint: 'allow changing row on validation errors'})
-	e.prop('exit_edit_on_lost_focus' , {store: 'var', default: false , hint: 'exit edit mode when losing focus'})
+	e.prop('can_exit_edit_on_errors' , {store: 'var', type: 'bool', default: true , hint: 'allow exiting edit mode on validation errors'})
+	e.prop('can_exit_row_on_errors'  , {store: 'var', type: 'bool', default: false, hint: 'allow changing row on validation errors'})
+	e.prop('exit_edit_on_lost_focus' , {store: 'var', type: 'bool', default: false, hint: 'exit edit mode when losing focus'})
 
 	// init -------------------------------------------------------------------
 
-	function init() {
-		init_all_fields(e)
-		init_all_rows(e.rows)
+	function init_all(res) {
+		init_all_fields(res)
+		init_all_rows(res)
 	}
 
 	e.on('attach', function() {
 		bind_lookup_rowsets(true)
 		bind_param_nav(true)
 		e.load()
-		reset({fields: true, rows: true, refocus: 'val'})
 	})
 
 	function force_unfocus_focused_cell() {
@@ -164,48 +163,49 @@ function nav_widget(e) {
 
 		e.all_fields = [] // fields in row value order.
 		fieldname_map = {} // field_name->field
-
-		if (e.attached && def.fields)
-			for (let i = 0; i < def.fields.length; i++) {
-
-				let f = def.fields[i]
-				let name = (f.name || 'f'+i).replace(' ', '_')
-				let custom_attrs = e.col_attrs && e.col_attrs[name]
-				let type = f.type || (custom_attrs && custom_attrs.type)
-				let type_attrs = type && (e.field_types[type] || field_types[type])
-				let field = update({val_index: i, nav: e},
-					all_col_types, e.all_col_types, type_attrs, f, custom_attrs)
-
-				field.w = clamp(field.w, field.min_w, field.max_w)
-
-				// generate a field display name.
-				if (field.text == null)
-					field.text = auto_display_name(field.name)
-				field.name = (field.name || 'f'+i).replace(' ', '_')
-
-				e.all_fields[i] = field
-
-				// disambiguate names.
-				let suffix = ''
-				if (field.name in fieldname_map) {
-					suffix = 2
-					while (field.name + suffix in fieldname_map)
-						suffix++
-				}
-				fieldname_map[field.name + suffix] = field
-			}
-
 		e.pk_fields = [] // primary key fields.
 
-		let pk = def.pk
-		if (e.attached && pk) {
-			if (typeof pk == 'string')
-				pk = pk.split(' ')
-			for (let col of pk) {
-				let field = e.field(col)
-				e.pk_fields.push(field)
-				field.is_pk = true
+		if (e.attached) {
+
+			if (def.fields)
+				for (let i = 0; i < def.fields.length; i++) {
+					let f = def.fields[i]
+
+					// disambiguate field name.
+					let name = (f.name || 'f'+i).replace(' ', '_')
+					if (name in fieldname_map) {
+						let suffix = 2
+						while (name+suffix in fieldname_map)
+							suffix++
+						name += suffix
+					}
+
+					let custom_attrs = e.col_attrs && e.col_attrs[name]
+					let type = f.type || (custom_attrs && custom_attrs.type)
+					let type_attrs = type && (e.field_types[type] || field_types[type])
+					let field = update({}, all_field_types, e.all_field_types, type_attrs, f, custom_attrs)
+
+					field.val_index = i
+					field.nav = e
+					field.w = clamp(field.w, field.min_w, field.max_w)
+					if (field.text == null)
+						field.text = auto_display_name(field.name)
+
+					e.all_fields[i] = field
+					fieldname_map[name] = field
+				}
+
+			let pk = def.pk
+			if (e.attached && pk) {
+				if (typeof pk == 'string')
+					pk = pk.split(/\s+/)
+				for (let col of pk) {
+					let field = e.field(col)
+					e.pk_fields.push(field)
+					field.is_pk = true
+				}
 			}
+
 		}
 
 		e.id_field     = e.pk_fields.length == 1 && e.pk_fields[0]
@@ -239,18 +239,13 @@ function nav_widget(e) {
 
 	function init_fields() {
 		e.fields = []
-		if (e.cols) {
-			for (let col of e.cols.split(' ')) {
-				let field = e.field(col)
-				if (field && field.visible != false)
-					e.fields.push(field)
-			}
-		} else {
-			for (let field of e.all_fields)
-				if (field.visible != false)
-					e.fields.push(field)
+		for (let col of cols_array()) {
+			let field = e.field(col)
+			if (field && field.visible != false)
+				e.fields.push(field)
 		}
 		update_field_index()
+		update_field_sort_order()
 	}
 
 	e.field_index = function(field) {
@@ -272,11 +267,11 @@ function nav_widget(e) {
 
 	let all_cols = () => e.all_fields.map((f) => f.name)
 
-	let cols_array = () => e.cols ? e.cols.split(' ') : all_cols()
+	let cols_array = () => e.cols ? e.cols.split(/\s+/) : all_cols()
 
-	function set_cols_array(cols) {
+	function cols_from_array(cols) {
 		cols = cols.join(' ')
-		e.cols = cols == all_cols() ? null : cols
+		return cols == all_cols() ? null : cols
 	}
 
 	e.show_field = function(field, on, at_fi) {
@@ -288,7 +283,7 @@ function nav_widget(e) {
 				cols.push(field)
 		else
 			cols.remove_value(field.name)
-		set_cols_array(cols)
+		e.cols = cols_from_array(cols)
 	}
 
 	e.move_field = function(fi, over_fi) {
@@ -298,7 +293,7 @@ function nav_widget(e) {
 		let cols = cols_array()
 		let col = cols.remove(fi)
 		cols.insert(insert_fi, col)
-		set_cols_array(cols)
+		e.cols = cols_from_array(cols)
 	}
 
 	// param nav --------------------------------------------------------------
@@ -307,46 +302,46 @@ function nav_widget(e) {
 		e.reload()
 	}
 
-	function bind_param_nav_cols(nav, cols, on) {
+	function bind_param_nav_cols(nav, params, on) {
 		if (on && !e.attached)
 			return
-		if (!(nav && cols))
+		if (!(nav && params))
 			return
 		nav.on('focused_row_changed', params_changed, on)
 		nav.on('loaded'             , params_changed, on)
-		for (let param of cols)
+		for (let param of params.split(/\s+/))
 			nav.on('focused_row_val_changed_for_'+param, params_changed, on)
 	}
 
 	function bind_param_nav(on) {
-		bind_param_nav_cols(e.param_nav, e.param_names, on)
+		bind_param_nav_cols(e.param_nav, e.params, on)
 	}
 
 	e.set_param_nav = function(nav1, nav0) {
-		bind_param_nav_cols(nav0, e.param_names, false)
-		bind_param_nav_cols(nav1, e.param_names, true)
+		bind_param_nav_cols(nav0, e.params, false)
+		bind_param_nav_cols(nav1, e.params, true)
 	}
 	e.prop('param_nav', {store: 'var', private: true})
 	e.prop('param_nav_name', {store: 'var', bind: 'param_nav', type: 'nav', text: 'Param Nav'})
 
-	e.set_param_names = function(names1, names0) {
-		bind_param_nav_cols(e.param_nav, names1, false)
-		bind_param_nav_cols(e.param_nav, names0, true)
+	e.set_params = function(params1, params0) {
+		bind_param_nav_cols(e.param_nav, params1, false)
+		bind_param_nav_cols(e.param_nav, params0, true)
 	}
-	e.prop('param_names', {store: 'var', private: true})
+	e.prop('params', {store: 'var'})
 
 	// all rows in load order -------------------------------------------------
 
-	function init_all_rows(rows) {
+	function init_all_rows(def) {
 		e.update_load_fail(false)
 		// TODO: unbind_filter_rowsets()
-		e.all_rows = e.attached && rows || []
+		e.all_rows = e.attached && def.rows || []
 		init_rows()
 	}
 
 	// filtered and custom-sorted subset of all_rows --------------------------
 
-	function reinit_rows() {
+	function create_rows() {
 		e.rows = []
 		if (e.attached) {
 			let i = 0
@@ -358,8 +353,8 @@ function nav_widget(e) {
 	}
 
 	function init_rows() {
-		reinit_rows()
-		update_row_index()
+		create_rows()
+		sort_rows()
 	}
 
 	e.row_index = function(row) {
@@ -711,38 +706,11 @@ function nav_widget(e) {
 		return e.selected_rows.has(row)
 	}
 
-	// updating the model and view --------------------------------------------
-
-	function reset(opt) {
-
-		if (opt.fields)
-			init_fields()
-
-		if (opt.rows) {
-			e.update_load_fail(false)
-			unbind_filter_rowsets()
-		}
-
-		if (opt.rows || opt.sort) {
-			if (e.attached) {
-				let must_sort = e.must_sort(order_by)
-				if (opt.rows || (opt.sort && !must_sort)) {
-					e.rows = []
-					let i = 0
-					let passes = e.filter_rowsets_filter(e.filter_rowsets)
-					for (let row of e.drows)
-						if (!row.parent_collapsed && passes(row))
-							e.rows.push(row)
-				}
-				if (must_sort) {
-					let cmp = e.comparator(order_by)
-					e.rows.sort(cmp)
-				}
-			} else
-				e.rows = []
-
-			update_row_index()
-		}
+	function refocus_state() {
+		let was_editing = !!e.editor
+		let focus_editor = e.editor && e.editor.hasfocus
+		let focused_pk_vals = e.focused_row ? e.pk_vals(e.focused_row) : null
+		force_unfocus_focused_cell()
 
 		e.update({
 			fields: opt.fields,
@@ -775,6 +743,18 @@ function nav_widget(e) {
 				e.update({focus: true})
 		}
 
+		let row = e.lookup(e.val_field, e.input_val)
+		let unfocus_if_not_found = true
+		return function() {
+			e.focus_cell(ri, true, 0, 0, {
+				must_not_move_row: !e.auto_focus_first_cell,
+				unfocus_if_not_found: unfocus_if_not_found,
+				enter_edit: e.auto_edit_first_cell,
+				was_editing: opt.was_editing,
+				focus_editor: opt.focus_editor,
+				preserve_selection: opt.preserve_selection,
+			})
+		}
 	}
 
 	// vlookup ----------------------------------------------------------------
@@ -1034,10 +1014,9 @@ function nav_widget(e) {
 		}
 	}
 
-	// order_by: [[field1,'desc'|'asc'],...]
-	e.comparator = function(order_by) {
+	function row_comparator() {
 
-		order_by = new Map(order_by)
+		let order_by = new Map(order_by_map)
 
 		// use index-based ordering by default, unless otherwise specified.
 		if (e.index_field && order_by.size == 0)
@@ -1105,75 +1084,65 @@ function nav_widget(e) {
 	}
 
 	function sort_rows(force) {
-		let must_sort = !!(e.parent_field || e.index_field || order_by.size)
-		if (must_sort) {
-			let cmp = e.comparator(order_by)
-			e.rows.sort(cmp)
-		} else if (force) {
-			reinit_rows()
-		}
+		let must_sort = !!(e.parent_field || e.index_field || order_by_map.size)
+		if (must_sort)
+			e.rows.sort(row_comparator())
+		else if (force)
+			create_rows()
+		update_row_index()
+		e.scroll_to_focused_cell()
 	}
 
 	// changing the sort order ------------------------------------------------
 
-	let order_by = new Map()
+	let order_by_map = new Map()
 
-	e.late_property('order_by',
-		function() {
-			let a = []
-			for (let [field, dir] of order_by) {
-				a.push(field.name + (dir == 'asc' ? '' : ' desc'))
-			}
-			return a.join(', ')
-		},
-		function(s) {
-			order_by.clear()
-			for (let s1 of s.split(/\s+/)) {
-				let m = s1.split(':')
-				let name = m[0]
-				let field = e.field(name)
-				if (field && field.sortable) {
-					let dir = m[1] || 'asc'
-					if (dir == 'asc' || dir == 'desc')
-						order_by.set(field, dir)
+	function update_field_sort_order() {
+		order_by_map.clear()
+		let pri = 0
+		for (let s1 of e.order_by.split(/\s+/)) {
+			let m = s1.split(':')
+			let name = m[0]
+			let field = e.field(name)
+			if (field && field.sortable) {
+				let dir = m[1] || 'asc'
+				if (dir == 'asc' || dir == 'desc') {
+					order_by_map.set(field, dir)
+					field.sort_dir = dir
+					field.sort_priority = pri
+					pri++
 				}
 			}
-			e.sort()
-		}
-	)
-
-	e.order_by_priority = function(field) {
-		let i = order_by.size-1
-		for (let [field1] of order_by) {
-			if (field1 == field)
-				return i
-			i--
 		}
 	}
 
-	e.order_by_dir = function(field) {
-		return order_by.get(field)
+	function order_by_from_map() {
+		let a = []
+		for (let [field, dir] of order_by_map)
+			a.push(field.name + (dir == 'asc' ? '' : ' desc'))
+		return a.join(' ')
 	}
+
+	e.set_order_by = function() {
+		update_field_sort_order()
+		sort_rows(true)
+	}
+	e.prop('order_by', {store: 'var'})
 
 	e.set_order_by_dir = function(field, dir, keep_others) {
 		if (!field.sortable)
 			return
 		if (dir == 'toggle') {
-			dir = order_by.get(field)
+			let dir = order_by_map.get(field)
 			dir = dir == 'asc' ? 'desc' : (dir == 'desc' ? false : 'asc')
 		}
 		if (!keep_others)
-			order_by.clear()
+			order_by_map.clear()
 		if (dir)
-			order_by.set(field, dir)
+			order_by_map.set(field, dir)
 		else
 			order_by.delete(field)
-		reset({sort: true, refocus: 'row', refocus_row: e.focused_row, preserve_selection: true})
-	}
-
-	e.clear_order = function() {
-		order_by.clear()
-		reset({sort: true, refocus: 'row', refocus_row: e.focused_row, preserve_selection: true})
+		e.order_by = order_by_from_map()
 	}
 
 	// filtering --------------------------------------------------------------
@@ -1924,15 +1893,18 @@ function nav_widget(e) {
 	// url with params --------------------------------------------------------
 
 	function make_url(params) {
-		if (!e.param_nav)
+		if (!e.param_nav || !e.params)
 			return e.url
 		if (!params) {
 			params = {}
-			for (let param of e.param_names) {
-				let field = e.param_nav.field(param)
+			for (let s of e.params.split(/\s+/)) {
+				let p = s.split('=')
+				let param = p && p[0] || s
+				let col = p && (p[1] || p[0]) || param
+				let field = e.param_nav.field(col)
 				let row = e.param_nav.focused_row
 				let v = row ? e.param_nav.cell_val(row, field) : null
-				params[field.name] = v
+				params[param] = v
 			}
 		}
 		return url(e.url, {params: json(params)})
@@ -2000,37 +1972,11 @@ function nav_widget(e) {
 		loading(false)
 	}
 
-	function check_fields(server_fields) {
-		if (!isarray(e.client_fields))
-			return true
-		let fi = 0
-		let ok = false
-		if (e.client_fields.length == server_fields.length) {
-			for (sf of server_fields) {
-				let cf = e.client_fields[fi]
-				if (cf.name != sf.name)
-					break
-				if (cf.type != sf.type)
-					break
-				fi++
-			}
-			ok = true
-		}
-		if (!ok)
-			e.notify('error', 'Client fields do not match server fields')
-		return ok
-	}
-
 	{
 	let focused_pk_vals, was_editing, focus_editor
 	e.reset = function(res) {
 
-		was_editing = !!e.editor
-		focus_editor = e.editor && e.editor.hasfocus
-		focused_pk_vals = e.focused_row ? e.pk_vals(e.focused_row) : null
-		force_unfocus_focused_cell()
-
-		e.fire('before_loaded')
+		let refocus = refocus_state('pk')
 
 		e.changed_rows = null
 
@@ -2039,21 +1985,10 @@ function nav_widget(e) {
 		e.can_remove_rows = and(or(true, res.can_remove_rows ), e.can_remove_rows)
 		e.can_change_rows = and(or(true, res.can_change_rows ), e.can_change_rows)
 
-		if (res.fields) {
-			if (!check_fields(res.fields))
-				return
-			init_all_fields(res)
-			e.id_col = res.id_col
-		}
-
-		if (res.params) {
-			e.param_names = res.params
-			init_params()
-		}
-
-		init_all_rows(res.rows)
+		init_all(res)
 
 		let fields_changed = !!res.fields
+
 
 		reset({
 			rows: true, fields: fields_changed,
@@ -2129,8 +2064,6 @@ function nav_widget(e) {
 
 	e.pack_changes = function(row) {
 		let changes = {rows: []}
-		if (e.id_col)
-			changes.id_col = e.id_col
 		if (!row) {
 			for (let row of e.changed_rows)
 				add_row_changes(row, changes.rows)
@@ -2392,7 +2325,7 @@ function nav_widget(e) {
 			e.fire('val_picked', ev)
 	}
 
-	init()
+	init_all(e)
 
 }
 
@@ -2414,7 +2347,7 @@ function global_rowset(name, ...options) {
 
 {
 
-	all_col_types = {
+	all_field_types = {
 		w: 100,
 		min_w: 20,
 		max_w: 2000,
@@ -2432,19 +2365,19 @@ function global_rowset(name, ...options) {
 		},
 	}
 
-	all_col_types.format = function(v) {
+	all_field_types.format = function(v) {
 		return String(v)
 	}
 
-	all_col_types.editor = function(...options) {
+	all_field_types.editor = function(...options) {
 		return input({nolabel: true}, ...options)
 	}
 
-	all_col_types.to_text = function(v) {
+	all_field_types.to_text = function(v) {
 		return v != null ? String(v) : ''
 	}
 
-	all_col_types.from_text = function(s) {
+	all_field_types.from_text = function(s) {
 		s = s.trim()
 		return s !== '' ? s : null
 	}
@@ -2581,20 +2514,19 @@ function global_rowset(name, ...options) {
 // cell nav
 // ---------------------------------------------------------------------------
 
-function cell_nav(field_opt, rs_opt) {
+function cell_nav(field_opt, nav_opt) {
 
-	let field = update({}, field_opt)
-	let row = [null]
-
-	let rs = rowset(update({
-		fields: [field],
-		rows: [row],
+	let e = nav_widget(update({
+		fields: [update({}, field_opt)],
+		rows: [[null]],
 		can_change_rows: true,
-	}, rs_opt))
+	}, nav_opt))
 
-	e.set_cell_val(row, e.field(0), field.val)
+	e.attach()
 
-	return {rowset: rs, focused_row: row, is_fake: true}
+	e.set_cell_val(e.rows[0], e.fields[0], field_opt.val)
+
+	return e
 }
 
 /*
@@ -2632,10 +2564,10 @@ function row_nav(field_opts, rs_opt) {
 // param nav
 // ---------------------------------------------------------------------------
 
-function param_nav(param_names) {
+function param_nav(params) {
 	let fields = []
 	let row = []
-	for (let param of param_names) {
+	for (let param of params) {
 		fields.push({
 			name: param,
 		})

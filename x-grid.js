@@ -435,13 +435,13 @@ component('x-grid', function(e) {
 	}
 
 	function update_sort_icons() {
+		let asc  = horiz ? 'up' : 'left'
+		let desc = horiz ? 'down' : 'right'
 		for (let fi = 0; fi < e.fields.length; fi++) {
 			let field = e.fields[fi]
 			let hcell = e.header.at[fi]
-			let dir = e.order_by_dir(field)
-			let pri = e.order_by_priority(field)
-			let asc  = horiz ? 'up' : 'left'
-			let desc = horiz ? 'down' : 'right'
+			let dir = field.sort_dir
+			let pri = field.sort_priority
 			hcell.sort_icon.class('fa-angle-'+asc        , false)
 			hcell.sort_icon.class('fa-angle-double-'+asc , false)
 			hcell.sort_icon.class('fa-angle-'+desc       , false)

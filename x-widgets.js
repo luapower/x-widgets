@@ -102,9 +102,9 @@ function up_widget_which(e, which) {
 
 function selectable_widget(e) {
 
-	attr(e, 'props').id = {
+	e.props.id = {
 		name: 'id',
-		unique: true,
+		unique: true, // don't show in prop inspector when selecting multiple objects.
 		validate: function(id) {
 			return window[id] === undefined || window[id] == e || 'id already in use'
 		},
@@ -546,21 +546,19 @@ function serializable_widget(e) {
 
 function focusable_widget(e, fe) {
 	fe = fe || e
-	let tabindex
+
 	let focusable = true
-	e.get_tabindex = function() {
-		return tabindex
-	}
+
 	e.set_tabindex = function(i) {
-		tabindex = i
 		fe.attr('tabindex', focusable ? i : -1)
 	}
-	e.prop('tabindex', {default: 0})
+	e.prop('tabindex', {store: 'var'})
+
 	e.property('focusable', () => focusable, function(v) {
 		v = !!v
 		if (v == focusable) return
 		focusable = v
-		e.set_tabindex(tabindex)
+		e.set_tabindex(e.tabindex)
 	})
 }
 
@@ -761,57 +759,61 @@ component('x-tooltip', function(e) {
 	e.pin = div({class: 'x-tooltip-tip'})
 	e.add(e.text_div, e.pin)
 
-	e.prop('side'   , {attr: 'side'    , type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
-	e.prop('align'  , {attr: 'align'   , type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
-	e.prop('kind'   , {attr: 'kind'    , type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
-	e.prop('px'     , {attr: 'px'      , type: 'number', default: 0})
-	e.prop('py'     , {attr: 'py'      , type: 'number', default: 0})
-	e.prop('timeout', {attr: 'timeout'})
+	e.prop('target'     , {store: 'var', private: true})
+	e.prop('target_name', {store: 'var', type: 'element', bind: 'target'})
+	e.prop('text'       , {store: 'var'})
+	e.prop('side'       , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
+	e.prop('align'      , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
+	e.prop('kind'       , {store: 'var', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
+	e.prop('px'         , {store: 'var', type: 'number', default: 0})
+	e.prop('py'         , {store: 'var', type: 'number', default: 0})
+	e.prop('timeout'    , {store: 'var', default: 'auto'})
 
-	let target
+	e.init = function() {
+		e.update({reset_timer: true})
+	}
 
 	e.popup_target_updated = function(target) {
 		let visible = !!(!e.check || e.check(target))
 		e.class('visible', visible)
 	}
 
-	e.update = function() {
-		e.popup(target, e.side, e.align, e.px, e.py)
+	e.update = function(opt) {
+		if (!e.initialized)
+			return
+		e.popup(e.target, e.side, e.align, e.px, e.py)
+		if (opt && opt.reset_timer)
+			reset_timeout_timer()
 	}
 
-	e.set_side  = e.update
-	e.set_align = e.update
-	e.set_kind  = e.update
-	e.set_px    = e.update
-	e.set_py    = e.update
+	function update() { e.update() }
+	e.set_target = function() { e.update({reset_timer: true}) }
+	e.set_side   = update
+	e.set_align  = update
+	e.set_kind   = update
+	e.set_px     = update
+	e.set_py     = update
 
-	function set_timeout_timer() {
+	e.set_text = function(s) {
+		e.text_div.set(s, 'pre-wrap')
+		e.update({reset_timer: true})
+	}
+
+	let remove_timer = timer(function() { e.target = false })
+	function reset_timeout_timer() {
+		if (!e.initialized)
+			return
 		let t = e.timeout
 		if (t == 'auto')
 			t = clamp(e.text.length / (tooltip.reading_speed / 60), 1, 10)
 		else
 			t = num(t)
-		if (t != null)
-			after(t, function() { e.target = false })
+		remove_timer(t)
 	}
-
-	e.late_property('text',
-		function()  { return e.text_div.textContent },
-		function(s) {
-			e.text_div.set(s, 'pre-wrap')
-			e.update()
-			set_timeout_timer()
-		}
-	)
 
 	e.property('visible',
 		function()  { return e.style.display != 'none' },
 		function(v) { e.show(v); e.update() }
-	)
-
-	e.late_property('target',
-		function()  { return target },
-		function(v) { target = v; e.update() }
 	)
 
 })
@@ -848,7 +850,7 @@ component('x-button', function(e) {
 	}
 	e.prop('icon', {store: 'var'})
 
-	e.prop('primary', {attr: 'primary', type: 'bool', default: false})
+	e.prop('primary', {store: 'var', type: 'bool', default: false})
 
 	e.on('keydown', function keydown(key, shift, ctrl) {
 		if (e.widget_editing) {
@@ -929,7 +931,7 @@ component('x-checkbox', function(e) {
 	val_widget(e)
 
 	e.classes = 'x-widget x-markbox x-checkbox'
-	e.prop('align', {attr: 'align', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
+	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
 
 	e.checked_val = true
 	e.unchecked_val = false
@@ -938,15 +940,19 @@ component('x-checkbox', function(e) {
 	e.text_div = span({class: 'x-markbox-text x-checkbox-text'})
 	e.add(e.icon_div, e.text_div)
 
+	e.init = function(opt) {
+		e.checked = opt.checked
+	}
+
 	// model
 
-	let get_checked = function() {
+	e.get_checked = function() {
 		return e.val === e.checked_val
 	}
-	let set_checked = function(v) {
+	e.set_checked = function(v) {
 		e.set_val(v ? e.checked_val : e.unchecked_val, {input: e})
 	}
-	e.late_property('checked', get_checked, set_checked)
+	e.prop('checked', {private: true})
 
 	// view
 
@@ -1064,7 +1070,7 @@ component('x-radiogroup', function(e) {
 		for (let idiv of e.children)
 			idiv.attr('align', align)
 	}
-	e.prop('align', {attr: 'align', type: 'enum', enum_values: ['left', 'right'], default: 'left', noinit: true})
+	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
 
 	let sel_item
 
@@ -1115,15 +1121,15 @@ component('x-radiogroup', function(e) {
 
 function input_widget(e) {
 
-	e.prop('align', {attr: 'align', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
-	e.prop('mode', {attr: 'mode', type: 'enum', enum_values: ['default', 'inline'], default: 'default'})
+	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
+	e.prop('mode' , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default'})
 
 	function update_inner_label() {
 		e.class('with-inner-label', !e.nolabel && e.field && !!e.field.text)
 	}
 
 	e.class('with-inner-label', true)
-	e.prop('nolabel', {attr: 'nolabel', type: 'bool'})
+	e.prop('nolabel', {store: 'var', type: 'bool'})
 	e.set_nolabel = update_inner_label
 
 	let inh_update = e.update
@@ -1285,8 +1291,8 @@ component('x-spin-input', function(e) {
 
 	e.set_button_style     = update_buttons
 	e.set_button_placement = update_buttons
-	e.prop('button_style'    , {attr: 'button-style'    , type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus', noinit: true})
-	e.prop('button_placement', {attr: 'button-placement', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side', noinit: true})
+	e.prop('button_style'    , {store: 'var', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus'})
+	e.prop('button_placement', {store: 'var', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side'})
 
 	e.up   = div({class: 'x-spin-input-button fa'})
 	e.down = div({class: 'x-spin-input-button fa'})
@@ -2173,7 +2179,7 @@ component('x-pagelist', function(e) {
 	serializable_widget(e)
 	e.classes = 'x-widget x-pagelist'
 
-	e.prop('tabs', {attr: 'tabs', type: 'enum', enum_values: ['above', 'below'], default: 'above'})
+	e.prop('tabs', {store: 'var', type: 'enum', enum_values: ['above', 'below'], default: 'above'})
 
 	e.header = div({class: 'x-pagelist-header'})
 	e.content = div({class: 'x-pagelist-content'})
@@ -2528,11 +2534,11 @@ component('x-split', function(e) {
 	e.set_fixed_size = update_size
 	e.set_min_size = update_size
 
-	e.prop('orientation', {attr: 'orientation', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal', noinit: true})
-	e.prop('fixed_side' , {attr: 'fixed-side' , type: 'enum', enum_values: ['first', 'second'], default: 'first', noinit: true})
-	e.prop('resizeable' , {attr: 'resizeable' , type: 'bool', default: true, noinit: true})
-	e.prop('fixed_size' , {store: 'var', type: 'number', default: 200, noinit: true})
-	e.prop('min_size'   , {store: 'var', type: 'number', default:   0, noinit: true})
+	e.prop('orientation', {store: 'var', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal'})
+	e.prop('fixed_side' , {store: 'var', type: 'enum', enum_values: ['first', 'second'], default: 'first'})
+	e.prop('resizeable' , {store: 'var', type: 'bool', default: true})
+	e.prop('fixed_size' , {store: 'var', type: 'number', default: 200})
+	e.prop('min_size'   , {store: 'var', type: 'number', default:   0})
 
 	e.on('attach', update_view)
 
@@ -2744,7 +2750,7 @@ component('x-action-band', function(e) {
 
 	e.init = function() {
 		let ct = e
-		for (let s of e.layout.split(' ')) {
+		for (let s of e.layout.split(/\s+/)) {
 			if (s == '<') {
 				ct = div({style: `
 						flex: auto;
