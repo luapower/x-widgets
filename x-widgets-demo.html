@@ -105,7 +105,6 @@ h2 {
 <script src="x-widgets.js"></script>
 <script src="x-listbox.js"></script>
 <script src="x-grid.js"></script>
-<script src="x-calendar.js"></script>
 <script src="x-cssgrid.js"></script>
 
 </head>
@@ -799,12 +798,11 @@ main.add(
 			'Bangos',
 			'Something Else Entirely',
 		],
-		nav: cell_nav({
-			val: 'Mananas',
-			validate: function(v) {
-				return v != 'Mananas' || 'Can\'t have mananas.'
-			},
-		}),
+		standalone: true,
+		val: 'Mananas',
+		validate: function(v) {
+			return v != 'Mananas' || 'Can\'t have mananas.'
+		},
 	}),
 
 	list_dropdown({

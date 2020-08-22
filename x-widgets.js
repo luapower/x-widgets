@@ -588,48 +588,36 @@ function val_widget(e, always_enabled) {
 
 	// nav & col --------------------------------------------------------------
 
-	function rowset_cell_state_changed(row, field, prop, val, ev) {
+	function nav_cell_state_changed(row, field, prop, val, ev) {
 		cell_state_changed(prop, val, ev)
-	}
-
-	function rowset_changed(rs1, rs0) {
-		bind_nav(nav, col, rs0, false)
-		bind_nav(nav, col, rs1, true)
-		e.update()
 	}
 
 	function something_changed() {
 		e.update()
 	}
 
-	function bind_nav(nav, col, rs, on) {
-		if (!(nav && col != null && rs)) return
-		if (nav.is_fake) {
-			rs.bind_user_widget(e, on)
-			rs.on('cell_state_changed', rowset_cell_state_changed, on)
-		} else {
-			nav.on('rowset_changed', rowset_changed, on)
-			nav.on('focused_row_changed', something_changed, on)
-			nav.on('focused_row_cell_state_changed_for_'+col, cell_state_changed, on)
-			rs.on('display_vals_changed_for_'+col, something_changed, on)
-			rs.on('loaded', something_changed, on)
-		}
+	function bind_nav(nav, col, on) {
+		if (!(nav && col != null)) return
+		nav.on('focused_row_changed', something_changed, on)
+		nav.on('focused_row_cell_state_changed_for_'+col, cell_state_changed, on)
+		nav.on('display_vals_changed_for_'+col, something_changed, on)
+		nav.on('loaded', something_changed, on)
 	}
 
 	e.on('attach', function() {
-		bind_nav(nav, col, nav && nav.rowset, true)
+		bind_nav(nav, col, true)
 		e.update()
 	})
 
 	e.on('detach', function() {
-		bind_nav(nav, col, nav && nav.rowset, false)
+		bind_nav(nav, col, false)
 		e.update()
 	})
 
 	function set_nav_col(nav1, nav0, col1, col0) {
 		if (e.attached) {
-			bind_nav(nav0, col0, nav0 && nav0.rowset, false)
-			bind_nav(nav1, col1, nav1 && nav1.rowset, true)
+			bind_nav(nav0, col0, false)
+			bind_nav(nav1, col1, true)
 		}
 		e.update()
 	}
@@ -648,7 +636,100 @@ function val_widget(e, always_enabled) {
 		col = col1
 		set_nav_col(nav, nav, col1, col0)
 	}
-	e.prop('col', {store: 'var', type: 'col', col_rowset: () => e.nav && e.nav.rowset})
+	e.prop('col', {store: 'var', type: 'col', col_nav: () => e.nav})
+
+	// standalone operation: fake nav & field ---------------------------------
+
+	e.set_standalone = function() {
+
+		let field = {}
+		let nav = {}
+		nav.on = noop
+		nav.focused_row = true
+		nav.all_fields = {}
+		nav.all_fields[undefined] = field
+
+		let cell_input_val = null
+		let cell_val = null
+		let cell_error
+		let cell_modified = false
+		let cell_old_val = null
+
+		nav.cell_input_val = () => cell_input_val
+		nav.cell_val       = () => cell_val
+		nav.cell_error     = () => cell_error
+		nav.cell_modified  = () => cell_modified
+
+		nav.display_val = function() {
+			let v = cell_input_val
+			if (v == null)
+				return field.null_text
+			if (v === '')
+				return field.empty_text
+			return field.format(v)
+		}
+
+		nav.validate_val = function(field, val, row, ev) {
+			if (val == null)
+				if (!field.allow_null)
+					return S('error_not_null', 'NULL not allowed')
+				else
+					return
+
+			if (field.min != null && val < field.min)
+				return S('error_min_value', 'Value must be at least {0}').subst(field.min)
+
+			if (field.max != null && val > field.max)
+				return S('error_max_value', 'Value must be at most {0}').subst(field.max)
+
+			let err = field.validate && field.validate.call(e, val, field)
+			if (typeof err == 'string')
+				return err
+
+			return e.fire('validate', val, row, ev)
+		}
+
+		nav.set_cell_val = function(row, field, val, ev) {
+			if (val === undefined)
+				val = null
+			let err = e.validate_val(field, val, row, ev)
+			err = typeof err == 'string' ? err : undefined
+			let invalid = err != null
+			let val_changed = !invalid && val !== cell_val
+
+			let old_cell_input_val = cell_input_val === undefined ? cell_val : cell_input_val
+			let input_val_changed = val !== old_cell_input_val
+			let cell_err_changed = err !== cell_error
+
+			cell_input_val = val
+			cell_error = err
+
+			if (val_changed) {
+				let was_modified = cell_modified
+				let modified = val !== cell_old_val
+
+				cell_val = val
+				if (!was_modified)
+					cell_old_val = cur_val
+				let cell_modified_changed = modified !== cell_modified
+				cell_state_changed(row, field, 'val', val, ev)
+				if (cell_modified_changed)
+					cell_state_changed(row, field, 'cell_modified', modified, ev)
+			}
+
+			if (input_val_changed)
+				cell_state_changed('input_val', val, ev)
+			if (cell_err_changed)
+				cell_state_changed('cell_error', err, ev)
+
+			return !invalid
+
+		}
+
+		e.nav = nav
+	}
+
+	e.prop('standalone', {store: 'var', private: true}
 
 	// field & val ------------------------------------------------------------
 
@@ -656,7 +737,7 @@ function val_widget(e, always_enabled) {
 
 	e.update = function() {
 		if (e.attached) {
-			e.field = nav && col != null && nav.rowset && nav.rowset.field(col)
+			e.field = nav && nav.all_fields[col]
 			let has_val = e.row && e.field
 			enabled = !!(always_enabled || has_val)
 			e.class('disabled', !enabled)
@@ -717,10 +798,9 @@ function val_widget(e, always_enabled) {
 	e.property('row', () => nav && nav.focused_row)
 
 	function get_val() {
-		let row = e.row
 		return row && e.field ? nav.cell_val(row, e.field) : null
 	}
-	e.set_val = function(v, ev) {
+	e.set_val = function(v) {
 		nav.set_cell_val(e.row, e.field, e.to_val(v), ev)
 	}
 	e.property('val', get_val, e.set_val)
@@ -762,9 +842,9 @@ component('x-tooltip', function(e) {
 	e.prop('target'     , {store: 'var', private: true})
 	e.prop('target_name', {store: 'var', type: 'element', bind: 'target'})
 	e.prop('text'       , {store: 'var'})
-	e.prop('side'       , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
-	e.prop('align'      , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
-	e.prop('kind'       , {store: 'var', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
+	e.prop('side'       , {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
+	e.prop('align'      , {store: 'attr', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
+	e.prop('kind'       , {store: 'attr', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
 	e.prop('px'         , {store: 'var', type: 'number', default: 0})
 	e.prop('py'         , {store: 'var', type: 'number', default: 0})
 	e.prop('timeout'    , {store: 'var', default: 'auto'})
@@ -850,7 +930,7 @@ component('x-button', function(e) {
 	}
 	e.prop('icon', {store: 'var'})
 
-	e.prop('primary', {store: 'var', type: 'bool', default: false})
+	e.prop('primary', {store: 'attr', type: 'bool', default: false})
 
 	e.on('keydown', function keydown(key, shift, ctrl) {
 		if (e.widget_editing) {
@@ -931,7 +1011,7 @@ component('x-checkbox', function(e) {
 	val_widget(e)
 
 	e.classes = 'x-widget x-markbox x-checkbox'
-	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
+	e.prop('align', {store: 'attr', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
 
 	e.checked_val = true
 	e.unchecked_val = false
@@ -1070,7 +1150,7 @@ component('x-radiogroup', function(e) {
 		for (let idiv of e.children)
 			idiv.attr('align', align)
 	}
-	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
+	e.prop('align', {store: 'attr', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
 
 	let sel_item
 
@@ -1121,15 +1201,15 @@ component('x-radiogroup', function(e) {
 
 function input_widget(e) {
 
-	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
-	e.prop('mode' , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default'})
+	e.prop('align', {store: 'attr', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
+	e.prop('mode' , {store: 'attr', type: 'enum', enum_values: ['default', 'inline'], default: 'default'})
 
 	function update_inner_label() {
 		e.class('with-inner-label', !e.nolabel && e.field && !!e.field.text)
 	}
 
 	e.class('with-inner-label', true)
-	e.prop('nolabel', {store: 'var', type: 'bool'})
+	e.prop('nolabel', {store: 'attr', type: 'bool'})
 	e.set_nolabel = update_inner_label
 
 	let inh_update = e.update
@@ -1291,8 +1371,8 @@ component('x-spin-input', function(e) {
 
 	e.set_button_style     = update_buttons
 	e.set_button_placement = update_buttons
-	e.prop('button_style'    , {store: 'var', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus'})
-	e.prop('button_placement', {store: 'var', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side'})
+	e.prop('button_style'    , {store: 'attr', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus'})
+	e.prop('button_placement', {store: 'attr', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side'})
 
 	e.up   = div({class: 'x-spin-input-button fa'})
 	e.down = div({class: 'x-spin-input-button fa'})
@@ -1768,37 +1848,37 @@ function lookup_dropdown_widget(e) {
 			e.picker.display_col = v
 	}
 
-	e.prop('lookup_rowset'     , {store: 'var', private: true})
-	e.prop('lookup_rowset_name', {store: 'var', bind: 'lookup_rowset', type: 'rowset', resolve: global_rowset})
-	e.prop('lookup_col'        , {store: 'var'})
-	e.prop('display_col'       , {store: 'var'})
+	e.prop('lookup_nav'     , {store: 'var', private: true})
+	e.prop('lookup_nav_name', {store: 'var', bind: 'lookup_nav', type: 'nav'})
+	e.prop('lookup_col'     , {store: 'var'})
+	e.prop('display_col'    , {store: 'var'})
 
 	let inh_display_val = e.display_val
 	e.display_val = function() {
-		let row = e.lookup_field && e.lookup_rowset.lookup(e.lookup_field, e.input_val)
+		let row = e.lookup_field && e.lookup_nav.lookup(e.lookup_field, e.input_val)
 		if (row)
 			return e.picker.row_display_val(row)
 		else
 			return inh_display_val()
 	}
 
-	e.set_lookup_rowset = function(lr1, lr0) {
-		bind_lookup_rowset(lr0, false)
+	e.set_lookup_nav = function(nav1, nav0) {
+		bind_lookup_nav(nav0, false)
 		if (e.attached)
-			bind_lookup_rowset(lr1, true)
-		lookup_rowset_changed()
+			bind_lookup_nav(nav1, true)
+		lookup_nav_changed()
 		if (e.picker)
-			e.picker.rowset = lr1
+			e.picker.nav = nav1
 	}
 
-	function lookup_rowset_changed() {
-		let lr = e.attached && e.lookup_rowset || null
-		e.lookup_field  = lr && (e.lookup_col
-			? lr.field(e.lookup_col)
-			: (lr.pk_fields.length ? lr.pk_fields : null))
-		e.display_field = lr && lr.field(e.display_col || lr.name_col)
+	function lookup_nav_changed() {
+		let nav = e.attached && e.lookup_nav || null
+		e.lookup_field  = nav && (e.lookup_col
+			? nav.all_fields[e.lookup_col]
+			: (nav.pk_fields.length ? nav.pk_fields : null))
+		e.display_field = nav && nav.all_fields[e.display_col || nav.name_col]
 		if (e.picker)
-			e.picker.rowset = lr
+			e.picker.nav = nav
 		lookup_values_changed()
 	}
 
@@ -1806,26 +1886,259 @@ function lookup_dropdown_widget(e) {
 		e.update()
 	}
 
-	function bind_lookup_rowset(lr, on) {
-		if (!lr) return
-		lr.bind_user_widget(e, on)
-		lr.on('loaded'           , lookup_rowset_changed, on)
-		lr.on('row_added'        , lookup_values_changed, on)
-		lr.on('row_removed'      , lookup_values_changed, on)
-		lr.on('input_val_changed', lookup_values_changed, on)
+	function bind_lookup_nav(nav, on) {
+		if (!nav) return
+		nav.on('loaded'           , lookup_nav_changed, on)
+		nav.on('row_added'        , lookup_values_changed, on)
+		nav.on('row_removed'      , lookup_values_changed, on)
+		nav.on('input_val_changed', lookup_values_changed, on)
 	}
 
 	e.on('attach', function() {
-		bind_lookup_rowset(e.lookup_rowset, true)
-		lookup_rowset_changed()
+		bind_lookup_nav(e.lookup_nav, true)
+		lookup_nav_changed()
 	})
 
 	e.on('detach', function() {
-		bind_lookup_rowset(e.lookup_rowset, false)
-		lookup_rowset_changed()
+		bind_lookup_nav(e.lookup_nav, false)
+		lookup_nav_changed()
 	})
 
 }
+
+// ---------------------------------------------------------------------------
+// calendar widget
+// ---------------------------------------------------------------------------
+
+component('x-calendar', function(e) {
+
+	focusable_widget(e)
+	val_widget(e)
+	e.classes = 'x-widget x-focusable x-calendar'
+
+	function format_month(i) {
+		return month_name(time(0, i), 'short')
+	}
+
+	e.sel_day = div({class: 'x-calendar-sel-day'})
+	e.sel_day_suffix = div({class: 'x-calendar-sel-day-suffix'})
+	e.sel_month = list_dropdown({
+		classes: 'x-calendar-sel-month',
+		items: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+		nav: cell_nav({format: format_month}),
+		listbox: {
+			format_item: format_month,
+		},
+	})
+	e.sel_year = spin_input({
+		classes: 'x-calendar-sel-year',
+		nav: cell_nav({
+			min: 100,
+			max: 3000,
+		}),
+		button_style: 'left-right',
+	})
+	e.header = div({class: 'x-calendar-header'},
+		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
+	e.weekview = H.table({class: 'x-calendar-weekview'})
+	e.add(e.header, e.weekview)
+
+	function as_ts(v) {
+		return v != null && e.field && e.field.to_time ? e.field.to_time(v) : v
+	}
+
+	e.update_val = function(v) {
+
+		e.sel_year.attach()
+		e.sel_month.attach()
+
+		v = or(as_ts(v), time())
+		let t = day(v)
+		update_weekview(t, 6)
+		let y = year_of(t)
+		let n = floor(1 + days(t - month(t)))
+		e.sel_day.set(n)
+		let day_suffixes = ['', 'st', 'nd', 'rd']
+		e.sel_day_suffix.set(locale.starts('en') ?
+			(n < 11 || n > 13) && day_suffixes[n % 10] || 'th' : '')
+		e.sel_month.val = month_of(t)
+		e.sel_year.val = y
+	}
+
+	let sel_td
+	function update_weekview(d, weeks) {
+		let today = day(time())
+		let this_month = month(d)
+		let sel_d = day(as_ts(e.input_val))
+		d = week(this_month)
+		e.weekview.clear()
+		sel_td = null
+		for (let week = 0; week <= weeks; week++) {
+			let tr = H.tr()
+			for (let weekday = 0; weekday < 7; weekday++) {
+				if (!week) {
+					let th = H.th({class: 'x-calendar-weekday'}, weekday_name(day(d, weekday)))
+					tr.add(th)
+				} else {
+					let m = month(d)
+					let s = d == today ? ' today' : ''
+					s = s + (m == this_month ? ' current-month' : '')
+					s = s + (d == sel_d ? ' focused selected' : '')
+					let td = H.td({class: 'x-calendar-day x-item'+s}, floor(1 + days(d - m)))
+					td.day = d
+					tr.add(td)
+					if (d == sel_d)
+						sel_td = td
+					d = day(d, 1)
+				}
+			}
+			e.weekview.add(tr)
+		}
+	}
+
+	// controller
+
+	function set_ts(v, ev) {
+		if (v != null && e.field.from_time)
+			v = e.field.from_time(v)
+		e.set_val(v, ev || {input: e})
+	}
+
+	e.weekview.on('pointerdown', function(ev) {
+		if (sel_td) {
+			sel_td.class('focused', false)
+			sel_td.class('selected', false)
+		}
+		let td = ev.target
+		if (td.day == null)
+			return
+		e.sel_month.cancel()
+		e.focus()
+		td.classes = 'focused selected'
+		return this.capture_pointer(ev, null, function() {
+			set_ts(td.day)
+			e.fire('val_picked') // picker protocol
+			return false
+		})
+	})
+
+	e.sel_month.on('val_changed', function(v, ev) {
+		if (ev && ev.input) {
+			_d.setTime(as_ts(e.input_val) * 1000)
+			_d.setMonth(this.val)
+			set_ts(_d.valueOf() / 1000)
+		}
+	})
+
+	e.sel_year.on('val_changed', function(v, ev) {
+		if (ev && ev.input) {
+			_d.setTime(as_ts(e.input_val) * 1000)
+			_d.setFullYear(this.val)
+			set_ts(_d.valueOf() / 1000)
+		}
+	})
+
+	e.weekview.on('wheel', function(dy) {
+		set_ts(day(as_ts(e.input_val), 7 * dy / 100))
+		return false
+	})
+
+	e.on('keydown', function(key, shift) {
+		if (!e.focused) // other inside element got focus
+			return
+		if (key == 'Tab' && e.hasclass('picker')) { // capture Tab navigation.
+			if (shift)
+				e.sel_year.focus()
+			else
+				e.sel_month.focus()
+			return false
+		}
+		let d, m
+		switch (key) {
+			case 'ArrowLeft'  : d = -1; break
+			case 'ArrowRight' : d =  1; break
+			case 'ArrowUp'    : d = -7; break
+			case 'ArrowDown'  : d =  7; break
+			case 'PageUp'     : m = -1; break
+			case 'PageDown'   : m =  1; break
+		}
+		if (d) {
+			set_ts(day(as_ts(e.input_val), d))
+			return false
+		}
+		if (m) {
+			let t = as_ts(e.input_val)
+			_d.setTime(t * 1000)
+			if (shift)
+				_d.setFullYear(year_of(t) + m)
+			else
+				_d.setMonth(month_of(t) + m)
+			set_ts(_d.valueOf() / 1000)
+			return false
+		}
+		if (key == 'Home') {
+			let t = as_ts(e.input_val)
+			set_ts(shift ? year(t) : month(t))
+			return false
+		}
+		if (key == 'End') {
+			let t = as_ts(e.input_val)
+			set_ts(day(shift ? year(t, 1) : month(t, 1), -1))
+			return false
+		}
+		if (key == 'Enter') {
+			e.fire('val_picked', {input: e}) // picker protocol
+			return false
+		}
+	})
+
+	e.sel_month.on('keydown', function(key, shift) {
+		if (key == 'Tab' && e.hasclass('picker')) {// capture Tab navigation.
+			if (shift)
+				e.focus()
+			else
+				e.sel_year.focus()
+			return false
+		}
+	})
+
+	e.sel_year.on('keydown', function(key, shift) {
+		if (key == 'Tab' && e.hasclass('picker')) { // capture Tab navigation.
+			if (shift)
+				e.sel_month.focus()
+			else
+				e.focus()
+			return false
+		}
+	})
+
+	// picker protocol
+
+	// hack: trick dropdown into thinking that our own opened dropdown picker
+	// is our child, which is how we would implement dropdowns if this fucking
+	// rendering model would allow us to decouple painting order from element's
+	// position in the tree (IOW we need the concept of global z-index).
+	let builtin_contains = e.contains
+	e.contains = function(e1) {
+		return builtin_contains.call(this, e1) || e.sel_month.picker.contains(e1)
+	}
+
+	e.pick_near_val = function(delta, ev) {
+		set_ts(day(as_ts(e.input_val), delta), ev)
+		e.fire('val_picked', ev)
+	}
+
+})
+
+// ---------------------------------------------------------------------------
+// date dropdown
+// ---------------------------------------------------------------------------
+
+component('x-date-dropdown', function(e) {
+	e.field_type = 'date'
+	e.picker = calendar()
+	dropdown.construct(e)
+})
 
 // ---------------------------------------------------------------------------
 // menu
@@ -2179,7 +2492,7 @@ component('x-pagelist', function(e) {
 	serializable_widget(e)
 	e.classes = 'x-widget x-pagelist'
 
-	e.prop('tabs', {store: 'var', type: 'enum', enum_values: ['above', 'below'], default: 'above'})
+	e.prop('tabs', {store: 'attr', type: 'enum', enum_values: ['above', 'below'], default: 'above'})
 
 	e.header = div({class: 'x-pagelist-header'})
 	e.content = div({class: 'x-pagelist-content'})
@@ -2534,9 +2847,9 @@ component('x-split', function(e) {
 	e.set_fixed_size = update_size
 	e.set_min_size = update_size
 
-	e.prop('orientation', {store: 'var', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal'})
-	e.prop('fixed_side' , {store: 'var', type: 'enum', enum_values: ['first', 'second'], default: 'first'})
-	e.prop('resizeable' , {store: 'var', type: 'bool', default: true})
+	e.prop('orientation', {store: 'attr', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal'})
+	e.prop('fixed_side' , {store: 'attr', type: 'enum', enum_values: ['first', 'second'], default: 'first'})
+	e.prop('resizeable' , {store: 'attr', type: 'bool', default: true})
 	e.prop('fixed_size' , {store: 'var', type: 'number', default: 200})
 	e.prop('min_size'   , {store: 'var', type: 'number', default:   0})
 

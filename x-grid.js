@@ -404,8 +404,8 @@ component('x-grid', function(e) {
 			},
 		})
 
-		let f0 = rs.field(0)
-		let f1 = rs.field(1)
+		let f0 = rs.all_fields[0]
+		let f1 = rs.all_fields[1]
 
 		dd.display_val = function() {
 			if (!rs.filtered_count)
@@ -771,7 +771,7 @@ component('x-grid', function(e) {
 	}
 
 	e.row_display_val = function(row) { // stub
-		e.display_field = e.field(e.display_col)
+		e.display_field = e.all_fields[e.display_col]
 		if (!e.display_field)
 			return 'no display field'
 		return e.rowset.display_val(row, e.display_field)

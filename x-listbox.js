@@ -14,17 +14,16 @@ component('x-listbox', function(e) {
 
 	e.classes = 'x-widget x-focusable x-listbox'
 
-	e.prop('orientation'   , {store: 'var', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical'})
+	e.prop('orientation'   , {store: 'attr', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical'})
 	e.prop('can_move_items', {store: 'var', type: 'bool', default: true})
 	e.prop('item_typename' , {store: 'var', default: 'richtext'})
 
 	e.display_col = 0
 
-	e.init = function() {
-		if(e.items) {
+	e.on('attach', function() {
+		if(e.items)
 			create_rows_items()
-		}
-	}
+	})
 
 	// item-based rowset ------------------------------------------------------
 
@@ -41,7 +40,7 @@ component('x-listbox', function(e) {
 			row[0] = item
 		}
 		e.on('row_added', row_added)
-		e.display_field = e.field(0)
+		e.display_field = e.all_fields[0]
 		let rows = []
 		for (let item of e.items) {
 			if (isobject(item) && item.typename)
@@ -89,7 +88,7 @@ component('x-listbox', function(e) {
 	// responding to nav changes ----------------------------------------------
 
 	e.row_display_val = function(row) { // stub
-		e.display_field = e.field(e.display_col)
+		e.display_field = e.all_fields[e.display_col]
 		if (!e.display_field)
 			return 'no display field'
 		return e.cell_display_val(row, e.display_field)
