@@ -130,10 +130,12 @@ function nav_widget(e) {
 	}
 
 	e.on('attach', function() {
-		init_all(e)
 		bind_lookup_rowsets(true)
 		bind_param_nav(true)
-		e.load()
+		if (e.data)
+			init_all(e.data)
+		else
+			e.load()
 	})
 
 	function force_unfocus_focused_cell() {
@@ -158,6 +160,56 @@ function nav_widget(e) {
 		e.tree_field = or(e.all_fields[or(e.tree_col, e.name_col)], or(def.tree_col, def.name_col))
 	}
 
+	function init_field(f, i) {
+		let custom_attrs = e.col_attrs && e.col_attrs[f.name]
+		let type = f.type || (custom_attrs && custom_attrs.type)
+		let type_attrs = type && (e.field_types[type] || field_types[type])
+		let field = update({}, all_field_types, e.all_field_types, type_attrs, f, custom_attrs)
+
+		// disambiguate field name.
+		let name = (f.name || 'f'+i).replace(' ', '_')
+		if (name in e.all_fields) {
+			let suffix = 2
+			while (name+suffix in e.all_fields)
+				suffix++
+			name += suffix
+		}
+		field.name = name
+
+		field.val_index = i
+		field.nav = e
+
+		field.w = clamp(field.w, field.min_w, field.max_w)
+		if (field.text == null)
+			field.text = auto_display_name(f.name)
+
+		return field
+	}
+
+	e.add_field = function(f) {
+		let fi = e.all_fields.length
+		let field = init_field(f, fi)
+		e.all_fields[fi] = field
+		e.all_fields[field.name] = field
+		for (let ri = 0; ri < e.all_rows.length; ri++)
+			e.all_rows[ri][fi] = null
+		init_fields()
+		e.update({fields: true})
+		return field
+	}
+
+	e.remove_field = function(field) {
+		let fi = field.val_index
+		e.all_fields.remove(fi)
+		e.all_fields[field.name] = undefined
+		for (let i = fi; i < e.all_fields.length; i++)
+			e.all_fields[i].val_index = i
+		for (let ri = 0; ri < e.all_rows.length; ri++)
+			e.all_rows[ri].remove(fi)
+		init_fields()
+		e.update({fields: true})
+	}
+
 	function init_all_fields(def) {
 
 		e.all_fields = [] // fields in row value order.
@@ -170,29 +222,9 @@ function nav_widget(e) {
 			if (def.fields)
 				for (let i = 0; i < def.fields.length; i++) {
 					let f = def.fields[i]
-
-					// disambiguate field name.
-					let name = (f.name || 'f'+i).replace(' ', '_')
-					if (name in e.all_fields) {
-						let suffix = 2
-						while (name+suffix in e.all_fields)
-							suffix++
-						name += suffix
-					}
-
-					let custom_attrs = e.col_attrs && e.col_attrs[name]
-					let type = f.type || (custom_attrs && custom_attrs.type)
-					let type_attrs = type && (e.field_types[type] || field_types[type])
-					let field = update({}, all_field_types, e.all_field_types, type_attrs, f, custom_attrs)
-
-					field.val_index = i
-					field.nav = e
-					field.w = clamp(field.w, field.min_w, field.max_w)
-					if (field.text == null)
-						field.text = auto_display_name(field.name)
-
+					let field = init_field(f, i)
 					e.all_fields[i] = field
-					e.all_fields[name] = field
+					e.all_fields[field.name] = field
 				}
 
 			let pk = def.pk
@@ -2305,9 +2337,41 @@ function nav_widget(e) {
 			e.fire('val_picked', ev)
 	}
 
-	init_all(e)
+	init_all({})
 
 }
+
+// ---------------------------------------------------------------------------
+// standalone val widget nav
+// ---------------------------------------------------------------------------
+
+{
+let nav
+standalone_val_widget_nav = function() {
+	if (!nav) {
+		component('x-val-nav', function(e) {
+			nav_widget(e)
+			e.update = noop
+			e.scroll_to_cell = noop
+			e.update_cell_state = noop
+			e.update_row_state = noop
+		})
+		nav = val_nav({
+			data: {
+				fields: [],
+				rows: [[]],
+			},
+		})
+		nav.attach()
+		nav.focus_cell(true, true)
+	}
+	return nav
+}
+}
+
+// ---------------------------------------------------------------------------
+// global rowset
+// ---------------------------------------------------------------------------
 
 function global_rowset(name, ...options) {
 	let d = name

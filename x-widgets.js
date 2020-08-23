@@ -605,6 +605,11 @@ function val_widget(e, always_enabled) {
 	}
 
 	e.on('attach', function() {
+		if (e.standalone) {
+			e.nav = standalone_val_widget_nav()
+			e.col = e.nav.add_field(e.field_data).name
+			print(e.nav, e.col)
+		}
 		bind_nav(nav, col, true)
 		e.update()
 	})
@@ -612,6 +617,8 @@ function val_widget(e, always_enabled) {
 	e.on('detach', function() {
 		bind_nav(nav, col, false)
 		e.update()
+		if (e.standalone)
+			e.nav.remove_field(e.field)
 	})
 
 	function set_nav_col(nav1, nav0, col1, col0) {
@@ -638,6 +645,7 @@ function val_widget(e, always_enabled) {
 	}
 	e.prop('col', {store: 'var', type: 'col', col_nav: () => e.nav})
 
+	/*
 	// standalone operation: fake nav & field ---------------------------------
 
 	e.set_standalone = function() {
@@ -730,6 +738,7 @@ function val_widget(e, always_enabled) {
 	}
 
 	e.prop('standalone', {store: 'var', private: true}
+	*/
 
 	// field & val ------------------------------------------------------------
 
@@ -739,6 +748,7 @@ function val_widget(e, always_enabled) {
 		if (e.attached) {
 			e.field = nav && nav.all_fields[col]
 			let has_val = e.row && e.field
+			print(e.typename, has_val)
 			enabled = !!(always_enabled || has_val)
 			e.class('disabled', !enabled)
 			e.focusable = enabled
@@ -798,10 +808,11 @@ function val_widget(e, always_enabled) {
 	e.property('row', () => nav && nav.focused_row)
 
 	function get_val() {
+		let row = e.row
 		return row && e.field ? nav.cell_val(row, e.field) : null
 	}
 	e.set_val = function(v) {
-		nav.set_cell_val(e.row, e.field, e.to_val(v), ev)
+		nav.set_cell_val(e.row, e.field, e.to_val(v))
 	}
 	e.property('val', get_val, e.set_val)
 
@@ -1519,7 +1530,7 @@ component('x-slider', function(e) {
 		e.set_val(clamp(v, cmin(), cmax()), ev)
 	}
 
-	e.late_property('progress',
+	e.property('progress',
 		function() {
 			return progress_for(e.input_val)
 		},
@@ -1737,7 +1748,7 @@ component('x-dropdown', function(e) {
 		e.close(focus)
 	}
 
-	e.late_property('isopen',
+	e.property('isopen',
 		function() {
 			return e.hasclass('open')
 		},
@@ -2607,7 +2618,7 @@ component('x-pagelist', function(e) {
 		}
 	}
 
-	e.late_property('selected_index',
+	e.property('selected_index',
 		function() {
 			return e.selected_item ? e.selected_item.index : null
 		},

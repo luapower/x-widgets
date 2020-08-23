@@ -431,12 +431,14 @@ function say_my_name_long(v) {
 }
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
-	nav: cell_nav({
-		val: 'wrong',
+	standalone: true,
+	field_data: {
 		validate: say_my_name,
-	}),
+	},
+	//	val: 'wrong',
 })))
 
+/*
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
 	nav: cell_nav({validate: say_my_name_long}),
 })))
@@ -454,6 +456,7 @@ main.add(
 		)
 	)
 )
+*/
 
 </script>
 </template>
@@ -791,7 +794,6 @@ function thousand_items() {
 main.add(
 	list_dropdown({
 		id: 'dd1',
-		field_name: 'Here we are',
 		items: [
 			'Apples',
 			'Mananas',
@@ -799,17 +801,20 @@ main.add(
 			'Something Else Entirely',
 		],
 		standalone: true,
-		val: 'Mananas',
-		validate: function(v) {
-			return v != 'Mananas' || 'Can\'t have mananas.'
+		field_data: {
+			name: 'Here we are',
+			validate: function(v) {
+				return v != 'Mananas' || 'Can\'t have mananas.'
+			},
 		},
+		//val: 'Mananas',
 	}),
 
 	list_dropdown({
 		id: 'dd2',
 		field_name: 'Here we are again',
 		items: thousand_items(),
-		nav: cell_nav({val: 'not-in-list'}),
+		//nav: cell_nav({val: 'not-in-list'}),
 	}),
 
 )
@@ -1236,7 +1241,7 @@ reload_button.on('click', function() {
 demo_list_ct.add(demo_list)
 
 window.on('load', function() {
-	demo_list.focus_cell(18+2)
+	demo_list.focus_cell(10)
 })
 
 lights_button.on('click', function() {
