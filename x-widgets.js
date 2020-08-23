@@ -781,7 +781,7 @@ function val_widget(e, always_enabled) {
 		if (!e.error_tooltip) {
 			if (!e.invalid)
 				return // don't create it until needed.
-			e.error_tooltip = tooltip({kind: 'error', target: e,
+			e.error_tooltip = tooltip({kind: 'error', target: e, timeout: null,
 				check: e.error_tooltip_check})
 		}
 		if (e.invalid)

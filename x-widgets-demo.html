@@ -694,6 +694,7 @@ g = grid({
 		parent_col: 'parent_id',
 		index_col: 'index',
 	},
+	order_by: 'name:desc date',
 	tree_col: 'name',
 	w: 606,
 	h: 400,
@@ -721,9 +722,9 @@ main.add(log)
 <template id=vgrid_demo>
 <script>
 
-var checked = () => H('<div class="fa fa-check"></div>')
+checked = () => H('<div class="fa fa-check"></div>')
 
-var data = {
+rowset = {
 	fields: [
 		{name: 'id'        , w:  60, min_w:  30, type: 'number', editable: false},
 		{name: 'index'     , w:  60, type: 'number', editable: false},
@@ -734,7 +735,7 @@ var data = {
 	],
 	pk: 'id',
 	index_col: 'index',
-	rows: new Set(),
+	rows: [],
 	can_add_rows: true,
 	can_remove_rows: true,
 	can_change_rows: true,
@@ -747,14 +748,12 @@ for (let i = 1; i <= 100000; i++) {
 	let random_date = i * 24 * 3600 * 1000
 	let row = [id, id, i % 5 == 0, name, random_num, random_date]
 	//row.focusable = i % 5 >= 2
-	data.rows.add(row)
+	rowset.rows.push(row)
 }
-
-d = rowset(data)
 
 vg = grid({
 	vertical: true,
-	rowset: d,
+	rowset: rowset,
 	w: 600,
 	h: 200,
 	can_change_header_visibility: true,
@@ -771,8 +770,8 @@ main.add(vg)
 log = tag('pre')
 main.add(log)
 
-d.on('row_changed', function() {
-	log.html = json(d.pack_changes(), null, 3)
+vg.on('row_changed', function() {
+	log.html = json(vg.pack_changes(), null, 3)
 })
 
 </script>
@@ -1207,9 +1206,12 @@ $('template').forEach(function(e) {
 
 demo_list = listbox({
 	items: demos,
-	attrs: {id: 'demo_list'},
+	id: 'demo_list',
 	auto_focus_first_cell: false,
 	item_typename: 'richtext',
+	field: {},
+	val_col: 0,
+	val: demos[18],
 })
 
 demo_list.create_item = function() {
@@ -1236,10 +1238,6 @@ reload_button.on('click', function() {
 })
 
 demo_list_ct.add(demo_list)
-
-window.on('load', function() {
-	demo_list.focus_cell(10)
-})
 
 lights_button.on('click', function() {
 	let dark = !document.body.hasclass('x-dark')

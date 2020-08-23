@@ -133,8 +133,6 @@ function nav_widget(e) {
 		e.selected_rows = new Map()
 
 		init_all_fields(res)
-		init_all_rows(res)
-
 	}
 
 	e.on('attach', function() {
@@ -260,6 +258,8 @@ function nav_widget(e) {
 		e.index_field = e.all_fields[def.index_col]
 
 		init_fields()
+
+		init_all_rows(def)
 	}
 
 	e.set_val_col = function(v) {
@@ -271,7 +271,7 @@ function nav_widget(e) {
 	e.set_tree_col = function() {
 		init_tree_field(e)
 		init_fields()
-		e.update({vals: true})
+		e.update({rows: true})
 	}
 	e.prop('tree_col', {store: 'var'})
 
@@ -1118,7 +1118,6 @@ function nav_widget(e) {
 		else if (force)
 			create_rows()
 		update_row_index()
-		e.scroll_to_focused_cell()
 	}
 
 	// changing the sort order ------------------------------------------------
@@ -1128,6 +1127,10 @@ function nav_widget(e) {
 	function update_field_sort_order() {
 		order_by_map.clear()
 		let pri = 0
+		for (let field of e.all_fields) {
+			field.sort_dir = null
+			field.sort_priority = null
+		}
 		for (let s1 of (e.order_by || '').split(/\s+/)) {
 			let m = s1.split(':')
 			let name = m[0]
@@ -1147,13 +1150,15 @@ function nav_widget(e) {
 	function order_by_from_map() {
 		let a = []
 		for (let [field, dir] of order_by_map)
-			a.push(field.name + (dir == 'asc' ? '' : ' desc'))
+			a.push(field.name + (dir == 'asc' ? '' : ':desc'))
 		return a.join(' ')
 	}
 
 	e.set_order_by = function() {
 		update_field_sort_order()
 		sort_rows(true)
+		e.update({vals: true, focus: true, sort_order: true})
+		e.scroll_to_focused_cell()
 	}
 	e.prop('order_by', {store: 'var'})
 
@@ -1161,7 +1166,7 @@ function nav_widget(e) {
 		if (!field.sortable)
 			return
 		if (dir == 'toggle') {
-			let dir = order_by_map.get(field)
+			dir = order_by_map.get(field)
 			dir = dir == 'asc' ? 'desc' : (dir == 'desc' ? false : 'asc')
 		}
 		if (!keep_others)
@@ -1169,7 +1174,7 @@ function nav_widget(e) {
 		if (dir)
 			order_by_map.set(field, dir)
 		else
-			order_by.delete(field)
+			order_by_map.delete(field)
 		e.order_by = order_by_from_map()
 	}
 
