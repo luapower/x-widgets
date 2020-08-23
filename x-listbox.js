@@ -52,7 +52,7 @@ component('x-listbox', function(e) {
 		e.reset({
 			fields: [{format: e.format_item}],
 			rows: rows,
-		})
+		}, true)
 	}
 
 	e.create_item = function() {

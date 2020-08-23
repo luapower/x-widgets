@@ -468,7 +468,7 @@ component('x-grid', function(e) {
 	}
 
 	e.update_cell_val = function(cell, row, field, input_val) {
-		let v = e.rowset.display_val(row, field)
+		let v = e.cell_display_val(row, field)
 		if (cell.indent)
 			cell.replace(cell.childNodes[1], v)
 		else
@@ -511,7 +511,7 @@ component('x-grid', function(e) {
 		cell.class('disabled', e.is_cell_disabled(row, field))
 		cell.class('new', !!row.is_new)
 		cell.class('removed', !!row.removed)
-		cell.class('modified', e.rowset.cell_modified(row, field))
+		cell.class('modified', e.cell_modified(row, field))
 
 		if (field_has_indent(field)) {
 			if (!cell.indent) {
@@ -528,8 +528,8 @@ component('x-grid', function(e) {
 			cell.indent = null
 		}
 
-		e.update_cell_val(cell, row, field, e.rowset.input_val(row, field))
-		e.update_cell_error(cell, row, field, e.rowset.cell_error(row, field))
+		e.update_cell_val(cell, row, field, e.cell_input_val(row, field))
+		e.update_cell_error(cell, row, field, e.cell_error(row, field))
 
 		row_focused = or(row_focused, e.focused_row_index == ri)
 		let cell_focused = row_focused && (!e.can_focus_cells || fi == e.focused_field_index)
@@ -774,7 +774,7 @@ component('x-grid', function(e) {
 		e.display_field = e.all_fields[e.display_col]
 		if (!e.display_field)
 			return 'no display field'
-		return e.rowset.display_val(row, e.display_field)
+		return e.cell_display_val(row, e.display_field)
 	}
 
 	// vgrid header resizing --------------------------------------------------
@@ -921,7 +921,7 @@ component('x-grid', function(e) {
 		if (e.focused_row_index != hit.cell.ri) return
 		if ( horiz && abs(hit.my - my) < 8) return
 		if (!horiz && abs(hit.mx - mx) < 8) return
-		if (!horiz && e.rowset.parent_field) return
+		if (!horiz && e.parent_field) return
 		if (e.order_by) return
 		if (e.filter_rowsets && e.filter_rowsets.size > 0) return
 		return true
@@ -953,7 +953,7 @@ component('x-grid', function(e) {
 
 		let ri1 = 0
 		let ri2 = e.rows.length
-		if (!e.can_change_parent && e.rowset.parent_field) {
+		if (!e.can_change_parent && e.parent_field) {
 			if (parent_row) {
 				let parent_ri = e.row_index(parent_row)
 				ri1 = parent_ri + 1
@@ -1044,7 +1044,7 @@ component('x-grid', function(e) {
 				let i2 = row2 ? row_indent(row2) : 0
 				// if the row can be a child of the row above,
 				// the indent right limit is increased one unit.
-				let ii1 = i1 + (row1 && !row1.collapsed && e.rowset.can_have_children(row1) ? 1 : 0)
+				let ii1 = i1 + (row1 && !row1.collapsed && e.can_have_children(row1) ? 1 : 0)
 				hit_indent = min(floor(lerp(hit_p, 0, 1, ii1 + 1, i2)), ii1)
 				let parent_i = i1 - hit_indent
 				hit_parent_row = parent_i >= 0 ? row1 && row1.parent_rows[parent_i] : row1
@@ -1619,7 +1619,7 @@ component('x-grid', function(e) {
 			if (!e.editor && e.focused_row && e.focused_field) {
 				e.enter_edit('select_all')
 				let v = e.focused_field.from_text(c)
-				e.rowset.set_val(e.focused_row, e.focused_field, v)
+				e.set_cell_val(e.focused_row, e.focused_field, v)
 				return false
 			}
 		} else if (!e.editor)
@@ -1644,12 +1644,12 @@ component('x-grid', function(e) {
 		let items = []
 
 		items.push({
-			text: e.rowset && e.rowset.changed_rows ?
+			text: e.changed_rows ?
 				S('discard_changes_and_reload', 'Discard changes and reload') : S('reload', 'Reload'),
-			enabled: !!e.rowset,
+			enabled: !!(e.changed_rows),
 			icon: 'fa fa-sync',
 			action: function() {
-				e.rowset.reload()
+				e.reload()
 			},
 			separator: true,
 		})
@@ -1657,9 +1657,9 @@ component('x-grid', function(e) {
 		items.push({
 			text: S('save', 'Save'),
 			icon: 'fa fa-save',
-			enabled: !!(e.rowset && e.rowset.changed_rows),
+			enabled: !!(e.changed_rows),
 			action: function() {
-				e.rowset.save()
+				e.save()
 			},
 			separator: true,
 		})
@@ -1667,9 +1667,9 @@ component('x-grid', function(e) {
 		items.push({
 			text: S('revert_changes', 'Revert changes'),
 			icon: 'fa fa-undo',
-			enabled: !!(e.rowset && e.rowset.changed_rows),
+			enabled: !!(e.changed_rows),
 			action: function() {
-				e.rowset.revert()
+				e.revert()
 			},
 			separator: true,
 		})
@@ -1746,17 +1746,16 @@ component('x-grid', function(e) {
 				e.show_field(item.field, true, fi)
 			}
 			let items_added
-			if (e.rowset)
-				for (let field of e.all_fields) {
-					if (e.fields.indexOf(field) == -1) {
-						items_added = true
-						items.push({
-							field: field,
-							text: field.text,
-							action: show_field,
-						})
-					}
+			for (let field of e.all_fields) {
+				if (e.fields.indexOf(field) == -1) {
+					items_added = true
+					items.push({
+						field: field,
+						text: field.text,
+						action: show_field,
+					})
 				}
+			}
 			if (!items_added)
 				items.push({
 					text: S('all_fields_shown', 'All fields are shown'),
@@ -1767,7 +1766,7 @@ component('x-grid', function(e) {
 
 		}
 
-		if (e.rowset.parent_field) {
+		if (e.parent_field) {
 			items.push({
 				text: S('expand_all', 'Expand all'),
 				enabled: horiz && e.tree_field,

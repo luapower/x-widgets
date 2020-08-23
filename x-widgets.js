@@ -437,7 +437,7 @@ function cssgrid_item_widget_editing(e) {
 		function so_pointerdown(ev, mx, my) {
 			let handle = ev.target.closest('.x-cssgrid-span-handle')
 			if (!handle) return
-			side = handle.attr('side')
+			side = handle.attrval('side')
 
 			let [bx1, by1, bx2, by2] = track_bounds()
 			let second = side == 'right' || side == 'bottom'
@@ -548,11 +548,12 @@ function focusable_widget(e, fe) {
 	fe = fe || e
 
 	let focusable = true
+	e.attr('tabindex', 0)
 
 	e.set_tabindex = function(i) {
 		fe.attr('tabindex', focusable ? i : -1)
 	}
-	e.prop('tabindex', {store: 'var'})
+	e.prop('tabindex', {store: 'var', default: 0})
 
 	e.property('focusable', () => focusable, function(v) {
 		v = !!v
@@ -586,47 +587,85 @@ function val_widget(e, always_enabled) {
 	cssgrid_item_widget(e)
 	serializable_widget(e)
 
-	// nav & col --------------------------------------------------------------
+	// nav dynamic binding ----------------------------------------------------
 
-	function nav_cell_state_changed(row, field, prop, val, ev) {
-		cell_state_changed(prop, val, ev)
+	function init_field() {
+		e.field = nav && nav.all_fields[col] || null
 	}
 
-	function something_changed() {
+	function init_val() {
+		if (initial_val !== undefined) {
+			let v = initial_val
+			initial_val = undefined
+			e.reset_val(v, {validate: true})
+		}
+	}
+
+	function val_changed() {
 		e.update()
+	}
+
+	function loaded() {
+		init_field()
+		e.update()
+	}
+
+	function cell_state_changed(prop, val, ev) {
+		if (updating)
+			return
+		if (prop == 'input_val')
+			e.update_val(val, ev)
+		else if (prop == 'val')
+			e.fire('val_changed', val, ev)
+		else if (prop == 'cell_error') {
+			e.invalid = val != null
+			e.class('invalid', e.invalid)
+			e.update_error(val, ev)
+		} else if (prop == 'cell_modified')
+			e.class('modified', val)
 	}
 
 	function bind_nav(nav, col, on) {
-		if (!(nav && col != null)) return
-		nav.on('focused_row_changed', something_changed, on)
+		if (!(nav && col != null))
+			return
+		nav.on('focused_row_changed', val_changed, on)
 		nav.on('focused_row_cell_state_changed_for_'+col, cell_state_changed, on)
-		nav.on('display_vals_changed_for_'+col, something_changed, on)
-		nav.on('loaded', something_changed, on)
+		nav.on('display_vals_changed_for_'+col, val_changed, on)
+		nav.on('loaded', loaded, on)
 	}
 
+	let attached_once
 	e.on('attach', function() {
-		if (e.standalone) {
-			e.nav = standalone_val_widget_nav()
-			e.col = e.nav.add_field(e.field_data).name
-			print(e.nav, e.col)
+		if (!attached_once && e.field) {
+			attached_once = true
+			e.standalone = true
+			let field_opt = e.field
+			e.begin_update()
+			e.nav = global_val_nav()
+			e.col = e.nav.add_field(field_opt).name
+			init_val()
+			e.end_update()
+		} else {
+			init_field()
+			bind_nav(nav, col, true)
+			e.update()
 		}
-		bind_nav(nav, col, true)
-		e.update()
 	})
 
 	e.on('detach', function() {
 		bind_nav(nav, col, false)
-		e.update()
 		if (e.standalone)
 			e.nav.remove_field(e.field)
+		e.field = null
 	})
 
 	function set_nav_col(nav1, nav0, col1, col0) {
 		if (e.attached) {
 			bind_nav(nav0, col0, false)
 			bind_nav(nav1, col1, true)
+			init_field()
+			e.update()
 		}
-		e.update()
 	}
 
 	let nav
@@ -645,162 +684,7 @@ function val_widget(e, always_enabled) {
 	}
 	e.prop('col', {store: 'var', type: 'col', col_nav: () => e.nav})
 
-	/*
-	// standalone operation: fake nav & field ---------------------------------
-
-	e.set_standalone = function() {
-
-		let field = {}
-		let nav = {}
-		nav.on = noop
-		nav.focused_row = true
-		nav.all_fields = {}
-		nav.all_fields[undefined] = field
-
-		let cell_input_val = null
-		let cell_val = null
-		let cell_error
-		let cell_modified = false
-		let cell_old_val = null
-
-		nav.cell_input_val = () => cell_input_val
-		nav.cell_val       = () => cell_val
-		nav.cell_error     = () => cell_error
-		nav.cell_modified  = () => cell_modified
-
-		nav.display_val = function() {
-			let v = cell_input_val
-			if (v == null)
-				return field.null_text
-			if (v === '')
-				return field.empty_text
-			return field.format(v)
-		}
-
-		nav.validate_val = function(field, val, row, ev) {
-			if (val == null)
-				if (!field.allow_null)
-					return S('error_not_null', 'NULL not allowed')
-				else
-					return
-
-			if (field.min != null && val < field.min)
-				return S('error_min_value', 'Value must be at least {0}').subst(field.min)
-
-			if (field.max != null && val > field.max)
-				return S('error_max_value', 'Value must be at most {0}').subst(field.max)
-
-			let err = field.validate && field.validate.call(e, val, field)
-			if (typeof err == 'string')
-				return err
-
-			return e.fire('validate', val, row, ev)
-		}
-
-		nav.set_cell_val = function(row, field, val, ev) {
-			if (val === undefined)
-				val = null
-			let err = e.validate_val(field, val, row, ev)
-			err = typeof err == 'string' ? err : undefined
-			let invalid = err != null
-			let val_changed = !invalid && val !== cell_val
-
-			let old_cell_input_val = cell_input_val === undefined ? cell_val : cell_input_val
-			let input_val_changed = val !== old_cell_input_val
-			let cell_err_changed = err !== cell_error
-
-			cell_input_val = val
-			cell_error = err
-
-			if (val_changed) {
-				let was_modified = cell_modified
-				let modified = val !== cell_old_val
-
-				cell_val = val
-				if (!was_modified)
-					cell_old_val = cur_val
-				let cell_modified_changed = modified !== cell_modified
-				cell_state_changed(row, field, 'val', val, ev)
-				if (cell_modified_changed)
-					cell_state_changed(row, field, 'cell_modified', modified, ev)
-			}
-
-			if (input_val_changed)
-				cell_state_changed('input_val', val, ev)
-			if (cell_err_changed)
-				cell_state_changed('cell_error', err, ev)
-
-			return !invalid
-
-		}
-
-		e.nav = nav
-	}
-
-	e.prop('standalone', {store: 'var', private: true}
-	*/
-
-	// field & val ------------------------------------------------------------
-
-	let enabled = true
-
-	e.update = function() {
-		if (e.attached) {
-			e.field = nav && nav.all_fields[col]
-			let has_val = e.row && e.field
-			print(e.typename, has_val)
-			enabled = !!(always_enabled || has_val)
-			e.class('disabled', !enabled)
-			e.focusable = enabled
-			cell_state_changed('input_val', e.input_val)
-			cell_state_changed('val', e.val)
-			cell_state_changed('cell_error', e.error)
-			cell_state_changed('cell_modified', e.modified)
-		} else {
-			e.field = null
-		}
-	}
-
-	{
-		let prevent_if_disabled = function() {
-			if (!enabled) return false
-		}
-		e.on('pointerdown', prevent_if_disabled)
-		e.on('pointerup'  , prevent_if_disabled)
-		e.on('click'      , prevent_if_disabled)
-	}
-
-	function cell_state_changed(prop, val, ev) {
-		if (prop == 'input_val')
-			e.update_val(val, ev)
-		else if (prop == 'val')
-			e.fire('val_changed', val, ev)
-		else if (prop == 'cell_error') {
-			e.invalid = val != null
-			e.class('invalid', e.invalid)
-			e.update_error(val, ev)
-		} else if (prop == 'cell_modified')
-			e.class('modified', val)
-	}
-
-	e.error_tooltip_check = function() {
-		return e.invalid && !e.hasclass('picker')
-			&& (e.hasfocus || e.hovered)
-	}
-
-	e.update_error = function(err) {
-		if (!e.error_tooltip) {
-			if (!e.invalid)
-				return // don't create it until needed.
-			e.error_tooltip = tooltip({kind: 'error', target: e,
-				check: e.error_tooltip_check})
-		}
-		if (e.invalid)
-			e.error_tooltip.text = err
-		e.error_tooltip.update()
-	}
-
-	// getters/setters --------------------------------------------------------
+	// model ------------------------------------------------------------------
 
 	e.to_val = function(v) { return v; }
 	e.from_val = function(v) { return v; }
@@ -811,10 +695,25 @@ function val_widget(e, always_enabled) {
 		let row = e.row
 		return row && e.field ? nav.cell_val(row, e.field) : null
 	}
-	e.set_val = function(v) {
-		nav.set_cell_val(e.row, e.field, e.to_val(v))
+	let initial_val
+	e.set_val = function(v, ev) {
+		v = e.to_val(v)
+		if (v === undefined)
+			v = null
+		if (nav && e.field)
+			nav.set_cell_val(e.row, e.field, v, ev)
+		else
+			initial_val = v
 	}
 	e.property('val', get_val, e.set_val)
+
+	e.reset_val = function(v, ev) {
+		v = e.to_val(v)
+		if (v === undefined)
+			v = null
+		if (nav && e.field)
+			nav.reset_cell_val(e.row, e.field, v, ev)
+	}
 
 	e.property('input_val', function() {
 		let row = e.row
@@ -834,6 +733,60 @@ function val_widget(e, always_enabled) {
 	e.display_val = function() {
 		let row = e.row
 		return row && e.field ? nav.cell_display_val(row, e.field) : ''
+	}
+
+	// view -------------------------------------------------------------------
+
+	let enabled = true
+
+	let updating
+	e.update = function() {
+		if (updating)
+			return
+		if (!e.attached)
+			return
+		enabled = !!(always_enabled || (e.row && e.field))
+		e.class('disabled', !enabled)
+		e.focusable = enabled
+		cell_state_changed('input_val', e.input_val)
+		cell_state_changed('val', e.val)
+		cell_state_changed('cell_error', e.error)
+		cell_state_changed('cell_modified', e.modified)
+	}
+
+	e.begin_update = function() {
+		updating = true
+	}
+
+	e.end_update = function() {
+		updating = false
+		e.update()
+	}
+
+	{
+		let prevent_if_disabled = function() {
+			if (!enabled) return false
+		}
+		e.on('pointerdown', prevent_if_disabled)
+		e.on('pointerup'  , prevent_if_disabled)
+		e.on('click'      , prevent_if_disabled)
+	}
+
+	e.error_tooltip_check = function() {
+		return e.invalid && !e.hasclass('picker')
+			&& (e.hasfocus || e.hovered)
+	}
+
+	e.update_error = function(err) {
+		if (!e.error_tooltip) {
+			if (!e.invalid)
+				return // don't create it until needed.
+			e.error_tooltip = tooltip({kind: 'error', target: e,
+				check: e.error_tooltip_check})
+		}
+		if (e.invalid)
+			e.error_tooltip.text = err
+		e.error_tooltip.update()
 	}
 
 }
@@ -896,7 +849,7 @@ component('x-tooltip', function(e) {
 			return
 		let t = e.timeout
 		if (t == 'auto')
-			t = clamp(e.text.length / (tooltip.reading_speed / 60), 1, 10)
+			t = clamp((e.text || '').length / (tooltip.reading_speed / 60), 1, 10)
 		else
 			t = num(t)
 		remove_timer(t)
@@ -1031,17 +984,13 @@ component('x-checkbox', function(e) {
 	e.text_div = span({class: 'x-markbox-text x-checkbox-text'})
 	e.add(e.icon_div, e.text_div)
 
-	e.init = function(opt) {
-		e.checked = opt.checked
-	}
-
 	// model
 
 	e.get_checked = function() {
 		return e.val === e.checked_val
 	}
 	e.set_checked = function(v) {
-		e.set_val(v ? e.checked_val : e.unchecked_val, {input: e})
+		e.val = v ? e.checked_val : e.unchecked_val
 	}
 	e.prop('checked', {private: true})
 
@@ -1936,17 +1885,17 @@ component('x-calendar', function(e) {
 	e.sel_month = list_dropdown({
 		classes: 'x-calendar-sel-month',
 		items: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-		nav: cell_nav({format: format_month}),
+		field: {format: format_month},
 		listbox: {
 			format_item: format_month,
 		},
 	})
 	e.sel_year = spin_input({
 		classes: 'x-calendar-sel-year',
-		nav: cell_nav({
+		field: {
 			min: 100,
 			max: 3000,
-		}),
+		},
 		button_style: 'left-right',
 	})
 	e.header = div({class: 'x-calendar-header'},

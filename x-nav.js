@@ -125,16 +125,25 @@ function nav_widget(e) {
 	// init -------------------------------------------------------------------
 
 	function init_all(res) {
+
+		e.focused_field = null
+		e.selected_field = null
+		e.focused_row = null
+		e.selected_row = null
+		e.selected_rows = new Map()
+
 		init_all_fields(res)
 		init_all_rows(res)
+
 	}
 
 	e.on('attach', function() {
 		bind_lookup_rowsets(true)
 		bind_param_nav(true)
-		if (e.data)
-			init_all(e.data)
-		else
+		if (e.rowset) {
+			init_all(e.rowset)
+			e.update({fields: true, rows: true})
+		} else
 			e.load()
 	})
 
@@ -152,10 +161,6 @@ function nav_widget(e) {
 
 	// fields array matching 1:1 to row contents ------------------------------
 
-	e.field = function(name) {
-		return e.all_fields[name] || name
-	}
-
 	function init_tree_field(def) {
 		e.tree_field = or(e.all_fields[or(e.tree_col, e.name_col)], or(def.tree_col, def.name_col))
 	}
@@ -163,7 +168,7 @@ function nav_widget(e) {
 	function init_field(f, i) {
 		let custom_attrs = e.col_attrs && e.col_attrs[f.name]
 		let type = f.type || (custom_attrs && custom_attrs.type)
-		let type_attrs = type && (e.field_types[type] || field_types[type])
+		let type_attrs = type && (e.field_types && e.field_types[type] || field_types[type])
 		let field = update({}, all_field_types, e.all_field_types, type_attrs, f, custom_attrs)
 
 		// disambiguate field name.
@@ -201,11 +206,18 @@ function nav_widget(e) {
 	e.remove_field = function(field) {
 		let fi = field.val_index
 		e.all_fields.remove(fi)
-		e.all_fields[field.name] = undefined
+		delete e.all_fields[field.name]
 		for (let i = fi; i < e.all_fields.length; i++)
 			e.all_fields[i].val_index = i
-		for (let ri = 0; ri < e.all_rows.length; ri++)
-			e.all_rows[ri].remove(fi)
+		for (let row of e.all_rows) {
+			row.remove(fi)
+			if (row.input_val) row.input_val.remove(fi)
+			if (row.prev_val ) row.prev_val .remove(fi)
+			if (row.old_val  ) row.old_val  .remove(fi)
+			if (row.input_val) row.input_val.remove(fi)
+			if (row.modified ) row.modified .remove(fi)
+			if (row.error    ) row.error    .remove(fi)
+		}
 		init_fields()
 		e.update({fields: true})
 	}
@@ -405,13 +417,6 @@ function nav_widget(e) {
 
 	// navigation and selection -----------------------------------------------
 
-	e.focused_row = null
-	e.focused_field = null
-	e.last_focused_col = null
-	e.selected_row = null
-	e.selected_field = null
-	e.selected_rows = new Map()
-
 	e.property('focused_row_index'   , () => e.row_index(e.focused_row))
 	e.property('focused_field_index' , () => e.field_index(e.focused_field))
 	e.property('selected_row_index'  , () => e.row_index(e.selected_row))
@@ -581,7 +586,7 @@ function nav_widget(e) {
 		let row = e.rows[ri]
 
 		if (e.val_field && row) {
-			let val = e.cell_vall(row, e.val_field)
+			let val = e.cell_val(row, e.val_field)
 			e.set_val(val, update({input: e}, ev))
 		}
 
@@ -772,7 +777,7 @@ function nav_widget(e) {
 				enter_edit: e.auto_edit_first_cell,
 				was_editing: was_editing,
 				focus_editor: focus_editor,
-				preserve_selection: true,
+				preserve_selection: how == 'row',
 			})
 
 		}
@@ -852,7 +857,7 @@ function nav_widget(e) {
 		if (!parent_rows) {
 
 			// reuse the parent rows array from a sibling, if any.
-			let sibling_row = (row.parent_row || d).child_rows[0]
+			let sibling_row = (row.parent_row || e).child_rows[0]
 			parent_rows = sibling_row && sibling_row.parent_rows
 
 			if (!parent_rows) {
@@ -888,7 +893,7 @@ function nav_widget(e) {
 	}
 
 	function remove_row_from_tree(row) {
-		;(row.parent_row || d).child_rows.remove_value(row)
+		;(row.parent_row || e).child_rows.remove_value(row)
 		if (row.parent_row && row.parent_row.child_rows.length == 0)
 			delete row.parent_row.collapsed
 		row.parent_row = null
@@ -897,7 +902,7 @@ function nav_widget(e) {
 
 	function add_row_to_tree(row, parent_row) {
 		row.parent_row = parent_row
-		;(parent_row || d).child_rows.push(row)
+		;(parent_row || e).child_rows.push(row)
 	}
 
 	function init_tree() {
@@ -1454,9 +1459,19 @@ function nav_widget(e) {
 	e.reset_cell_val = function(row, field, val, ev) {
 		if (val === undefined)
 			val = null
+
+		let err
+		if (ev && ev.validate) {
+			err = e.validate_val(field, val, row, ev)
+			err = typeof err == 'string' ? err : undefined
+		}
+		let invalid = err != null
+
 		let cur_val = row[field.val_index]
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val)
 		let cell_modified_changed = e.set_cell_state(row, field, 'modified', false, false)
+		let cell_err_changed = e.set_cell_state(row, field, 'error', err)
+		let row_err_changed = e.set_row_state(row, 'row_error')
 		e.set_cell_state(row, field, 'old_val', val)
 		if (val !== cur_val) {
 			row[field.val_index] = val
@@ -1469,6 +1484,12 @@ function nav_widget(e) {
 			cell_state_changed(row, field, 'input_val', val, ev)
 		if (cell_modified_changed)
 			cell_state_changed(row, field, 'cell_modified', false, ev)
+		if (cell_err_changed)
+			cell_state_changed(row, field, 'cell_error', err, ev)
+		if (row_err_changed)
+			row_state_changed(row, 'row_error', undefined, ev)
+
+		return !invalid
 	}
 
 	// responding to cell updates ---------------------------------------------
@@ -1672,7 +1693,7 @@ function nav_widget(e) {
 		if (e.parent_field) {
 			row.child_rows = []
 			row.parent_row = ev && ev.parent_row || null
-			;(row.parent_row || d).child_rows.push(row)
+			;(row.parent_row || e).child_rows.push(row)
 			if (row.parent_row) {
 				// silently set parent id to be the id of the parent row before firing `row_added` event.
 				let parent_id = e.cell_val(row.parent_row, e.id_field)
@@ -1995,9 +2016,9 @@ function nav_widget(e) {
 		loading(false)
 	}
 
-	e.reset = function(res) {
+	e.reset = function(res, refocus_val) {
 
-		let refocus = refocus_state('pk')
+		let refocus = refocus_state(refocus_val ? 'val' : 'pk')
 		force_unfocus_focused_cell()
 
 		e.changed_rows = null
@@ -2345,28 +2366,25 @@ function nav_widget(e) {
 // standalone val widget nav
 // ---------------------------------------------------------------------------
 
-{
-let nav
-standalone_val_widget_nav = function() {
-	if (!nav) {
-		component('x-val-nav', function(e) {
-			nav_widget(e)
-			e.update = noop
-			e.scroll_to_cell = noop
-			e.update_cell_state = noop
-			e.update_row_state = noop
-		})
-		nav = val_nav({
-			data: {
-				fields: [],
-				rows: [[]],
-			},
-		})
-		nav.attach()
-		nav.focus_cell(true, true)
-	}
+global_val_nav = function() {
+	component('x-val-nav', function(e) {
+		nav_widget(e)
+		e.update = noop
+		e.scroll_to_cell = noop
+		e.update_cell_state = noop
+		e.update_row_state = noop
+	})
+	let nav
+	global_val_nav = () => nav // memoize.
+	nav = val_nav({
+		rowset: {
+			fields: [],
+			rows: [[]],
+		},
+	})
+	nav.attach()
+	nav.focus_cell(true, true)
 	return nav
-}
 }
 
 // ---------------------------------------------------------------------------
@@ -2434,7 +2452,7 @@ function global_rowset(name, ...options) {
 	field_types.number = number
 
 	number.validate = function(val, field) {
-		val = parseFloat(val)
+		val = num(val)
 
 		if (typeof val != 'number' || val !== val)
 			return S('error_invalid_number', 'Invalid number')
@@ -2455,7 +2473,10 @@ function global_rowset(name, ...options) {
 	}
 
 	number.from_text = function(s) {
-		return num(s)
+		s = s.trim()
+		s = s !== '' ? s : null
+		let x = num(s)
+		return x != null ? x : s
 	}
 
 	number.to_text = function(x) {

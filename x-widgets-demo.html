@@ -185,18 +185,20 @@ main.add(
 
 main.add(checkbox({
 	text: 'Wassup homie',
-	nav: cell_nav({
-		val: 'wrong',
+	val: 'wrong',
+	field: {
 		validate: function(v) {
+			print(v)
 			return typeof(v) == 'boolean' || 'Value not a boolean'
 		},
-	}),
+	},
 }))
 
 c2 = checkbox({
 	text: H('Yo wasup<br>I am multiline and right-aligned.'),
 	align: 'right',
-	nav: cell_nav({val: true}),
+	field: {},
+	val: true,
 })
 
 c2.on('value_changed', function(v) { print(v, this.checked) })
@@ -218,9 +220,8 @@ main.add(
 			'Option 2',
 			H('Option 3<br>Multiple lines'),
 		],
-		nav: cell_nav({
-			val: 1,
-		}),
+		field: {},
+		val: 1,
 	}),
 	radiogroup({
 		align: 'right',
@@ -229,12 +230,12 @@ main.add(
 			'Option 2',
 			H('Option 3<br>Multiple lines long text'),
 		],
-		nav: cell_nav({
-			val: 1/0,
+		val: 1/0,
+		field: {
 			validate: function(v) {
 				return v >= 0 && v < 3 || 'Selected option out of range'
 			},
-		}),
+		},
 	})
 )
 
@@ -431,16 +432,14 @@ function say_my_name_long(v) {
 }
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
-	standalone: true,
-	field_data: {
+	field: {
 		validate: say_my_name,
 	},
-	//	val: 'wrong',
+	val: 'wrong',
 })))
 
-/*
 main.add(H.div({}, 'type in "Klaus" to validate: ', input({
-	nav: cell_nav({validate: say_my_name_long}),
+	field: {validate: say_my_name_long},
 })))
 
 main.add(
@@ -448,15 +447,15 @@ main.add(
 		'Check out these inner labels:',
 		H.div({},
 			input({
-				nav: cell_nav({name: "santa's_name", validate: say_my_name}),
+				field: {name: "santa's_name", validate: say_my_name},
 			}),
 			input({
-				nav: cell_nav({text: "devil's name"}),
+				field: {text: "devil's name"},
+				val: 'Anything goes',
 			})
 		)
 	)
 )
-*/
 
 </script>
 </template>
@@ -467,20 +466,20 @@ main.add(
 <script>
 
 main.add(H.div({},
-	spin_input({nav: cell_nav({val: 42})}),
-	spin_input({nav: cell_nav({val: 42, text: 'Heeey'})})
+	spin_input({field: {val: 42}}),
+	spin_input({field: {val: 42, text: 'Heeey'}})
 ))
 main.add(H.div({},
-	spin_input({button_style: 'up-down', nav: cell_nav({val: 42})}),
-	spin_input({button_style: 'up-down', nav: cell_nav({text: 'Hey hey'})})
+	spin_input({button_style: 'up-down', field: {val: 42}}),
+	spin_input({button_style: 'up-down', field: {text: 'Hey hey'}})
 ))
 main.add(H.div({},
-	spin_input({button_style: 'left-right', nav: cell_nav({val: 42})}),
-	spin_input({button_style: 'left-right', nav: cell_nav({text: 'Dis look good?'})})
+	spin_input({button_style: 'left-right', field: {val: 42}}),
+	spin_input({button_style: 'left-right', field: {text: 'Dis look good?'}})
 ))
 main.add(H.div({},
-	spin_input({nav: cell_nav({min: -2, max: 5, multiple_of: 1.5, val: 1}), button_placement: 'right'}),
-	spin_input({nav: cell_nav({min: -2, max: 5, multiple_of: 1.5, text: 'How bout dis?'}), button_placement: 'right'}),
+	spin_input({field: {min: -2, max: 5, multiple_of: 1.5, val: 1}, button_placement: 'right'}),
+	spin_input({field: {min: -2, max: 5, multiple_of: 1.5, text: 'How bout dis?'}, button_placement: 'right'}),
 ))
 
 </script>
@@ -494,22 +493,22 @@ main.add(H.div({},
 main.add(H.div({},
 	'Slider 1',
 	slider({
-		nav: cell_nav({
-			val: .5,
+		field: {
 			validate: function(v) {
 				return v >= .2 && v <= .8 || 'Value not between .2 and .8'
 			},
-		}),
+		},
+		val: .5,
 	})))
 
 main.add(H.div({},
 	'Slider 2',
 	slider({
 		from: 1000, to: 2000,
-		nav: cell_nav({
-			val: 1500,
+		field: {
 			multiple_of: 200, min: 1300, max: 1700,
-		}),
+		},
+		val: 1500,
 	}))
 )
 
@@ -528,7 +527,8 @@ lb = listbox({
 		'Something Else Entirely',
 	],
 	val_col: 0,
-	nav: cell_nav({val: 'Bananas'}),
+	field: {},
+	val: 'Bananas',
 })
 
 hlb = hlistbox({
@@ -546,6 +546,9 @@ sb = select_button({
 		'Of',
 		'Us',
 	],
+	val_col: 0,
+	field: {},
+	val: 'One',
 })
 
 main.add(lb, hlb, div({}, H('<h3>select_button</h3>'), sb))
@@ -609,9 +612,9 @@ main.add(
 
 cg = cssgrid({
 	items: [
-		date_dropdown ({nav: cell_nav({val: day(time())}), pos_x: 3, pos_y: 1}),
-		input         ({nav: cell_nav({val: 'hello1'}), pos_x: 2, pos_y: 2}),
-		input         ({nav: cell_nav({val: 'hello2'}), pos_x: 1, pos_y: 3}),
+		date_dropdown ({val: day(time()), pos_x: 3, pos_y: 1}),
+		input         ({val: 'hello1', pos_x: 2, pos_y: 2}),
+		input         ({val: 'hello2', pos_x: 1, pos_y: 3}),
 	],
 })
 
@@ -630,19 +633,19 @@ main.add(cg)
 <script>
 
 main.add(calendar({
-	nav: cell_nav(),
+	field: {},
 }))
 
 main.add(calendar({
-	nav: cell_nav({
-		val: day(time(), 1),
+	val: day(time(), 1),
+	field: {
 		validate: function(v) {
 			if (day(v) == day(time()))
 				return 'Can\'t have today.'
 			if (day(v) == day(time(), 1))
 				return 'Can\'t have tomorrow.'
 		},
-	}),
+	},
 }))
 
 </script>
@@ -667,7 +670,7 @@ let fields = [
 	{name: 'parent_id' , w:  50, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: true},
 	{name: 'random_num', w: 130, allow_null: true, type: 'number', text: () => H('<i>Random</i><br>Number')},
 	{name: 'date'      , w: 120, allow_null: true, type: 'date', filter_by: true},
-}
+]
 
 let rows = []
 
@@ -683,14 +686,14 @@ for (let i = 0; i <= 10000; i++) {
 	rows.push(row)
 }
 
-d = rowset(data)
-
 g = grid({
-	fields: fields,
-	rows: rows,
-	pk: 'id',
-	parent_col: 'parent_id',
-	index_col: 'index',
+	rowset: {
+		fields: fields,
+		rows: rows,
+		pk: 'id',
+		parent_col: 'parent_id',
+		index_col: 'index',
+	},
 	tree_col: 'name',
 	w: 606,
 	h: 400,
@@ -709,10 +712,6 @@ main.add(g)
 
 log = tag('pre')
 main.add(log)
-
-d.on('row_changed', function() {
-	//log.html = json(d.pack_changes(), null, 3)
-})
 
 </script>
 </template>
@@ -800,21 +799,20 @@ main.add(
 			'Bangos',
 			'Something Else Entirely',
 		],
-		standalone: true,
-		field_data: {
+		field: {
 			name: 'Here we are',
 			validate: function(v) {
 				return v != 'Mananas' || 'Can\'t have mananas.'
 			},
 		},
-		//val: 'Mananas',
+		val: 'Mananas',
 	}),
 
 	list_dropdown({
 		id: 'dd2',
-		field_name: 'Here we are again',
+		field: {name: 'Here we are again'},
 		items: thousand_items(),
-		//nav: cell_nav({val: 'not-in-list'}),
+		val: 'not-in-list',
 	}),
 
 )
@@ -839,7 +837,7 @@ main.add(clb)
 <template id=country_dropdown_demo>
 <script>
 
-cd = country_dropdown({nav: cell_nav({val: 'RO'})})
+cd = country_dropdown({val: 'RO'})
 main.add(cd)
 
 </script>
@@ -851,8 +849,8 @@ main.add(cd)
 <script>
 
 d = date_dropdown({
-	nav: cell_nav({
-		val: time(),
+	val: time(),
+	field: {
 		type: 'date',
 		validate: function(v) {
 			if (day(v) == day(time()))
@@ -860,7 +858,7 @@ d = date_dropdown({
 			if (day(v) == day(time(), 1))
 				return 'Can\'t have tomorrow.'
 		},
-	}),
+	},
 })
 
 main.add(d)
@@ -891,7 +889,7 @@ main.add(
 		lookup_rowset: r1,
 		lookup_col: 'id',
 		display_col: 'name',
-		nav: cell_nav({val: 4}),
+		val: 4,
 	})
 )
 
@@ -912,7 +910,7 @@ main.add(
 		lookup_rowset: r2,
 		lookup_col: 'id',
 		display_col: 'name',
-		nav: cell_nav({val: 42}),
+		val: 42,
 	})
 )
 
@@ -1199,10 +1197,9 @@ function run_script() {
 let demos = []
 
 $('template').forEach(function(e) {
-	let id = e.attr('id')
-	if (!id.ends('_demo'))
+	if (!e.id.ends('_demo'))
 		return
-	let name = id.replace('_demo', '')
+	let name = e.id.replace('_demo', '')
 	let t = window[name+'_demo'].content
 	let s = t.$('script')[0]; s = s && s.innerHTML.trim() || ''
 	demos.push({text: name, code: s})
