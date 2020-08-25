@@ -54,12 +54,11 @@ the building blocks of a designer UI.
 
 All navigation widgets as well as the single-value widgets are model-driven
 (we used to call these data-driven way back when wearing a t-shirt over
-a long sleeve was cool). The data is never in the widget. Instead, the data
-stays in a so-called rowset (a non-visual object holding a two-dimensional
-structure of rows and columns). One or more widgets are then bound to the
-rowset so changes on a cell made by one widget are reflected instantly by
-other widgets (aka 2-way binding). The rowset then gathers the changes made
-to one or more rows/cells and can push them to a server (aka 3-way binding).
+a long sleeve was cool). The nav widgets holds the data, and one or more
+value widgets are then bound to the nav widget so changes made on a cell
+by one widget are reflected instantly in other widgets (aka 2-way binding).
+The nav widget then gathers the changes made to one or more rows/cells and
+can push them to a server (aka 3-way binding).
 
 ## Browser Compatibility
 

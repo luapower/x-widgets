@@ -188,7 +188,6 @@ main.add(checkbox({
 	val: 'wrong',
 	field: {
 		validate: function(v) {
-			print(v)
 			return typeof(v) == 'boolean' || 'Value not a boolean'
 		},
 	},
@@ -667,7 +666,7 @@ let fields = [
 	{name: 'index'     , w:  50, type: 'number', editable: false},
 	{name: 'active'    , w:  30, type: 'bool', true_text: checked, false_text: ''},
 	{name: 'name'      , w: 150, min_w:  50, max_w: 400, validate: starts_with_a, filter_by: true},
-	{name: 'parent_id' , w:  50, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: true},
+	{name: 'parent_id' , w:  50, min_w:  50, type: 'number', allow_null: true, editable: false, focusable: false},
 	{name: 'random_num', w: 130, allow_null: true, type: 'number', text: () => H('<i>Random</i><br>Number')},
 	{name: 'date'      , w: 120, allow_null: true, type: 'date', filter_by: true},
 ]
@@ -682,7 +681,7 @@ for (let i = 0; i <= 10000; i++) {
 	let random_date = i * 24 * 3600 * 1000
 	let active = i % 5 == 0
 	let row = [id, id, active, name, parent_id, random_num, random_date]
-	//row.focusable = i % 10 >= 2
+	row.focusable = i % 10 >= 2
 	rows.push(row)
 }
 
@@ -694,7 +693,7 @@ g = grid({
 		parent_col: 'parent_id',
 		index_col: 'index',
 	},
-	order_by: 'name:desc date',
+	order_by: 'active name:desc',
 	tree_col: 'name',
 	w: 606,
 	h: 400,
@@ -779,71 +778,6 @@ vg.on('row_changed', function() {
 
 <!--------------------------------------------------------------------------->
 
-<template id=list_dropdown_demo>
-<script>
-
-function thousand_items() {
-	let a = []
-	for (let i = 1; i <= 1000; i++)
-		a.push('Record '+i)
-	return a
-}
-
-main.add(
-	list_dropdown({
-		id: 'dd1',
-		items: [
-			'Apples',
-			'Mananas',
-			'Bangos',
-			'Something Else Entirely',
-		],
-		field: {
-			name: 'Here we are',
-			validate: function(v) {
-				return v != 'Mananas' || 'Can\'t have mananas.'
-			},
-		},
-		val: 'Mananas',
-	}),
-
-	list_dropdown({
-		id: 'dd2',
-		field: {name: 'Here we are again'},
-		items: thousand_items(),
-		val: 'not-in-list',
-	}),
-
-)
-
-</script>
-</template>
-
-<!--------------------------------------------------------------------------->
-
-<template id=countries_listbox_demo>
-<script>
-
-clb = countries_listbox({})
-main.add(clb)
-//TODO: clb.val: 'RO'
-
-</script>
-</template>
-
-<!--------------------------------------------------------------------------->
-
-<template id=country_dropdown_demo>
-<script>
-
-cd = country_dropdown({val: 'RO'})
-main.add(cd)
-
-</script>
-</template>
-
-<!--------------------------------------------------------------------------->
-
 <template id=date_dropdown_demo>
 <script>
 
@@ -861,6 +795,57 @@ d = date_dropdown({
 })
 
 main.add(d)
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=list_dropdown_demo>
+<script>
+
+function thousand_items() {
+	let a = []
+	for (let i = 1; i <= 1000; i++)
+		a.push('Record '+i)
+	return a
+}
+
+main.add(
+	list_dropdown({
+		id: 'dd1',
+		rowset: {
+			fields: [
+				{name: 'name'},
+				{name: 'code'},
+			],
+			rows: [
+				['Apples', 'a'],
+				['Mananas', 'm'],
+				['Bangos', 'b'],
+				['Something Else Entirely', 's'],
+			],
+		},
+		val_col: 'code',
+		display_col: 'name',
+		field: {
+			name: 'Here we are',
+			validate: function(v) {
+				return v != 'm' || 'Can\'t have mananas.'
+			},
+		},
+		val: 'm',
+	}),
+
+	list_dropdown({
+		id: 'dd2',
+		field: {name: 'Here we are again'},
+		items: thousand_items(),
+		val_col: 0,
+		val: 'not-in-list',
+	}),
+
+)
 
 </script>
 </template>
@@ -912,6 +897,29 @@ main.add(
 		val: 42,
 	})
 )
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=countries_listbox_demo>
+<script>
+
+clb = countries_listbox({})
+main.add(clb)
+//TODO: clb.val: 'RO'
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=country_dropdown_demo>
+<script>
+
+cd = country_dropdown({val: 'RO'})
+main.add(cd)
 
 </script>
 </template>
@@ -1211,7 +1219,7 @@ demo_list = listbox({
 	item_typename: 'richtext',
 	field: {},
 	val_col: 0,
-	val: demos[18],
+	val: demos[20],
 })
 
 demo_list.create_item = function() {

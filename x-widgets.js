@@ -634,15 +634,17 @@ function val_widget(e, always_enabled) {
 		nav.on('loaded', loaded, on)
 	}
 
-	let attached_once
+	let field_opt
 	e.on('attach', function() {
-		if (!attached_once && e.field) {
-			attached_once = true
+		if (e.field && !e.standalone) {
+			field_opt = e.field
 			e.standalone = true
-			let field_opt = e.field
+		}
+		if (e.standalone) {
 			e.begin_update()
 			e.nav = global_val_nav()
-			e.col = e.nav.add_field(field_opt).name
+			e.field = e.nav.add_field(field_opt)
+			e.col = e.field.name
 			init_val()
 			e.end_update()
 		} else {
@@ -731,8 +733,9 @@ function val_widget(e, always_enabled) {
 	})
 
 	e.display_val = function() {
-		let row = e.row
-		return row && e.field ? nav.cell_display_val(row, e.field) : ''
+		if (!e.field)
+			return 'no field'
+		return nav.cell_display_val(e.row, e.field)
 	}
 
 	// view -------------------------------------------------------------------
@@ -781,7 +784,7 @@ function val_widget(e, always_enabled) {
 		if (!e.error_tooltip) {
 			if (!e.invalid)
 				return // don't create it until needed.
-			e.error_tooltip = tooltip({kind: 'error', target: e, timeout: null,
+			e.error_tooltip = tooltip({kind: 'error', target: e,
 				check: e.error_tooltip_check})
 		}
 		if (e.invalid)
@@ -811,7 +814,7 @@ component('x-tooltip', function(e) {
 	e.prop('kind'       , {store: 'attr', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
 	e.prop('px'         , {store: 'var', type: 'number', default: 0})
 	e.prop('py'         , {store: 'var', type: 'number', default: 0})
-	e.prop('timeout'    , {store: 'var', default: 'auto'})
+	e.prop('timeout'    , {store: 'var'})
 
 	e.init = function() {
 		e.update({reset_timer: true})
@@ -1612,6 +1615,9 @@ component('x-dropdown', function(e) {
 	}
 
 	e.init = function() {
+		e.picker.dropdown = e
+		e.picker.nav = e.nav
+		e.picker.col = e.col
 		e.picker.class('picker', true)
 		e.picker.can_select_widget = false
 		e.picker.on('val_picked', picker_val_picked)
@@ -1619,13 +1625,15 @@ component('x-dropdown', function(e) {
 	}
 
 	function bind_document(on) {
-		document.on('pointerdown', document_pointerdown, on)
+		document.on('pointerdown'     , document_pointerdown, on)
 		document.on('rightpointerdown', document_pointerdown, on)
-		document.on('stopped_event', document_stopped_event, on)
+		document.on('stopped_event'   , document_stopped_event, on)
 	}
 
 	e.on('attach', function() {
 		bind_document(true)
+		e.picker.attach()
+		e.update()
 	})
 
 	e.on('detach', function() {
@@ -1636,7 +1644,7 @@ component('x-dropdown', function(e) {
 	// val updating
 
 	e.update_val = function(v, ev) {
-		let text = e.display_val()
+		let text = v != null ? e.picker.dropdown_display_val() : e.display_val()
 		let empty = text === ''
 		e.val_div.class('empty', empty)
 		e.val_div.class('null', v == null)
@@ -1792,77 +1800,30 @@ component('x-dropdown', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// lookup dropdown mixin
+// nav dropdown mixin
 // ---------------------------------------------------------------------------
 
-function lookup_dropdown_widget(e) {
+function nav_dropdown_widget(e) {
 
 	dropdown.construct(e)
 
-	e.set_lookup_col = function(v) {
-		lookup_values_changed()
+	e.set_val_col = function(v) {
+		if (!e.initialized) return
+		e.picker.val_col = v
 	}
+	e.prop('val_col', {store: 'var'})
 
 	e.set_display_col = function(v) {
-		if (e.picker)
-			e.picker.display_col = v
+		if (!e.initialized) return
+		e.picker.display_col = v
 	}
+	e.prop('display_col', {store: 'var'})
 
-	e.prop('lookup_nav'     , {store: 'var', private: true})
-	e.prop('lookup_nav_name', {store: 'var', bind: 'lookup_nav', type: 'nav'})
-	e.prop('lookup_col'     , {store: 'var'})
-	e.prop('display_col'    , {store: 'var'})
-
-	let inh_display_val = e.display_val
-	e.display_val = function() {
-		let row = e.lookup_field && e.lookup_nav.lookup(e.lookup_field, e.input_val)
-		if (row)
-			return e.picker.row_display_val(row)
-		else
-			return inh_display_val()
+	e.set_rowset_name = function(v) {
+		if (!e.initialized) return
+		e.picker.rowset_name = rowset_name
 	}
-
-	e.set_lookup_nav = function(nav1, nav0) {
-		bind_lookup_nav(nav0, false)
-		if (e.attached)
-			bind_lookup_nav(nav1, true)
-		lookup_nav_changed()
-		if (e.picker)
-			e.picker.nav = nav1
-	}
-
-	function lookup_nav_changed() {
-		let nav = e.attached && e.lookup_nav || null
-		e.lookup_field  = nav && (e.lookup_col
-			? nav.all_fields[e.lookup_col]
-			: (nav.pk_fields.length ? nav.pk_fields : null))
-		e.display_field = nav && nav.all_fields[e.display_col || nav.name_col]
-		if (e.picker)
-			e.picker.nav = nav
-		lookup_values_changed()
-	}
-
-	function lookup_values_changed() {
-		e.update()
-	}
-
-	function bind_lookup_nav(nav, on) {
-		if (!nav) return
-		nav.on('loaded'           , lookup_nav_changed, on)
-		nav.on('row_added'        , lookup_values_changed, on)
-		nav.on('row_removed'      , lookup_values_changed, on)
-		nav.on('input_val_changed', lookup_values_changed, on)
-	}
-
-	e.on('attach', function() {
-		bind_lookup_nav(e.lookup_nav, true)
-		lookup_nav_changed()
-	})
-
-	e.on('detach', function() {
-		bind_lookup_nav(e.lookup_nav, false)
-		lookup_nav_changed()
-	})
+	e.prop('rowset_name', {store: 'var', type: 'rowset'})
 
 }
 
@@ -1886,6 +1847,7 @@ component('x-calendar', function(e) {
 		classes: 'x-calendar-sel-month',
 		items: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
 		field: {format: format_month},
+		display_col: 0,
 		listbox: {
 			format_item: format_month,
 		},
@@ -2074,6 +2036,10 @@ component('x-calendar', function(e) {
 
 	// picker protocol
 
+	e.dropdown_display_val = function() {
+		return e.display_val()
+	}
+
 	// hack: trick dropdown into thinking that our own opened dropdown picker
 	// is our child, which is how we would implement dropdowns if this fucking
 	// rendering model would allow us to decouple painting order from element's
@@ -2094,11 +2060,14 @@ component('x-calendar', function(e) {
 // date dropdown
 // ---------------------------------------------------------------------------
 
+{
+let dd_calendar = memoize(calendar)
 component('x-date-dropdown', function(e) {
-	e.field_type = 'date'
-	e.picker = calendar()
 	dropdown.construct(e)
+	e.field_type = 'date'
+	e.picker = dd_calendar()
 })
+}
 
 // ---------------------------------------------------------------------------
 // menu
@@ -3109,7 +3078,7 @@ component('x-dialog', function(e) {
 			e.footer = action_band({layout: e.footer, buttons: e.buttons})
 		e.add(e.header, e.content, e.footer)
 		if (e.x_button) {
-			e.x_button = div({class: 'x-dialog-x-button fa fa-times'})
+			e.x_button = div({class: 'x-dialog-xbutton fa fa-times'})
 			e.x_button.on('click', function() {
 				e.cancel()
 			})
@@ -3194,7 +3163,7 @@ component('x-toolbox', function(e) {
 		})
 	})
 
-	e.xbutton.on('pointerdown', function() {
+	e.xbutton.on('pointerup', function() {
 		e.hide()
 		return false
 	})

@@ -53,18 +53,15 @@
 		empty_text     : display value for ''
 
 	vlookup:
-		lookup_rowset  : rowset to look up values of this field into
-		lookup_col     : field in lookup_rowset that matches this field
-		display_col    : field in lookup_rowset to use as display_val of this field.
+		lookup_nav     : nav to look up values of this field into
+		lookup_col     : field in lookup_nav that matches this field
+		display_col    : field in lookup_nav to use as display_val of this field.
 		lookup_failed_display_val : f(v) -> s; what to use when lookup fails.
 
 	sorting:
 		sortable       : allow sorting (true).
 		compare_types  : f(v1, v2) -> -1|0|1  (for sorting)
 		compare_values : f(v1, v2) -> -1|0|1  (for sorting)
-
-	grouping:
-		group_by(col) -> group_rowset
 
 	rows: [row1,...]
 		row[i]             : current cell value (always valid).
@@ -114,7 +111,7 @@ function nav_widget(e) {
 	e.prop('auto_focus_first_cell'   , {store: 'var', type: 'bool', default: true , hint: 'focus first cell automatically on loading'})
 	e.prop('auto_edit_first_cell'    , {store: 'var', type: 'bool', default: false, hint: 'automatically enter edit mode on loading'})
 	e.prop('stay_in_edit_mode'       , {store: 'var', type: 'bool', default: true , hint: 're-enter edit mode after navigating'})
-	e.prop('auto_advance_row'        , {store: 'var', type: 'bool', default: true , hint: 'jump row on horiz. navigation limits'})
+	e.prop('auto_advance_row'        , {store: 'var', type: 'bool', default: true , hint: 'jump row on horizontal navigation limits'})
 	e.prop('save_row_on'             , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual']})
 	e.prop('insert_row_on'           , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual']})
 	e.prop('remove_row_on'           , {store: 'var', type: 'enum', default: 'input'    , enum_values: ['input', 'exit_row', 'manual']})
@@ -136,13 +133,15 @@ function nav_widget(e) {
 	}
 
 	e.on('attach', function() {
-		bind_lookup_rowsets(true)
+		bind_lookup_navs(true)
 		bind_param_nav(true)
 		if (e.rowset) {
+			let refocus = refocus_state('val')
 			init_all(e.rowset)
 			e.update({fields: true, rows: true})
+			refocus()
 		} else
-			e.load()
+			e.reload()
 	})
 
 	function force_unfocus_focused_cell() {
@@ -152,10 +151,16 @@ function nav_widget(e) {
 	e.on('detach', function() {
 		abort_ajax_requests()
 		force_unfocus_focused_cell()
-		bind_lookup_rowsets(false)
+		bind_lookup_navs(false)
 		bind_param_nav(false)
 		init_all({})
 	})
+
+	e.set_rowset_name = function(v) {
+		e.rowset_url = v ? 'rowset.json/' + v : null
+		e.reload()
+	}
+	e.prop('rowset_name', {store: 'var', type: 'rowset'})
 
 	// fields array matching 1:1 to row contents ------------------------------
 
@@ -170,7 +175,7 @@ function nav_widget(e) {
 		let field = update({}, all_field_types, e.all_field_types, type_attrs, f, custom_attrs)
 
 		// disambiguate field name.
-		let name = (f.name || 'f'+i).replace(' ', '_')
+		let name = (f.name || 'f'+i).replace(/ /g, '_')
 		if (name in e.all_fields) {
 			let suffix = 2
 			while (name+suffix in e.all_fields)
@@ -190,12 +195,19 @@ function nav_widget(e) {
 	}
 
 	e.add_field = function(f) {
-		let fi = e.all_fields.length
-		let field = init_field(f, fi)
-		e.all_fields[fi] = field
+		let fn = e.all_fields.length
+		let field = init_field(f, fn)
+		e.all_fields[fn] = field
 		e.all_fields[field.name] = field
-		for (let ri = 0; ri < e.all_rows.length; ri++)
-			e.all_rows[ri][fi] = null
+		for (let ri = 0; ri < e.all_rows.length; ri++) {
+			let row = e.all_rows[ri]
+			// append a val slot to the row.
+			row.splice(fn, 0, null)
+			// insert a slot into all cell_state sub-arrays of the row.
+			fn++
+			for (let i = 2 * fn; i < row.length; i += fn)
+				row.splice(i, 0, null)
+		}
 		init_fields()
 		e.update({fields: true})
 		return field
@@ -207,14 +219,13 @@ function nav_widget(e) {
 		delete e.all_fields[field.name]
 		for (let i = fi; i < e.all_fields.length; i++)
 			e.all_fields[i].val_index = i
+		let fn = e.all_fields.length
 		for (let row of e.all_rows) {
-			row.remove(fi)
-			if (row.input_val) row.input_val.remove(fi)
-			if (row.prev_val ) row.prev_val .remove(fi)
-			if (row.old_val  ) row.old_val  .remove(fi)
-			if (row.input_val) row.input_val.remove(fi)
-			if (row.modified ) row.modified .remove(fi)
-			if (row.error    ) row.error    .remove(fi)
+			// remove the val slot of the row.
+			row.splice(fi, 1)
+			// remove all cell_state slots of the row for this field.
+			for (let i = fn + 1 + fi; i < row.length; i += fn)
+				row.splice(i, 1)
 		}
 		init_fields()
 		e.update({fields: true})
@@ -264,7 +275,8 @@ function nav_widget(e) {
 
 	e.set_val_col = function(v) {
 		e.val_field = e.all_fields[v]
-		refocus_state('val')()
+		if (e.val_field)
+			e.update_val(e.input_val)
 	}
 	e.prop('val_col', {store: 'var'})
 
@@ -991,6 +1003,7 @@ function nav_widget(e) {
 
 		let refocus = refocus_state('row')
 		init_rows()
+		e.update({rows: true})
 		refocus()
 	}
 
@@ -1084,7 +1097,7 @@ function nav_widget(e) {
 				s.push('  if (v1 > v2) return  1')
 				s.push('}')
 			}
-			// compare vals using the rowset comparator
+			// compare vals using the value comparator
 			s.push('{')
 			s.push('let cmp = cmps['+i+']')
 			s.push('let r = cmp(r1, r2)')
@@ -1287,19 +1300,36 @@ function nav_widget(e) {
 
 	// get/set cell & row state (storage api) ---------------------------------
 
+	let next_key_index = 0
+	let key_index = {}
+
+	function cell_state_key_index(key) {
+		let i = key_index[key]
+		if (i == null) {
+			i = next_key_index++
+			key_index[key] = i
+		}
+		return i
+	}
+
+	function cell_state_val_index(row, key, field) {
+		let fn = e.all_fields.length
+		return fn + 1 + cell_state_key_index(key) * fn + field.val_index
+	}
+
 	e.cell_state = function(row, field, key, default_val) {
-		let v = row[key] && row[key][field.val_index]
+		let v = row[cell_state_val_index(row, key, field)]
 		return v !== undefined ? v : default_val
 	}
 
 	e.set_cell_state = function(row, field, key, val, default_val) {
-		let t = array_attr(row, key)
-		let old_val = t[field.val_index]
+		let vi = cell_state_val_index(row, key, field)
+		let old_val = row[vi]
 		if (old_val === undefined)
 			old_val = default_val
 		let changed = old_val !== val
 		if (changed)
-			t[field.val_index] = val
+			row[vi] = val
 		return changed
 	}
 
@@ -1370,12 +1400,12 @@ function nav_widget(e) {
 		if (field.max != null && val > field.max)
 			return S('error_max_value', 'Value must be at most {0}').subst(field.max)
 
-		let lr = field.lookup_rowset
-		if (lr) {
-			field.lookup_field = field.lookup_field || lr.all_fields[field.lookup_col]
-			field.display_field = field.display_field || lr.all_fields[field.display_col || lr.name_col]
-			if (!lr.lookup(field.lookup_field, val))
-				return S('error_lookup', 'Value not found in lookup rowset')
+		let ln = field.lookup_nav
+		if (ln) {
+			field.lookup_field = field.lookup_field || ln.all_fields[field.lookup_col]
+			field.display_field = field.display_field || ln.all_fields[field.display_col || ln.name_col]
+			if (!ln.lookup(field.lookup_field, val))
+				return S('error_lookup', 'Value not found in lookup nav')
 		}
 
 		let err = field.validate && field.validate.call(e, val, field)
@@ -1625,47 +1655,47 @@ function nav_widget(e) {
 
 	// get/set display val ----------------------------------------------------
 
-	function bind_lookup_rowsets(on) {
+	function bind_lookup_navs(on) {
 		for (let field of e.all_fields) {
-			let lr = field.lookup_rowset
-			if (lr) {
-				if (on && !field.lookup_rowset_loaded) {
-					field.lookup_rowset_loaded = function() {
-						field.lookup_field  = lr.all_fields[field.lookup_col]
-						field.display_field = lr.all_fields[field.display_col || lr.name_col]
+			let ln = field.lookup_nav
+			if (ln) {
+				if (on && !field.lookup_nav_loaded) {
+					field.lookup_nav_loaded = function() {
+						field.lookup_field  = ln.all_fields[field.lookup_col]
+						field.display_field = ln.all_fields[field.display_col || ln.name_col]
 						e.fire('display_vals_changed', field)
 						e.fire('display_vals_changed_for_'+field.name)
 					}
-					field.lookup_rowset_display_vals_changed = function() {
+					field.lookup_nav_display_vals_changed = function() {
 						e.fire('display_vals_changed', field)
 						e.fire('display_vals_changed_for_'+field.name)
 					}
-					field.lookup_rowset_loaded()
+					field.lookup_nav_loaded()
 				}
-				lr.on('loaded'      , field.lookup_rowset_loaded, on)
-				lr.on('row_added'   , field.lookup_rowset_display_vals_changed, on)
-				lr.on('row_removed' , field.lookup_rowset_display_vals_changed, on)
-				lr.on('input_val_changed_for_'+field.lookup_col,
-					field.lookup_rowset_display_vals_changed, on)
-				lr.on('input_val_changed_for_'+(field.display_col || lr.name_col),
-					field.lookup_rowset_display_vals_changed, on)
+				ln.on('loaded'      , field.lookup_nav_loaded, on)
+				ln.on('row_added'   , field.lookup_nav_display_vals_changed, on)
+				ln.on('row_removed' , field.lookup_nav_display_vals_changed, on)
+				ln.on('input_val_changed_for_'+field.lookup_col,
+					field.lookup_nav_display_vals_changed, on)
+				ln.on('input_val_changed_for_'+(field.display_col || ln.name_col),
+					field.lookup_nav_display_vals_changed, on)
 			}
 		}
 	}
 
 	e.cell_display_val = function(row, field) {
-		let v = e.cell_input_val(row, field)
+		let v = row ? e.cell_input_val(row, field) : null
 		if (v == null)
 			return field.null_text
 		if (v === '')
 			return field.empty_text
-		let lr = field.lookup_rowset
-		if (lr) {
+		let ln = field.lookup_nav
+		if (ln) {
 			let lf = field.lookup_field
 			if (lf) {
-				let row = lr.lookup(lf, v)
+				let row = ln.lookup(lf, v)
 				if (row)
-					return lr.display_val(row, field.display_field)
+					return ln.display_val(row, field.display_field)
 			}
 			return field.lookup_failed_display_val(v)
 		} else
@@ -1941,9 +1971,9 @@ function nav_widget(e) {
 
 	// url with params --------------------------------------------------------
 
-	function make_url(params) {
+	function make_rowset_url(params) {
 		if (!e.param_nav || !e.params)
-			return e.url
+			return e.rowset_url
 		if (!params) {
 			params = {}
 			for (let s of e.params.split(/\s+/)) {
@@ -1956,14 +1986,14 @@ function nav_widget(e) {
 				params[param] = v
 			}
 		}
-		return url(e.url, {params: json(params)})
+		return url(e.rowset_url, {params: json(params)})
 	}
 
 	// loading ----------------------------------------------------------------
 
 	e.reload = function(params) {
 		params = or(params, e.params)
-		if (!e.url)
+		if (!e.rowset_url)
 			return
 		if (requests && requests.size && !e.load_request) {
 			e.notify('error',
@@ -1972,7 +2002,7 @@ function nav_widget(e) {
 		}
 		e.abort_loading()
 		let req = ajax({
-			url: make_url(params),
+			url: make_rowset_url(params),
 			progress: load_progress,
 			success: e.reset,
 			fail: load_fail,
@@ -1985,11 +2015,6 @@ function nav_widget(e) {
 		e.loading = true
 		loading(true)
 		req.send()
-	}
-
-	e.load = function() {
-		e.load = noop
-		e.reload()
 	}
 
 	e.load_fields = function() {
@@ -2173,8 +2198,8 @@ function nav_widget(e) {
 	e.save = function(row) {
 		if (!e.changed_rows)
 			return
-		if (e.url)
-			e.save_to_url(e.url, row)
+		if (e.rowset_url)
+			e.save_to_url(e.rowset_url, row)
 	}
 
 	function save_slow(show) {
@@ -2219,7 +2244,7 @@ function nav_widget(e) {
 		e.changed_rows = null
 	}
 
-	// responding to notifications from rowset --------------------------------
+	// responding to notifications from the server ----------------------------
 
 	e.notify = function(type, message, ...args) {
 		notify(message, type)
@@ -2358,6 +2383,17 @@ function nav_widget(e) {
 
 	// picker protocol --------------------------------------------------------
 
+	e.row_display_val = function(row) { // stub
+		let field = e.all_fields[e.display_col]
+		if (!field)
+			return 'no display field'
+		return e.cell_display_val(row, field)
+	}
+
+	e.dropdown_display_val = function() {
+		return e.row_display_val(e.focused_row)
+	}
+
 	e.pick_near_val = function(delta, ev) {
 		if (e.focus_cell(true, true, delta, 0, ev))
 			e.fire('val_picked', ev)
@@ -2368,7 +2404,7 @@ function nav_widget(e) {
 }
 
 // ---------------------------------------------------------------------------
-// standalone val widget nav
+// global one-row nav for all standalone (i.e. not bound to a nav) widgets.
 // ---------------------------------------------------------------------------
 
 global_val_nav = function() {

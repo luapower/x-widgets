@@ -40,6 +40,7 @@ component('x-listbox', function(e) {
 			row[0] = item
 		}
 		e.on('row_added', row_added)
+		e.display_col = 0
 		e.display_field = e.all_fields[0]
 		let rows = []
 		for (let item of e.items) {
@@ -49,10 +50,11 @@ component('x-listbox', function(e) {
 				setup_item(item)
 			rows.push([item])
 		}
-		e.reset({
+		e.rowset = {
 			fields: [{format: e.format_item}],
 			rows: rows,
-		}, true)
+		}
+		e.reset(e.rowset, true)
 	}
 
 	e.create_item = function() {
@@ -86,13 +88,6 @@ component('x-listbox', function(e) {
 	}
 
 	// responding to nav changes ----------------------------------------------
-
-	e.row_display_val = function(row) { // stub
-		e.display_field = e.all_fields[e.display_col]
-		if (!e.display_field)
-			return 'no display field'
-		return e.cell_display_val(row, e.display_field)
-	}
 
 	e.update_item = function(item, row) { // stub
 		if (item.typename)
@@ -330,39 +325,33 @@ hlistbox = function(...options) {
 }
 
 // ---------------------------------------------------------------------------
-// list_dropdown
+// list dropdown
 // ---------------------------------------------------------------------------
 
 component('x-list-dropdown', function(e) {
 
-	lookup_dropdown_widget(e)
+	e.init_picker = function() {
+
+	}
+
+	nav_dropdown_widget(e)
 	e.classes = 'x-list-dropdown'
 
 	init = e.init
 	e.init = function() {
 
-		if (e.items) {
-			e.lookup_col = 0
-			e.display_col = 0
-		}
-
 		e.picker = e.picker || listbox(update({
 			items: e.items,
-			rowset: e.lookup_rowset,
+			rowset: e.rowset,
+			rowset_nane: e.rowset_name,
 			display_col: e.display_col,
 			nav: e.nav,
 			col: e.col,
-			val_col: e.lookup_col,
+			val_col: e.val_col,
+			auto_focus_first_cell: false,
+			can_select_multiple: false,
+			can_move_items: false,
 		}, e.listbox))
-
-		e.picker.dropdown = e
-
-		if (e.items)
-			e.lookup_rowset = e.picker.rowset
-
-		e.picker.auto_focus_first_cell = false
-		e.picker.can_select_multiple = false
-		e.picker.can_move_items = false
 
 		e.on('opened', function() {
 			e.picker.scroll_to_focused_cell()

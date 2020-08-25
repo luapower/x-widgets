@@ -23,7 +23,7 @@ component('x-grid', function(e) {
 	// keyboard behavior
 	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
 	e.auto_advance = 'next_row' // advance on enter = false|'next_row'|'next_cell'
-	e.auto_jump_cells = false   // jump to next/prev cell on caret limits
+	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
 	e.quick_edit = false        // quick edit (vs. quick-search) when pressing a key
 
 	// mouse behavior
@@ -770,13 +770,6 @@ component('x-grid', function(e) {
 		e.fire('val_picked', {input: e})
 	}
 
-	e.row_display_val = function(row) { // stub
-		e.display_field = e.all_fields[e.display_col]
-		if (!e.display_field)
-			return 'no display field'
-		return e.cell_display_val(row, e.display_field)
-	}
-
 	// vgrid header resizing --------------------------------------------------
 
 	function ht_header_resize(mx, my, hit) {
@@ -895,6 +888,9 @@ component('x-grid', function(e) {
 			e.focused_row_index == cell.ri &&
 			e.focused_field_index == cell.fi
 
+		if (over_indent)
+			e.toggle_collapsed(cell.ri, shift)
+
 		if (e.focus_cell(cell.ri, cell.fi, 0, 0, {
 			must_not_move_row: true,
 			enter_edit: !over_indent && e.can_edit
@@ -906,12 +902,10 @@ component('x-grid', function(e) {
 			expand_selection: shift,
 			invert_selection: ctrl,
 			input: e,
-		})) {
-			if (over_indent)
-				e.toggle_collapsed(e.focused_row_index, shift)
+		}))
 			if (!already_on_it)
 				e.pick_val()
-		}
+
 	}
 
 	// row moving -------------------------------------------------------------
@@ -1019,7 +1013,7 @@ component('x-grid', function(e) {
 		// hit testing
 
 		function advance_row(before_ri) {
-			if (!d.parent_field)
+			if (!e.parent_field)
 				return 1
 			if (e.can_change_parent)
 				return 1
@@ -1401,10 +1395,26 @@ component('x-grid', function(e) {
 		} else
 			assert(false)
 
-		if (ev.which == 3)
-			return false // no dragging with right-click.
-
 		return 'capture'
+	}
+
+	function rightpointerdown(ev, mx, my) {
+
+		if (!hit.state)
+			pointermove(ev, mx, my)
+		if (!hit.state)
+			return
+
+		e.focus()
+
+		e.focus_cell(hit.cell.ri, hit.cell.fi, 0, 0, {
+			must_not_move_row: true,
+			expand_selection: ev.shiftKey,
+			invert_selection: ev.ctrlKey,
+			input: e,
+		})
+
+		return false
 	}
 
 	function pointerup(ev) {
@@ -1437,7 +1447,7 @@ component('x-grid', function(e) {
 	e.on('pointerdown'     , pointerdown)
 	e.on('pointerup'       , pointerup)
 	e.on('pointerleave'    , pointerup)
-	e.on('rightpointerdown', pointerdown)
+	e.on('rightpointerdown', rightpointerdown)
 
 	e.on('contextmenu', function(ev) {
 		let cell = ev.target.closest('.x-grid-header-cell') || ev.target.closest('.x-grid-cell')
@@ -1802,7 +1812,7 @@ component('x-grid', function(e) {
 
 component('x-grid-dropdown', function(e) {
 
-	lookup_dropdown_widget(e)
+	nav_dropdown_widget(e)
 	e.classes = 'x-grid-dropdown'
 
 	init = e.init
@@ -1811,7 +1821,7 @@ component('x-grid-dropdown', function(e) {
 			rowset: e.lookup_rowset,
 			nav: e.nav,
 			col: e.col,
-			val_col: e.lookup_col,
+			val_col: e.val_col,
 			display_col: e.display_col,
 			can_edit: false,
 			can_focus_cells: false,
