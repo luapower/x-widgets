@@ -116,8 +116,8 @@ function selectable_widget(e) {
 		inherited.call(this, id)
 		if (id === id0)
 			return
-		this.fire('prop_changed', 'id', id, id0)
-		document.fire(event('global_changed', false, this, id, id0))
+		this.fireup('prop_changed', 'id', id, id0)
+		document.fire('global_changed', this, id, id0)
 	})
 
 	e.set_css_classes = function(c1, c0) {
@@ -548,7 +548,7 @@ function focusable_widget(e, fe) {
 	fe = fe || e
 
 	let focusable = true
-	e.attr('tabindex', 0)
+	fe.attr('tabindex', 0)
 
 	e.set_tabindex = function(i) {
 		fe.attr('tabindex', focusable ? i : -1)
@@ -735,7 +735,10 @@ function val_widget(e, always_enabled) {
 	e.display_val = function() {
 		if (!e.field)
 			return 'no field'
-		return nav.cell_display_val(e.row, e.field)
+		let row = e.row
+		if (!row)
+			return 'no row'
+		return nav.cell_display_val(row, e.field)
 	}
 
 	// view -------------------------------------------------------------------
@@ -1179,8 +1182,7 @@ function input_widget(e) {
 	e.update = function() {
 		inh_update()
 		update_inner_label()
-		if (e.field)
-			e.inner_label_div.set(e.field.text)
+		e.inner_label_div.set(e.field ? e.field.text : '(no field)')
 	}
 
 }
@@ -1290,6 +1292,8 @@ component('x-input', function(e) {
 				return i0 == i1 && leftmost && 'left'
 			else if (s == 'right')
 				return i0 == i1 && rightmost && 'right'
+			else if (s == 'all_selected')
+				return leftmost && rightmost
 		} else {
 			if (!editor_state)
 				update_editor_state()
@@ -1622,6 +1626,20 @@ component('x-dropdown', function(e) {
 		e.picker.can_select_widget = false
 		e.picker.on('val_picked', picker_val_picked)
 		e.picker.on('keydown', picker_keydown)
+
+		let picker_update = e.picker.update
+		e.picker.update = function(opt) {
+			picker_update(opt)
+			let text = e.picker.dropdown_display_val()
+			if (text == null)
+				text = e.display_val()
+			let empty = text === ''
+			e.val_div.class('empty', empty)
+			e.val_div.class('null', false)
+			e.inner_label_div.class('empty', empty)
+			e.val_div.set(empty ? H('&nbsp;') : text)
+		}
+
 	}
 
 	function bind_document(on) {
@@ -1639,19 +1657,14 @@ component('x-dropdown', function(e) {
 	e.on('detach', function() {
 		e.close()
 		bind_document(false)
+		e.picker.detach()
 	})
 
 	// val updating
 
 	e.update_val = function(v, ev) {
-		let text = v != null ? e.picker.dropdown_display_val() : e.display_val()
-		let empty = text === ''
-		e.val_div.class('empty', empty)
-		e.val_div.class('null', v == null)
-		e.inner_label_div.class('empty', empty)
-		e.val_div.set(empty ? H('&nbsp;') : text)
-		if (ev && ev.focus)
-			e.focus()
+		// nothing: wait for when the picker updates itself
+		// and use picker-provided value.
 	}
 
 	let error_tooltip_check = e.error_tooltip_check
@@ -1843,37 +1856,50 @@ component('x-calendar', function(e) {
 
 	e.sel_day = div({class: 'x-calendar-sel-day'})
 	e.sel_day_suffix = div({class: 'x-calendar-sel-day-suffix'})
+
 	e.sel_month = list_dropdown({
 		classes: 'x-calendar-sel-month',
 		items: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
 		field: {format: format_month},
+		val_col: 0,
 		display_col: 0,
 		listbox: {
 			format_item: format_month,
 		},
 	})
+
 	e.sel_year = spin_input({
 		classes: 'x-calendar-sel-year',
 		field: {
-			min: 100,
-			max: 3000,
+			min: -10000,
+			max:  10000,
 		},
 		button_style: 'left-right',
 	})
+
 	e.header = div({class: 'x-calendar-header'},
 		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
+
 	e.weekview = H.table({class: 'x-calendar-weekview'})
+
 	e.add(e.header, e.weekview)
 
 	function as_ts(v) {
 		return v != null && e.field && e.field.to_time ? e.field.to_time(v) : v
 	}
 
-	e.update_val = function(v) {
-
+	e.on('attach', function() {
 		e.sel_year.attach()
 		e.sel_month.attach()
+	})
 
+	e.on('detach', function() {
+		e.sel_year.detach()
+		e.sel_month.detach()
+	})
+
+	e.update_val = function(v) {
+		assert(e.attached)
 		v = or(as_ts(v), time())
 		let t = day(v)
 		update_weekview(t, 6)
@@ -1927,13 +1953,13 @@ component('x-calendar', function(e) {
 	}
 
 	e.weekview.on('pointerdown', function(ev) {
+		let td = ev.target
+		if (td.day == null)
+			return
 		if (sel_td) {
 			sel_td.class('focused', false)
 			sel_td.class('selected', false)
 		}
-		let td = ev.target
-		if (td.day == null)
-			return
 		e.sel_month.cancel()
 		e.focus()
 		td.classes = 'focused selected'
@@ -2060,14 +2086,11 @@ component('x-calendar', function(e) {
 // date dropdown
 // ---------------------------------------------------------------------------
 
-{
-let dd_calendar = memoize(calendar)
 component('x-date-dropdown', function(e) {
 	dropdown.construct(e)
 	e.field_type = 'date'
-	e.picker = dd_calendar()
+	e.picker = calendar()
 })
-}
 
 // ---------------------------------------------------------------------------
 // menu
@@ -2377,7 +2400,7 @@ component('x-widget-placeholder', function(e) {
 			let pe = e.parent
 			pe.replace(e, widget)
 			root_widget = widget
-			pe.fire('widget_tree_changed')
+			pe.fireup('widget_tree_changed')
 		}
 		widget.focus()
 	}
@@ -2666,7 +2689,7 @@ component('x-pagelist', function(e) {
 		add_item(item)
 		e.header.add(e.selection_bar)
 		e.header.add(e.add_button)
-		e.fire('widget_tree_changed')
+		e.fireup('widget_tree_changed')
 		return false
 	})
 
@@ -2692,7 +2715,7 @@ component('x-pagelist', function(e) {
 		select_item(null)
 		idiv.remove()
 		e.items.remove_value(idiv.item)
-		e.fire('widget_tree_changed')
+		e.fireup('widget_tree_changed')
 		return false
 	}
 
@@ -2710,7 +2733,7 @@ component('x-pagelist', function(e) {
 			if (item.page == old_widget) {
 				old_widget.parent.replace(old_widget, new_widget)
 				item.page = new_widget
-				e.fire('widget_tree_changed')
+				e.fireup('widget_tree_changed')
 				break
 			}
 	}
@@ -2767,7 +2790,7 @@ component('x-split', function(e) {
 
 	function update_size() {
 		update_view()
-		e.fire('layout_changed')
+		e.fireup('layout_changed')
 	}
 
 	e.set_orientation = update_view
@@ -2896,7 +2919,7 @@ component('x-split', function(e) {
 		e[widget_index(old_widget)] = new_widget
 		old_widget.parent.replace(old_widget, new_widget)
 		update_view()
-		e.fire('widget_tree_changed')
+		e.fireup('widget_tree_changed')
 	}
 
 	e.serialize = function() {
@@ -3168,8 +3191,9 @@ component('x-toolbox', function(e) {
 		return false
 	})
 
-	e.on('attr_changed', function() {
-		e.fire('layout_changed')
+	e.detect_style_size_changes()
+	e.on('style_size_changed', function() {
+		e.fireup('layout_changed')
 	})
 
 })

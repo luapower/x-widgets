@@ -1,14 +1,16 @@
 
-global_rowset.countries = rowset({
+countries_rowset = {
 	fields: [
 		{name: 'country_flag',
 			format: function(v, row) {
 				if (v == null)
 					return ''
-				return tag('img', {
-					style: 'vertical-align: middle; padding-right: .5em',
-					src: '/country-flags/'+row[1]+'_16.png',
-				})
+				return div({class: 'x-countries-listbox-flag-cell'},
+					tag('img', {
+						class: 'x-countries-listbox-flag-image',
+						src: '/country-flags/'+row[1]+'_16.png',
+					})
+				)
 			},
 		},
 		{name: 'country_code'},
@@ -260,23 +262,24 @@ global_rowset.countries = rowset({
 		[0, 'ZM', 'Zambia'],
 		[0, 'ZW', 'Zimbabwe'],
 	],
-})
+}
 
 function countries_listbox(...opt) {
 	return listbox({
-		rowset: global_rowset('countries'),
+		rowset: countries_rowset,
+		val_col: 'country_code',
 		row_display_val: function(row) {
-			let rs = this.rowset
-			return div({},
-				rs.display_val(row, rs.field(0)),
-				rs.display_val(row, rs.field(2)))
+			return div({class: 'x-countries-listbox-row'},
+				this.cell_display_val(row, this.all_fields[0]),
+				this.cell_display_val(row, this.all_fields[2])
+			)
 		},
 	}, ...opt)
 }
 
 component('x-country-dropdown', function(e) {
+	list_dropdown.construct(e)
 	e.picker = countries_listbox()
-	list_dropdown.construct()
-	e.lookup_rowset = e.picker.rowset
-	e.lookup_col = 'country_code'
+	e.val_col = 'country_code'
+	e.display_col = 'country_name'
 })

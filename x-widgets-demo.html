@@ -106,6 +106,7 @@ h2 {
 <script src="x-listbox.js"></script>
 <script src="x-grid.js"></script>
 <script src="x-cssgrid.js"></script>
+<script src="x-country-dropdown.js"></script>
 
 </head>
 
@@ -635,6 +636,7 @@ main.add(calendar({
 	field: {},
 }))
 
+/*
 main.add(calendar({
 	val: day(time(), 1),
 	field: {
@@ -646,6 +648,7 @@ main.add(calendar({
 		},
 	},
 }))
+*/
 
 </script>
 </template>
@@ -678,7 +681,7 @@ for (let i = 0; i <= 10000; i++) {
 	let name       = 'record '+i
 	let parent_id  = i > 1 ? (i-1) % 3 : null // floor((random() * i))
 	let random_num = floor(random() * 1e9)
-	let random_date = i * 24 * 3600 * 1000
+	let random_date = clamp(i * 24 * 3600 * 10, 0, time(3000, 0))
 	let active = i % 5 == 0
 	let row = [id, id, active, name, parent_id, random_num, random_date]
 	row.focusable = i % 10 >= 2
@@ -855,24 +858,23 @@ main.add(
 <template id=grid_dropdown_demo>
 <script>
 
-r1 = rowset({
-	fields: [
-		{w:  50, name: 'id', type: 'number', visible: false},
-		{w: 150, name: 'name'},
-		{w: 150, name: 'date', type: 'date'},
-	],
-	rows: [
-		[1, 'Hey Dude', day(time())],
-		[2, 'Wasup'   , month(time())],
-		[3, 'Nuthin'  , year(time())],
-	],
-})
-
 main.add(
 	grid_dropdown({
-		lookup_rowset: r1,
-		lookup_col: 'id',
+		rowset: {
+			fields: [
+				{w:  50, name: 'id', type: 'number', visible: false},
+				{w: 150, name: 'name'},
+				{w: 150, name: 'date', type: 'date'},
+			],
+			rows: [
+				[1, 'Hey Dude', day(time())],
+				[2, 'Wasup'   , month(time())],
+				[3, 'Nuthin'  , year(time())],
+			],
+		},
+		val_col: 'id',
 		display_col: 'name',
+		field: {},
 		val: 4,
 	})
 )
@@ -881,19 +883,18 @@ rows2 = []
 for (let i = 1; i <= 1e5; i++)
 	rows2.push([i, 'Hey Dude #'+i])
 
-r2 = rowset({
-	fields: [
-		{w:  50, name: 'id', type: 'number', visible: false},
-		{w: 200, name: 'name'},
-	],
-	rows: rows2,
-})
-
 main.add(
 	grid_dropdown({
-		lookup_rowset: r2,
-		lookup_col: 'id',
+		rowset: {
+			fields: [
+				{w:  50, name: 'id', type: 'number', visible: false},
+				{w: 200, name: 'name'},
+			],
+			rows: rows2,
+		},
+		val_col: 'id',
 		display_col: 'name',
+		field: {},
 		val: 42,
 	})
 )
@@ -906,9 +907,11 @@ main.add(
 <template id=countries_listbox_demo>
 <script>
 
-clb = countries_listbox({})
+clb = countries_listbox({
+	field: {},
+	val: 'RO',
+})
 main.add(clb)
-//TODO: clb.val: 'RO'
 
 </script>
 </template>
@@ -918,7 +921,10 @@ main.add(clb)
 <template id=country_dropdown_demo>
 <script>
 
-cd = country_dropdown({val: 'RO'})
+cd = country_dropdown({
+	field: {},
+	val: 'RO',
+})
 main.add(cd)
 
 </script>
@@ -1219,7 +1225,7 @@ demo_list = listbox({
 	item_typename: 'richtext',
 	field: {},
 	val_col: 0,
-	val: demos[20],
+	val: demos[22],
 })
 
 demo_list.create_item = function() {

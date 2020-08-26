@@ -355,13 +355,11 @@ component('x-grid', function(e) {
 			w0 = w1
 			h0 = h1
 		}
-	}
 
-	// detect w/h changes from resizing made with css 'resize: both'.
-	e.on('attr_changed', function(mutations) {
-		if (mutations[0].attributeName == 'style')
-			layout_changed()
-	})
+		// detect w/h changes from resizing made with css 'resize: both'.
+		e.detect_style_size_changes()
+		e.on('style_size_changed', layout_changed)
+	}
 
 	// rendering --------------------------------------------------------------
 
@@ -639,9 +637,9 @@ component('x-grid', function(e) {
 		let fi = e.focused_field_index
 		let field = e.fields[fi]
 		let hcell = e.header.at[fi]
-		let css = e.cells.at[0].css()
-		let bw = num(css['border-right-width'])
-		let bh = num(css['border-bottom-width'])
+		//let css = e.cells.at[0].css()
+		let bw = 1 // num(css['border-right-width'])
+		let bh = 0 // num(css['border-bottom-width'])
 		let iw = field_has_indent(field)
 			? indent_offset(or(indent, row_indent(e.rows[ri]))) : 0
 
@@ -686,11 +684,10 @@ component('x-grid', function(e) {
 	}
 
 	let create_editor = e.create_editor
-	e.create_editor = function(field, ...editor_options) {
+	e.create_editor = function(field, ...opt) {
 		create_editor(field, {
 			inner_label: false,
-			can_select_widget: false,
-		}, ...editor_options)
+		}, ...opt)
 		if (!e.editor)
 			return
 		e.editor.class('grid-editor')
@@ -884,14 +881,14 @@ component('x-grid', function(e) {
 		if (!cell)
 			return
 
-		let already_on_it =
-			e.focused_row_index == cell.ri &&
-			e.focused_field_index == cell.fi
-
 		if (over_indent)
 			e.toggle_collapsed(cell.ri, shift)
 
-		if (e.focus_cell(cell.ri, cell.fi, 0, 0, {
+		let already_on_it =
+			cell.ri == e.focused_row_index &&
+			cell.fi == e.focused_field_index
+
+		return e.focus_cell(cell.ri, cell.fi, 0, 0, {
 			must_not_move_row: true,
 			enter_edit: !over_indent && e.can_edit
 				&& !ctrl && !shift
@@ -902,10 +899,7 @@ component('x-grid', function(e) {
 			expand_selection: shift,
 			invert_selection: ctrl,
 			input: e,
-		}))
-			if (!already_on_it)
-				e.pick_val()
-
+		})
 	}
 
 	// row moving -------------------------------------------------------------
@@ -1391,11 +1385,12 @@ component('x-grid', function(e) {
 			hit.state = 'col_dragging'
 		} else if (hit.state == 'row_drag') {
 			hit.state = 'row_dragging'
-			md_row_drag(ev, mx, my, ev.shiftKey, ev.ctrlKey)
+			if (!md_row_drag(ev, mx, my, ev.shiftKey, ev.ctrlKey))
+				return false
 		} else
 			assert(false)
 
-		return 'capture'
+		return this.capture_pointer(ev, pointermove, pointerup)
 	}
 
 	function rightpointerdown(ev, mx, my) {
@@ -1438,7 +1433,8 @@ component('x-grid', function(e) {
 			mu_col_move()
 		} else if (hit.state == 'row_moving') {
 			mu_row_move()
-		}
+		} else if (hit.state == 'row_dragging')
+			e.pick_val()
 		hit.state = null
 		return false
 	}
@@ -1483,11 +1479,18 @@ component('x-grid', function(e) {
 				|| (e.auto_jump_cells && !shift && (!horiz || ctrl)
 					&& (!horiz
 						|| !e.editor.editor_state
-						|| e.editor.editor_state(cols < 0 ? 'left' : 'right')))
+						|| ctrl
+							&& (e.editor.editor_state(cols < 0 ? 'left' : 'right')
+							|| e.editor.editor_state('all_selected'))
+						))
 
 			if (move)
 				if (e.focus_next_cell(cols, {
-					editor_state: horiz ? (cols > 0 ? 'left' : 'right') : 'select_all',
+					editor_state: horiz
+						? (((e.editor && e.editor.editor_state) ? e.editor.editor_state('all_selected') : ctrl)
+							? 'select_all'
+							: cols > 0 ? 'left' : 'right')
+						: 'select_all',
 					expand_selection: shift,
 					input: e,
 				}))
@@ -1543,11 +1546,15 @@ component('x-grid', function(e) {
 				|| (e.auto_jump_cells && !shift
 					&& (horiz
 						|| !e.editor.editor_state
-						|| e.editor.editor_state(rows < 0 ? 'left' : 'right')))
+						|| (ctrl
+							&& (e.editor.editor_state(rows < 0 ? 'left' : 'right')
+							|| e.editor.editor_state('all_selected')))
+						))
 
 			if (move)
 				if (e.focus_cell(true, true, rows, 0, {
-					editor_state: rows > 0 ? 'left' : 'right',
+					editor_state: e.editor && e.editor.editor_state
+						&& (horiz ? e.editor.editor_state() : 'select_all'),
 					expand_selection: shift,
 					input: e,
 				}))
@@ -1818,7 +1825,8 @@ component('x-grid-dropdown', function(e) {
 	init = e.init
 	e.init = function() {
 		e.picker = grid(update({
-			rowset: e.lookup_rowset,
+			rowset: e.rowset,
+			rowset_nane: e.rowset_name,
 			nav: e.nav,
 			col: e.col,
 			val_col: e.val_col,
@@ -1832,5 +1840,9 @@ component('x-grid-dropdown', function(e) {
 		}, e.grid))
 		init()
 	}
+
+	e.on('opened', function() {
+		e.picker.scroll_to_focused_cell()
+	})
 
 })

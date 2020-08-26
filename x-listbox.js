@@ -41,7 +41,6 @@ component('x-listbox', function(e) {
 		}
 		e.on('row_added', row_added)
 		e.display_col = 0
-		e.display_field = e.all_fields[0]
 		let rows = []
 		for (let item of e.items) {
 			if (isobject(item) && item.typename)
@@ -232,7 +231,7 @@ component('x-listbox', function(e) {
 				}
 
 			} else if (!(ev.shiftKey || ev.ctrlKey)) {
-				e.fire('val_picked') // picker protocol
+				e.fire('val_picked', {input: e}) // picker protocol
 			}
 
 			return false
@@ -330,10 +329,6 @@ hlistbox = function(...options) {
 
 component('x-list-dropdown', function(e) {
 
-	e.init_picker = function() {
-
-	}
-
 	nav_dropdown_widget(e)
 	e.classes = 'x-list-dropdown'
 
@@ -344,10 +339,10 @@ component('x-list-dropdown', function(e) {
 			items: e.items,
 			rowset: e.rowset,
 			rowset_nane: e.rowset_name,
-			display_col: e.display_col,
 			nav: e.nav,
 			col: e.col,
 			val_col: e.val_col,
+			display_col: e.display_col,
 			auto_focus_first_cell: false,
 			can_select_multiple: false,
 			can_move_items: false,
@@ -368,8 +363,10 @@ component('x-list-dropdown', function(e) {
 
 component('x-select-button', function(e) {
 
-	e.classes = 'x-select-button'
 	listbox.construct(e)
+
+	e.classes = 'x-select-button'
+
 	e.orientation = 'horizontal'
 	e.can_move_items = false
 	e.auto_focus_first_cell = false

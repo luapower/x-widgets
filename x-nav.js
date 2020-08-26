@@ -133,7 +133,6 @@ function nav_widget(e) {
 	}
 
 	e.on('attach', function() {
-		bind_lookup_navs(true)
 		bind_param_nav(true)
 		if (e.rowset) {
 			let refocus = refocus_state('val')
@@ -151,7 +150,6 @@ function nav_widget(e) {
 	e.on('detach', function() {
 		abort_ajax_requests()
 		force_unfocus_focused_cell()
-		bind_lookup_navs(false)
 		bind_param_nav(false)
 		init_all({})
 	})
@@ -233,6 +231,9 @@ function nav_widget(e) {
 
 	function init_all_fields(def) {
 
+		if (e.all_fields)
+			bind_lookup_navs(false)
+
 		e.all_fields = [] // fields in row value order.
 		e.pk_fields = [] // primary key fields.
 
@@ -261,11 +262,13 @@ function nav_widget(e) {
 
 		}
 
-		e.id_field     = e.pk_fields.length == 1 && e.pk_fields[0]
+		bind_lookup_navs(true)
+
+		e.id_field = e.pk_fields.length == 1 && e.pk_fields[0]
 		e.parent_field = e.id_field && e.all_fields[def.parent_col]
 		init_tree_field(def)
 
-		e.val_field   = e.all_fields[e.val_col]
+		e.val_field = e.all_fields[e.val_col]
 		e.index_field = e.all_fields[def.index_col]
 
 		init_fields()
@@ -436,7 +439,7 @@ function nav_widget(e) {
 
 	e.can_focus_cell = function(row, field, for_editing) {
 		return (!row || row.focusable != false)
-			&& (field == null || (e.can_focus_cells && field.focusable != false))
+			&& (field == null || !e.can_focus_cells || field.focusable != false)
 			&& (!for_editing || e.can_change_val(row, field))
 	}
 
@@ -1527,13 +1530,6 @@ function nav_widget(e) {
 		return !invalid
 	}
 
-	// responding to cell updates ---------------------------------------------
-
-	// TODO:
-	function display_vals_changed(field) {
-		e.update({vals: true})
-	}
-
 	// responding to val changes ----------------------------------------------
 
 	e.update_val = function(v, ev) {
@@ -1556,10 +1552,19 @@ function nav_widget(e) {
 	e.editor = null
 
 	e.create_editor = function(field, ...opt) {
-		e.editor = field.editor({
-			nav: e,
-			col: field.name,
-		}, ...opt)
+		if (!field.editor_instance) {
+			e.editor = field.editor({
+				nav: e,
+				col: field.name,
+				can_select_widget: false,
+			}, ...opt)
+			if (!e.editor)
+				return
+			field.editor_instance = e.editor
+		} else {
+			e.editor = field.editor_instance
+			e.editor.show()
+		}
 	}
 
 	e.enter_edit = function(editor_state, focus) {
@@ -1583,7 +1588,7 @@ function nav_widget(e) {
 		let editor = e.editor
 		if (editor) {
 			e.editor = null // removing the editor first as a barrier for lost_focus().
-			editor.remove()
+			editor.hide()
 		}
 	}
 
@@ -1653,7 +1658,7 @@ function nav_widget(e) {
 					e.set_cell_val(row, field, null)
 	}
 
-	// get/set display val ----------------------------------------------------
+	// get/set cell display val -----------------------------------------------
 
 	function bind_lookup_navs(on) {
 		for (let field of e.all_fields) {
@@ -1684,7 +1689,7 @@ function nav_widget(e) {
 	}
 
 	e.cell_display_val = function(row, field) {
-		let v = row ? e.cell_input_val(row, field) : null
+		let v = e.cell_input_val(row, field)
 		if (v == null)
 			return field.null_text
 		if (v === '')
@@ -1701,6 +1706,12 @@ function nav_widget(e) {
 		} else
 			return field.format(v, row)
 	}
+
+	e.on('display_vals_changed', function(field) {
+		e.update({vals: true})
+	})
+
+	// get cell text val ------------------------------------------------------
 
 	e.cell_text_val = function(row, field) {
 		let v = e.cell_display_val(row, field)
@@ -2384,6 +2395,8 @@ function nav_widget(e) {
 	// picker protocol --------------------------------------------------------
 
 	e.row_display_val = function(row) { // stub
+		if (!e.all_fields.length)
+			return 'no fields'
 		let field = e.all_fields[e.display_col]
 		if (!field)
 			return 'no display field'
@@ -2391,6 +2404,8 @@ function nav_widget(e) {
 	}
 
 	e.dropdown_display_val = function() {
+		if (!e.focused_row)
+			return
 		return e.row_display_val(e.focused_row)
 	}
 
@@ -2398,6 +2413,11 @@ function nav_widget(e) {
 		if (e.focus_cell(true, true, delta, 0, ev))
 			e.fire('val_picked', ev)
 	}
+
+	e.set_display_col = function() {
+		e.update({vals: true})
+	}
+	e.prop('display_col', {store: 'var'})
 
 	init_all({})
 

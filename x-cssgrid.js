@@ -380,7 +380,7 @@ function cssgrid_widget_editing(e) {
 		item.pos_y = this.pos_y
 		e.items.push(item)
 		e.add(item)
-		e.fire('widget_tree_changed')
+		e.fireup('widget_tree_changed')
 	})
 
 	function is_cell_empty(i, j) {
@@ -432,7 +432,7 @@ function cssgrid_widget_editing(e) {
 		let i = e.items.indexOf(old_widget)
 		e.items[i] = new_widget
 		old_widget.parent.replace(old_widget, new_widget)
-		e.fire('widget_tree_changed')
+		e.fireup('widget_tree_changed')
 	}
 
 	// you won't believe this shit, but page-up/down from inner contenteditables
