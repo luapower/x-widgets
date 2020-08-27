@@ -497,6 +497,7 @@
 	/* styling */
 	border-color: #ccc;
 	border-style: solid;
+	background-color: var(--x-input-focused-bg-color);
 }
 
 .x-cssgrid > .x-input {
@@ -546,6 +547,12 @@
 .x-input.modified {
 	/* background-color: var(--x-modified-bg-color); */
 }
+
+.x-input.invalid {
+	background-color: var(--x-error-bg-color);
+	color: var(--x-inverted-fg-color);
+}
+
 
 /* input with animated inner label/placeholder ---------------------------- */
 
@@ -851,17 +858,11 @@
 .x-dropdown.open
 {
 	outline: none;
-	background-color: var(--x-input-focused-bg-color);
 	box-shadow: var(--x-focus-shadow);
 }
 .x-dropdown[mode=inline]:focus,
 .x-dropdown[mode=inline].open {
 	box-shadow: none;
-}
-
-.x-input.invalid {
-	background-color: var(--x-error-bg-color);
-	color: var(--x-inverted-fg-color);
 }
 
 /* listbox ---------------------------------------------------------------- */
@@ -1864,7 +1865,6 @@
 	border: 0;
 	margin: 0;
 	border-radius: 0;
-	background-color: var(--x-input-focused-bg-color);
 	z-index: 1;
 
 	font-size: inherit;
