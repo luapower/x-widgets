@@ -1572,24 +1572,22 @@ function nav_widget(e) {
 			return true
 		if (!e.can_focus_cell(e.focused_row, e.focused_field, true))
 			return false
+
 		e.create_editor(e.focused_field)
 		if (!e.editor)
 			return false
+
 		e.update_cell_editing(e.focused_row_index, e.focused_field_index, true)
+
 		e.editor.on('lost_focus', editor_lost_focus)
+
 		if (e.editor.enter_editor)
 			e.editor.enter_editor(editor_state)
+
 		if (focus != false)
 			e.editor.focus()
-		return true
-	}
 
-	function free_editor() {
-		let editor = e.editor
-		if (editor) {
-			e.editor = null // removing the editor first as a barrier for lost_focus().
-			editor.hide()
-		}
+		return true
 	}
 
 	e.exit_edit = function(force) {
@@ -1612,7 +1610,11 @@ function nav_widget(e) {
 				return false
 
 		let had_focus = e.hasfocus
-		free_editor()
+
+		e.editor.off('lost_focus', editor_lost_focus)
+		e.editor.hide()
+		e.editor = null
+
 		e.update_cell_editing(e.focused_row_index, e.focused_field_index, false)
 		if (had_focus)
 			e.focus()
@@ -1621,8 +1623,6 @@ function nav_widget(e) {
 	}
 
 	function editor_lost_focus(ev) {
-		if (!e.editor) // editor is being removed.
-			return
 		if (ev.target != e.editor) // other input that bubbled up.
 			return
 		if (e.exit_edit_on_lost_focus)

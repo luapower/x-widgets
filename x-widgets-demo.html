@@ -1236,6 +1236,8 @@ demo_list.can_add_rows = true
 
 demo_list.on('focused_row_changed', function() {
 	let demo = this.focused_item
+	if (!demo)
+		return
 	let code = isobject(demo) && demo.code || ''
 	ace_editor.getSession().setValue(code)
 	ace_editor.initial_script = code

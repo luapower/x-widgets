@@ -679,7 +679,7 @@ function val_widget(e, always_enabled) {
 	e.prop('nav', {store: 'var', private: true})
 	e.prop('nav_name', {store: 'var', bind: 'nav', type: 'nav'})
 
-	let col = 0
+	let col
 	e.set_col = function(col1, col0) {
 		col = col1
 		set_nav_col(nav, nav, col1, col0)
@@ -1624,8 +1624,8 @@ component('x-dropdown', function(e) {
 		e.picker.col = e.col
 		e.picker.class('picker', true)
 		e.picker.can_select_widget = false
-		e.picker.on('val_picked', picker_val_picked)
-		e.picker.on('keydown', picker_keydown)
+		//e.picker.on('val_picked', picker_val_picked)
+		//e.picker.on('keydown'   , picker_keydown)
 
 		let picker_update = e.picker.update
 		e.picker.update = function(opt) {
@@ -1642,22 +1642,25 @@ component('x-dropdown', function(e) {
 
 	}
 
-	function bind_document(on) {
+	function bind_events(on) {
 		document.on('pointerdown'     , document_pointerdown, on)
 		document.on('rightpointerdown', document_pointerdown, on)
 		document.on('stopped_event'   , document_stopped_event, on)
+		e.picker.on('val_picked', picker_val_picked, on)
+		e.picker.on('keydown'   , picker_keydown, on)
 	}
 
 	e.on('attach', function() {
-		bind_document(true)
+		bind_events(true)
 		e.picker.attach()
 		e.update()
 	})
 
 	e.on('detach', function() {
 		e.close()
-		bind_document(false)
+		bind_events(false)
 		e.picker.detach()
+		e.picker.popup(false)
 	})
 
 	// val updating

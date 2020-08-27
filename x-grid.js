@@ -691,7 +691,8 @@ component('x-grid', function(e) {
 		if (!e.editor)
 			return
 		e.editor.class('grid-editor')
-		e.cells_ct.add(e.editor)
+		if (!e.editor.parent)
+			e.cells_ct.add(e.editor)
 		update_editor()
 	}
 

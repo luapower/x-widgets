@@ -21,8 +21,10 @@ component('x-listbox', function(e) {
 	e.display_col = 0
 
 	e.on('attach', function() {
-		if(e.items)
+		if(e.items) {
 			create_rows_items()
+			e.items = null
+		}
 	})
 
 	// item-based rowset ------------------------------------------------------
