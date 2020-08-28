@@ -16,6 +16,7 @@
 	--x-input-focused-bg-color      : #fff;  /* bg color for focused inputs, dropdowns and pickers */
 	--x-modified-bg-color           : #ddffdd;
 	--x-new-bg-color                : #eeeeff;
+	--x-search-bg-color             : #ff9;
 	--x-info-bg-color               : #069;  /* bg color for info bubbles */
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
 
@@ -136,6 +137,11 @@
 
 .x-focusable .x-item.focused:not(.invalid) {
 	background-color: var(--x-item-unfocused-bg-color);
+}
+
+.x-focusable:focus-within .x-item.focused:not(.invalid):active {
+	background-color: var(--x-item-focused-selected-bg-color);
+	color: var(--x-inverted-fg-color);
 }
 
 .x-focusable:focus-within .x-item.focused:not(.invalid) {
@@ -396,6 +402,9 @@
 .x-tooltip[side=bottom] { margin-top    : -.25em; }
 
 /* styling based on kind attr */
+
+.x-tooltip[kind=search] > .x-tooltip-text { background-color: var(--x-search-bg-color); }
+.x-tooltip[kind=search] > .x-tooltip-tip  { color: var(--x-search-bg-color); }
 
 .x-tooltip[kind=info] > .x-tooltip-text { background-color: var(--x-info-bg-color); color: var(--x-inverted-fg-color); }
 .x-tooltip[kind=info] > .x-tooltip-tip  { color: var(--x-info-bg-color); }
@@ -1630,10 +1639,19 @@
 	flex-flow: row;
 }
 
+.x-grid-qs-text {
+	position: absolute;
+	top: 0;
+	background-color: var(--x-search-bg-color) !important;
+	color: initial;
+	z-index: 1;
+}
+
 /* grid header & row cell common styles that make them align */
 
 .x-grid-header-cell,
 .x-grid-cell {
+	position: relative;        /* required: qs-text is relative to it. */
 	white-space: nowrap;       /* required: row height is fixed */
 
 	/* sizing & styling */

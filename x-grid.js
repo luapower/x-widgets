@@ -5,11 +5,13 @@
 
 component('x-grid', function(e) {
 
+	e.props.align_x = {default: 'stretch'}
+	e.props.align_y = {default: 'stretch'}
+
 	nav_widget(e)
+	editable_widget(e)
 	focusable_widget(e)
 
-	e.align_x = 'stretch'
-	e.align_y = 'stretch'
 	e.classes = 'x-widget x-focusable x-grid'
 
 	// geometry
@@ -21,17 +23,17 @@ component('x-grid', function(e) {
 	e.cell_w = 120              // vertical grid
 
 	// keyboard behavior
-	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
-	e.auto_advance = 'next_row' // advance on enter = false|'next_row'|'next_cell'
 	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
+	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
+	e.advance_on_enter = 'next_row' // false|'next_row'|'next_cell'
+	e.prop('exit_edit_on_escape'         , {store: 'var', default: true})
+	e.prop('exit_edit_on_enter'          , {store: 'var', default: false})
 	e.quick_edit = false        // quick edit (vs. quick-search) when pressing a key
 
 	// mouse behavior
 	e.prop('can_reorder_fields'          , {store: 'var', default: true})
 	e.prop('enter_edit_on_click'         , {store: 'var', default: false})
 	e.prop('enter_edit_on_click_focused' , {store: 'var', default: true})
-	e.prop('exit_edit_on_escape'         , {store: 'var', default: true})
-	e.prop('exit_edit_on_enter'          , {store: 'var', default: true})
 	e.prop('focus_cell_on_click_header'  , {store: 'var', default: false})
 	e.prop('can_move_rows'               , {store: 'var', default: false})
 	e.prop('can_change_parent'           , {store: 'var', default: true})
@@ -48,7 +50,7 @@ component('x-grid', function(e) {
 		horiz = !v
 		e.class('x-hgrid',  horiz)
 		e.class('x-vgrid', !horiz)
-		e.update({fields: true, rows: true, focus: true})
+		e.update({fields: true, rows: true})
 	}
 	e.prop('vertical', {type: 'bool'})
 
@@ -285,8 +287,11 @@ component('x-grid', function(e) {
 
 	function set_col_w(fi, w) { // hgrid
 		let field = e.fields[fi]
-		field.w = clamp(w, field.min_w, field.max_w)
-		e.header.at[fi]._w = field.w
+		w = clamp(w, field.min_w, field.max_w)
+		field.w = w
+		if (e.widget_editing)
+			attr(attr(e, 'field_attrs'), field.name).w = w
+		e.header.at[fi]._w = w
 	}
 
 	function update_header_w(w) { // vgrid
@@ -466,11 +471,15 @@ component('x-grid', function(e) {
 	}
 
 	e.update_cell_val = function(cell, row, field, input_val) {
-		let v = e.cell_display_val(row, field)
-		if (cell.indent)
-			cell.replace(cell.childNodes[1], v)
-		else
-			cell.set(v)
+		let v = e.cell_display_val_for(row, field, input_val)
+		cell.input_val = v
+		let node = cell.childNodes[cell.indent ? 1 : 0]
+		if (cell.qs_div) { // value is wrapped
+			node.replace(node.childNodes[0], v)
+			cell.qs_div.clear()
+		} else {
+			cell.replace(node, v)
+		}
 		cell.class('null', input_val == null)
 		cell.class('empty', input_val == '')
 	}
@@ -485,8 +494,8 @@ component('x-grid', function(e) {
 		return 12 + indent * 16
 	}
 
-	function set_cell_indent(cell, indent) {
-		cell.indent.style['padding-left'] = (indent_offset(indent) - 4)+'px'
+	function set_cell_indent(cell_indent, indent) {
+		cell_indent.style['padding-left'] = (indent_offset(indent) - 4)+'px'
 	}
 
 	function update_cell_content(cell, row, ri, fi, row_focused, indent) {
@@ -520,7 +529,7 @@ component('x-grid', function(e) {
 			cell.indent.class('far', has_children)
 			cell.indent.class('fa-plus-square' , has_children && !!row.collapsed)
 			cell.indent.class('fa-minus-square', has_children && !row.collapsed)
-			set_cell_indent(cell, or(indent, row_indent(row)))
+			set_cell_indent(cell.indent, or(indent, row_indent(row)))
 		} else if (cell.indent) {
 			cell.set(null)
 			cell.indent = null
@@ -529,8 +538,8 @@ component('x-grid', function(e) {
 		e.update_cell_val(cell, row, field, e.cell_input_val(row, field))
 		e.update_cell_error(cell, row, field, e.cell_error(row, field))
 
-		row_focused = or(row_focused, e.focused_row_index == ri)
-		let cell_focused = row_focused && (!e.can_focus_cells || fi == e.focused_field_index)
+		row_focused = or(row_focused, e.focused_row == row)
+		let cell_focused = row_focused && (!e.can_focus_cells || field == e.focused_field)
 		let sel_fields = e.selected_rows.get(row)
 		let selected = (isobject(sel_fields) ? sel_fields.has(field) : sel_fields) || false
 		let editing = !!e.editor
@@ -563,7 +572,32 @@ component('x-grid', function(e) {
 		update_scroll()
 		if (vri1 != last_vri1)
 			update_cells()
+		update_editor()
+		update_quicksearch_cell()
 	})
+
+	// quicksearch highlight --------------------------------------------------
+
+	function update_quicksearch_cell() {
+		let row = e.focused_row
+		let field = e.quicksearch_field
+		let s = e.quicksearch_text
+		if (!(row && field))
+			return
+		let cell = e.cells.at[cell_index(e.row_index(row), field.index)]
+		if (!cell)
+			return
+		if (typeof cell.input_val != 'string')
+			return
+		if (!cell.qs_div) {
+			cell.qs_div = div({class: 'x-grid-qs-text'}, s)
+			let val_node = cell.childNodes[cell.indent ? 1 : 0]
+			val_node.remove()
+			cell.add(div({style: 'position: relative'}, val_node, cell.qs_div))
+		} else {
+			cell.qs_div.set(s)
+		}
+	}
 
 	// resize guides ----------------------------------------------------------
 
@@ -631,15 +665,18 @@ component('x-grid', function(e) {
 	// inline editing ---------------------------------------------------------
 
 	// when: input created, column width or height changed.
+	let bw, bh
 	function update_editor(x, y, indent) {
 		if (!e.editor) return
 		let ri = e.focused_row_index
 		let fi = e.focused_field_index
 		let field = e.fields[fi]
 		let hcell = e.header.at[fi]
-		//let css = e.cells.at[0].css()
-		let bw = 1 // num(css['border-right-width'])
-		let bh = 0 // num(css['border-bottom-width'])
+		if (bw == null) {
+			let css = e.cells.at[0].css()
+			bw = num(css['border-right-width'])
+			bh = num(css['border-bottom-width'])
+		}
 		let iw = field_has_indent(field)
 			? indent_offset(or(indent, row_indent(e.rows[ri]))) : 0
 
@@ -670,11 +707,10 @@ component('x-grid', function(e) {
 			if (cell) {
 				let cell_min_w = cell.style['min-width']
 				let cell_w     = cell.style['width']
+				// measure cell unclipped width.
 				cell.style['min-width'] = null
 				cell.style['width'    ] = null
-
 				cell_text_w = cell.rect().w - bw - iw
-
 				cell.style['min-width'] = cell_min_w
 				cell.style['width'    ] = cell_w
 			}
@@ -727,8 +763,10 @@ component('x-grid', function(e) {
 			create_cells()
 		if (opt_sizes)
 			update_cell_sizes(opt.col_resizing)
-		if (opt_rows || opt.vals || opt.focus)
+		if (opt_rows || opt.vals || opt.state)
 			update_cells()
+		if (opt_rows || opt.state)
+			update_quicksearch_cell()
 	}
 
 	e.update_cell_state = function(ri, fi, prop, val) {
@@ -883,7 +921,7 @@ component('x-grid', function(e) {
 			return
 
 		if (over_indent)
-			e.toggle_collapsed(cell.ri, shift)
+			e.toggle_collapsed(e.rows[cell.ri], shift)
 
 		let already_on_it =
 			cell.ri == e.focused_row_index &&
@@ -991,7 +1029,7 @@ component('x-grid', function(e) {
 				if (cell.ri != ri || ri == null)
 					update_cell_content(cell, row, ri, fi, focused, indent)
 				else if (cell.indent)
-					set_cell_indent(cell, indent)
+					set_cell_indent(cell.indent, indent)
 
 				cell.class('row-moving', moving)
 
@@ -1385,6 +1423,10 @@ component('x-grid', function(e) {
 		} else if (hit.state == 'col_drag') {
 			hit.state = 'col_dragging'
 		} else if (hit.state == 'row_drag') {
+			if (e.widget_editing && !ev.shiftKey && !ev.ctrlKey) {
+				e.widget_editing = false
+				return false
+			}
 			hit.state = 'row_dragging'
 			if (!md_row_drag(ev, mx, my, ev.shiftKey, ev.ctrlKey))
 				return false
@@ -1403,12 +1445,13 @@ component('x-grid', function(e) {
 
 		e.focus()
 
-		e.focus_cell(hit.cell.ri, hit.cell.fi, 0, 0, {
-			must_not_move_row: true,
-			expand_selection: ev.shiftKey,
-			invert_selection: ev.ctrlKey,
-			input: e,
-		})
+		if (hit.state == 'row_drag')
+			e.focus_cell(hit.cell.ri, hit.cell.fi, 0, 0, {
+				must_not_move_row: true,
+				expand_selection: ev.shiftKey,
+				invert_selection: ev.ctrlKey,
+				input: e,
+			})
 
 		return false
 	}
@@ -1571,28 +1614,32 @@ component('x-grid', function(e) {
 
 		// Enter: toggle edit mode, and navigate on exit
 		if (key == 'Enter') {
-			if (e.hasclass('picker')) {
+			if (e.quicksearch_text) {
+				e.quicksearch(e.quicksearch_text, e.focused_row, 1)
+			} else if (e.hasclass('picker')) {
 				e.pick_val()
 			} else if (!e.editor) {
 				e.enter_edit('select_all')
-			} else if (e.exit_edit_on_enter && e.exit_edit()) {
-				if (e.auto_advance == 'next_row')
-					e.focus_cell(true, true, 1, 0, {editor_state: 'select_all', input: e})
-				else if (e.auto_advance == 'next_cell')
-					e.focus_next_cell(shift ? -1 : 1, {editor_state: 'select_all', input: e})
+			} else if (!e.exit_edit_on_enter || e.exit_edit()) {
+				if (e.advance_on_enter == 'next_row')
+					e.focus_cell(true, true, 1, 0, {editor_state: 'select_all', input: e, enter_edit: e.stay_in_edit_mode})
+				else if (e.advance_on_enter == 'next_cell')
+					e.focus_next_cell(shift ? -1 : 1, {editor_state: 'select_all', input: e, enter_edit: e.stay_in_edit_mode})
 			}
 			return false
 		}
 
 		// Esc: exit edit mode.
 		if (key == 'Escape') {
-			if (e.hasclass('picker'))
-				return
-			if (e.exit_edit_on_escape) {
+			if (e.quicksearch_text) {
+				e.quicksearch('')
+				return false
+			}
+			if (e.editor && e.exit_edit_on_escape) {
 				e.exit_edit()
 				e.focus()
+				return false
 			}
-			return false
 		}
 
 		// insert key: insert row
@@ -1614,14 +1661,20 @@ component('x-grid', function(e) {
 
 		}
 
-		if (!e.editor && key == ' ') {
-			if (e.focused_row_index)
-				e.toggle_collapsed(e.focused_row_index, shift)
+		if (!e.editor && key == ' ' && !e.quicksearch_text) {
+			if (e.focused_row)
+				e.toggle_collapsed(e.focused_row, shift)
 			return false
 		}
 
 		if (!e.editor && ctrl && key == 'a') {
 			e.select_all_cells()
+			return false
+		}
+
+		if (key == 'Backspace') {
+			if (e.quicksearch_text)
+				e.quicksearch(e.quicksearch_text.slice(0, -1), e.focused_row)
 			return false
 		}
 
@@ -1640,8 +1693,10 @@ component('x-grid', function(e) {
 				e.set_cell_val(e.focused_row, e.focused_field, v)
 				return false
 			}
-		} else if (!e.editor)
-			e.quicksearch(c, e.focused_field)
+		} else if (!e.editor) {
+			e.quicksearch(e.quicksearch_text + c, e.focused_row)
+			return false
+		}
 	})
 
 	e.property('ctrl_click_used', () => e.can_select_multiple)
@@ -1697,7 +1752,7 @@ component('x-grid', function(e) {
 			icon: 'fa fa-trash',
 			enabled: e.selected_rows.size && e.can_remove_row(),
 			action: function() {
-				e.remove_selected_rows()
+				e.remove_selected_rows({refocus: true})
 			},
 		})
 
@@ -1802,14 +1857,6 @@ component('x-grid', function(e) {
 		let px = mx - r.x
 		let py = my - r.y
 		context_menu.popup(e, 'inner-top', null, px, py)
-	}
-
-	// serialization
-
-	e.serialize = function() {
-		let t = e.serialize_props()
-		//
-		return t
 	}
 
 })

@@ -123,7 +123,7 @@ component('x-listbox', function(e) {
 			for (let i = 0; i < e.rows.length; i++)
 				e.update_item(e.at[i], e.rows[i])
 
-		if (opt.rows || opt.focus)
+		if (opt.rows || opt.state)
 			for (let i = 0; i < e.rows.length; i++) {
 				let item = e.at[i]
 				item.class('focused', e.focused_row_index == i)

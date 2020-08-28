@@ -287,7 +287,9 @@ function editable_widget(e) {
 			e.set_widget_editing(v)
 		})
 
-	e.on('detach', function() { e.widget_editing = false })
+	e.on('detach', function() {
+		e.widget_editing = false
+	})
 
 }
 
@@ -935,10 +937,12 @@ component('x-button', function(e) {
 		}
 	})
 
-	e.on('click', function() {
-		if(e.action)
-			e.action()
-		e.fire('action')
+	e.on('pointerdown', function(ev) {
+		return this.capture_pointer(ev, null, function() {
+			if(e.action)
+				e.action()
+			e.fire('action')
+		})
 	})
 
 	// widget editing ---------------------------------------------------------
@@ -2122,7 +2126,7 @@ component('x-menu', function(e) {
 		tr.item = item
 		tr.check_div = check_div
 		update_check(tr)
-		tr.on('pointerup'   , item_pointerup)
+		tr.on('pointerdown' , item_pointerdown)
 		tr.on('pointerenter', item_pointerenter)
 		return tr
 	}
@@ -2279,24 +2283,24 @@ component('x-menu', function(e) {
 		return true
 	}
 
-	function click_item(tr, allow_close, from_keyboard) {
+	function click_item(tr) {
 		let item = tr.item
 		if ((item.action || item.checked != null) && item.enabled != false) {
 			if (item.checked != null) {
 				item.checked = !item.checked
 				update_check(tr)
 			}
-			if (!item.action || item.action(item) != false)
-				if (allow_close != false)
-					e.close(from_keyboard)
+			return !item.action || item.action(item) != false
 		}
 	}
 
 	// mouse bindings
 
-	function item_pointerup() {
-		click_item(this)
-		return false
+	function item_pointerdown(ev) {
+		return this.capture_pointer(ev, null, function() {
+			if (click_item(this))
+				return e.close()
+		})
 	}
 
 	function item_pointerenter(ev) {
@@ -2342,7 +2346,8 @@ component('x-menu', function(e) {
 			let tr = this.selected_item_tr
 			if (tr) {
 				let submenu_activated = activate_submenu(tr)
-				click_item(tr, !submenu_activated, true)
+				if (click_item(tr) && !submenu_activated)
+					e.close(true)
 			}
 			return false
 		}

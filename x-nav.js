@@ -122,13 +122,6 @@ function nav_widget(e) {
 	// init -------------------------------------------------------------------
 
 	function init_all(res) {
-
-		e.focused_field = null
-		e.selected_field = null
-		e.focused_row = null
-		e.selected_row = null
-		e.selected_rows = new Map()
-
 		init_all_fields(res)
 	}
 
@@ -137,8 +130,7 @@ function nav_widget(e) {
 		if (e.rowset) {
 			let refocus = refocus_state('val')
 			init_all(e.rowset)
-			e.update({fields: true, rows: true})
-			refocus()
+			refocus({fields: true, rows: true})
 		} else
 			e.reload()
 	})
@@ -159,6 +151,14 @@ function nav_widget(e) {
 		e.reload()
 	}
 	e.prop('rowset_name', {store: 'var', type: 'rowset'})
+
+	// serialization ----------------------------------------------------------
+
+	e.serialize = function() {
+		let t = e.serialize_props()
+		t.field_attrs = e.field_attrs
+		return t
+	}
 
 	// fields array matching 1:1 to row contents ------------------------------
 
@@ -231,6 +231,10 @@ function nav_widget(e) {
 
 	function init_all_fields(def) {
 
+		e.focused_field = null
+		e.selected_field = null
+		e.quicksearch_field = null
+
 		if (e.all_fields)
 			bind_lookup_navs(false)
 
@@ -297,9 +301,17 @@ function nav_widget(e) {
 	}
 	e.prop('name_col', {store: 'var'})
 
+	e.set_quicksearch_col = function(v) {
+		e.quicksearch_field = e.all_fields[v]
+		reset_quicksearch()
+		e.update({state: true})
+	}
+	e.prop('quicksearch_col', {store: 'var'})
+
 	// all_fields subset in custom order --------------------------------------
 
 	function init_fields() {
+		reset_quicksearch()
 		e.fields = []
 		for (let col of cols_array()) {
 			let field = e.all_fields[col]
@@ -395,6 +407,11 @@ function nav_widget(e) {
 	// all rows in load order -------------------------------------------------
 
 	function init_all_rows(def) {
+
+		e.focused_row = null
+		e.selected_row = null
+		e.selected_rows = new Map()
+
 		e.update_load_fail(false)
 		// TODO: unbind_filter_rowsets()
 		e.all_rows = e.attached && def.rows || []
@@ -416,6 +433,7 @@ function nav_widget(e) {
 	}
 
 	function init_rows() {
+		reset_quicksearch()
 		create_rows()
 		sort_rows()
 	}
@@ -546,6 +564,7 @@ function nav_widget(e) {
 	}
 
 	e.focus_cell = function(ri, fi, rows, cols, ev) {
+		ev = ev || empty
 
 		if (ri === false || fi === false) { // false means unfocus.
 			if (!e.rows.length)
@@ -561,29 +580,28 @@ function nav_widget(e) {
 			)
 		}
 
-		let was_editing = (ev && ev.was_editing) || !!e.editor
-		let focus_editor = (ev && ev.focus_editor) || (e.editor && e.editor.hasfocus)
-		let enter_edit = (ev && ev.enter_edit) || (was_editing && e.stay_in_edit_mode)
-		let editable = (ev && ev.editable) || enter_edit
-		let force_exit_edit = (ev && ev.force_exit_edit)
-		let expand_selection = ev && ev.expand_selection && e.can_select_multiple
-		let invert_selection = ev && ev.invert_selection && e.can_select_multiple
+		let was_editing = ev.was_editing || !!e.editor
+		let focus_editor = ev.focus_editor || (e.editor && e.editor.hasfocus)
+		let enter_edit = ev.enter_edit || (was_editing && e.stay_in_edit_mode)
+		let editable = ev.editable || enter_edit
+		let expand_selection = ev.expand_selection && e.can_select_multiple
+		let invert_selection = ev.invert_selection && e.can_select_multiple
 
 		let opt = update({editable: editable}, ev)
 		;[ri, fi] = e.first_focusable_cell(ri, fi, rows, cols, opt)
 
 		if (ri == null) // failure to find row means cancel.
-			if (!(ev && ev.unfocus_if_not_found))
+			if (!ev.unfocus_if_not_found)
 				return false
 
 		let row_changed   = e.focused_row_index   != ri
 		let field_changed = e.focused_field_index != fi
 
 		if (row_changed) {
-			if (!e.exit_focused_row(force_exit_edit))
+			if (!e.exit_focused_row(ev.force_exit_edit))
 				return false
 		} else if (field_changed) {
-			if (!e.exit_edit(force_exit_edit))
+			if (!e.exit_edit(ev.force_exit_edit))
 				return false
 		}
 
@@ -606,9 +624,9 @@ function nav_widget(e) {
 		}
 
 		let sel_rows_changed
-		if (ev && ev.preserve_selection) {
+		if (ev.preserve_selection) {
 			// leave it
-		} else if (ev && ev.selected_rows) {
+		} else if (ev.selected_rows) {
 			e.selected_rows = new Map(ev.selected_rows)
 			sel_rows_changed = true
 		} else if (e.can_focus_cells) {
@@ -687,13 +705,22 @@ function nav_widget(e) {
 		if (sel_rows_changed)
 			e.fire('selected_rows_changed')
 
-		if (row_changed || sel_rows_changed || field_changed)
-			e.update({focus: true})
+		let qs_changed = !!ev.quicksearch_text
+		if (qs_changed) {
+			e.quicksearch_text = ev.quicksearch_text
+			e.quicksearch_field = ev.quicksearch_field
+		} else if (e.quicksearch_text) {
+			reset_quicksearch()
+			qs_changed = true
+		}
+
+		if (row_changed || sel_rows_changed || field_changed || qs_changed || ev.update)
+			e.update(update({state: true}, ev.update))
 
 		if (enter_edit && ri != null && fi != null)
-			e.enter_edit(ev && ev.editor_state, focus_editor || false)
+			e.enter_edit(ev.editor_state, focus_editor || false)
 
-		if (!(ev && ev.make_visible == false))
+		if (ev.make_visible != false)
 			if (e.focused_row)
 				e.scroll_to_cell(e.focused_row_index, e.focused_field_index)
 
@@ -717,27 +744,6 @@ function nav_widget(e) {
 		return ri == null
 	}
 
-	function clear_selection() {
-		e.selected_row   = null
-		e.selected_field = null
-		e.selected_rows.clear()
-	}
-
-	function reset_selection() {
-		let sel_rows_size_before = e.selected_rows.size
-		clear_selection()
-		if (e.focused_row) {
-			let sel_fields = true
-			if (e.can_focus_cells && e.focused_field) {
-				sel_fields = new Set()
-				sel_fields.add(e.focused_field_index)
-			}
-			e.selected_rows.set(e.focused_row, sel_fields)
-		}
-		if (sel_rows_size_before)
-			e.fire('selected_rows_changed')
-	}
-
 	e.select_all_cells = function(fi) {
 		let sel_rows_size_before = e.selected_rows.size
 		e.selected_rows.clear()
@@ -753,7 +759,7 @@ function nav_widget(e) {
 				}
 				e.selected_rows.set(row, sel_fields)
 			}
-		e.update({focus: true})
+		e.update({state: true})
 		if (sel_rows_size_before != e.selected_rows.size)
 			e.fire('selected_rows_changed')
 	}
@@ -772,7 +778,7 @@ function nav_widget(e) {
 		else if (how == 'row')
 			refocus_row = e.focused_row
 
-		return function() {
+		return function(update_opt) {
 			if (!e.rows.length)
 				return
 
@@ -787,6 +793,7 @@ function nav_widget(e) {
 			let ri = e.row_index(row)
 
 			e.focus_cell(ri, true, 0, 0, {
+				update: update_opt,
 				must_not_move_row: !e.auto_focus_first_cell,
 				unfocus_if_not_found: unfocus_if_not_found,
 				enter_edit: e.auto_edit_first_cell,
@@ -997,21 +1004,20 @@ function nav_widget(e) {
 		}
 	}
 
-	e.set_collapsed = function(ri, collapsed, recursive) {
-		if (ri != null)
-			set_collapsed(e.rows[ri], collapsed, recursive)
+	e.set_collapsed = function(row, collapsed, recursive) {
+		if (row)
+			set_collapsed(row, collapsed, recursive)
 		else
 			for (let row of e.child_rows)
 				set_collapsed(row, collapsed, recursive)
 
 		let refocus = refocus_state('row')
 		init_rows()
-		e.update({rows: true})
-		refocus()
+		refocus({rows: true})
 	}
 
-	e.toggle_collapsed = function(ri, recursive) {
-		e.set_collapsed(ri, !e.rows[ri].collapsed, recursive)
+	e.toggle_collapsed = function(row, recursive) {
+		e.set_collapsed(row, !row.collapsed, recursive)
 	}
 
 	// sorting ----------------------------------------------------------------
@@ -1173,7 +1179,7 @@ function nav_widget(e) {
 	e.set_order_by = function() {
 		update_field_sort_order()
 		sort_rows(true)
-		e.update({vals: true, focus: true, sort_order: true})
+		e.update({vals: true, state: true, sort_order: true})
 		e.scroll_to_focused_cell()
 	}
 	e.prop('order_by', {store: 'var'})
@@ -1643,8 +1649,8 @@ function nav_widget(e) {
 			if (!e.can_exit_row_on_errors && e.row_has_errors(row))
 				return false
 		if (e.save_row_on == 'exit_row'
-			|| (e.save_row_on && row.is_new  && e.insert_row_on == 'exit_row')
-			|| (e.save_row_on && row.removed && e.remove_row_on == 'exit_row')
+			|| (e.save_row_on != 'manual' && row.is_new  && e.insert_row_on == 'exit_row')
+			|| (e.save_row_on != 'manual' && row.removed && e.remove_row_on == 'exit_row')
 		) {
 			e.save(row)
 		}
@@ -1688,8 +1694,7 @@ function nav_widget(e) {
 		}
 	}
 
-	e.cell_display_val = function(row, field) {
-		let v = e.cell_input_val(row, field)
+	e.cell_display_val_for = function(row, field, v) {
 		if (v == null)
 			return field.null_text
 		if (v === '')
@@ -1707,7 +1712,12 @@ function nav_widget(e) {
 			return field.format(v, row)
 	}
 
+	e.cell_display_val = function(row, field) {
+		return e.cell_display_val_for(row, field, e.cell_input_val(row, field))
+	}
+
 	e.on('display_vals_changed', function(field) {
+		reset_quicksearch()
 		e.update({vals: true})
 	})
 
@@ -1790,18 +1800,17 @@ function nav_widget(e) {
 			parent_row: parent_row,
 		}, ev))
 
-		if (row && e.save_row_on && e.insert_row_on == 'input')
+		if (row && e.save_row_on != 'manual' && e.insert_row_on == 'input')
 			e.save(row)
 
 		return row
 	}
 
-	e.can_remove_row = function(ri) {
+	e.can_remove_row = function(row) {
 		if (!(e.can_edit && e.can_remove_rows))
 			return false
-		if (ri == null)
+		if (!row)
 			return true
-		let row = e.rows[ri]
 		if (row.can_remove === false)
 			return false
 		if (row.is_new && row.save_request) {
@@ -1813,70 +1822,85 @@ function nav_widget(e) {
 		return true
 	}
 
-	e.remove_row = function(ri, ev) {
+	e.remove_rows = function(rows_to_remove, ev) {
 
-		let row = e.rows[ri]
+		let forever = (ev && ev.forever) || !e.rowset_url
+		let toggle = ev && ev.toggle
+		let refocus = ev && ev.refocus
 
-		if ((ev && ev.forever) || row.is_new) {
-			e.each_child_row(row, function(row) {
-				e.all_rows.delete(row)
-			})
-			e.all_rows.delete(row)
-			remove_row_from_tree(row)
-			each_lookup('row_removed', row)
+		let removed_rows = new Set()
+		let rows_marked
+		let top_row_index
 
-			let ri = e.row_index(row, ev && ev.row_index)
-			let n = 1
-			if (row.parent_rows) {
-				let min_parent_rows = row.parent_rows.length + 1
-				while (1) {
-					let row = e.rows[ri + n]
-					if (!row || row.parent_rows.length < min_parent_rows)
-						break
-					n++
+		for (let row of rows_to_remove) {
+
+			if (forever || row.is_new) {
+
+				if (refocus) {
+					let row_index = e.row_index(row)
+					if (top_row_index == null || row_index < top_row_index)
+						top_row_index = row_index
 				}
+
+				removed_rows.add(row)
+				e.each_child_row(row, function(row) {
+					removed_rows.add(row)
+				})
+
+				remove_row_from_tree(row)
+
+				each_lookup('row_removed', row)
+
+			} else if (e.can_remove_row(row)) {
+
+				let removed = !toggle || !row.removed
+
+				e.each_child_row(row, function(row) {
+					if (e.set_row_state(row, 'removed', removed, false))
+						row_state_changed(row, 'row_removed', removed, ev)
+				})
+				if (e.set_row_state(row, 'removed', removed, false))
+					row_state_changed(row, 'row_removed', removed, ev)
+
+				row_changed(row)
+
+				rows_marked = rows_marked || removed
 			}
-			e.rows.splice(ri, n)
-			update_row_index()
+
+		}
+
+		if (removed_rows.size) {
+
+			if (removed_rows.size < 100) {
+				// much faster removal for a small number of rows (common case).
+				for (let row of removed_rows.keys()) {
+					e.rows.remove_value(row)
+					e.all_rows.remove_value(row)
+				}
+				update_row_index()
+			} else {
+				e.all_rows = e.all_rows.filter(row => !removed_rows.has(row))
+				init_rows()
+			}
 
 			e.update({rows: true})
 
-			if (ev && ev.refocus)
-				if (!e.focus_cell(ri, true, 0, 0, ev))
-					e.focus_cell(ri, true, -0, 0, ev)
-
-			e.fire('row_removed', row, ev)
-
-		} else {
-
-			if (!e.can_remove_row(ri))
-				return
-
-			let removed = !ev || !ev.toggle || !row.removed
-			e.each_child_row(row, function(row) {
-				if (e.set_row_state(row, 'removed', removed, false))
-					row_state_changed(row, 'row_removed', removed, ev)
-			})
-			if (e.set_row_state(row, 'removed', removed, false))
-				row_state_changed(row, 'row_removed', removed, ev)
-
-			row_changed(row)
-
+			if (top_row_index != null) {
+				if (!e.focus_cell(top_row_index, true))
+					e.focus_cell(top_row_index, true, -0)
+			} else {
+				e.focus_cell(false, false)
+			}
 		}
 
-		if (row && e.save_row_on && e.remove_row_on == 'input')
-			e.save(row)
+		if (rows_marked && e.save_row_on != 'manual' && e.remove_row_on == 'input')
+			e.save()
 
-		return row
+		return removed_rows.size > 0 || rows_marked
 	}
 
 	e.remove_selected_rows = function(ev) {
-		let result = true
-		for (let row of e.selected_rows.keys()) {
-			if (!e.remove_row(e.row_index(row), ev))
-				result = false
-		}
-		return result
+		return e.remove_rows(e.selected_rows.keys(), ev)
 	}
 
 	// row moving -------------------------------------------------------------
@@ -1951,14 +1975,10 @@ function nav_widget(e) {
 						e.set_cell_val(e.rows[ri], e.index_field, index++)
 				}
 
-				e.update({rows: true})
-
-			} else {
-
-				e.update({rows: true}) // for grid
-				e.update({vals: true, focus: true})
-
 			}
+
+			e.update({vals: true, state: true})
+
 		}
 
 		return state
@@ -2070,8 +2090,7 @@ function nav_widget(e) {
 		e.can_change_rows = and(or(true, res.can_change_rows ), e.can_change_rows)
 
 		init_all(res)
-		e.update({fields: true, rows: true})
-		refocus()
+		refocus({fields: true, rows: true})
 		e.fire('loaded', true)
 
 	}
@@ -2147,6 +2166,7 @@ function nav_widget(e) {
 	}
 
 	e.apply_result = function(result, changed_rows) {
+		let rows_to_remove = []
 		for (let i = 0; i < result.rows.length; i++) {
 			let rt = result.rows[i]
 			let row = changed_rows[i]
@@ -2156,12 +2176,14 @@ function nav_widget(e) {
 			e.set_row_error(row, err)
 
 			if (rt.remove) {
-				e.remove_row(row, {forever: true, refocus: true})
+				rows_to_remove.push(row)
 			} else {
 				if (!row_failed) {
-					if (e.set_row_state(row, 'is_new', false, false))
+					let not_new = e.set_row_state(row, 'is_new', false, false)
+					let not_modified = e.set_row_state(row, 'cells_modified', false, false)
+					if (not_new)
 						row_state_changed(row, 'row_is_new', false)
-					if (e.set_row_state(row, 'cells_modified', false, false))
+					if (not_modified)
 						row_state_changed(row, 'row_modified', false)
 				}
 				if (rt.field_errors) {
@@ -2172,13 +2194,14 @@ function nav_widget(e) {
 						if (e.set_cell_state(row, field, 'error', err))
 							cell_state_changed(row, field, 'cell_error', err)
 					}
-				} else {
-					if (rt.values)
-						for (let k in rt.values)
-							e.reset_cell_val(row, e.all_fields[k], rt.values[k])
 				}
+				if (rt.values)
+					for (let k in rt.values)
+						e.reset_cell_val(row, e.all_fields[k], rt.values[k])
 			}
 		}
+		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
+
 		if (result.sql_trace && result.sql_trace.length)
 			print(result.sql_trace.join('\n'))
 	}
@@ -2360,36 +2383,54 @@ function nav_widget(e) {
 	}
 	}
 
-	// crude quick-search only for the first letter ---------------------------
+	// quick-search -----------------------------------------------------------
 
-	let found_row_index
-	function quicksearch(c, field, again) {
-		if (e.focused_row_index != found_row_index)
-			found_row_index = null // user changed selection, start over.
-		let ri = found_row_index != null ? found_row_index+1 : 0
-		if (ri >= e.rows.length)
-			ri = null
-		while (ri != null) {
-			let s = e.cell_text_val(e.rows[ri], field)
-			if (s.starts(c.lower()) || s.starts(c.upper())) {
-				e.focus_cell(ri, true, 0, 0, {input: e})
-				break
-			}
-			ri++
-			if (ri >= e.rows.length)
-				ri = null
-		}
-		found_row_index = ri
-		if (found_row_index == null && !again)
-			quicksearch(c, field, true)
+	function* qs_reach_row(start_row, ri_offset) {
+		let n = e.rows.length
+		let ri1 = or(e.row_index(start_row), 0) + (ri_offset || 0)
+		for (let ri = ri1; ri < n; ri++)
+			yield ri
+		for (let ri = 0; ri < ri1; ri++)
+			yield ri
 	}
 
-	e.quicksearch = function(c, field) {
-		field = field
-			||	e.quicksearch_field
-			|| (e.quicksearch_col && e.all_fields[e.quicksearch_col])
-		if (field)
-			quicksearch(c, field)
+	function reset_quicksearch() {
+		e.quicksearch_text = ''
+		e.quicksearch_field = null
+	}
+
+	reset_quicksearch()
+
+	e.quicksearch = function(s, start_row, ri_offset) {
+
+		if (!s) {
+			reset_quicksearch()
+			e.update({state: true})
+			return
+		}
+
+		s = s.lower()
+
+		let field = e.focused_field || (e.quicksearch_col && e.all_fields[e.quicksearch_col])
+		if (!field)
+			return
+
+		for (let ri of qs_reach_row(start_row, ri_offset)) {
+			let row = e.rows[ri]
+			let cell_text = e.cell_text_val(row, field).lower()
+			if (cell_text.starts(s)) {
+				if (e.focus_cell(ri, true, 0, 0, {
+						input: e,
+						must_not_move_row: true,
+						must_not_move_col: true,
+						quicksearch_text: s,
+						quicksearch_field: field,
+				})) {
+					break
+				}
+			}
+		}
+
 	}
 
 	// picker protocol --------------------------------------------------------
@@ -2415,7 +2456,8 @@ function nav_widget(e) {
 	}
 
 	e.set_display_col = function() {
-		e.update({vals: true})
+		reset_quicksearch()
+		e.update({vals: true, state: true})
 	}
 	e.prop('display_col', {store: 'var'})
 

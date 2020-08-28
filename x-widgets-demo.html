@@ -684,7 +684,7 @@ for (let i = 0; i <= 10000; i++) {
 	let random_date = clamp(i * 24 * 3600 * 10, 0, time(3000, 0))
 	let active = i % 5 == 0
 	let row = [id, id, active, name, parent_id, random_num, random_date]
-	row.focusable = i % 10 >= 2
+	row.focusable = true // i % 100 >= 85
 	rows.push(row)
 }
 
@@ -1225,7 +1225,7 @@ demo_list = listbox({
 	item_typename: 'richtext',
 	field: {},
 	val_col: 0,
-	val: demos[22],
+	val: demos[18],
 })
 
 demo_list.create_item = function() {
