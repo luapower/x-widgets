@@ -68,7 +68,7 @@ function xmodule_load() {
 			root_widget.remove()
 		root_widget	= component.create(t)
 		body.add(root_widget)
-		body.fire('widget_tree_changed')
+		body.fireup('widget_tree_changed')
 	}
 	ajax({url: '/xmodule.json', success: loaded}).send()
 }

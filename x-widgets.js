@@ -715,7 +715,7 @@ function val_widget(e, always_enabled) {
 		v = e.to_val(v)
 		if (v === undefined)
 			v = null
-		if (nav && e.field)
+		if (e.row && e.field)
 			nav.reset_cell_val(e.row, e.field, v, ev)
 	}
 
@@ -1628,8 +1628,8 @@ component('x-dropdown', function(e) {
 		e.picker.col = e.col
 		e.picker.class('picker', true)
 		e.picker.can_select_widget = false
-		//e.picker.on('val_picked', picker_val_picked)
-		//e.picker.on('keydown'   , picker_keydown)
+		e.picker.on('val_picked', picker_val_picked)
+		e.picker.on('keydown'   , picker_keydown)
 
 		let picker_update = e.picker.update
 		e.picker.update = function(opt) {
@@ -1646,23 +1646,21 @@ component('x-dropdown', function(e) {
 
 	}
 
-	function bind_events(on) {
+	function bind_document(on) {
 		document.on('pointerdown'     , document_pointerdown, on)
 		document.on('rightpointerdown', document_pointerdown, on)
 		document.on('stopped_event'   , document_stopped_event, on)
-		e.picker.on('val_picked', picker_val_picked, on)
-		e.picker.on('keydown'   , picker_keydown, on)
 	}
 
 	e.on('attach', function() {
-		bind_events(true)
+		bind_document(true)
 		e.picker.attach()
 		e.update()
 	})
 
 	e.on('detach', function() {
 		e.close()
-		bind_events(false)
+		bind_document(false)
 		e.picker.detach()
 		e.picker.popup(false)
 	})
@@ -1827,6 +1825,20 @@ function nav_dropdown_widget(e) {
 
 	dropdown.construct(e)
 
+	let set_nav = e.set_nav
+	e.set_nav = function(v, ...args) {
+		set_nav(v, ...args)
+		if (!e.initialized) return
+		e.picker.nav = v
+	}
+
+	let set_col = e.set_col
+	e.set_col = function(v, ...args) {
+		set_col(v, ...args)
+		if (!e.initialized) return
+		e.picker.col = v
+	}
+
 	e.set_val_col = function(v) {
 		if (!e.initialized) return
 		e.picker.val_col = v
@@ -1841,7 +1853,7 @@ function nav_dropdown_widget(e) {
 
 	e.set_rowset_name = function(v) {
 		if (!e.initialized) return
-		e.picker.rowset_name = rowset_name
+		e.picker.rowset_name = v
 	}
 	e.prop('rowset_name', {store: 'var', type: 'rowset'})
 
@@ -2984,7 +2996,7 @@ component('x-toaster', function(e) {
 			text: text,
 			side: e.side,
 			align: e.align,
-			timeout: opt(timeout, e.timeout),
+			timeout: strict_or(timeout, e.timeout),
 			check: popup_check,
 			popup_target_detached: popup_removed,
 		})

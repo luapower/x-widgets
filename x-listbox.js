@@ -55,7 +55,7 @@ component('x-listbox', function(e) {
 			fields: [{format: e.format_item}],
 			rows: rows,
 		}
-		e.reset(e.rowset, true)
+		e.reset()
 	}
 
 	e.create_item = function() {
@@ -340,7 +340,7 @@ component('x-list-dropdown', function(e) {
 		e.picker = e.picker || listbox(update({
 			items: e.items,
 			rowset: e.rowset,
-			rowset_nane: e.rowset_name,
+			rowset_name: e.rowset_name,
 			nav: e.nav,
 			col: e.col,
 			val_col: e.val_col,

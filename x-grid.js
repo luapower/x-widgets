@@ -26,23 +26,22 @@ component('x-grid', function(e) {
 	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
 	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
 	e.advance_on_enter = 'next_row' // false|'next_row'|'next_cell'
-	e.prop('exit_edit_on_escape'         , {store: 'var', default: true})
-	e.prop('exit_edit_on_enter'          , {store: 'var', default: false})
+	e.prop('exit_edit_on_escape'         , {store: 'var', type: 'bool', default: true})
+	e.prop('exit_edit_on_enter'          , {store: 'var', type: 'bool', default: false})
 	e.quick_edit = false        // quick edit (vs. quick-search) when pressing a key
 
 	// mouse behavior
-	e.prop('can_reorder_fields'          , {store: 'var', default: true})
-	e.prop('enter_edit_on_click'         , {store: 'var', default: false})
-	e.prop('enter_edit_on_click_focused' , {store: 'var', default: true})
-	e.prop('focus_cell_on_click_header'  , {store: 'var', default: false})
-	e.prop('can_move_rows'               , {store: 'var', default: false})
-	e.prop('can_change_parent'           , {store: 'var', default: true})
+	e.prop('can_reorder_fields'          , {store: 'var', type: 'bool', default: true})
+	e.prop('enter_edit_on_click'         , {store: 'var', type: 'bool', default: false})
+	e.prop('enter_edit_on_click_focused' , {store: 'var', type: 'bool', default: true})
+	e.prop('focus_cell_on_click_header'  , {store: 'var', type: 'bool', default: false})
+	e.prop('can_change_parent'           , {store: 'var', type: 'bool', default: true})
 
 	// context menu features
-	e.prop('enable_context_menu'           , {store: 'var', default: true})
-	e.prop('can_change_header_visibility'  , {store: 'var', default: false})
-	e.prop('can_change_filters_visibility' , {store: 'var', default: true})
-	e.prop('can_change_fields_visibility'  , {store: 'var', default: true})
+	e.prop('enable_context_menu'           , {store: 'var', type: 'bool', default: true})
+	e.prop('can_change_header_visibility'  , {store: 'var', type: 'bool', default: false})
+	e.prop('can_change_filters_visibility' , {store: 'var', type: 'bool', default: true})
+	e.prop('can_change_fields_visibility'  , {store: 'var', type: 'bool', default: true})
 
 	let horiz = true
 	e.get_vertical = function() { return !horiz }
@@ -290,7 +289,7 @@ component('x-grid', function(e) {
 		w = clamp(w, field.min_w, field.max_w)
 		field.w = w
 		if (e.widget_editing)
-			attr(attr(e, 'field_attrs'), field.name).w = w
+			attr(attr(e, 'col_attrs'), field.name).w = w
 		e.header.at[fi]._w = w
 	}
 
@@ -590,12 +589,19 @@ component('x-grid', function(e) {
 		if (typeof cell.input_val != 'string')
 			return
 		if (!cell.qs_div) {
-			cell.qs_div = div({class: 'x-grid-qs-text'}, s)
-			let val_node = cell.childNodes[cell.indent ? 1 : 0]
-			val_node.remove()
-			cell.add(div({style: 'position: relative'}, val_node, cell.qs_div))
+			if (s) {
+				cell.qs_div = div({class: 'x-grid-qs-text'}, s)
+				let val_node = cell.childNodes[cell.indent ? 1 : 0]
+				val_node.remove()
+				cell.add(div({style: 'position: relative'}, val_node, cell.qs_div))
+			}
 		} else {
-			cell.qs_div.set(s)
+			if (s) {
+				let prefix = e.cell_input_val(row, field).slice(0, s.length)
+				cell.qs_div.set(prefix)
+			} else {
+				cell.qs_div.clear()
+			}
 		}
 	}
 
@@ -1672,7 +1678,7 @@ component('x-grid', function(e) {
 			return false
 		}
 
-		if (key == 'Backspace') {
+		if (!e.editor && key == 'Backspace') {
 			if (e.quicksearch_text)
 				e.quicksearch(e.quicksearch_text.slice(0, -1), e.focused_row)
 			return false
@@ -1719,7 +1725,7 @@ component('x-grid', function(e) {
 		items.push({
 			text: e.changed_rows ?
 				S('discard_changes_and_reload', 'Discard changes and reload') : S('reload', 'Reload'),
-			enabled: !!(e.changed_rows),
+			enabled: !e.changed_rows && !!e.rowset_url,
 			icon: 'fa fa-sync',
 			action: function() {
 				e.reload()
@@ -1874,7 +1880,7 @@ component('x-grid-dropdown', function(e) {
 	e.init = function() {
 		e.picker = grid(update({
 			rowset: e.rowset,
-			rowset_nane: e.rowset_name,
+			rowset_name: e.rowset_name,
 			nav: e.nav,
 			col: e.col,
 			val_col: e.val_col,

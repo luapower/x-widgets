@@ -1,23 +1,19 @@
 
 // ---------------------------------------------------------------------------
-// rowset types
+// global widgets nav
 // ---------------------------------------------------------------------------
 
-// globals rowset
+global_widgets_nav = function(type, exclude_e) {
 
-global_widgets_rowset = function(type, exclude_e) {
-
-	let rs = rowset({
+	let e = bare_nav({
 		fields: [{name: 'name'}],
-		can_add_rows: true,
-		can_remove_rows: true,
 	})
 
 	function global_changed(te, name, last_name) {
 		if (last_name && name) {
-			let field = rs.fields[0]
-			let row = rs.lookup(field, last_name)
-			rs.set_val(row, field, name)
+			let field = e.fields[0]
+			let row = e.lookup(field, last_name)
+			e.set_val(row, field, name)
 		} else {
 			global_detached(te, last_name)
 			global_attached(te, name)
@@ -27,15 +23,15 @@ global_widgets_rowset = function(type, exclude_e) {
 	function global_attached(te, name) {
 		if (!name)
 			return
-		rs.add_row({name: name})
+		e.add_row({name: name})
 	}
 
 	function global_detached(te, name) {
 		if (!name)
 			return
-		let row = rs.lookup(rs.fields[0], name)
+		let row = e.lookup(e.fields[0], name)
 		if (row)
-			rs.remove_row(row, {forever: true})
+			e.remove_row(row, {forever: true})
 	}
 
 	document.on('global_changed' , global_changed )
@@ -49,27 +45,32 @@ global_widgets_rowset = function(type, exclude_e) {
 			global_attached(e, e.id)
 	}
 
-	return rs
+	return e
 }
 
-// rowsets rowset
+// ---------------------------------------------------------------------------
+// rowsets nav
+// ---------------------------------------------------------------------------
 
-rowsets_rowset = global_rowset('rowsets')
-rowsets_rowset.load()
+//rowsets_nav = bare_nav({rowset_name: 'rowsets'})
+//rowsets_nav.reload()
 
-// rowset
+// ---------------------------------------------------------------------------
+// rowset types
+// ---------------------------------------------------------------------------
 
-rowset.types.rowset = {}
+field_types.rowset = {}
 
-rowset.types.rowset.editor = function(...options) {
+field_types.rowset.editor = function(...options) {
 	function more() {
 		let d = sql_rowset_editor_dialog()
 		d.modal()
 	}
 	return list_dropdown(update({
 		nolabel: true,
-		lookup_rowset: rowsets_rowset,
-		lookup_col: 'name',
+		rowset_name: 'rowsets',
+		val_col: 'name',
+		display_col: 'name',
 		mode: 'fixed',
 		more_action: more,
 	}, ...options))
@@ -77,10 +78,10 @@ rowset.types.rowset.editor = function(...options) {
 
 // col
 
-rowset.types.col = {}
+field_types.col = {}
 
 /*
-rowset.types.col.editor = function(...options) {
+field_types.col.editor = function(...options) {
 	let rs = rowset({
 		fields: [{name: 'name'}],
 	})
@@ -107,16 +108,16 @@ rowset.types.col.editor = function(...options) {
 
 // nav
 
-rowset.types.nav = {}
+field_types.nav = {}
 
-rowset.types.nav.editor = function(...options) {
+field_types.nav.editor = function(...options) {
 	let opt = update({
 		nolabel: true,
 		lookup_col: 'name',
 		display_col: 'name',
 		mode: 'fixed',
 	}, ...options)
-	opt.lookup_rowset = global_widgets_rowset('nav')
+	opt.lookup_nav = global_widgets_nav('nav')
 	return list_dropdown(opt)
 }
 
@@ -127,6 +128,9 @@ rowset.types.nav.editor = function(...options) {
 prop_inspector = component('x-prop-inspector', function(e) {
 
 	grid.construct(e)
+
+	e.can_add_rows = false
+	e.can_remove_rows = false
 
 	e.can_select_widget = false
 
@@ -144,16 +148,9 @@ prop_inspector = component('x-prop-inspector', function(e) {
 	e.exit_edit_on_enter = false
 	e.stay_in_edit_mode = true
 
-	e.rowset = rowset({
-		can_change_rows: true,
+	e.on('attach', function() {
+		reset()
 	})
-
-	init = e.init
-	e.init = function() {
-		init_widgets()
-		init_rowset()
-		init()
-	}
 
 	function bind(on) {
 		document.on('selected_widgets_changed', selected_widgets_changed, on)
@@ -163,24 +160,15 @@ prop_inspector = component('x-prop-inspector', function(e) {
 	e.on('attach', function() { bind(true) })
 	e.on('detach', function() { bind(false) })
 
-	let widgets
-
-	function init_widgets() {
-		widgets = selected_widgets
-		if (!selected_widgets.size && focused_widget() && !up_widget_which(focused_widget(), e => !e.can_select_widget))
-			widgets = new Set([focused_widget()])
-	}
-
-	e.rowset.on('val_changed', function(row, field, val) {
+	e.on('val_changed', function(row, field, val) {
 		if (!widgets)
-			init_widgets()
+			reset()
 		for (let e of widgets)
 			e[field.name] = val
 	})
 
 	function selected_widgets_changed() {
-		init_widgets()
-		init_rowset()
+		reset()
 	}
 
 	let barrier
@@ -192,8 +180,7 @@ prop_inspector = component('x-prop-inspector', function(e) {
 		if (!fe || !fe.can_select_widget)
 			return
 		barrier = true
-		init_widgets()
-		init_rowset()
+		reset()
 		barrier = false
 	}
 
@@ -201,26 +188,32 @@ prop_inspector = component('x-prop-inspector', function(e) {
 		let widget = ev.target
 		if (!widgets.has(widget))
 			return
-		let field = e.rowset.field(k)
+		let field = e.all_fields[k]
 		if (!field)
 			return
 		e.focus_cell(0, e.field_index(field))
-		e.rowset.reset_val(e.focused_row, field, v)
+		e.reset_val(e.focused_row, field, v)
 	}
 
 	/*
 	e.on('exit_edit', function(ri, fi) {
 		let field = e.fields[fi]
-		e.rowset.reset_val(e.rows[ri], field, e.widget[field.name])
+		e.reset_cell_val(e.rows[ri], field, e.widget[field.name])
 	})
 	*/
 
-	function init_rowset() {
+	let widgets
 
-		let res = {}
-		res.fields = []
+	function reset() {
+
+		widgets = selected_widgets
+		if (!selected_widgets.size && focused_widget() && !up_widget_which(focused_widget(), e => !e.can_select_widget))
+			widgets = new Set([focused_widget()])
+
+		let rs = {}
+		rs.fields = []
 		let vals = []
-		res.rows = [vals]
+		rs.rows = [vals]
 
 		let prop_counts = {}
 		let props = {}
@@ -236,11 +229,12 @@ prop_inspector = component('x-prop-inspector', function(e) {
 
 		for (let prop in prop_counts)
 			if (prop_counts[prop] == widgets.size) {
-				res.fields.push(props[prop])
+				rs.fields.push(props[prop])
 				vals.push(prop_vals[prop])
 			}
 
-		e.rowset.reset(res)
+		e.rowset = rs
+		e.reset()
 
 		e.title_text = ([...widgets].map(e => e.typename)).join(' ')
 
@@ -260,6 +254,8 @@ prop_inspector = component('x-prop-inspector', function(e) {
 
 widget_tree = component('x-widget-tree', function(e) {
 
+	grid.construct(e)
+
 	function widget_tree_rows() {
 		let rows = new Set()
 		function add_widget(e, pe) {
@@ -277,7 +273,7 @@ widget_tree = component('x-widget-tree', function(e) {
 		return () => H((e.id && '<b>'+e.id+'</b> ' || e.typename.replace('_', ' ')))
 	}
 
-	let rs = rowset({
+	let rs = {
 		fields: [
 			{name: 'widget', format: widget_name},
 			{name: 'parent_widget', visible: false},
@@ -286,18 +282,16 @@ widget_tree = component('x-widget-tree', function(e) {
 		rows: widget_tree_rows(),
 		pk: 'widget',
 		parent_col: 'parent_widget',
-	})
-
-	e.cols = 'id widget'
-
-	grid.construct(e)
-
-	e.can_select_widget = false
+	}
 
 	e.rowset = rs
+	e.cols = 'id widget'
 	e.tree_col = 'widget'
+
+	e.can_select_widget = false
 	e.header_visible = false
 	e.can_focus_cells = false
+	e.can_change_rows = false
 	e.auto_focus_first_cell = false
 	e.can_select_non_siblings = false
 
@@ -305,7 +299,7 @@ widget_tree = component('x-widget-tree', function(e) {
 		return e.focused_row && e.focused_row[0]
 	}
 	function set_widget(widget) {
-		let row = rs.lookup(rs.field(0), widget)
+		let row = e.lookup(e.all_fields[0], widget)
 		let ri = e.row_index(row)
 		e.focus_cell(ri, 0)
 	}
@@ -331,11 +325,11 @@ widget_tree = component('x-widget-tree', function(e) {
 	function select_widgets(widgets) {
 		let rows = new Map()
 		for (let ce of widgets) {
-			let row = rs.lookup(rs.field(0), ce)
+			let row = e.lookup(e.all_fields[0], ce)
 			rows.set(row, true)
 		}
 		let focused_widget = [...widgets].pop()
-		let row = rs.lookup(rs.field(0), focused_widget)
+		let row = e.lookup(e.all_fields[0], focused_widget)
 		let ri = e.row_index(row)
 		e.focus_cell(ri, null, 0, 0, {
 			selected_rows: rows,
@@ -353,7 +347,8 @@ widget_tree = component('x-widget-tree', function(e) {
 	}
 
 	function widget_tree_changed() {
-		rs.reset({rows: widget_tree_rows()})
+		rs.rows = widget_tree_rows()
+		e.reset()
 	}
 
 	/* TODO: not sure what to do here...

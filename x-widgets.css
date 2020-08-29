@@ -139,7 +139,7 @@
 	background-color: var(--x-item-unfocused-bg-color);
 }
 
-.x-focusable:focus-within .x-item.focused:not(.invalid):active {
+.x-focusable:focus-within .x-item.focused:not(.invalid):not(.disabled):active {
 	background-color: var(--x-item-focused-selected-bg-color);
 	color: var(--x-inverted-fg-color);
 }
@@ -1781,7 +1781,8 @@
 /* grid rows */
 
 .x-grid-cells-view {
-	overflow: auto;            /* required: show scrollbars as needed */
+	overflow-x: auto;          /* required: show scrollbars as needed */
+	overflow-y: scroll;        /* required: show scrollbars always */
 	position: relative;        /* required: anchor rows div */
 	min-height: 0;
 	flex: 1;
