@@ -231,10 +231,6 @@ function nav_widget(e) {
 
 	function init_all_fields(def) {
 
-		e.focused_field = null
-		e.selected_field = null
-		e.quicksearch_field = null
-
 		if (e.all_fields)
 			bind_lookup_navs(false)
 
@@ -311,7 +307,14 @@ function nav_widget(e) {
 	// all_fields subset in custom order --------------------------------------
 
 	function init_fields() {
-		reset_quicksearch()
+
+		e.focused_field = null
+		e.selected_field = null
+		e.last_focused_col = null
+		e.quicksearch_field = null
+		if (e.selected_rows)
+			e.selected_rows.clear()
+
 		e.fields = []
 		for (let col of cols_array()) {
 			let field = e.all_fields[col]
@@ -320,6 +323,7 @@ function nav_widget(e) {
 		}
 		update_field_index()
 		update_field_sort_order()
+
 	}
 
 	e.field_index = function(field) {
@@ -327,6 +331,8 @@ function nav_widget(e) {
 	}
 
 	function update_field_index() {
+		for (let field of e.all_fields)
+			field.index = null
 		for (let i = 0; i < e.fields.length; i++)
 			e.fields[i].index = i
 	}
@@ -334,8 +340,9 @@ function nav_widget(e) {
 	// visible cols list ------------------------------------------------------
 
 	e.set_cols = function() {
+		let refocus = refocus_state(false)
 		init_fields()
-		e.update({fields: true})
+		refocus({fields: true})
 	}
 	e.prop('cols', {store: 'var'})
 
@@ -782,24 +789,28 @@ function nav_widget(e) {
 			if (!e.rows.length)
 				return
 
-			let row, unfocus_if_not_found
+			let must_not_move_row = !e.auto_focus_first_cell
+			let ri, unfocus_if_not_found
 			if (how == 'val' && e.val_field && e.nav && e.field) {
-				row = e.lookup(e.val_field, e.input_val)
+				ri = e.row_index(e.lookup(e.val_field, e.input_val))
 				unfocus_if_not_found = true
 			} else if (how == 'pk' && e.pk_fields && e.pk_fields.length)
-				row = e.lookup(e.pk_fields, refocus_pk)
+				ri = e.row_index(e.lookup(e.pk_fields, refocus_pk))
 			else if (how == 'row')
-				row = refocus_row
-			let ri = e.row_index(row)
+				ri = e.row_index(refocus_row)
+			else if (!how) {
+				ri = false
+				must_not_move_row = true
+				unfocus_if_not_found = true
+			}
 
 			e.focus_cell(ri, true, 0, 0, {
 				update: update_opt,
-				must_not_move_row: !e.auto_focus_first_cell,
+				must_not_move_row: must_not_move_row,
 				unfocus_if_not_found: unfocus_if_not_found,
 				enter_edit: e.auto_edit_first_cell,
 				was_editing: was_editing,
 				focus_editor: focus_editor,
-				preserve_selection: how == 'row',
 			})
 
 		}
