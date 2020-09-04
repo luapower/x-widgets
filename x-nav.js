@@ -5,7 +5,6 @@
 
 /*
 	nav widgets must implement:
-		update(opt)
 		update_cell_state(ri, fi, prop, val, ev)
 		update_row_state(ri, prop, val, ev)
 		update_cell_editing(ri, [fi], editing)
@@ -129,7 +128,6 @@ function nav_widget(e) {
 	e.on('attach', function() {
 		bind_param_nav(true)
 		e.reset()
-		e.reload()
 	})
 
 	function force_unfocus_focused_cell() {
@@ -279,7 +277,7 @@ function nav_widget(e) {
 	e.set_val_col = function(v) {
 		e.val_field = e.all_fields[v]
 		if (e.val_field)
-			e.update_val(e.input_val)
+			e.update()
 	}
 	e.prop('val_col', {store: 'var'})
 
@@ -402,7 +400,6 @@ function nav_widget(e) {
 		if (!(nav && params))
 			return
 		nav.on('focused_row_changed', params_changed, on)
-		nav.on('loaded'             , params_changed, on)
 		for (let param of params.split(/\s+/))
 			nav.on('focused_row_val_changed_for_'+(param.replace(/[^=]*=/, '')), params_changed, on)
 	}
@@ -608,27 +605,19 @@ function nav_widget(e) {
 		let opt = update({editable: editable}, ev)
 		;[ri, fi] = e.first_focusable_cell(ri, fi, rows, cols, opt)
 
-		let cancel, row_changed, field_changed
-
 		// failure to find cell means cancel.
 		if (ri == null && !ev.unfocus_if_not_found)
-			cancel = true
-		else {
-			row_changed   = e.focused_row_index   != ri
-			field_changed = e.focused_field_index != fi
-
-			if (row_changed) {
-				if (!e.exit_focused_row(ev.force_exit_edit))
-					cancel = true
-			} else if (field_changed) {
-				if (!e.exit_edit(ev.force_exit_edit))
-					cancel = true
-			}
-		}
-		if (cancel) {
-			if (ev.update)
-				e.update(ev.update)
 			return false
+
+		let row_changed   = e.focused_row != e.rows[ri]
+		let field_changed = e.focused_field != e.fields[fi]
+
+		if (row_changed) {
+			if (!e.exit_focused_row(ev.force_exit_edit))
+				return false
+		} else if (field_changed) {
+			if (!e.exit_edit(ev.force_exit_edit))
+				return false
 		}
 
 		let last_ri = e.focused_row_index
@@ -745,15 +734,19 @@ function nav_widget(e) {
 			qs_changed = true
 		}
 
-		if (row_changed || sel_rows_changed || field_changed || qs_changed || ev.update)
-			e.update(update({state: true}, ev.update))
+		e.begin_update()
+
+		if (row_changed || sel_rows_changed || field_changed || qs_changed)
+			e.update({state: true})
 
 		if (enter_edit && ri != null && fi != null)
-			e.enter_edit(ev.editor_state, focus_editor || false)
+			e.update({enter_edit: [ev.editor_state, focus_editor || false]})
 
 		if (ev.make_visible != false)
 			if (e.focused_row)
-				e.scroll_to_cell(e.focused_row_index, e.focused_field_index)
+				e.update({scroll_to_cell: [e.focused_row_index, e.focused_field_index]})
+
+		e.end_update()
 
 		return true
 	}
@@ -809,7 +802,7 @@ function nav_widget(e) {
 		else if (how == 'row')
 			refocus_row = e.focused_row
 
-		return function(update_opt) {
+		return function() {
 
 			let must_not_move_row = !e.auto_focus_first_cell
 			let ri, unfocus_if_not_found
@@ -827,7 +820,6 @@ function nav_widget(e) {
 			}
 
 			e.focus_cell(ri, true, 0, 0, {
-				update: update_opt,
 				must_not_move_row: must_not_move_row,
 				unfocus_if_not_found: unfocus_if_not_found,
 				enter_edit: e.auto_edit_first_cell,
@@ -1048,10 +1040,12 @@ function nav_widget(e) {
 		else
 			for (let row of e.child_rows)
 				set_collapsed(row, collapsed, recursive)
-
 		let refocus = refocus_state('row')
 		init_rows()
-		refocus({rows: true})
+		e.begin_update()
+		update({rows: true})
+		refocus()
+		e.end_update()
 	}
 
 	e.toggle_collapsed = function(row, recursive) {
@@ -2041,8 +2035,10 @@ function nav_widget(e) {
 
 	function make_rowset_url(param_vals) {
 		if (!param_vals) {
-			if (!e.param_nav || !e.params)
+			if (!e.params)
 				return e.rowset_url
+			if (!e.param_nav || !e.param_nav.focused_row)
+				return
 			param_vals = {}
 			for (let s of e.params.split(/\s+/)) {
 				let p = s.split('=')
@@ -2064,6 +2060,13 @@ function nav_widget(e) {
 	e.reload = function(param_vals) {
 		if (!e.rowset_url)
 			return
+		if (!e.attached) {
+			e.update({reload: true})
+			return
+		}
+		let url = make_rowset_url(param_vals)
+		if (!url)
+			return
 		if (requests && requests.size && !e.load_request) {
 			e.notify('error',
 				S('error_load_while_saving', 'Cannot reload while saving is in progress.'))
@@ -2071,7 +2074,7 @@ function nav_widget(e) {
 		}
 		e.abort_loading()
 		let req = ajax({
-			url: make_rowset_url(param_vals),
+			url: url,
 			progress: load_progress,
 			success: load_success,
 			fail: load_fail,
@@ -2134,7 +2137,10 @@ function nav_widget(e) {
 		e.can_change_rows = strict_or(e.rowset.can_change_rows, true) && e.can_change_rows
 
 		init_all()
-		refocus({fields: true, rows: true})
+		e.begin_update()
+		e.update({fields: true, rows: true})
+		refocus()
+		e.end_update()
 		e.fire('loaded', true)
 
 	}
@@ -2520,7 +2526,6 @@ function nav_widget(e) {
 
 component('x-bare-nav', function(e) {
 	nav_widget(e)
-	e.update = noop
 	e.scroll_to_cell = noop
 	e.update_cell_state = noop
 	e.update_row_state = noop

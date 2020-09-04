@@ -54,45 +54,43 @@ html, body {
 <body>
 <script>
 
+DEBUG_EVENTS = true
+DEBUG_ATTACH_TIME = true
+
 // ---------------------------------------------------------------------------
 // main app
 // ---------------------------------------------------------------------------
 
-body = document.body
-
 allow_editing = true
 
-function xmodule_load() {
-	function loaded(t) {
-		if (root_widget)
-			root_widget.remove()
-		root_widget	= component.create(t)
-		body.add(root_widget)
-		body.fireup('widget_tree_changed')
-	}
-	ajax({url: '/xmodule.json', success: loaded}).send()
-}
-
-function xmodule_save() {
-	ajax({url: '/xmodule.json', upload: root_widget.serialize()}).send()
-}
-
-body.on('keydown', function(key, shift, ctrl) {
+document.body.on('keydown', function(key, shift, ctrl) {
 	if (key == 's' && ctrl) {
-		xmodule_save()
+		xmodule.save()
 		return false
 	}
 	if (key == 'r' && ctrl) {
-		xmodule_load()
+		xmodule.reload()
 		return false
 	}
 
 })
 
-root_widget = widget_placeholder()
-body.add(root_widget)
+xmodule = xmodule({
+	prop_layer_slots: {
+		base: null,
+		pri_lang: null,
+		sec_lang: null,
+		app: null,
+		user: null,
+	},
+})
 
-xmodule_load()
+root_widget = null
+
+xmodule.set_prop_layer('base', 'base', null, function() {
+	root_widget = component.create({gid: 'lma1'})
+	document.body.add(root_widget)
+})
 
 props_tb = properties_toolbox({
 	y: 128, x: 920, w: 220, h: 397,
@@ -125,7 +123,7 @@ function widgets_toolbox() {
 		let name = lb.items[i]
 		let cons = window[name]
 		let e = cons()
-		body.add(e)
+		document.body.add(e)
 	})
 	return tb
 }

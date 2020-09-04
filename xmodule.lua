@@ -1,7 +1,10 @@
 
 require'xrowset'
 local path = require'path'
+local fs = require'fs'
 local ppjson = require'prettycjson' --TODO: this is broken.
+
+--rowsets --------------------------------------------------------------------
 
 local rowsets = virtual_rowset(function(rs)
 	function rs:select_rows(res, param_values)
@@ -16,16 +19,33 @@ local rowsets = virtual_rowset(function(rs)
 	end
 end)
 
-action['xmodule.json'] = function()
-	local file = path.combine(config'www_dir', 'xmodule0.json')
+function rowset.rowsets()
+	return rowsets:respond()
+end
+
+--xmodule --------------------------------------------------------------------
+
+function xmodule_file(file)
+	return path.combine(config'app_dir', file)
+end
+
+function action.xmodule_next_gid()
+	local fn = xmodule_file'xmodule-next-gid'
+	local id = tonumber(assert(readfile(fn)))
+	if method'post' then
+		assert(writefile(fn, tostring(id + 1)))
+	end
+	setmime'txt'
+	out(config('xmodule_ns', '')..id)
+end
+
+action['xmodule_layer.json'] = function(layer)
+	layer = check(str_arg(layer))
+	assert(layer:find'^[%w_]+$')
+	local file = xmodule_file(_('xmodule-%s.json', layer))
 	if method'post' then
 		writefile(file, json(post()))
 	else
 		return readfile(file)
 	end
 end
-
-function rowset.rowsets()
-	return rowsets:respond()
-end
-

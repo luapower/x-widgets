@@ -5,6 +5,381 @@
 
 */
 
+DEBUG_ATTACH_TIME = false
+
+// ---------------------------------------------------------------------------
+// creating & setting up web components
+// ---------------------------------------------------------------------------
+// implements:
+//   e.initialized
+//   e.attached
+//   e.attach()
+//   e.detach()
+//   e.override(name, f)
+//   e.property(name, get[, set])
+// uses:
+//   e.init()
+// fires on self:
+//   'attach', 'detach'
+// fires on document:
+//   'global_attached', 'global_detached'
+//   'widget_attached', 'widget_detached'
+//
+// NOTE: the only reason for using this web components "technology" instead
+// of creating normal elements is because of connectedCallback and
+// disconnectedCallback for which there are no events in built-in elements,
+// and we use those events to solve the so-called "lapsed listener problem"
+// (a proper iterable weak hash map would be a better way to solve this but
+// alas, the web people could't get that one right either).
+// ---------------------------------------------------------------------------
+
+/* TODO: use it or scrape it.
+method(HTMLElement, 'override', function(method, func) {
+	let inherited = this[method] || noop
+	this[method] = function(...args) {
+		return func(inherited, ...args)
+	}
+})
+*/
+
+let repl_empty_str = v => repl(v, '', null)
+
+// component(tag, cons) -> create({option: value}) -> element.
+function component(tag, cons) {
+
+	let typename = tag.replace(/^[^\-]+\-/, '').replace(/\-/g, '_')
+
+	let cls = class extends HTMLElement {
+
+		constructor() {
+			super()
+			this.initialized = null // for log_add_event().
+			this.attached = false
+		}
+
+		connectedCallback() {
+			if (this.attached)
+				return
+			if (!this.isConnected)
+				return
+			// elements created by the browser must be initialized on first
+			// attach as they aren't allowed to create children or set
+			// attributes in the constructor.
+			init(this)
+			this.attach()
+		}
+
+		disconnectedCallback() {
+			this.detach()
+		}
+
+		attach() {
+			if (this.attached)
+				return
+			let t0 = DEBUG_ATTACH_TIME && time()
+
+			this.attached = true
+			this.begin_update()
+			this.fire('attach')
+			if (this.id)
+				document.fire('global_attached', this, this.id)
+			if (this.gid)
+				document.fire('widget_attached', this)
+			this.end_update()
+
+			if (DEBUG_ATTACH_TIME) {
+				let t1 = time()
+				let dt = (t1 - t0) * 1000
+				if (dt > 10)
+					print((dt).toFixed(0).padStart(3, ' '), 'attach', this.debug_name())
+			}
+		}
+
+		detach() {
+			if (!this.attached)
+				return
+			this.attached = false
+			this.fire('detach')
+			if (this.id)
+				document.fire('global_detached', this, this.id)
+			if (this.gid)
+				document.fire('widget_detached', this)
+		}
+
+		debug_name(prefix) {
+			prefix = (prefix && prefix + ' < ' || '') + this.typename
+				+ (this.id || this.gid != null ? ' ' + (this.id || this.gid) : '')
+			let p = this; do { p = p.popup_target || p.parent } while (p && !p.debug_name)
+			if (!(p && p.debug_name))
+				return prefix
+			return p.debug_name(prefix)
+		}
+
+	}
+
+	customElements.define(tag, cls)
+
+	function init(e, ...args) {
+		if (e.initialized)
+			return
+		e.typename = typename
+		e.init = noop
+		component_prop_system(e)
+		component_deferred_updating(e)
+		cons(e)
+		e.initialized = false
+		e.begin_update()
+		update(e, ...args)
+		e.end_update()
+		e.initialized = true
+		e.init()
+	}
+
+	function create(...args) {
+		let e = new cls()
+		init(e, ...args)
+		return e
+	}
+
+	create.class = cls
+	create.construct = cons
+
+	component.types[typename] = create
+	window[typename] = create
+
+	return create
+}
+
+component.types = {} // {typename -> create}
+
+component.create = function(t) {
+	if (t instanceof HTMLElement)
+		return t
+	if (t.gid)
+		update(t, xmodule.prop_vals(t.gid))
+	let create = component.types[t.typename]
+	return create && create(t)
+}
+
+global_widget_resolver = memoize(function(type) {
+	let is_type = 'is_'+type
+	return function(name) {
+		let e = window[name]
+		return isobject(e) && e.attached && e[is_type] && e.can_select_widget ? e : null
+	}
+})
+
+// ---------------------------------------------------------------------------
+// component partial deferred updating mixin
+// ---------------------------------------------------------------------------
+// implements:
+//   e.updating
+//   e.begin_update()
+//   e.end_update()
+//   e.update([opt])
+// uses:
+//   e.do_update([opt])
+// ---------------------------------------------------------------------------
+
+let component_deferred_updating = function(e) {
+
+	e.updating = 0
+
+	e.begin_update = function() {
+		e.updating++
+	}
+
+	e.end_update = function() {
+		assert(e.updating)
+		e.updating--
+		if (!e.updating)
+			e.update()
+	}
+
+	e.do_update = noop
+
+	let invalid, opt
+
+	e.update = function(opt1) {
+		invalid = true
+		if (opt1)
+			if (opt)
+				update(opt, opt1)
+			else
+				opt = opt1
+		if (e.updating)
+			return
+		if (!e.attached)
+			return
+		if (invalid) {
+			e.do_update(opt)
+			opt = null
+			invalid = false
+		}
+	}
+
+}
+
+// ---------------------------------------------------------------------------
+// component property system mixin
+// ---------------------------------------------------------------------------
+// implements:
+//   e.property(name, get[, set])
+//   e.prop(name, attrs)
+//   e.props: {prop -> attrs}
+//      attrs: name, type, private, store, convert, default,
+//             style, style_format, style_parse, bind, resolve.
+//   e.get_<prop>() -> v
+//   e.set_<prop>(v1, v0)
+// fires up:
+//   'prop_changed' (prop, v1, v0)
+// ---------------------------------------------------------------------------
+
+function component_prop_system(e) {
+
+	e.property = function(prop, getter, setter) {
+		property(this, prop, {get: getter, set: setter})
+	}
+
+	e.props = {}
+
+	e.prop = function(prop, opt) {
+		opt = opt || {}
+		update(opt, e.props[prop]) // class overrides
+		let getter = 'get_'+prop
+		let setter = 'set_'+prop
+		let type = opt.type
+		opt.name = prop
+		let convert = opt.convert || return_arg
+		let priv = opt.private
+		if (!e[setter])
+			e[setter] = noop
+		let chev = true // TODO: disable those when editing mode not allowed app-wide.
+
+		if (opt.store == 'var') {
+			let v = opt.default
+			function get() {
+				return v
+			}
+			function set(v1) {
+				let v0 = v
+				v1 = convert(v1, v0)
+				if (v1 === v0)
+					return
+				v = v1
+				e[setter](v1, v0)
+				if (!priv && chev)
+					e.fireup('prop_changed', prop, v1, v0)
+			}
+		} else if (opt.store == 'attr') {  // for attr-based styling
+			let attr = prop.replace(/_/g, '-')
+			if (opt.default !== undefined)
+				e.attr(attr, opt.default)
+			function get() {
+				return e.attrval(attr)
+			}
+			function set(v1) {
+				let v0 = get()
+				v1 = convert(v1, v0)
+				if (v1 === v0)
+					return
+				e.attr(attr, v1)
+				e[setter](v1, v0)
+				if (!priv && chev)
+					e.fireup('prop_changed', prop, v1, v0)
+			}
+		} else if (opt.style) {
+			let style = opt.style
+			let format = opt.style_format || return_arg
+			let parse  = opt.style_parse  || type == 'number' && num || repl_empty_str
+			if (opt.default != null && parse(e.style[style]) == null)
+				e.style[style] = format(opt.default)
+			function get() {
+				return parse(e.style[style])
+			}
+			function set(v) {
+				let v0 = get.call(e)
+				v = convert(v, v0)
+				if (v == v0)
+					return
+				e.style[style] = format(v)
+				v = get.call(e) // take it again (browser only sets valid values)
+				if (v == v0)
+					return
+				e[setter](v, v0)
+				if (!priv && chev)
+					e.fireup('prop_changed', prop, v, v0)
+			}
+		} else {
+			assert(!('default' in opt))
+			function get() {
+				return e[getter]()
+			}
+			function set(v) {
+				let v0 = e[getter]()
+				v = convert(v, v0)
+				if (v === v0)
+					return
+				e[setter](v, v0)
+				if (!priv && chev)
+					e.fireup('prop_changed', prop, v, v0)
+			}
+		}
+
+		if (opt.bind) {
+			let resolve = opt.resolve || global_widget_resolver(type)
+			let NAME = prop
+			let REF = repl(opt.bind, true, NAME)
+			function global_changed(te, name, last_name) {
+				// NOTE: changing the name from something to nothing
+				// will unbind dependants forever.
+				if (e[NAME] == last_name)
+					e[NAME] = name
+			}
+			function global_attached(te, name) {
+				if (e[NAME] == name)
+					e[REF] = te
+			}
+			function global_detached(te, name) {
+				if (e[REF] == te)
+					e[REF] = null
+			}
+			function bind(on) {
+				document.on('global_changed' , global_changed, on)
+				document.on('global_attached', global_attached, on)
+				document.on('global_detached', global_detached, on)
+			}
+			function attach() {
+				e[REF] = resolve(e[NAME])
+				bind(true)
+			}
+			function detach() {
+				e[REF] = null
+				bind(false)
+			}
+			function prop_changed(k, name, last_name) {
+				if (k != NAME) return
+				if (e.attached)
+					e[REF] = resolve(name)
+				if ((name != null) != (last_name != null)) {
+					e.on('attach', attach, name != null)
+					e.on('detach', detach, name != null)
+				}
+			}
+			if (e[NAME] != null)
+				prop_changed(NAME, e[NAME])
+			e.on('prop_changed', prop_changed)
+		}
+
+		e.property(prop, get, set)
+
+		if (!priv)
+			e.props[prop] = opt
+
+	}
+
+}
+
 // ---------------------------------------------------------------------------
 // undo stack, selected widgets, editing widget and clipboard.
 // ---------------------------------------------------------------------------
@@ -579,7 +954,7 @@ function focusable_widget(e, fe) {
 		e.from_val(v) -> v
 	val widgets can override:
 		e.update_error(err, ev)
-		e.update()
+		e.do_update()
 
 */
 
@@ -613,7 +988,7 @@ function val_widget(e, always_enabled) {
 	}
 
 	function cell_state_changed(prop, val, ev) {
-		if (updating)
+		if (e.updating)
 			return
 		if (prop == 'input_val')
 			e.update_val(val, ev)
@@ -643,16 +1018,13 @@ function val_widget(e, always_enabled) {
 			e.standalone = true
 		}
 		if (e.standalone) {
-			e.begin_update()
 			e.nav = global_val_nav()
 			e.field = e.nav.add_field(field_opt)
 			e.col = e.field.name
 			init_val()
-			e.end_update()
 		} else {
 			init_field()
 			bind_nav(nav, col, true)
-			e.update()
 		}
 	})
 
@@ -747,12 +1119,7 @@ function val_widget(e, always_enabled) {
 
 	let enabled = true
 
-	let updating
-	e.update = function() {
-		if (updating)
-			return
-		if (!e.attached)
-			return
+	e.do_update = function() {
 		enabled = !!(always_enabled || (e.row && e.field))
 		e.class('disabled', !enabled)
 		e.focusable = enabled
@@ -760,15 +1127,6 @@ function val_widget(e, always_enabled) {
 		cell_state_changed('val', e.val)
 		cell_state_changed('cell_error', e.error)
 		cell_state_changed('cell_modified', e.modified)
-	}
-
-	e.begin_update = function() {
-		updating = true
-	}
-
-	e.end_update = function() {
-		updating = false
-		e.update()
 	}
 
 	{
@@ -830,9 +1188,7 @@ component('x-tooltip', function(e) {
 		e.class('visible', visible)
 	}
 
-	e.update = function(opt) {
-		if (!e.initialized)
-			return
+	e.do_update = function(opt) {
 		e.popup(e.target, e.side, e.align, e.px, e.py)
 		if (opt && opt.reset_timer)
 			reset_timeout_timer()
@@ -1182,9 +1538,9 @@ function input_widget(e) {
 	e.prop('nolabel', {store: 'attr', type: 'bool'})
 	e.set_nolabel = update_inner_label
 
-	let inh_update = e.update
-	e.update = function() {
-		inh_update()
+	let inh_do_update = e.do_update
+	e.do_update = function() {
+		inh_do_update()
 		update_inner_label()
 		e.inner_label_div.set(e.field ? e.field.text : '(no field)')
 	}
@@ -1470,9 +1826,9 @@ component('x-slider', function(e) {
 
 	e.field_type = 'number'
 
-	let inh_update = e.update
-	e.update = function() {
-		inh_update()
+	let inh_do_update = e.do_update
+	e.do_update = function() {
+		inh_do_update()
 		e.class('animated', e.field && e.field.multiple_of >= 5) // TODO: that's not the point of this.
 	}
 
@@ -1631,9 +1987,9 @@ component('x-dropdown', function(e) {
 		e.picker.on('val_picked', picker_val_picked)
 		e.picker.on('keydown'   , picker_keydown)
 
-		let picker_update = e.picker.update
-		e.picker.update = function(opt) {
-			picker_update(opt)
+		let picker_do_update = e.picker.do_update
+		e.picker.do_update = function(opt) {
+			picker_do_update(opt)
 			let text = e.picker.dropdown_display_val()
 			if (text == null)
 				text = e.display_val()
@@ -2260,7 +2616,7 @@ component('x-menu', function(e) {
 			target.focus()
 	}
 
-	e.override('popup', function(inherited, target, side, align, x, y, select_first_item) {
+	override(e, 'popup', function(inherited, target, side, align, x, y, select_first_item) {
 		popup_target = target
 		inherited.call(this, target, side, align, x, y)
 		if (select_first_item)
@@ -2420,7 +2776,6 @@ component('x-widget-placeholder', function(e) {
 			let pe = e.parent
 			pe.replace(e, widget)
 			root_widget = widget
-			pe.fireup('widget_tree_changed')
 		}
 		widget.focus()
 	}
@@ -2530,7 +2885,7 @@ component('x-pagelist', function(e) {
 		e.selection_bar.show(!!idiv)
 	}
 
-	e.update = function() {
+	e.do_update = function() {
 		update_selection_bar()
 		let idiv = e.selected_item
 		if (idiv)
@@ -2709,7 +3064,6 @@ component('x-pagelist', function(e) {
 		add_item(item)
 		e.header.add(e.selection_bar)
 		e.header.add(e.add_button)
-		e.fireup('widget_tree_changed')
 		return false
 	})
 
@@ -2735,7 +3089,6 @@ component('x-pagelist', function(e) {
 		select_item(null)
 		idiv.remove()
 		e.items.remove_value(idiv.item)
-		e.fireup('widget_tree_changed')
 		return false
 	}
 
@@ -2753,7 +3106,6 @@ component('x-pagelist', function(e) {
 			if (item.page == old_widget) {
 				old_widget.parent.replace(old_widget, new_widget)
 				item.page = new_widget
-				e.fireup('widget_tree_changed')
 				break
 			}
 	}
@@ -2939,7 +3291,6 @@ component('x-split', function(e) {
 		e[widget_index(old_widget)] = new_widget
 		old_widget.parent.replace(old_widget, new_widget)
 		update_view()
-		e.fireup('widget_tree_changed')
 	}
 
 	e.serialize = function() {

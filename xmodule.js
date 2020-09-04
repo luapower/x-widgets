@@ -1,5 +1,139 @@
 
 // ---------------------------------------------------------------------------
+// prop layers
+// ---------------------------------------------------------------------------
+
+function xmodule(e) {
+
+	assert(e.prop_layer_slots) // {slot -> null} in correct order.
+	e.widgets = {} // {gid -> e}
+	e.prop_layers = {} // {layer -> {slot:, name:, widgets: {gid -> prop_vals}}}
+
+	document.on('widget_attached', function(te) {
+		e.widgets[te.gid] = te
+		e.update_widget(te)
+		document.fire('widget_tree_changed')
+	})
+
+	document.on('widget_detached', function(te) {
+		e.widgets[te.gid] = null
+		document.fire('widget_tree_changed')
+	})
+
+	e.prop_vals = function(gid) {
+		let t = {gid: gid}
+		for (let slot in e.prop_layer_slots) {
+			let layer_obj = e.prop_layer_slots[slot]
+			if (layer_obj) {
+				let prop_vals = layer_obj.widgets[gid]
+				update(t, prop_vals)
+			}
+		}
+		return t
+	}
+
+	e.update_widget = function(te) {
+		te.begin_update()
+		let vals = e.prop_vals(te.gid)
+		for (let prop in vals)
+			te[prop] = vals[prop]
+		te.end_update()
+	}
+
+	e.set_prop_layer = function(slot, layer, reload, on_loaded) {
+
+		if (!layer) {
+			e.prop_layer_slots[slot] = null
+			return
+		}
+
+		function update_layer(layer_widgets) {
+
+			if (slot) {
+				let old_layer_obj = e.prop_layer_slots[slot]
+				if (old_layer_obj)
+					old_layer_obj.slot = null
+			}
+			let layer_obj = {slot: slot, widgets: layer_widgets}
+			e.prop_layers[layer] = layer_obj
+			if (slot)
+				e.prop_layer_slots[slot] = layer_obj
+
+			// update all attached widgets.
+			for (let gid in e.widgets)
+				if (layer_widgets[gid])
+					e.update_widget(e.widgets[gid])
+
+			if (slot)
+				document.fire('prop_layer_slots_changed')
+
+			if (on_loaded)
+				on_loaded()
+		}
+
+		let layer_obj = e.prop_layers[layer]
+		if (!layer_obj || reload) {
+			ajax({
+				url: 'xmodule-layer.json/'+layer,
+				success: function(widgets) {
+					update_layer(widgets)
+				},
+				fail: function(how, status) {
+					if (how == 'http' && status == 404)
+						update_layer({})
+				},
+			}).send()
+		} else {
+			update_layer(layer_obj.widgets)
+		}
+
+	}
+
+	e.save_prop_layer = function(layer) {
+		let layer_obj = e.prop_layers[layer]
+		if (layer_obj.save_request)
+			return // already saving...
+		layer_obj.save_request = ajax({
+			url: 'xmodule-layer.json/'+layer,
+			upload: json(prop_vals, null, '\t'),
+			done: function() {
+				layer_obj.save_request = null
+			},
+		}).send()
+	}
+
+	e.reload = function() {
+		for (let layer in e.prop_layers) {
+			let layer_obj = e.prop_layers[layer]
+			e.set_prop_layer(layer_obj.slot, layer, true)
+		}
+	}
+
+	e.set_prop = function(widget, slot, prop, val) {
+		let layer_obj = e.prop_layer_slots[slot]
+		if (layer_obj)
+			attr(layer_obj.widgets, widget.gid)[prop] = val
+	}
+
+	e.save = function() {
+		for (let layer of e.prop_layers)
+			if (e.prop_layers[layer].modified)
+				e.save_prop_layer(layer)
+	}
+
+	e.new_gid = function(success) {
+		ajax({
+			url: 'xmodule-next-gid',
+			method: 'post',
+			success: success,
+		})
+	}
+
+	return e
+
+}
+
+// ---------------------------------------------------------------------------
 // global widgets nav
 // ---------------------------------------------------------------------------
 

@@ -746,14 +746,22 @@ component('x-grid', function(e) {
 
 	// responding to rowset changes -------------------------------------------
 
-	let val_widget_update = e.update
-	e.update = function(opt) {
+	let val_widget_do_update = e.do_update
+	e.do_update = function(opt) {
+
 		if (!opt) {
-			val_widget_update()
+			val_widget_do_update()
 			return
 		}
+
 		if (!e.attached)
 			return
+
+		if (opt.reload) {
+			e.reload()
+			return
+		}
+
 		if (opt.fields)
 			create_fields()
 		if (opt.fields || opt.sort_order)
@@ -773,6 +781,10 @@ component('x-grid', function(e) {
 			update_cells()
 		if (opt_rows || opt.state)
 			update_quicksearch_cell()
+		if (opt.enter_edit)
+			e.enter_edit(...opt.enter_edit)
+		if (opt.scroll_to_cell)
+				e.scroll_to_cell(...opt.scroll_to_cell)
 	}
 
 	e.update_cell_state = function(ri, fi, prop, val) {

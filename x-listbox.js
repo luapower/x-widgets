@@ -96,14 +96,21 @@ component('x-listbox', function(e) {
 		item.set(e.row_display_val(row))
 	}
 
-	let val_widget_update = e.update
-	e.update = function(opt) {
+	let val_widget_do_update = e.do_update
+	e.do_update = function(opt) {
+
 		if (!opt) {
-			val_widget_update()
+			val_widget_do_update()
 			return
 		}
+
 		if (!e.attached)
 			return
+
+		if (opt.reload) {
+			e.reload()
+			return
+		}
 
 		if (opt.rows) {
 			e.clear()
@@ -130,6 +137,8 @@ component('x-listbox', function(e) {
 				item.class('selected', !!e.selected_rows.get(e.rows[i]))
 			}
 
+		if (opt.scroll_to_cell)
+			e.scroll_to_cell(...opt.scroll_to_cell)
 	}
 
 	e.update_cell_state = function(ri, fi, prop, val) {
