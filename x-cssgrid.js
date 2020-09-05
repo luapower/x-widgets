@@ -177,7 +177,7 @@ function cssgrid_widget_editing(e) {
 	}
 
 	function bind(on) {
-		e.on('prop_changed', prop_changed, on)
+		document.on('prop_changed', prop_changed, on)
 	}
 
 	function enter_editing() {
@@ -196,8 +196,8 @@ function cssgrid_widget_editing(e) {
 		remove_guides_for('y')
 	}
 
-	function prop_changed(k, v, v0, ev) {
-		if (ev.target.parent == e) {
+	function prop_changed(te, k, v, v0, _, ev) {
+		if (te.parent == e) {
 			if (k == 'pos_x' || k == 'span_x')
 				update_guides_for('x')
 			else if (k == 'pos_y' || k == 'span_y')
@@ -380,7 +380,7 @@ function cssgrid_widget_editing(e) {
 		item.pos_y = this.pos_y
 		e.items.push(item)
 		e.add(item)
-		e.fireup('widget_tree_changed')
+		document.fire('widget_tree_changed')
 	})
 
 	function is_cell_empty(i, j) {
@@ -432,7 +432,7 @@ function cssgrid_widget_editing(e) {
 		let i = e.items.indexOf(old_widget)
 		e.items[i] = new_widget
 		old_widget.parent.replace(old_widget, new_widget)
-		e.fireup('widget_tree_changed')
+		document.fire('widget_tree_changed')
 	}
 
 	// you won't believe this shit, but page-up/down from inner contenteditables

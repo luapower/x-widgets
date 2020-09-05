@@ -107,12 +107,12 @@ function xmodule(e) {
 		}
 	}
 
-	e.set_props = function(widget, slot, props) {
+	e.set_prop = function(widget, slot, prop, val) {
 		if (!widget.gid) return
 		let layer_obj = e.prop_layer_slots[slot]
 		if (!layer_obj) return
 		layer_obj.modified = true
-		update(attr(layer_obj.widgets, widget.gid), props)
+		attr(layer_obj.widgets, widget.gid)[prop] = val
 	}
 
 	e.save = function() {
@@ -132,7 +132,6 @@ function xmodule(e) {
 				widget.gid = gid
 				on_success(gid)
 			},
-			done: () => widget.next_gid_request = null,
 		})
 	}
 
@@ -325,8 +324,7 @@ prop_inspector = component('x-prop-inspector', function(e) {
 		barrier = false
 	}
 
-	function prop_changed(k, v, v0, ev) {
-		let widget = ev.target
+	function prop_changed(widget, k, v, v0, prop_attrs, ev) {
 		if (!widgets.has(widget))
 			return
 		let field = e.all_fields[k]
@@ -377,7 +375,7 @@ prop_inspector = component('x-prop-inspector', function(e) {
 		e.rowset = rs
 		e.reset()
 
-		e.title_text = ([...widgets].map(e => e.typename)).join(' ')
+		e.title_text = ([...widgets].map(e => e.type)).join(' ')
 
 		e.fire('property_inspector_changed')
 	}
@@ -411,7 +409,8 @@ widget_tree = component('x-widget-tree', function(e) {
 	}
 
 	function widget_name(e) {
-		return () => H((e.id && '<b>'+e.id+'</b> ' || e.typename.replace('_', ' ')))
+		return () => typeof e == 'string'
+			? e : H((e.id && '<b>'+e.id+'</b> ' || e.type.replace('_', ' ')))
 	}
 
 	let rs = {

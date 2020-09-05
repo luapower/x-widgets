@@ -47,7 +47,7 @@ let repl_empty_str = v => repl(v, '', null)
 // component(tag, cons) -> create({option: value}) -> element.
 function component(tag, cons) {
 
-	let typename = tag.replace(/^[^\-]+\-/, '').replace(/\-/g, '_')
+	let type = tag.replace(/^[^\-]+\-/, '').replace(/\-/g, '_')
 
 	let cls = class extends HTMLElement {
 
@@ -107,7 +107,7 @@ function component(tag, cons) {
 		}
 
 		debug_name(prefix) {
-			prefix = (prefix && prefix + ' < ' || '') + this.typename
+			prefix = (prefix && prefix + ' < ' || '') + this.type
 				+ (this.id || this.gid != null ? ' ' + (this.id || this.gid) : '')
 			let p = this; do { p = p.popup_target || p.parent } while (p && !p.debug_name)
 			if (!(p && p.debug_name))
@@ -122,7 +122,8 @@ function component(tag, cons) {
 	function init(e, ...args) {
 		if (e.initialized)
 			return
-		e.typename = typename
+		e.iswidget = true
+		e.type = type
 		e.init = noop
 		component_prop_system(e)
 		component_deferred_updating(e)
@@ -144,20 +145,23 @@ function component(tag, cons) {
 	create.class = cls
 	create.construct = cons
 
-	component.types[typename] = create
-	window[typename] = create
+	component.types[type] = create
+	window[type] = create
 
 	return create
 }
 
-component.types = {} // {typename -> create}
+component.types = {} // {type -> create}
 
-component.create = function(t) {
+component.create = function(t, e0) {
 	if (t instanceof HTMLElement)
 		return t
-	if (t.gid)
-		update(t, xmodule.prop_vals(t.gid))
-	let create = component.types[t.typename]
+	if (typeof t == 'string') { // t is a gid
+		if (e0 && e0.gid == t)
+			return e0  // already created (called as prop's `convert()`).
+		t = xmodule.prop_vals(t)
+	}
+	let create = component.types[t.type]
 	return create && create(t)
 }
 
@@ -232,8 +236,12 @@ let component_deferred_updating = function(e) {
 //   e.get_<prop>() -> v
 //   e.set_<prop>(v1, v0)
 // fires up:
-//   'prop_changed' (prop, v1, v0)
+//   'prop_changed' (e, prop, v1, v0, prop_attrs)
 // ---------------------------------------------------------------------------
+
+let fire_prop_changed = function(e, prop, v1, v0, opt) {
+	document.fire('prop_changed', e, prop, v1, v0, opt)
+}
 
 function component_prop_system(e) {
 
@@ -254,7 +262,7 @@ function component_prop_system(e) {
 		let priv = opt.private
 		if (!e[setter])
 			e[setter] = noop
-		let chev = true // TODO: disable those when editing mode not allowed app-wide.
+		let prop_changed = fire_prop_changed
 
 		if (opt.store == 'var') {
 			let v = opt.default
@@ -268,8 +276,8 @@ function component_prop_system(e) {
 					return
 				v = v1
 				e[setter](v1, v0)
-				if (!priv && chev)
-					e.fireup('prop_changed', prop, v1, v0)
+				if (!priv)
+					prop_changed(e, prop, v1, v0, opt)
 			}
 		} else if (opt.store == 'attr') {  // for attr-based styling
 			let attr = prop.replace(/_/g, '-')
@@ -285,8 +293,8 @@ function component_prop_system(e) {
 					return
 				e.attr(attr, v1)
 				e[setter](v1, v0)
-				if (!priv && chev)
-					e.fireup('prop_changed', prop, v1, v0)
+				if (!priv)
+					prop_changed(e, prop, v1, v0, opt)
 			}
 		} else if (opt.style) {
 			let style = opt.style
@@ -307,8 +315,8 @@ function component_prop_system(e) {
 				if (v == v0)
 					return
 				e[setter](v, v0)
-				if (!priv && chev)
-					e.fireup('prop_changed', prop, v, v0)
+				if (!priv)
+					prop_changed(e, prop, v, v0, opt)
 			}
 		} else {
 			assert(!('default' in opt))
@@ -321,8 +329,8 @@ function component_prop_system(e) {
 				if (v === v0)
 					return
 				e[setter](v, v0)
-				if (!priv && chev)
-					e.fireup('prop_changed', prop, v, v0)
+				if (!priv)
+					prop_changed(e, prop, v, v0, opt)
 			}
 		}
 
@@ -357,8 +365,7 @@ function component_prop_system(e) {
 				e[REF] = null
 				bind(false)
 			}
-			function prop_changed(k, name, last_name) {
-				if (k != NAME) return
+			function name_changed(name, last_name) {
 				if (e.attached)
 					e[REF] = resolve(name)
 				if ((name != null) != (last_name != null)) {
@@ -366,9 +373,14 @@ function component_prop_system(e) {
 					e.on('detach', detach, name != null)
 				}
 			}
+			prop_changed = function(e, k, v1, v0, opt) {
+				fire_prop_changed(e, k, v1, v0, opt)
+				if (k == NAME)
+					name_changed(v1, v0)
+			}
 			if (e[NAME] != null)
-				prop_changed(NAME, e[NAME])
-			e.on('prop_changed', prop_changed)
+				name_changed(e[NAME])
+
 		}
 
 		e.property(prop, get, set)
@@ -407,7 +419,7 @@ function redo() {
 
 function focused_widget(e) {
 	e = e || document.activeElement
-	return e && e.typename && e || (e.parent && e.parent != e && focused_widget(e.parent))
+	return e && e.iswidget && e || (e.parent && e.parent != e && focused_widget(e.parent))
 }
 
 editing_widget = null
@@ -465,7 +477,7 @@ function parent_widget_which(e, which) {
 	assert(e != window)
 	e = e.popup_target || e.parent
 	while (e) {
-		if (e.typename && which(e))
+		if (e.iswidget && which(e))
 			return e
 		e = e.popup_target || e.parent
 	}
@@ -491,7 +503,7 @@ function selectable_widget(e) {
 		inherited.call(this, id)
 		if (id === id0)
 			return
-		this.fireup('prop_changed', 'id', id, id0)
+		document.fire('prop_changed', e, 'id', id, id0, e.props.id)
 		document.fire('global_changed', this, id, id0)
 	})
 
@@ -687,7 +699,7 @@ function cssgrid_item_widget(e) {
 	e.select_widget = function(focus) {
 		select_widget(focus)
 		let p = e.parent_widget
-		if (p && p.typename == 'cssgrid') {
+		if (p && p.iswidget && p.type == 'cssgrid') {
 			cssgrid_item_widget_editing(e)
 			e.cssgrid_item_select_widget()
 		}
@@ -695,7 +707,7 @@ function cssgrid_item_widget(e) {
 
 	e.unselect_widget = function(focus_prev) {
 		let p = e.parent_widget
-		if (p && p.typename == 'cssgrid')
+		if (p && p.iswidget && p.type == 'cssgrid')
 			e.cssgrid_item_unselect_widget()
 		unselect_widget(focus_prev)
 	}
@@ -753,7 +765,7 @@ function cssgrid_item_widget_editing(e) {
 	e.cssgrid_item_select_widget = function() {
 
 		let p = e.parent_widget
-		if (!p || p.typename != 'cssgrid')
+		if (!(p && p.iswidget && p.type == 'cssgrid'))
 			return
 
 		p.widget_editing = true
@@ -777,12 +789,18 @@ function cssgrid_item_widget_editing(e) {
 		}
 		update_so()
 
-		function prop_changed(k, v, v0, ev) {
-			if (ev.target == e)
+		function prop_changed(te, k, v, v0, _, ev) {
+			if (te == e)
 				if (k == 'pos_x' || k == 'span_x' || k == 'pos_y' || k == 'span_y')
 					update_so()
 		}
-		e.on('prop_changed', prop_changed)
+
+		function bind(on) {
+			document.on('prop_changed', prop_changed, on)
+		}
+
+		e.on('attach', function() { bind(true ) })
+		e.on('detach', function() { bind(false) })
 
 		// drag-resize item's span outline => change item's grid area ----------
 
@@ -895,8 +913,10 @@ function cssgrid_item_widget_editing(e) {
 
 function serializable_widget(e) {
 
-	e.serialize_props = function() {
-		let t = {typename: e.typename}
+	e.serialize = function() {
+		if (e.gid)
+			return e.gid
+		let t = {type: e.type}
 		if (e.props)
 			for (let prop in e.props) {
 				let v = e[prop]
@@ -912,8 +932,6 @@ function serializable_widget(e) {
 			}
 		return t
 	}
-
-	e.serialize = e.serialize_props
 
 }
 
@@ -2768,10 +2786,9 @@ component('x-widget-placeholder', function(e) {
 	]
 
 	function replace_with_widget() {
-		let widget = component.create({typename: this.typename})
+		let widget = component.create({type: this.type})
 		xmodule.assign_gid(widget, function() {
-			props.gid = widget.gid
-			xmodule.set_props(widget, 'base', props)
+			xmodule.set_prop(widget, 'base', 'type', this.type)
 		})
 		let pe = e.parent_widget
 		if (pe)
@@ -2787,13 +2804,13 @@ component('x-widget-placeholder', function(e) {
 	function create_widget_buttons(widgets) {
 		e.clear()
 		let i = 1
-		for (let [s, typename, sep] of widgets) {
-			let btn = button({text: s, title: typename, pos_x: i++})
+		for (let [s, type, sep] of widgets) {
+			let btn = button({text: s, title: type, pos_x: i++})
 			btn.class('x-widget-placeholder-button')
 			if (sep)
 				btn.style['margin-right'] = '.5em'
 			e.add(btn)
-			btn.typename = typename
+			btn.type = type
 			btn.action = replace_with_widget
 		}
 	}
@@ -2830,18 +2847,17 @@ component('x-pagelist', function(e) {
 	e.add_button = div({class: 'x-pagelist-item x-pagelist-add-button fa fa-plus', tabindex: 0})
 	e.add(e.header, e.content)
 
-	function add_item(item) {
-		if (typeof item == 'string' || item instanceof Node)
-			item = {text: item}
-		item.page = component.create(item.page || {typename: 'widget_placeholder'})
+	function add_item(page) {
+		let item = {}
+		item.page = component.create(page || {type: 'widget_placeholder', title: 'New'})
 		let xbutton = div({class: 'x-pagelist-xbutton fa fa-times'})
 		xbutton.hide()
 		let tdiv = div({class: 'x-pagelist-text'})
 		let idiv = div({class: 'x-pagelist-item', tabindex: 0}, tdiv, xbutton)
 		idiv.text_div = tdiv
 		idiv.xbutton = xbutton
-		tdiv.set(item.text, 'pre-wrap')
-		tdiv.title = item.text
+		tdiv.set(item.page.title, 'pre-wrap')
+		tdiv.title = item.page.title
 		idiv.on('pointerdown', idiv_pointerdown)
 		idiv.on('dblclick'   , idiv_dblclick)
 		idiv.on('keydown'    , idiv_keydown)
@@ -2866,14 +2882,12 @@ component('x-pagelist', function(e) {
 		e.update()
 	}
 
+	let inh_serialize = e.serialize
 	e.serialize = function() {
-		let t = e.serialize_props()
+		let t = inh_serialize()
 		t.items = []
-		for (let item of e.items) {
-			let sitem = {text: item.text}
-			sitem.page = item.page.serialize()
-			t.items.push(sitem)
-		}
+		for (let item of e.items)
+			t.items.push(item.page.serialize())
 		return t
 	}
 
@@ -3062,10 +3076,9 @@ component('x-pagelist', function(e) {
 	e.add_button.on('click', function() {
 		if (e.selected_item == this)
 			return
-		let item = {text: 'New'}
 		e.selection_bar.remove()
 		e.add_button.remove()
-		add_item(item)
+		add_item()
 		e.header.add(e.selection_bar)
 		e.header.add(e.add_button)
 		return false
@@ -3080,7 +3093,7 @@ component('x-pagelist', function(e) {
 	}
 
 	function tdiv_input() {
-		e.items[e.selected_index].text = e.selected_item.text_div.innerText
+		e.items[e.selected_index].page.title = e.selected_item.text_div.innerText
 		e.update()
 	}
 
@@ -3135,14 +3148,18 @@ component('x-split', function(e) {
 	e.sizer = div({class: 'x-split-sizer'})
 	e.add(e.pane1, e.sizer, e.pane2)
 
+	e.set_item1 = function(ce) { e.pane1.set(ce) }
+	e.set_item2 = function(ce) { e.pane2.set(ce) }
+
+	e.prop('item1', {store: 'var', type: 'widget', convert: component.create})
+	e.prop('item2', {store: 'var', type: 'widget', convert: component.create})
+
 	let horiz, left
 
-	function update_view() {
+	e.do_update = function() {
 
-		e[1] = component.create(e[1] || widget_placeholder())
-		e[2] = component.create(e[2] || widget_placeholder())
-		if (!e[1].parent) e.pane1.set(e[1])
-		if (!e[2].parent) e.pane2.set(e[2])
+		if (!e.item1) e.item1 = widget_placeholder()
+		if (!e.item2) e.item2 = widget_placeholder()
 
 		horiz = e.orientation == 'horizontal'
 		left = e.fixed_side == 'first'
@@ -3165,23 +3182,21 @@ component('x-split', function(e) {
 	}
 
 	function update_size() {
-		update_view()
-		e.fireup('layout_changed')
+		e.update()
+		document.fire('layout_changed')
 	}
 
-	e.set_orientation = update_view
-	e.set_fixed_side = update_view
-	e.set_resizeable = update_view
-	e.set_fixed_size = update_size
-	e.set_min_size = update_size
+	e.set_orientation = e.update
+	e.set_fixed_side  = e.update
+	e.set_resizeable  = e.update
+	e.set_fixed_size  = e.update
+	e.set_min_size    = e.update
 
 	e.prop('orientation', {store: 'attr', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal'})
 	e.prop('fixed_side' , {store: 'attr', type: 'enum', enum_values: ['first', 'second'], default: 'first'})
 	e.prop('resizeable' , {store: 'attr', type: 'bool', default: true})
 	e.prop('fixed_size' , {store: 'var', type: 'number', default: 200})
 	e.prop('min_size'   , {store: 'var', type: 'number', default:   0})
-
-	e.on('attach', update_view)
 
 	// resizing ---------------------------------------------------------------
 
@@ -3280,11 +3295,11 @@ component('x-split', function(e) {
 	// xmodule protocol -------------------------------------------------------
 
 	e.child_widgets = function() {
-		return [e[1], e[2]]
+		return [e.item1, e.item2]
 	}
 
 	function widget_index(ce) {
-		return e[1] == ce && 1 || e[2] == ce && 2 || null
+		return e.item1 == ce && 1 || e.item2 == ce && 2 || null
 	}
 
 	e.remove_child_widget = function(ce) {
@@ -3294,14 +3309,7 @@ component('x-split', function(e) {
 	e.replace_widget = function(old_widget, new_widget) {
 		e[widget_index(old_widget)] = new_widget
 		old_widget.parent.replace(old_widget, new_widget)
-		update_view()
-	}
-
-	e.serialize = function() {
-		let t = e.serialize_props()
-		t[1] = e[1].serialize()
-		t[2] = e[2].serialize()
-		return t
+		e.update()
 	}
 
 })
@@ -3568,7 +3576,7 @@ component('x-toolbox', function(e) {
 
 	e.detect_style_size_changes()
 	e.on('style_size_changed', function() {
-		e.fireup('layout_changed')
+		document.fire('layout_changed')
 	})
 
 })

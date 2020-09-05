@@ -16,7 +16,7 @@ component('x-listbox', function(e) {
 
 	e.prop('orientation'   , {store: 'attr', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical'})
 	e.prop('can_move_items', {store: 'var', type: 'bool', default: true})
-	e.prop('item_typename' , {store: 'var', default: 'richtext'})
+	e.prop('item_type'     , {store: 'var', default: 'richtext'})
 
 	e.display_col = 0
 
@@ -45,7 +45,7 @@ component('x-listbox', function(e) {
 		e.display_col = 0
 		let rows = []
 		for (let item of e.items) {
-			if (isobject(item) && item.typename)
+			if (isobject(item) && item.type)
 				item = component.create(item)
 			if (item instanceof HTMLElement)
 				setup_item(item)
@@ -59,7 +59,7 @@ component('x-listbox', function(e) {
 	}
 
 	e.create_item = function() {
-		return component.create({typename: e.item_typename})
+		return component.create({type: e.item_type})
 	}
 
 	e.format_item = function(item) {
@@ -73,7 +73,7 @@ component('x-listbox', function(e) {
 	e.child_widgets = function() {
 		let widgets = []
 		for (let ce of e.children)
-			if (ce.typename)
+			if (ce.iswidget)
 				widgets.push(ce)
 		return widgets
 	}
@@ -91,7 +91,7 @@ component('x-listbox', function(e) {
 	// responding to nav changes ----------------------------------------------
 
 	e.update_item = function(item, row) { // stub
-		if (item.typename)
+		if (item.iswidget)
 			return
 		item.set(e.row_display_val(row))
 	}
