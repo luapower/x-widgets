@@ -5,7 +5,7 @@
 
 function xmodule(e) {
 
-	assert(e.prop_layer_slots) // {slot -> null} in correct order.
+	assert(e.prop_layer_slots) // {slot -> layer_obj} in correct order.
 	e.widgets = {} // {gid -> e}
 	e.prop_layers = {} // {layer -> {slot:, name:, widgets: {gid -> prop_vals}}}
 
@@ -16,7 +16,7 @@ function xmodule(e) {
 	})
 
 	document.on('widget_detached', function(te) {
-		e.widgets[te.gid] = null
+		delete e.widgets[te.gid]
 		document.fire('widget_tree_changed')
 	})
 
@@ -82,7 +82,7 @@ function xmodule(e) {
 					if (how == 'http' && status == 404)
 						update_layer({})
 				},
-			}).send()
+			})
 		} else {
 			update_layer(layer_obj.widgets)
 		}
@@ -95,11 +95,9 @@ function xmodule(e) {
 			return // already saving...
 		layer_obj.save_request = ajax({
 			url: 'xmodule-layer.json/'+layer,
-			upload: json(prop_vals, null, '\t'),
-			done: function() {
-				layer_obj.save_request = null
-			},
-		}).send()
+			upload: json(layer_obj.widgets, null, '\t'),
+			done: () => layer_obj.save_request = null,
+		})
 	}
 
 	e.reload = function() {
@@ -109,23 +107,32 @@ function xmodule(e) {
 		}
 	}
 
-	e.set_prop = function(widget, slot, prop, val) {
+	e.set_props = function(widget, slot, props) {
+		if (!widget.gid) return
 		let layer_obj = e.prop_layer_slots[slot]
-		if (layer_obj)
-			attr(layer_obj.widgets, widget.gid)[prop] = val
+		if (!layer_obj) return
+		layer_obj.modified = true
+		update(attr(layer_obj.widgets, widget.gid), props)
 	}
 
 	e.save = function() {
-		for (let layer of e.prop_layers)
+		for (let layer in e.prop_layers)
 			if (e.prop_layers[layer].modified)
 				e.save_prop_layer(layer)
 	}
 
-	e.new_gid = function(success) {
+	e.assign_gid = function(widget) {
 		ajax({
 			url: 'xmodule-next-gid',
 			method: 'post',
-			success: success,
+			// TODO: find another way since smart-ass condescending w3c people
+			// deprecated synchronous requests.
+			async: false,
+			success: function(gid) {
+				widget.gid = gid
+				on_success(gid)
+			},
+			done: () => widget.next_gid_request = null,
 		})
 	}
 

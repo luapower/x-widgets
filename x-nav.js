@@ -2086,7 +2086,6 @@ function nav_widget(e) {
 		e.load_request = req
 		e.loading = true
 		loading(true)
-		req.send()
 		return true
 	}
 
@@ -2281,7 +2280,6 @@ function nav_widget(e) {
 		add_request(req)
 		set_save_state(req.rows, req)
 		e.fire('saving', true)
-		req.send()
 	}
 
 	e.save = function(row) {

@@ -91,7 +91,7 @@ function component(tag, cons) {
 				let t1 = time()
 				let dt = (t1 - t0) * 1000
 				if (dt > 10)
-					print((dt).toFixed(0).padStart(3, ' '), 'attach', this.debug_name())
+					print((dt).toFixed(0).padStart(3, ' ')+'ms', this.debug_name())
 			}
 		}
 
@@ -2769,6 +2769,10 @@ component('x-widget-placeholder', function(e) {
 
 	function replace_with_widget() {
 		let widget = component.create({typename: this.typename})
+		xmodule.assign_gid(widget, function() {
+			props.gid = widget.gid
+			xmodule.set_props(widget, 'base', props)
+		})
 		let pe = e.parent_widget
 		if (pe)
 			pe.replace_widget(e, widget)
