@@ -20,10 +20,12 @@ component('x-listbox', function(e) {
 
 	e.display_col = 0
 
-	e.on('attach', function() {
-		if(e.items) {
-			create_rows_items()
-			e.items = null
+	e.on('bind', function(on) {
+		if (on) {
+			if (e.items) {
+				create_rows_items()
+				e.items = null
+			}
 		}
 	})
 
@@ -35,13 +37,17 @@ component('x-listbox', function(e) {
 	}
 
 	function create_rows_items() {
-		function row_added(row) {
-			let item = e.create_item()
-			item.ctrl_click_used = true
-			setup_item(item)
-			row[0] = item
+
+		function rows_added(rows, ri1) {
+			for (let row of rows) {
+				let item = e.create_item()
+				item.ctrl_click_used = true
+				setup_item(item)
+				row[0] = item
+			}
 		}
-		e.on('row_added', row_added)
+		e.on('rows_added', rows_added)
+
 		e.display_col = 0
 		let rows = []
 		for (let item of e.items) {

@@ -13,14 +13,13 @@ DEBUG_ATTACH_TIME = false
 // implements:
 //   e.initialized
 //   e.attached
-//   e.attach()
-//   e.detach()
+//   e.bind(t|f)
 //   e.override(name, f)
 //   e.property(name, get[, set])
 // uses:
 //   e.init()
 // fires on self:
-//   'attach', 'detach'
+//   'bind'
 // fires on document:
 //   'global_attached', 'global_detached'
 //   'widget_attached', 'widget_detached'
@@ -66,44 +65,44 @@ function component(tag, cons) {
 			// attach as they aren't allowed to create children or set
 			// attributes in the constructor.
 			init(this)
-			this.attach()
+			this.bind(true)
 		}
 
 		disconnectedCallback() {
-			this.detach()
+			this.bind(false)
 		}
 
-		attach() {
-			if (this.attached)
-				return
-			let t0 = DEBUG_ATTACH_TIME && time()
+		bind(on) {
+			if (on) {
+				if (this.attached)
+					return
+				let t0 = DEBUG_ATTACH_TIME && time()
 
-			this.attached = true
-			this.begin_update()
-			this.fire('attach')
-			if (this.id)
-				document.fire('global_attached', this, this.id)
-			if (this.gid)
-				document.fire('widget_attached', this)
-			this.end_update()
+				this.attached = true
+				this.begin_update()
+				this.fire('bind', true)
+				if (this.id)
+					document.fire('global_attached', this, this.id)
+				if (this.gid)
+					document.fire('widget_attached', this)
+				this.end_update()
 
-			if (DEBUG_ATTACH_TIME) {
-				let t1 = time()
-				let dt = (t1 - t0) * 1000
-				if (dt > 10)
-					print((dt).toFixed(0).padStart(3, ' ')+'ms', this.debug_name())
+				if (DEBUG_ATTACH_TIME) {
+					let t1 = time()
+					let dt = (t1 - t0) * 1000
+					if (dt > 10)
+						print((dt).toFixed(0).padStart(3, ' ')+'ms', this.debug_name())
+				}
+			} else {
+				if (!this.attached)
+					return
+				this.attached = false
+				this.fire('bind', false)
+				if (this.id)
+					document.fire('global_detached', this, this.id)
+				if (this.gid)
+					document.fire('widget_detached', this)
 			}
-		}
-
-		detach() {
-			if (!this.attached)
-				return
-			this.attached = false
-			this.fire('detach')
-			if (this.id)
-				document.fire('global_detached', this, this.id)
-			if (this.gid)
-				document.fire('widget_detached', this)
 		}
 
 		debug_name(prefix) {
@@ -166,10 +165,10 @@ component.create = function(t, e0) {
 }
 
 global_widget_resolver = memoize(function(type) {
-	let is_type = 'is_'+type
+	let ISTYPE = 'is'+type
 	return function(name) {
 		let e = window[name]
-		return isobject(e) && e.attached && e[is_type] && e.can_select_widget ? e : null
+		return isobject(e) && e.attached && e[ISTYPE] && e.can_select_widget ? e : null
 	}
 })
 
@@ -248,6 +247,12 @@ let fire_prop_changed = function(e, prop, v1, v0, opt) {
 }
 
 function component_prop_system(e) {
+
+	/* TODO: use this or scrape it
+	e.bind_ext = function(te, ev, f) {
+		e.on('bind', function(on) { te.on(ev, f, on) })
+	}
+	*/
 
 	e.property = function(prop, getter, setter) {
 		property(this, prop, {get: getter, set: setter})
@@ -338,6 +343,39 @@ function component_prop_system(e) {
 			}
 		}
 
+		if (opt.bind_gid) {
+			let resolve = opt.resolve || xmodule.resolve
+			let GID = prop
+			let REF = repl(opt.bind_gid, true, GID)
+			function widget_attached(te) {
+				if (e[GID] == te.gid)
+					e[REF] = te
+			}
+			function widget_detached(te) {
+				if (e[GID] == te.gid)
+					e[REF] = null
+			}
+			function bind(on) {
+				e[REF] = on ? resolve(e[GID]) : null
+				document.on('widget_attached', widget_attached, on)
+				document.on('widget_detached', widget_detached, on)
+			}
+			function gid_changed(gid1, gid0) {
+				if (e.attached)
+					e[REF] = resolve(name)
+				if ((gid1 != null) != (gid0 != null)) {
+					e.on('bind', bind, gid1 != null)
+				}
+			}
+			prop_changed = function(e, k, v1, v0, opt) {
+				fire_prop_changed(e, k, v1, v0, opt)
+				if (k == GID)
+					gid_changed(v1, v0)
+			}
+			if (e[GID] != null)
+				gid_changed(e[GID])
+		}
+
 		if (opt.bind) {
 			let resolve = opt.resolve || global_widget_resolver(type)
 			let NAME = prop
@@ -357,24 +395,16 @@ function component_prop_system(e) {
 					e[REF] = null
 			}
 			function bind(on) {
+				e[REF] = on ? resolve(e[NAME]) : null
 				document.on('global_changed' , global_changed, on)
 				document.on('global_attached', global_attached, on)
 				document.on('global_detached', global_detached, on)
-			}
-			function attach() {
-				e[REF] = resolve(e[NAME])
-				bind(true)
-			}
-			function detach() {
-				e[REF] = null
-				bind(false)
 			}
 			function name_changed(name, last_name) {
 				if (e.attached)
 					e[REF] = resolve(name)
 				if ((name != null) != (last_name != null)) {
-					e.on('attach', attach, name != null)
-					e.on('detach', detach, name != null)
+					e.on('bind', bind, name != null)
 				}
 			}
 			prop_changed = function(e, k, v1, v0, opt) {
@@ -384,7 +414,6 @@ function component_prop_system(e) {
 			}
 			if (e[NAME] != null)
 				name_changed(e[NAME])
-
 		}
 
 		e.property(prop, get, set)
@@ -642,8 +671,9 @@ function selectable_widget(e) {
 
 	})
 
-	e.on('detach', function() {
-		e.widget_selected = false
+	e.on('bind', function(on) {
+		if (!on)
+			e.widget_selected = false
 	})
 
 }
@@ -678,8 +708,9 @@ function editable_widget(e) {
 			e.set_widget_editing(v)
 		})
 
-	e.on('detach', function() {
-		e.widget_editing = false
+	e.on('bind', function(on) {
+		if (!on)
+			e.widget_editing = false
 	})
 
 }
@@ -799,12 +830,9 @@ function cssgrid_item_widget_editing(e) {
 					update_so()
 		}
 
-		function bind(on) {
+		e.on('bind', function(on) {
 			document.on('prop_changed', prop_changed, on)
-		}
-
-		e.on('attach', function() { bind(true ) })
-		e.on('detach', function() { bind(false) })
+		})
 
 		// drag-resize item's span outline => change item's grid area ----------
 
@@ -1034,27 +1062,27 @@ function val_widget(e, always_enabled) {
 	}
 
 	let field_opt
-	e.on('attach', function() {
-		if (e.field && !e.standalone) {
-			field_opt = e.field
-			e.standalone = true
-		}
-		if (e.standalone) {
-			e.nav = global_val_nav()
-			e.field = e.nav.add_field(field_opt)
-			e.col = e.field.name
-			init_val()
+	e.on('bind', function(on) {
+		if (on) {
+			if (e.field && !e.standalone) {
+				field_opt = e.field
+				e.standalone = true
+			}
+			if (e.standalone) {
+				e.nav = global_val_nav()
+				e.field = e.nav.add_field(field_opt)
+				e.col = e.field.name
+				init_val()
+			} else {
+				init_field()
+				bind_nav(nav, col, true)
+			}
 		} else {
-			init_field()
-			bind_nav(nav, col, true)
+			bind_nav(nav, col, false)
+			if (e.standalone)
+				e.nav.remove_field(e.field)
+			e.field = null
 		}
-	})
-
-	e.on('detach', function() {
-		bind_nav(nav, col, false)
-		if (e.standalone)
-			e.nav.remove_field(e.field)
-		e.field = null
 	})
 
 	function set_nav_col(nav1, nav0, col1, col0) {
@@ -1072,8 +1100,9 @@ function val_widget(e, always_enabled) {
 		nav = nav1
 		set_nav_col(nav1, nav0, col, col)
 	}
-	e.prop('nav', {store: 'var', convert: })
+	e.prop('nav', {store: 'var', private: true})
 	e.prop('nav_name', {store: 'var', bind: 'nav', type: 'nav'})
+	e.prop('nav_gid' , {store: 'var', bind_gid: 'nav', type: 'nav_gid'})
 
 	let col
 	e.set_col = function(col1, col0) {
@@ -1142,6 +1171,7 @@ function val_widget(e, always_enabled) {
 	let enabled = true
 
 	e.do_update = function() {
+		init_field()
 		enabled = !!(always_enabled || (e.row && e.field))
 		e.class('disabled', !enabled)
 		e.focusable = enabled
@@ -1718,15 +1748,18 @@ component('x-spin-input', function(e) {
 	e.align = 'right'
 	e.field_type = 'number'
 
-	e.set_button_style     = update_buttons
-	e.set_button_placement = update_buttons
+	e.set_button_style     = e.update
+	e.set_button_placement = e.update
 	e.prop('button_style'    , {store: 'attr', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus'})
 	e.prop('button_placement', {store: 'attr', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side'})
 
 	e.up   = div({class: 'x-spin-input-button fa'})
 	e.down = div({class: 'x-spin-input-button fa'})
 
-	function update_buttons() {
+	let inh_do_update = e.do_update
+	e.do_update = function() {
+
+		inh_do_update()
 
 		let bs = e.button_style
 		let bp = e.button_placement
@@ -1772,8 +1805,6 @@ component('x-spin-input', function(e) {
 		}
 
 	}
-
-	e.on('attach', update_buttons)
 
 	// controller
 
@@ -2024,23 +2055,18 @@ component('x-dropdown', function(e) {
 
 	}
 
-	function bind_document(on) {
-		document.on('pointerdown'     , document_pointerdown, on)
-		document.on('rightpointerdown', document_pointerdown, on)
-		document.on('stopped_event'   , document_stopped_event, on)
-	}
-
-	e.on('attach', function() {
-		bind_document(true)
-		e.picker.attach()
-		e.update()
-	})
-
-	e.on('detach', function() {
-		e.close()
-		bind_document(false)
-		e.picker.detach()
-		e.picker.popup(false)
+	e.on('bind', function(on) {
+		if (on) {
+			document.on('pointerdown'     , document_pointerdown, on)
+			document.on('rightpointerdown', document_pointerdown, on)
+			document.on('stopped_event'   , document_stopped_event, on)
+			e.picker.bind(true)
+			e.update()
+		} else {
+			e.close()
+			e.picker.bind(false)
+			e.picker.popup(false)
+		}
 	})
 
 	// val updating
@@ -2285,14 +2311,9 @@ component('x-calendar', function(e) {
 		return v != null && e.field && e.field.to_time ? e.field.to_time(v) : v
 	}
 
-	e.on('attach', function() {
-		e.sel_year.attach()
-		e.sel_month.attach()
-	})
-
-	e.on('detach', function() {
-		e.sel_year.detach()
-		e.sel_month.detach()
+	e.on('bind', function(on) {
+		e.sel_year.bind(on)
+		e.sel_month.bind(on)
 	})
 
 	e.update_val = function(v) {
@@ -2600,18 +2621,10 @@ component('x-menu', function(e) {
 
 	// popup protocol
 
-	function bind_document(on) {
+	e.popup_target_bind = function(target, on) {
 		document.on('pointerdown', document_pointerdown, on)
 		document.on('rightpointerdown', document_pointerdown, on)
 		document.on('stopped_event', document_stopped_event, on)
-	}
-
-	e.popup_target_attached = function(target) {
-		bind_document(true)
-	}
-
-	e.popup_target_detached = function(target) {
-		bind_document(false)
 	}
 
 	function document_pointerdown(ev) {
@@ -2819,12 +2832,14 @@ component('x-widget-placeholder', function(e) {
 		}
 	}
 
-	e.on('attach', function() {
-		widgets = stretched_widgets
-		let pe = e.parent_widget
-		if (pe && pe.accepts_form_widgets)
-			widgets = [].concat(widgets, form_widgets)
-		create_widget_buttons(widgets)
+	e.on('bind', function(on) {
+		if (on) {
+			widgets = stretched_widgets
+			let pe = e.parent_widget
+			if (pe && pe.accepts_form_widgets)
+				widgets = [].concat(widgets, form_widgets)
+			create_widget_buttons(widgets)
+		}
 	})
 
 })
@@ -2892,7 +2907,6 @@ component('x-pagelist', function(e) {
 		if (isobject(t)) {
 			t.items = []
 			for (let item of e.items) {
-				print(t.items)
 				t.items.push(item.page.serialize())
 			}
 		}
@@ -2928,8 +2942,9 @@ component('x-pagelist', function(e) {
 	e.prop('can_remove_items', {store: 'var', type: 'bool', default: false})
 	e.prop('can_move_items'  , {store: 'var', type: 'bool', default: true})
 
-	e.on('attach', function() {
-		e.selected_index = or(e.selected_index, 0)
+	e.on('bind', function(on) {
+		if (on)
+			e.selected_index = or(e.selected_index, 0)
 	})
 
 	function select_item(idiv, focus_page, enter_editing) {
@@ -3380,8 +3395,9 @@ component('x-toaster', function(e) {
 			t.target = false
 	}
 
-	e.on('detach', function() {
-		e.close_all()
+	e.on('bind', function(on) {
+		if (!on)
+			e.close_all()
 	})
 
 })

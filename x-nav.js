@@ -97,7 +97,7 @@ function nav_widget(e) {
 
 	val_widget(e, true)
 
-	e.is_nav = true // for resolver
+	e.isnav = true // for resolver
 
 	e.prop('can_edit'                , {store: 'var', type: 'bool', default: true, hint: 'can change anything at all'})
 	e.prop('can_add_rows'            , {store: 'var', type: 'bool', default: true})
@@ -125,20 +125,19 @@ function nav_widget(e) {
 		init_all_fields()
 	}
 
-	e.on('attach', function() {
-		bind_param_nav(true)
-		e.reset()
-	})
-
 	function force_unfocus_focused_cell() {
 		assert(e.focus_cell(false, false, 0, 0, {force_exit_edit: true}))
 	}
 
-	e.on('detach', function() {
-		abort_ajax_requests()
-		force_unfocus_focused_cell()
-		bind_param_nav(false)
-		init_all()
+	e.on('bind', function(on) {
+		bind_param_nav(on)
+		if (on) {
+			e.reset()
+		} else {
+			abort_ajax_requests()
+			force_unfocus_focused_cell()
+			init_all()
+		}
 	})
 
 	e.set_rowset_name = function(v) {
@@ -816,7 +815,7 @@ function nav_widget(e) {
 				ri = e.row_index(e.lookup(e.pk_fields, refocus_pk))
 			else if (how == 'row')
 				ri = e.row_index(refocus_row)
-			else if (!how) { // TODO: not used
+			else if (!how) { // TODO: not used (unfocus)
 				ri = false
 				must_not_move_row = true
 				unfocus_if_not_found = true
@@ -1718,8 +1717,8 @@ function nav_widget(e) {
 					field.lookup_nav_loaded()
 				}
 				ln.on('loaded'      , field.lookup_nav_loaded, on)
-				ln.on('row_added'   , field.lookup_nav_display_vals_changed, on)
-				ln.on('row_removed' , field.lookup_nav_display_vals_changed, on)
+				ln.on('rows_added'  , field.lookup_nav_display_vals_changed, on)
+				ln.on('rows_removed', field.lookup_nav_display_vals_changed, on)
 				ln.on('input_val_changed_for_'+field.lookup_col,
 					field.lookup_nav_display_vals_changed, on)
 				ln.on('input_val_changed_for_'+(field.display_col || ln.name_col),
@@ -1766,79 +1765,84 @@ function nav_widget(e) {
 		return v
 	}
 
-	// row adding & removing --------------------------------------------------
+	// row adding -------------------------------------------------------------
 
-	function add_row(values, ev) {
-		if (!(e.can_edit && e.can_add_rows))
-			return
-		let row = []
-		// add server_default values or null
-		for (let i = 0; i < e.all_fields.length; i++) {
-			let field = e.all_fields[i]
-			row[i] = or(or(values && values[field.name], field.server_default), null)
-		}
-		row.is_new = true
-		e.all_rows.push(row)
-
-		if (e.parent_field) {
-			row.child_rows = []
-			row.parent_row = ev && ev.parent_row || null
-			;(row.parent_row || e).child_rows.push(row)
-			if (row.parent_row) {
-				// silently set parent id to be the id of the parent row before firing `row_added` event.
-				let parent_id = e.cell_val(row.parent_row, e.id_field)
-				e.set_cell_val(row, e.parent_field, parent_id, update({fire_changed_events: false}, ev))
-			}
-			assert(init_parents_for_row(row))
-		}
-
-		each_lookup('row_added', row)
-
-		let ri = ev && ev.row_index
-		if (ri != null) {
-			e.rows.insert(ri, row)
-			if (e.focused_row_index >= ri)
-				e.focused_row_index++
-		} else
-			ri = e.rows.push(row)
-
-		update_row_index()
-
-		e.update({rows: true})
-
-		if (ev && ev.focus_it)
-			e.focus_cell(ri, true, 0, 0, ev)
-
-		e.fire('row_added', row, ev)
-
-		// set default client values as if they were typed in by the user.
-		let set_val_ev = update({row_not_modified: true}, ev)
-		for (let field of e.all_fields)
-			if (field.client_default != null)
-				e.set_cell_val(row, field, field.client_default, set_val_ev)
-
-		row_changed(row)
-		return row
-	}
-
-	e.insert_row = function(at_focused_row, focus_it, ev) {
+	e.insert_rows = function(values, at_focused_row, focus_it, ev) {
 		if (!e.can_edit || !e.can_add_rows)
 			return false
 
 		let at_row = at_focused_row && e.focused_row
 		let parent_row = at_row ? at_row.parent_row : null
 
-		let row = add_row(null, update({
-			row_index: at_row && e.focused_row_index,
-			focus_it: focus_it,
-			parent_row: parent_row,
-		}, ev))
+		let row_num = (isarray(values) ? values.length : values)
+		if (!row_num)
+			return false
 
-		if (row && e.save_row_on != 'manual' && e.insert_row_on == 'input')
+		let ri1 = at_row ? e.focused_row_index : e.rows.length
+
+		let rows = []
+		for (let i = 0, ri = ri1; i < row_num; i++, ri++) {
+
+			let vals = isarray(values) ? values[i] : null
+			let row = []
+			// add server_default values or null
+			for (let fi = 0; fi < e.all_fields.length; fi++) {
+				let field = e.all_fields[fi]
+				let val = isobject(vals) ? vals[field.name] : vals && vals[fi]
+				row[fi] = or(or(val, field.server_default), null)
+			}
+			row.is_new = true
+			e.all_rows.push(row)
+			rows.push(row)
+
+			if (e.parent_field) {
+				row.child_rows = []
+				row.parent_row = parent_row || null
+				;(row.parent_row || e).child_rows.push(row)
+				if (row.parent_row) {
+					// silently set parent id to be the id of the parent row.
+					let parent_id = e.cell_val(row.parent_row, e.id_field)
+					e.set_cell_val(row, e.parent_field, parent_id,
+						update({fire_changed_events: false}, ev))
+				}
+				assert(init_parents_for_row(row))
+			}
+
+			each_lookup('row_added', row)
+
+			e.rows.insert(ri, row)
+			if (e.focused_row_index >= ri)
+				e.focused_row = e.rows[e.focused_row_index + 1]
+
+			// set default client values as if they were typed in by the user.
+			let set_val_ev = update({row_not_modified: true}, ev)
+			for (let field of e.all_fields)
+				if (field.client_default != null)
+					e.set_cell_val(row, field, field.client_default, set_val_ev)
+
+			row_changed(row)
+		}
+
+		update_row_index()
+
+		e.begin_update()
+
+		e.update({rows: true})
+
+		if (focus_it)
+			e.focus_cell(ri1, true, 0, 0, ev)
+
+		if (e.save_row_on != 'manual' && e.insert_row_on == 'input')
 			e.save(row)
 
-		return row
+		e.end_update()
+
+		e.fire('rows_added', rows, ri1)
+
+		return true
 	}
+
+	// row removing -----------------------------------------------------------
 
 	e.can_remove_row = function(row) {
 		if (!(e.can_edit && e.can_remove_rows))
@@ -1917,6 +1921,8 @@ function nav_widget(e) {
 				init_rows()
 			}
 
+			e.begin_update()
+
 			e.update({rows: true})
 
 			if (top_row_index != null) {
@@ -1925,6 +1931,10 @@ function nav_widget(e) {
 			} else {
 				e.focus_cell(false, false)
 			}
+
+			e.end_update()
+
+			e.fire('rows_removed', removed_rows)
 		}
 
 		if (rows_marked && e.save_row_on != 'manual' && e.remove_row_on == 'input')
@@ -2533,7 +2543,7 @@ component('x-bare-nav', function(e) {
 	let init = e.init
 	e.init = function() {
 		init()
-		e.attach()
+		e.bind(true)
 	}
 })
 

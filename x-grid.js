@@ -60,16 +60,8 @@ component('x-grid', function(e) {
 	e.progress_bar = div({class: 'x-grid-progress-bar'})
 	e.add(e.header, e.progress_bar, e.cells_view)
 
-	function bind(on) {
+	e.on('bind', function(on) {
 		document.on('layout_changed', layout_changed, on)
-	}
-
-	e.on('attach', function() {
-		bind(true)
-	})
-
-	e.on('detach', function() {
-		bind(false)
 	})
 
 	// geometry ---------------------------------------------------------------
@@ -1577,7 +1569,7 @@ component('x-grid', function(e) {
 		// insert with the arrow down key on the last focusable row.
 		if (key == down_arrow) {
 			if (e.is_last_row_focused())
-				if (e.insert_row(null, true))
+				if (e.insert_rows(1, null, true))
 					return false
 		}
 
@@ -1662,7 +1654,7 @@ component('x-grid', function(e) {
 
 		// insert key: insert row
 		if (key == 'Insert')
-			if (e.insert_row(true, true))
+			if (e.insert_rows(1, true, true))
 				return false
 
 		if (!e.editor && key == 'Delete') {

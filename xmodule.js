@@ -12,6 +12,35 @@ function xmodule(e) {
 	e.prop_layers = {} // {layer -> {slot:, name:, widgets: {gid -> prop_vals}}}
 	e.selected_prop_slot = null
 
+	e.resolve = gid => e.widgets[gid]
+
+	e.create_nav_gid_editor = function(...options) {
+		let dd = list_dropdown({
+			rowset: {
+				fields: [{name: 'gid'}],
+			},
+			nolabel: true,
+			val_col: 'gid',
+			display_col: 'gid',
+			mode: 'fixed',
+		}, ...options)
+		function reset_nav() {
+			let rows = []
+			for (let gid in e.widgets) {
+				let te = e.widgets[gid]
+				if (te.isnav && te.can_select_widget)
+					rows.push([gid])
+			}
+			dd.picker.rowset.rows = rows
+			dd.picker.reset()
+		}
+		dd.on('bind', function(on) {
+			document.on('widget_tree_changed', reset_nav, on)
+		})
+		reset_nav()
+		return dd
+	}
+
 	document.on('widget_attached', function(te) {
 		e.widgets[te.gid] = te
 		e.update_widget(te)
@@ -183,55 +212,6 @@ function xmodule(e) {
 }
 
 // ---------------------------------------------------------------------------
-// global widgets nav
-// ---------------------------------------------------------------------------
-
-global_widgets_nav = function(type, exclude_e) {
-
-	let e = bare_nav({
-		fields: [{name: 'name'}],
-	})
-
-	function global_changed(te, name, last_name) {
-		if (last_name && name) {
-			let field = e.fields[0]
-			let row = e.lookup(field, last_name)
-			e.set_val(row, field, name)
-		} else {
-			global_detached(te, last_name)
-			global_attached(te, name)
-		}
-	}
-
-	function global_attached(te, name) {
-		if (!name)
-			return
-		e.add_row({name: name})
-	}
-
-	function global_detached(te, name) {
-		if (!name)
-			return
-		let row = e.lookup(e.fields[0], name)
-		if (row)
-			e.remove_row(row, {forever: true})
-	}
-
-	document.on('global_changed' , global_changed )
-	document.on('global_attached', global_attached)
-	document.on('global_detached', global_detached)
-
-	let resolve = global_widget_resolver(type)
-	for (let e of $('[id]')) {
-		e = e != exclude_e && resolve(e.id)
-		if (e)
-			global_attached(e, e.id)
-	}
-
-	return e
-}
-
-// ---------------------------------------------------------------------------
 // rowsets nav
 // ---------------------------------------------------------------------------
 
@@ -294,14 +274,67 @@ field_types.col.editor = function(...options) {
 field_types.nav = {}
 
 field_types.nav.editor = function(...options) {
-	let opt = update({
+
+	let rows = []
+	let rowset = {
+		fields: [{name: 'name'}],
+		rows: rows,
+	}
+
+	function global_changed(te, name, last_name) {
+		if (last_name && name) {
+			let field = nav.fields[0]
+			let row = nav.lookup(field, last_name)
+			nav.set_val(row, field, name)
+		} else {
+			global_detached(te, last_name)
+			global_attached(te, name)
+		}
+	}
+
+	function global_attached(te, name) {
+		if (!name)
+			return
+		nav.insert_rows([{name: name}])
+	}
+
+	function global_detached(te, name) {
+		if (!name)
+			return
+		let row = nav.lookup(nav.fields[0], name)
+		if (row)
+			nav.remove_row(row, {forever: true})
+	}
+
+	document.on('global_changed' , global_changed )
+	document.on('global_attached', global_attached)
+	document.on('global_detached', global_detached)
+
+	let exclude_e = null // TODO: exclude self
+
+	let resolve = global_widget_resolver('nav')
+	for (let e of $('[id]')) {
+		e = e != exclude_e && resolve(e.id)
+		if (e)
+			rows.push([e.id])
+	}
+
+	let dd = list_dropdown(update({
 		nolabel: true,
-		lookup_col: 'name',
+		rowset: rowset,
+		val_col: 'name',
 		display_col: 'name',
 		mode: 'fixed',
-	}, ...options)
-	opt.lookup_nav = global_widgets_nav('nav')
-	return list_dropdown(opt)
+	}, ...options))
+
+	let nav = dd.listbox
+
+	return dd
+}
+
+field_types.nav_gid = {}
+field_types.nav_gid.editor = function(...args) {
+	return xmodule.create_nav_gid_editor(...args)
 }
 
 // ---------------------------------------------------------------------------
@@ -332,17 +365,13 @@ component('x-prop-inspector', function(e) {
 	e.exit_edit_on_enter = false
 	e.stay_in_edit_mode = true
 
-	e.on('attach', function() {
-		reset()
-	})
-
-	function bind(on) {
+	e.on('bind', function(on) {
 		document.on('selected_widgets_changed', selected_widgets_changed, on)
 		document.on('prop_changed', prop_changed, on)
 		document.on('focusin', focus_changed, on)
-	}
-	e.on('attach', function() { bind(true) })
-	e.on('detach', function() { bind(false) })
+		if (on)
+			reset()
+	})
 
 	e.on('val_changed', function(row, field, val) {
 		if (!widgets)
@@ -419,7 +448,7 @@ component('x-prop-inspector', function(e) {
 		e.rowset = rs
 		e.reset()
 
-		e.title_text = ([...widgets].map(e => e.type)).join(' ')
+		e.title_text = ([...widgets].map(e => e.type + (e.gid ? ' ' + e.gid : ''))).join(' ')
 
 		e.fire('property_inspector_changed')
 	}
@@ -547,13 +576,11 @@ component('x-widget-tree', function(e) {
 	}
 	*/
 
-	function bind(on) {
+	e.on('bind', function(on) {
 		document.on('widget_tree_changed', widget_tree_changed, on)
 		document.on('selected_widgets_changed', selected_widgets_changed, on)
 		//document.on('focusin', focus_changed, on)
-	}
-	e.on('attach', function() { bind(true) })
-	e.on('detach', function() { bind(false) })
+	})
 
 })
 
@@ -589,7 +616,7 @@ component('x-prop-layers-inspector', function(e) {
 		e.reset()
 	}
 
-	e.on('attach', reset)
+	e.on('bind', reset)
 
 })
 
