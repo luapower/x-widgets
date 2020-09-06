@@ -19,11 +19,14 @@ component('x-cssgrid', function(e) {
 		}
 	}
 
+	let inh_serialize = e.serialize
 	e.serialize = function() {
-		let t = e.serialize_props()
-		t.items = []
-		for (let item of e.items)
-			t.items.push(item.serialize())
+		let t = inh_serialize()
+		if (isobject(t)) {
+			t.items = []
+			for (let item of e.items)
+				t.items.push(item.serialize())
+		}
 		return t
 	}
 
@@ -196,13 +199,13 @@ function cssgrid_widget_editing(e) {
 		remove_guides_for('y')
 	}
 
-	function prop_changed(te, k, v, v0, _, ev) {
+	function prop_changed(te, k) {
 		if (te.parent == e) {
 			if (k == 'pos_x' || k == 'span_x')
 				update_guides_for('x')
 			else if (k == 'pos_y' || k == 'span_y')
 				update_guides_for('y')
-		} else if (ev.target == e) {
+		} else if (te == e) {
 			if (k == 'sizes_x')
 				update_sizes_for('x')
 			else if (k == 'sizes_y')

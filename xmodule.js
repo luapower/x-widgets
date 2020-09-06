@@ -5,9 +5,12 @@
 
 function xmodule(e) {
 
+	let generation = 0
+
 	assert(e.prop_layer_slots) // {slot -> layer_obj} in correct order.
 	e.widgets = {} // {gid -> e}
 	e.prop_layers = {} // {layer -> {slot:, name:, widgets: {gid -> prop_vals}}}
+	e.selected_prop_slot = null
 
 	document.on('widget_attached', function(te) {
 		e.widgets[te.gid] = te
@@ -20,8 +23,31 @@ function xmodule(e) {
 		document.fire('widget_tree_changed')
 	})
 
+	document.on('prop_changed', function(te, k, v, v0, def) {
+		if (!te.gid) return
+		if (te.xmodule_updating) return
+
+		let slot = e.selected_prop_slot || def.slot || 'base'
+
+		if (slot == 'base' && v === def.default)
+			return
+
+		let layer_obj = e.prop_layer_slots[slot]
+		if (!layer_obj) return
+
+		if (def.serialize)
+			v = def.serialize(v)
+		else if (isobject(v) && v.serialize)
+			v = v.serialize()
+		if (v === undefined)
+			return
+
+		layer_obj.modified = true
+		attr(layer_obj.widgets, te.gid)[k] = v
+	})
+
 	e.prop_vals = function(gid) {
-		let t = {gid: gid}
+		let t = {gid: gid, prop_layers_generation: generation}
 		for (let slot in e.prop_layer_slots) {
 			let layer_obj = e.prop_layer_slots[slot]
 			if (layer_obj) {
@@ -33,10 +59,25 @@ function xmodule(e) {
 	}
 
 	e.update_widget = function(te) {
+		if (te.prop_layers_generation == generation)
+			return
 		te.begin_update()
 		let vals = e.prop_vals(te.gid)
-		for (let prop in vals)
+		te.xmodule_updating = true
+		let pv0 = te.__pv0 // prop values before the last override.
+		te.__pv0 = {} // prop values before this override.
+		// restore prop vals that were overriden last time and that
+		// are not present in this override.
+		if (pv0)
+			for (let prop in pv0)
+				if (!(prop in vals))
+					te[prop] = pv0[prop]
+		// apply this override preserving previous values.
+		for (let prop in vals) {
+			te.__pv0[prop] = te[prop]
 			te[prop] = vals[prop]
+		}
+		te.xmodule_updating = false
 		te.end_update()
 	}
 
@@ -49,12 +90,14 @@ function xmodule(e) {
 
 		function update_layer(layer_widgets) {
 
+			generation++
+
 			if (slot) {
 				let old_layer_obj = e.prop_layer_slots[slot]
 				if (old_layer_obj)
 					old_layer_obj.slot = null
 			}
-			let layer_obj = {slot: slot, widgets: layer_widgets}
+			let layer_obj = {slot: slot, name: layer, widgets: layer_widgets}
 			e.prop_layers[layer] = layer_obj
 			if (slot)
 				e.prop_layer_slots[slot] = layer_obj
@@ -265,9 +308,10 @@ field_types.nav.editor = function(...options) {
 // property inspector
 // ---------------------------------------------------------------------------
 
-prop_inspector = component('x-prop-inspector', function(e) {
+component('x-prop-inspector', function(e) {
 
 	grid.construct(e)
+	e.cell_h = 22
 
 	e.can_add_rows = false
 	e.can_remove_rows = false
@@ -324,7 +368,7 @@ prop_inspector = component('x-prop-inspector', function(e) {
 		barrier = false
 	}
 
-	function prop_changed(widget, k, v, v0, prop_attrs, ev) {
+	function prop_changed(widget, k, v) {
 		if (!widgets.has(widget))
 			return
 		let field = e.all_fields[k]
@@ -391,9 +435,10 @@ prop_inspector = component('x-prop-inspector', function(e) {
 // widget tree
 // ---------------------------------------------------------------------------
 
-widget_tree = component('x-widget-tree', function(e) {
+component('x-widget-tree', function(e) {
 
 	grid.construct(e)
+	e.cell_h = 22
 
 	function widget_tree_rows() {
 		let rows = new Set()
@@ -513,6 +558,42 @@ widget_tree = component('x-widget-tree', function(e) {
 })
 
 // ---------------------------------------------------------------------------
+// prop layers inspector
+// ---------------------------------------------------------------------------
+
+component('x-prop-layers-inspector', function(e) {
+
+	grid.construct(e)
+	e.cell_h = 22
+
+	e.can_select_widget = false
+
+	function reset() {
+		let rows = []
+		for (let slot in xmodule.prop_layer_slots) {
+			let layer_obj = xmodule.prop_layer_slots[slot]
+			let layer = layer_obj ? layer_obj.name : null
+			rows.push([true, slot, layer])
+		}
+		e.rowset = {
+			fields: [
+				{name: 'active', type: 'bool', w: 24,
+					true_text: () => H('<div class="fa fa-eye" style="font-size: 80%"></div>'),
+					false_text: '',
+				},
+				{name: 'slot', w: 80},
+				{name: 'layer', w: 80},
+			],
+			rows: rows,
+		}
+		e.reset()
+	}
+
+	e.on('attach', reset)
+
+})
+
+// ---------------------------------------------------------------------------
 // sql rowset editor
 // ---------------------------------------------------------------------------
 
@@ -562,6 +643,17 @@ function widget_tree_toolbox(tb_opt, wt_opt) {
 		can_select_widget: false,
 	}, tb_opt))
 	tb.tree = wt
+	return tb
+}
+
+function prop_layers_toolbox(tb_opt, insp_opt) {
+	let pg = prop_layers_inspector(insp_opt)
+	let tb = toolbox(update({
+		text: 'property layers',
+		content: pg,
+		can_select_widget: false,
+	}, tb_opt))
+	tb.inspector = pg
 	return tb
 }
 

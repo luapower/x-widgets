@@ -149,9 +149,12 @@ function nav_widget(e) {
 
 	// serialization ----------------------------------------------------------
 
+	let inh_serialize = e.serialize
 	e.serialize = function() {
-		let t = e.serialize_props()
-		t.col_attrs = e.col_attrs
+		let t = inh_serialize()
+		if (isobject(t)) {
+			t.col_attrs = e.col_attrs
+		}
 		return t
 	}
 

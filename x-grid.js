@@ -26,16 +26,16 @@ component('x-grid', function(e) {
 	e.auto_jump_cells = true    // jump to next/prev cell on caret limits
 	e.tab_navigation = false    // disabled as it prevents jumping out of the grid.
 	e.advance_on_enter = 'next_row' // false|'next_row'|'next_cell'
-	e.prop('exit_edit_on_escape'         , {store: 'var', type: 'bool', default: true})
-	e.prop('exit_edit_on_enter'          , {store: 'var', type: 'bool', default: false})
+	e.prop('exit_edit_on_escape'           , {store: 'var', type: 'bool', default: true})
+	e.prop('exit_edit_on_enter'            , {store: 'var', type: 'bool', default: false})
 	e.quick_edit = false        // quick edit (vs. quick-search) when pressing a key
 
 	// mouse behavior
-	e.prop('can_reorder_fields'          , {store: 'var', type: 'bool', default: true})
-	e.prop('enter_edit_on_click'         , {store: 'var', type: 'bool', default: false})
-	e.prop('enter_edit_on_click_focused' , {store: 'var', type: 'bool', default: true})
-	e.prop('focus_cell_on_click_header'  , {store: 'var', type: 'bool', default: false})
-	e.prop('can_change_parent'           , {store: 'var', type: 'bool', default: true})
+	e.prop('can_reorder_fields'            , {store: 'var', type: 'bool', default: true})
+	e.prop('enter_edit_on_click'           , {store: 'var', type: 'bool', default: false})
+	e.prop('enter_edit_on_click_focused'   , {store: 'var', type: 'bool', default: true})
+	e.prop('focus_cell_on_click_header'    , {store: 'var', type: 'bool', default: false})
+	e.prop('can_change_parent'             , {store: 'var', type: 'bool', default: true})
 
 	// context menu features
 	e.prop('enable_context_menu'           , {store: 'var', type: 'bool', default: true})

@@ -92,48 +92,20 @@ xmodule.set_prop_layer('base', 'base', null, function() {
 	document.body.add(root_widget)
 })
 
+prop_layers_tb = prop_layers_toolbox({
+	popup_y: 2, w: 222, h: 225,
+})
+prop_layers_tb.show(true, true)
+
 props_tb = properties_toolbox({
-	y: 128, x: 920, w: 220, h: 397,
+	popup_y: 230, w: 222, h: 397,
 }, {header_w: 80})
 props_tb.show(true, true)
 
 tree_tb = widget_tree_toolbox({
-	y: 528, x: 920, w: 220, h: 401,
+	popup_y: 630, w: 222, h: 311,
 })
 tree_tb.show(true, true)
-
-/*
-
-function widgets_toolbox() {
-	let lb = listbox({
-		items: [
-			'button', 'checkbox', 'radiogroup',
-			'input', 'spin_input', 'slider',
-			'list_dropdown', 'date_dropdown', 'grid_dropdown',
-			'listbox', 'grid',
-			'split', 'pagelist', 'cssgrid',
-		],
-	})
-	let tb = toolbox({
-		text: 'widgets',
-		content: lb,
-	})
-	tb.on('dblclick', function(ev) {
-		let i = ev.target.index
-		let name = lb.items[i]
-		let cons = window[name]
-		let e = cons()
-		document.body.add(e)
-	})
-	return tb
-}
-
-widgets_tb = widgets_toolbox({
-	y: 150,
-	x: 500,
-})
-//widgets_tb.show()
-*/
 
 </script>
 </body>

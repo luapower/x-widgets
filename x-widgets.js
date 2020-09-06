@@ -190,10 +190,14 @@ let component_deferred_updating = function(e) {
 	e.updating = 0
 
 	e.begin_update = function() {
+		if (!e.attached)
+			return
 		e.updating++
 	}
 
 	e.end_update = function() {
+		if (!e.attached)
+			return
 		assert(e.updating)
 		e.updating--
 		if (!e.updating)
@@ -789,7 +793,7 @@ function cssgrid_item_widget_editing(e) {
 		}
 		update_so()
 
-		function prop_changed(te, k, v, v0, _, ev) {
+		function prop_changed(te, k) {
 			if (te == e)
 				if (k == 'pos_x' || k == 'span_x' || k == 'pos_y' || k == 'span_y')
 					update_so()
@@ -1068,7 +1072,7 @@ function val_widget(e, always_enabled) {
 		nav = nav1
 		set_nav_col(nav1, nav0, col, col)
 	}
-	e.prop('nav', {store: 'var', private: true})
+	e.prop('nav', {store: 'var', convert: })
 	e.prop('nav_name', {store: 'var', bind: 'nav', type: 'nav'})
 
 	let col
@@ -2885,9 +2889,13 @@ component('x-pagelist', function(e) {
 	let inh_serialize = e.serialize
 	e.serialize = function() {
 		let t = inh_serialize()
-		t.items = []
-		for (let item of e.items)
-			t.items.push(item.page.serialize())
+		if (isobject(t)) {
+			t.items = []
+			for (let item of e.items) {
+				print(t.items)
+				t.items.push(item.page.serialize())
+			}
+		}
 		return t
 	}
 
@@ -3542,12 +3550,29 @@ component('x-toolbox', function(e) {
 	e.set_text = function(v) { e.title_div.set(v) }
 	e.prop('text')
 
+	e.set_popup_side   = e.update
+	e.set_popup_align  = e.update
+	e.set_popup_widget = e.update
+	e.set_popup_x      = e.update
+	e.set_popup_y      = e.update
+
+	e.prop('popup_side'  , {store: 'var', type: 'enum', enum_values: ['inner-right', 'inner-left', 'inner-top', 'inner-bottom', 'left', 'right', 'top', 'bottom'], default: 'inner-right'})
+	e.prop('popup_align' , {store: 'var', type: 'enum', enum_values: ['start', 'center', 'end'], default: 'start'})
+	e.prop('popup_widget', {store: 'var', type: 'widget'})
+	e.prop('popup_x'     , {store: 'var', type: 'number', default: 0})
+	e.prop('popup_y'     , {store: 'var', type: 'number', default: 0})
+
+	e.do_update = function() {
+		e.popup(e.popup_widget, e.popup_side, e.popup_align, e.popup_x, e.popup_y)
+	}
+
 	e.init = function() {
 		e.content_div = div({class: 'x-toolbox-content'})
 		e.content_div.set(e.content)
 		e.add(e.content_div)
 		e.hide()
-		document.body.add(e)
+		e.do_update()
+		e.popup(e.popup_widget || document.body)
 	}
 
 	e.titlebar.on('pointerdown', function(ev, mx, my) {
@@ -3559,13 +3584,17 @@ component('x-toolbox', function(e) {
 
 		if (ev.target == e.xbutton)
 			return
+
 		let r = e.rect()
-		let drag_x = mx - r.x
-		let drag_y = my - r.y
+		let drag_x = mx - e.popup_x
+		let drag_y = my - e.popup_y
+
 		return this.capture_pointer(ev, function(ev, mx, my) {
 			let r = this.rect()
-			e.x = clamp(0, mx - drag_x, window.innerWidth  - r.w)
-			e.y = clamp(0, my - drag_y, window.innerHeight - r.h)
+			e.begin_update()
+			e.popup_x = clamp(0, mx - drag_x, window.innerWidth  - r.w)
+			e.popup_y = clamp(0, my - drag_y, window.innerHeight - r.h)
+			e.end_update()
 		})
 	})
 

@@ -2001,6 +2001,19 @@
 	justify-content: start;
 }
 
+/* xmodule stuff ---------------------------------------------------------- */
+
+x-prop-layers-inspector,
+x-prop-inspector,
+x-widget-tree {
+	font-size: 90% !important;
+}
+
+x-prop-layers-inspector > .x-grid-header {
+	min-height: calc(2em + 1px);
+}
+
+
 /* ------------------------------------------------------------------------ */
 /* dark theme                                                               */
 /* ------------------------------------------------------------------------ */

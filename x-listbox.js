@@ -79,8 +79,8 @@ component('x-listbox', function(e) {
 	}
 
 	e.serialize = function() {
-		let t = e.serialize_props()
-		if (e.items) {
+		let t = e.serialize()
+		if (isobject(t) && e.items) {
 			t.items = []
 			for (let ce of e.child_widgets)
 				t.items.push(ce.serialize())
