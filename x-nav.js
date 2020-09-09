@@ -310,6 +310,8 @@ function nav_widget(e) {
 
 	// serialization ----------------------------------------------------------
 
+	e.props.col_attrs = {name: 'col_attrs'}
+
 	let inh_serialize = e.serialize
 	e.serialize = function() {
 		let t = inh_serialize()
@@ -1199,6 +1201,8 @@ function nav_widget(e) {
 	}
 
 	e.set_collapsed = function(row, collapsed, recursive) {
+		if (!e.parent_field)
+			return
 		if (row)
 			set_collapsed(row, collapsed, recursive)
 		else
@@ -1773,6 +1777,12 @@ function nav_widget(e) {
 			return true
 		if (!e.can_focus_cell(e.focused_row, e.focused_field, true))
 			return false
+
+		if (e.focused_field.type == 'bool') {
+			e.set_cell_val(e.focused_row, e.focused_field,
+				!e.cell_val(e.focused_row, e.focused_field))
+			return false
+		}
 
 		e.do_create_editor(e.focused_field)
 		if (!e.editor)

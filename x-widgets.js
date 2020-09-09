@@ -118,11 +118,12 @@ function component(tag, cons) {
 	function init(e, ...args) {
 		if (e.initialized)
 			return
-		e.iswidget = true
-		e.type = type
-		e.init = noop
 		component_prop_system(e)
 		component_deferred_updating(e)
+		e.iswidget = true
+		e.type = type
+		e.props.type = {name: 'type'}
+		e.init = noop
 		cons(e)
 		e.initialized = false
 		e.begin_update()
@@ -189,7 +190,8 @@ let component_deferred_updating = function(e) {
 		assert(e.updating)
 		e.updating--
 		if (!e.updating)
-			e.update()
+			if (invalid)
+				e.update()
 	}
 
 	e.do_update = noop
@@ -777,10 +779,31 @@ function editable_widget(e) {
 }
 
 // ---------------------------------------------------------------------------
+// pagelist item widget mixin
+// ---------------------------------------------------------------------------
+
+function pagelist_item_widget(e) {
+
+	e.props.title = {name: 'title', slot: 'lang'}
+
+	override_property_setter(e, 'title', function(inherited, v) {
+		if (!v) v = ''
+		let v0 = e.title
+		inherited.call(this, v)
+		if (v === v0)
+			return
+		document.fire('prop_changed', e, 'title', v, v0, e.props.title)
+	})
+
+}
+
+// ---------------------------------------------------------------------------
 // cssgrid item widget mixin
 // ---------------------------------------------------------------------------
 
 function cssgrid_item_widget(e) {
+
+	pagelist_item_widget(e)
 
 	e.prop('pos_x'  , {style: 'grid-column-start' , type: 'number', default: 1})
 	e.prop('pos_y'  , {style: 'grid-row-start'    , type: 'number', default: 1})
@@ -1316,7 +1339,7 @@ component('x-tooltip', function(e) {
 
 	e.prop('target'     , {store: 'var', private: true})
 	e.prop('target_name', {store: 'var', type: 'element', bind: 'target'})
-	e.prop('text'       , {store: 'var'})
+	e.prop('text'       , {store: 'var', slot: 'lang'})
 	e.prop('side'       , {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
 	e.prop('align'      , {store: 'attr', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
 	e.prop('kind'       , {store: 'attr', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
@@ -1393,7 +1416,7 @@ component('x-button', function(e) {
 	e.add(e.icon_div, e.text_div)
 
 	e.set_text = function(s) { e.text_div.set(s, 'pre-wrap') }
-	e.prop('text', {store: 'var', default: 'OK'})
+	e.prop('text', {store: 'var', default: 'OK', slot: 'lang'})
 
 	e.set_icon = function(v) {
 		if (typeof v == 'string')
@@ -1509,7 +1532,7 @@ component('x-checkbox', function(e) {
 	// view
 
 	e.set_text = function(s) { e.text_div.set(s, 'pre-wrap') }
-	e.prop('text', {store: 'var', default: 'Check me!'})
+	e.prop('text', {store: 'var', default: 'Check me!', slot: 'lang'})
 
 	e.do_update_val = function() {
 		let v = e.checked
@@ -3061,8 +3084,6 @@ component('x-pagelist', function(e) {
 			let tab = div({class: 'x-pagelist-tab', tabindex: 0}, title_div, xbutton)
 			tab.title_div = title_div
 			tab.xbutton = xbutton
-			title_div.set(item.title, 'pre-wrap')
-			title_div.title = item.title
 			tab.on('pointerdown' , tab_pointerdown)
 			tab.on('dblclick'    , tab_dblclick)
 			tab.on('keydown'     , tab_keydown)
@@ -3071,6 +3092,7 @@ component('x-pagelist', function(e) {
 			xbutton.on('pointerdown', xbutton_pointerdown)
 			tab.item = item
 			item._tab = tab
+			update_tab_title(tab)
 		}
 		item._tab.x = null
 		e.header.add(item._tab)
@@ -3115,8 +3137,14 @@ component('x-pagelist', function(e) {
 			e.items = [{type: 'widget_placeholder', title: 'New'}]
 	}
 
-	function update_tab(tab, select) {
-		tab.xbutton.show(select && (e.can_remove_items || e.widget_editing))
+	function update_tab_title(tab) {
+		tab.title_div.set(tab.item.title, 'pre-wrap')
+		tab.title_div.title = tab.item.title
+		update_selection_bar()
+	}
+
+	function update_tab_state(tab, select) {
+		tab.xbutton.show(select && (e.can_remove_items || e.widget_editing) || false)
 		tab.title_div.contenteditable = select && (e.widget_editing || e.renaming)
 	}
 
@@ -3130,7 +3158,7 @@ component('x-pagelist', function(e) {
 	e.do_update = function() {
 		update_selection_bar()
 		if (e.selected_tab)
-			update_tab(e.selected_tab, true)
+			update_tab_state(e.selected_tab, true)
 		e.add_button.show(e.can_add_items || e.widget_editing)
 	}
 
@@ -3143,9 +3171,15 @@ component('x-pagelist', function(e) {
 	e.prop('can_remove_items', {store: 'var', type: 'bool', default: false})
 	e.prop('can_move_items'  , {store: 'var', type: 'bool', default: true})
 
+	function prop_changed(te, k, v) {
+		if (k == 'title' && te._tab && te._tab.parent == e.header)
+			update_tab_title(te._tab)
+	}
+
 	e.on('bind', function(on) {
 		if (on)
 			select_default_tab()
+		document.on('prop_changed', prop_changed, on)
 	})
 
 	function select_tab(tab, focus_tab, enter_editing) {
@@ -3154,7 +3188,7 @@ component('x-pagelist', function(e) {
 				e.selected_tab.class('selected', false)
 				e.fire('close', e.selected_tab.index)
 				e.content.clear()
-				update_tab(e.selected_tab, false)
+				update_tab_state(e.selected_tab, false)
 			}
 			e.selected_tab = tab
 			e.update()
@@ -3784,7 +3818,7 @@ component('x-toolbox', function(e) {
 
 	e.get_text = () => e.title_div.textContent
 	e.set_text = function(v) { e.title_div.set(v) }
-	e.prop('text')
+	e.prop('text', {slot: 'lang'})
 
 	e.set_popup_side   = e.update
 	e.set_popup_align  = e.update
@@ -3872,7 +3906,7 @@ component('x-richtext', function(e) {
 
 	e.get_content = function()  { return e.content_div.html }
 	e.set_content = function(s) { e.content_div.html = s }
-	e.prop('content')
+	e.prop('content', {slot: 'lang'})
 
 	// widget editing ---------------------------------------------------------
 

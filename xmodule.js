@@ -91,7 +91,7 @@ function xmodule(e) {
 			if (slot)
 				e.prop_layer_slots[slot] = layer_obj
 
-			// update all attached widgets.
+			// update all live widgets.
 			for (let gid in e.widgets)
 				if (layer_widgets[gid])
 					e.update_widget(e.widgets[gid])
@@ -125,6 +125,17 @@ function xmodule(e) {
 		let layer_obj = e.prop_layers[layer]
 		if (layer_obj.save_request)
 			return // already saving...
+
+		// refresh stored props of live widgets.
+		for (let gid in e.widgets) {
+			let props = layer_obj.widgets[gid]
+			if (props) {
+				let te = e.widgets[gid]
+				for (let k in props)
+					set_layer_prop(te, layer_obj, k, te[k])
+			}
+		}
+
 		layer_obj.save_request = ajax({
 			url: 'xmodule-layer.json/'+layer,
 			upload: json(layer_obj.widgets, null, '\t'),
@@ -139,16 +150,16 @@ function xmodule(e) {
 		}
 	}
 
-	e.set_prop = function(te, slot, k, v) {
-		if (!te.gid) return
-
-		let layer_obj = e.prop_layer_slots[slot]
-		if (!layer_obj) return
+	function set_layer_prop(te, layer_obj, k, v) {
 
 		let def = te.props[k]
-		if (slot == 'base' && v === def.default)
+		if (!def) {
+			print('removing old prop from store:', k, '=', v)
+			v = undefined // delete old props from store.
+		} else if (layer_obj.name == 'base' && v === def.default) {
+			print('removing default from store:', k, '=', v)
 			v = undefined // delete defaults from store.
-		else if (def.serialize)
+		} else if (def.serialize)
 			v = def.serialize(v)
 		else if (isobject(v) && v.serialize)
 			v = v.serialize()
@@ -167,6 +178,13 @@ function xmodule(e) {
 			delete t[k] // can't store `undefined` because nav can't.
 		else
 			t[k] = v
+	}
+
+	e.set_prop = function(te, slot, k, v) {
+		if (!te.gid) return
+		let layer_obj = e.prop_layer_slots[slot]
+		if (!layer_obj) return
+		set_layer_prop(te, layer_obj, k, v)
 	}
 
 	e.save = function() {
@@ -564,6 +582,7 @@ component('x-prop-layers-inspector', function(e) {
 	}
 
 	e.on('bind', reset)
+	document.on('prop_layer_slots_changed', reset)
 
 })
 

@@ -36,7 +36,7 @@ function action.xmodule_next_gid()
 	local fn = xmodule_file'xmodule-next-gid'
 	local id = tonumber(assert(readfile(fn)))
 	if method'post' then
-		assert(writefile(fn, tostring(id + 1)))
+		assert(writefile(fn, tostring(id + 1), nil, fn..'.tmp'))
 	end
 	setmime'txt'
 	out(xmodule_ns..id)
@@ -44,11 +44,11 @@ end
 
 action['xmodule_layer.json'] = function(layer)
 	layer = check(str_arg(layer))
-	assert(layer:find'^[%w_]+$')
+	assert(layer:find'^[%w_%-]+$')
 	local file = xmodule_file(_('xmodule-%s.json', layer))
 	if method'post' then
 		writefile(file, post())
 	else
-		return readfile(file)
+		return readfile(file) or '{}'
 	end
 end

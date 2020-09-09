@@ -72,8 +72,8 @@ document.body.on('keydown', function(key, shift, ctrl) {
 xmodule = xmodule({
 	prop_layer_slots: {
 		base: null,
-		pri_lang: null,
-		sec_lang: null,
+		lang: null,
+		lang2: null,
 		app: null,
 		user: null,
 	},
@@ -81,9 +81,13 @@ xmodule = xmodule({
 
 root_widget = null
 
-xmodule.set_prop_layer('base', 'base', null, function() {
-	root_widget = component.create('lma1')
-	document.body.add(root_widget)
+xmodule.set_prop_layer('lang', 'lang-ro', null, function() {
+
+	xmodule.set_prop_layer('base', 'base', null, function() {
+		root_widget = component.create('lma1')
+		document.body.add(root_widget)
+	})
+
 })
 
 prop_layers_tb = prop_layers_toolbox({
