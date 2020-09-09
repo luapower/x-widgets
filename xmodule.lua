@@ -29,6 +29,9 @@ function xmodule_file(file)
 	return path.combine(config'app_dir', file)
 end
 
+local xmodule_ns = config('xmodule_ns', '')
+assert(not xmodule_ns:find(' ', 1, true))
+
 function action.xmodule_next_gid()
 	local fn = xmodule_file'xmodule-next-gid'
 	local id = tonumber(assert(readfile(fn)))
@@ -36,7 +39,7 @@ function action.xmodule_next_gid()
 		assert(writefile(fn, tostring(id + 1)))
 	end
 	setmime'txt'
-	out(config('xmodule_ns', '')..id)
+	out(xmodule_ns..id)
 end
 
 action['xmodule_layer.json'] = function(layer)
@@ -44,7 +47,7 @@ action['xmodule_layer.json'] = function(layer)
 	assert(layer:find'^[%w_]+$')
 	local file = xmodule_file(_('xmodule-%s.json', layer))
 	if method'post' then
-		writefile(file, json(post()))
+		writefile(file, post())
 	else
 		return readfile(file)
 	end

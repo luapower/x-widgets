@@ -7,41 +7,35 @@
 
 DEBUG_ATTACH_TIME = false
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // creating & setting up web components
 // ---------------------------------------------------------------------------
-// implements:
-//   e.initialized
-//   e.attached
-//   e.bind(t|f)
-//   e.override(name, f)
-//   e.property(name, get[, set])
-// uses:
-//   e.init()
-// fires on self:
-//   'bind'
-// fires on document:
-//   'global_attached', 'global_detached'
-//   'widget_attached', 'widget_detached'
-//
-// NOTE: the only reason for using this web components "technology" instead
-// of creating normal elements is because of connectedCallback and
-// disconnectedCallback for which there are no events in built-in elements,
-// and we use those events to solve the so-called "lapsed listener problem"
-// (a proper iterable weak hash map would be a better way to solve this but
-// alas, the web people could't get that one right either).
-// ---------------------------------------------------------------------------
-
-/* TODO: use it or scrape it.
-method(HTMLElement, 'override', function(method, func) {
-	let inherited = this[method] || noop
-	this[method] = function(...args) {
-		return func(inherited, ...args)
-	}
-})
-*/
+uses:
+	bind_events <- t|f
+publishes:
+	e.iswidget: t
+	e.type
+	e.initialized: t|f
+	e.attached: t|f
+	e.bind(t|f)
+	calls:
+	e.init()
+fires:
+	e.'bind' (t|f)
+	document.'global_attached', document.'global_detached'
+	document.'widget_attached', document.'widget_detached'
+------------------------------------------------------------------------------
+NOTE: the only reason for using this web components "technology" instead
+of creating normal elements is because of connectedCallback and
+disconnectedCallback for which there are no events in built-in elements,
+and we use those events to solve the so-called "lapsed listener problem"
+(a proper iterable weak hash map would be a better way to solve this but
+alas, the web people could't get that one right either).
+--------------------------------------------------------------------------- */
 
 let repl_empty_str = v => repl(v, '', null)
+
+bind_events = true
 
 // component(tag, cons) -> create({option: value}) -> element.
 function component(tag, cons) {
@@ -73,6 +67,9 @@ function component(tag, cons) {
 		}
 
 		bind(on) {
+			assert(typeof on == 'boolean')
+			if (!bind_events)
+				return
 			if (on) {
 				if (this.attached)
 					return
@@ -164,25 +161,17 @@ component.create = function(t, e0) {
 	return create && create(t)
 }
 
-global_widget_resolver = memoize(function(type) {
-	let ISTYPE = 'is'+type
-	return function(name) {
-		let e = window[name]
-		return isobject(e) && e.attached && e[ISTYPE] && e.can_select_widget ? e : null
-	}
-})
-
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // component partial deferred updating mixin
 // ---------------------------------------------------------------------------
-// implements:
-//   e.updating
-//   e.begin_update()
-//   e.end_update()
-//   e.update([opt])
-// uses:
-//   e.do_update([opt])
-// ---------------------------------------------------------------------------
+publishes:
+	e.updating
+	e.begin_update()
+	e.end_update()
+	e.update()
+calls:
+	e.do_update()
+--------------------------------------------------------------------------- */
 
 let component_deferred_updating = function(e) {
 
@@ -227,24 +216,45 @@ let component_deferred_updating = function(e) {
 
 }
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // component property system mixin
 // ---------------------------------------------------------------------------
-// implements:
-//   e.property(name, get[, set])
-//   e.prop(name, attrs)
-//   e.props: {prop -> attrs}
-//      attrs: name, type, private, store, convert, default,
-//             style, style_format, style_parse, bind, resolve.
-//   e.get_<prop>() -> v
-//   e.set_<prop>(v1, v0)
-// fires up:
-//   'prop_changed' (e, prop, v1, v0, prop_attrs)
-// ---------------------------------------------------------------------------
+uses:
+	e.property(name, get[, set])
+	e.prop(name, attrs)
+publishes:
+	e.<prop>
+	e.props: {prop -> attrs}
+		store: 'var'|'attr'|, private, default, convert,
+		type, ...,
+		style, style_format, style_parse, bind, resolve.
+calls:
+	e.get_<prop>() -> v
+	e.set_<prop>(v1, v0)
+fires:
+	document.'prop_changed' (e, prop, v1, v0, prop_attrs)
+--------------------------------------------------------------------------- */
+
+/* TODO: use it or scrape it.
+method(HTMLElement, 'override', function(method, func) {
+	let inherited = this[method] || noop
+	this[method] = function(...args) {
+		return func(inherited, ...args)
+	}
+})
+*/
 
 let fire_prop_changed = function(e, prop, v1, v0, opt) {
 	document.fire('prop_changed', e, prop, v1, v0, opt)
 }
+
+global_widget_resolver = memoize(function(type) {
+	let ISTYPE = 'is'+type
+	return function(name) {
+		let e = window[name]
+		return isobject(e) && e.attached && e[ISTYPE] && e.can_select_widget ? e : null
+	}
+})
 
 function component_prop_system(e) {
 
@@ -272,9 +282,10 @@ function component_prop_system(e) {
 		if (!e[setter])
 			e[setter] = noop
 		let prop_changed = fire_prop_changed
+		let dv = repl(opt.default, undefined, null) // `undefined` is not valid.
 
 		if (opt.store == 'var') {
-			let v = opt.default
+			let v = dv
 			function get() {
 				return v
 			}
@@ -290,27 +301,46 @@ function component_prop_system(e) {
 			}
 		} else if (opt.store == 'attr') {  // for attr-based styling
 			let attr = prop.replace(/_/g, '-')
-			if (opt.default !== undefined)
-				e.attr(attr, opt.default)
-			function get() {
-				return e.attrval(attr)
-			}
-			function set(v1) {
-				let v0 = get()
-				v1 = convert(v1, v0)
-				if (v1 === v0)
-					return
-				e.attr(attr, v1)
-				e[setter](v1, v0)
-				if (!priv)
-					prop_changed(e, prop, v1, v0, opt)
+			if (type == 'bool') {
+				dv = dv || false
+				if (dv)
+					e.attr(attr, true)
+				function get() {
+					return e.attrval(attr) || false
+				}
+				function set(v1) {
+					let v0 = get()
+					v1 = convert(v1, v0) && true || false
+					if (v1 === v0)
+						return
+					e.attr(attr, v1)
+					e[setter](v1, v0)
+					if (!priv)
+						prop_changed(e, prop, v1, v0, opt)
+				}
+			} else {
+				if (dv != null)
+					e.attr(attr, dv)
+				function get() {
+					return e.attrval(attr)
+				}
+				function set(v1) {
+					let v0 = get()
+					v1 = convert(v1, v0)
+					if (v1 === v0)
+						return
+					e.attr(attr, v1)
+					e[setter](v1, v0)
+					if (!priv)
+						prop_changed(e, prop, v1, v0, opt)
+				}
 			}
 		} else if (opt.style) {
 			let style = opt.style
 			let format = opt.style_format || return_arg
 			let parse  = opt.style_parse  || type == 'number' && num || repl_empty_str
-			if (opt.default != null && parse(e.style[style]) == null)
-				e.style[style] = format(opt.default)
+			if (dv != null && parse(e.style[style]) == null)
+				e.style[style] = format(dv)
 			function get() {
 				return parse(e.style[style])
 			}
@@ -346,7 +376,7 @@ function component_prop_system(e) {
 		if (opt.bind_gid) {
 			let resolve = opt.resolve || xmodule.resolve
 			let GID = prop
-			let REF = repl(opt.bind_gid, true, GID)
+			let REF = opt.bind_gid
 			function widget_attached(te) {
 				if (e[GID] == te.gid)
 					e[REF] = te
@@ -362,7 +392,7 @@ function component_prop_system(e) {
 			}
 			function gid_changed(gid1, gid0) {
 				if (e.attached)
-					e[REF] = resolve(name)
+					e[REF] = resolve(gid1)
 				if ((gid1 != null) != (gid0 != null)) {
 					e.on('bind', bind, gid1 != null)
 				}
@@ -376,10 +406,10 @@ function component_prop_system(e) {
 				gid_changed(e[GID])
 		}
 
-		if (opt.bind) {
+		if (opt.bind_id) {
 			let resolve = opt.resolve || global_widget_resolver(type)
 			let NAME = prop
-			let REF = repl(opt.bind, true, NAME)
+			let REF = opt.bind_id
 			function global_changed(te, name, last_name) {
 				// NOTE: changing the name from something to nothing
 				// will unbind dependants forever.
@@ -425,9 +455,26 @@ function component_prop_system(e) {
 
 }
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // undo stack, selected widgets, editing widget and clipboard.
 // ---------------------------------------------------------------------------
+publishes:
+	undo_stack, redo_stack
+	editing_widget
+	selected_widgets
+	copied_widgets
+	focused_widget(e)
+	unselect_all_widgets()
+	copy_selected_widgets()
+	cut_selected_widgets()
+	paste_copied_widgets()
+	undo()
+	redo()
+	push_undo(f)
+behavior:
+	uncaptured clicks and escape unselect all widgets.
+	ctrl+x/+c/+v/(+shift)+z/+y do the usual thing with selected widgets.
+--------------------------------------------------------------------------- */
 
 undo_stack = []
 redo_stack = []
@@ -502,9 +549,26 @@ document.on('pointerdown', function() {
 	unselect_all_widgets()
 })
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // selectable widget mixin
 // ---------------------------------------------------------------------------
+uses:
+	e.can_select_widget
+publishes:
+	e.parent_widget
+	e.selectable_parent_widget
+	e.widget_selected
+	e.set_widget_selected()
+	e.remove_widget()
+calls:
+	e.do_select_widget()
+	e.do_unselect_widget()
+calls from the first parent which has e.child_widgets:
+	p.can_select_widget
+	p.remove_child_widget()
+behavior:
+	enters widget editing mode and/or selects widget with ctrl(+shift)+click.
+--------------------------------------------------------------------------- */
 
 function parent_widget_which(e, which) {
 	assert(e != window)
@@ -540,16 +604,6 @@ function selectable_widget(e) {
 		document.fire('global_changed', this, id, id0)
 	})
 
-	e.set_css_classes = function(c1, c0) {
-		if (c0)
-			for (s of c0.split(/\s+/))
-				this.class(s, false)
-		if (c1)
-			for (s of c1.split(/\s+/))
-				this.class(s, true)
-	}
-	e.prop('css_classes', {store: 'var'})
-
 	e.property('parent_widget', function() {
 		return parent_widget_which(this, p => p.child_widgets)
 	})
@@ -566,10 +620,10 @@ function selectable_widget(e) {
 			return
 		if (select) {
 			selected_widgets.add(e)
-			e.select_widget(focus)
+			e.do_select_widget(focus)
 		} else {
 			selected_widgets.delete(e)
-			e.unselect_widget(focus)
+			e.do_unselect_widget(focus)
 		}
 		e.class('widget-selected', select)
 		if (fire_changed_event !== false)
@@ -580,7 +634,7 @@ function selectable_widget(e) {
 		() => selected_widgets.has(e),
 		function(v, ...args) { e.set_widget_selected(v, ...args) })
 
-	e.select_widget = function(focus) {
+	e.do_select_widget = function(focus) {
 
 		// make widget unfocusable: the overlay will be focusable instead.
 		e.focusable = false
@@ -616,7 +670,7 @@ function selectable_widget(e) {
 			overlay.focus()
 	}
 
-	e.unselect_widget = function(focus_prev) {
+	e.do_unselect_widget = function(focus_prev) {
 
 		e.focusable = true
 
@@ -678,9 +732,16 @@ function selectable_widget(e) {
 
 }
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // editable widget mixin
 // ---------------------------------------------------------------------------
+uses:
+	e.can_edit_widget
+publishes:
+	e.widget_editing
+calls:
+	e.set_widget_editing()
+--------------------------------------------------------------------------- */
 
 function editable_widget(e) {
 
@@ -728,29 +789,29 @@ function cssgrid_item_widget(e) {
 	e.prop('align_x', {style: 'justify-self'      , type: 'enum', enum_values: ['start', 'end', 'center', 'stretch'], default: 'center'})
 	e.prop('align_y', {style: 'align-self'        , type: 'enum', enum_values: ['start', 'end', 'center', 'stretch'], default: 'center'})
 
-	let select_widget = e.select_widget
-	let unselect_widget = e.unselect_widget
+	let do_select_widget = e.do_select_widget
+	let do_unselect_widget = e.do_unselect_widget
 
-	e.select_widget = function(focus) {
-		select_widget(focus)
+	e.do_select_widget = function(focus) {
+		do_select_widget(focus)
 		let p = e.parent_widget
 		if (p && p.iswidget && p.type == 'cssgrid') {
 			cssgrid_item_widget_editing(e)
-			e.cssgrid_item_select_widget()
+			e.cssgrid_item_do_select_widget()
 		}
 	}
 
-	e.unselect_widget = function(focus_prev) {
+	e.do_unselect_widget = function(focus_prev) {
 		let p = e.parent_widget
 		if (p && p.iswidget && p.type == 'cssgrid')
-			e.cssgrid_item_unselect_widget()
-		unselect_widget(focus_prev)
+			e.cssgrid_item_do_unselect_widget()
+		do_unselect_widget(focus_prev)
 	}
 
 }
 
 // ---------------------------------------------------------------------------
-// cssgrid item widget editing mixin
+// editable widget protocol for cssgrid item
 // ---------------------------------------------------------------------------
 
 function cssgrid_item_widget_editing(e) {
@@ -797,7 +858,7 @@ function cssgrid_item_widget_editing(e) {
 			toggle_stretch_for(false)
 	}
 
-	e.cssgrid_item_select_widget = function() {
+	e.cssgrid_item_do_select_widget = function() {
 
 		let p = e.parent_widget
 		if (!(p && p.iswidget && p.type == 'cssgrid'))
@@ -914,11 +975,11 @@ function cssgrid_item_widget_editing(e) {
 		}
 		e.widget_selected_overlay.on('keydown', overlay_keydown)
 
-		e.cssgrid_item_unselect_widget = function() {
+		e.cssgrid_item_do_unselect_widget = function() {
 			e.off('prop_changed', prop_changed)
 			e.widget_selected_overlay.off('keydown', overlay_keydown)
 			span_outline.remove()
-			e.cssgrid_item_unselect_widget = noop
+			e.cssgrid_item_do_unselect_widget = noop
 
 			// exit parent editing if this was the last item to be selected.
 			let p = e.parent_widget
@@ -939,9 +1000,12 @@ function cssgrid_item_widget_editing(e) {
 
 }
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // serializable widget mixin
 // ---------------------------------------------------------------------------
+publishes:
+	e.serialize()
+--------------------------------------------------------------------------- */
 
 function serializable_widget(e) {
 
@@ -967,9 +1031,13 @@ function serializable_widget(e) {
 
 }
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // focusable widget mixin
 // ---------------------------------------------------------------------------
+publishes:
+	e.tabindex
+	e.focusable
+--------------------------------------------------------------------------- */
 
 function focusable_widget(e, fe) {
 	fe = fe || e
@@ -990,25 +1058,51 @@ function focusable_widget(e, fe) {
 	})
 }
 
+/* ---------------------------------------------------------------------------
+// stylable widget mixin
 // ---------------------------------------------------------------------------
+publishes:
+	e.css_classes
+--------------------------------------------------------------------------- */
+
+function stylable_widget(e) {
+
+	e.set_css_classes = function(c1, c0) {
+		if (c0)
+			for (s of c0.split(/\s+/))
+				this.class(s, false)
+		if (c1)
+			for (s of c1.split(/\s+/))
+				this.class(s, true)
+	}
+	e.prop('css_classes', {store: 'var'})
+
+}
+
+/* ---------------------------------------------------------------------------
 // val widget mixin
 // ---------------------------------------------------------------------------
+publishes:
+	e.col
+	e.field
+	e.val
+	e.input_val
+	e.error
+	e.modified
+	e.set_val(v, ev)
+	e.reset_val(v, ev)
+	e.display_val()
+implements:
+	e.do_update()
+calls:
+	e.do_update_val(val, ev)
+	e.do_update_error(err, ev)
+	e.do_error_tooltip_check()
+	e.to_val(v) -> v
+	e.from_val(v) -> v
+--------------------------------------------------------------------------- */
 
-/*
-	val widgets must implement:
-		update_val(val, ev)
-	val widgets must call:
-		e.set_val(val, ev)
-	val widgets can implement:
-		e.to_val(v) -> v
-		e.from_val(v) -> v
-	val widgets can override:
-		e.update_error(err, ev)
-		e.do_update()
-
-*/
-
-function val_widget(e, always_enabled) {
+function val_widget(e, enabled_without_nav) {
 
 	selectable_widget(e)
 	cssgrid_item_widget(e)
@@ -1041,13 +1135,13 @@ function val_widget(e, always_enabled) {
 		if (e.updating)
 			return
 		if (prop == 'input_val')
-			e.update_val(val, ev)
+			e.do_update_val(val, ev)
 		else if (prop == 'val')
 			e.fire('val_changed', val, ev)
 		else if (prop == 'cell_error') {
 			e.invalid = val != null
 			e.class('invalid', e.invalid)
-			e.update_error(val, ev)
+			e.do_update_error(val, ev)
 		} else if (prop == 'cell_modified')
 			e.class('modified', val)
 	}
@@ -1101,8 +1195,7 @@ function val_widget(e, always_enabled) {
 		set_nav_col(nav1, nav0, col, col)
 	}
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_name', {store: 'var', bind: 'nav', type: 'nav'})
-	e.prop('nav_gid' , {store: 'var', bind_gid: 'nav', type: 'nav_gid'})
+	e.prop('nav_gid' , {store: 'var', bind_gid: 'nav', type: 'nav'})
 
 	let col
 	e.set_col = function(col1, col0) {
@@ -1172,7 +1265,7 @@ function val_widget(e, always_enabled) {
 
 	e.do_update = function() {
 		init_field()
-		enabled = !!(always_enabled || (e.row && e.field))
+		enabled = !!(enabled_without_nav || (e.row && e.field))
 		e.class('disabled', !enabled)
 		e.focusable = enabled
 		cell_state_changed('input_val', e.input_val)
@@ -1190,17 +1283,17 @@ function val_widget(e, always_enabled) {
 		e.on('click'      , prevent_if_disabled)
 	}
 
-	e.error_tooltip_check = function() {
+	e.do_error_tooltip_check = function() {
 		return e.invalid && !e.hasclass('picker')
 			&& (e.hasfocus || e.hovered)
 	}
 
-	e.update_error = function(err) {
+	e.do_update_error = function(err) {
 		if (!e.error_tooltip) {
 			if (!e.invalid)
 				return // don't create it until needed.
 			e.error_tooltip = tooltip({kind: 'error', target: e,
-				check: e.error_tooltip_check})
+				check: e.do_error_tooltip_check})
 		}
 		if (e.invalid)
 			e.error_tooltip.text = err
@@ -1233,6 +1326,7 @@ component('x-tooltip', function(e) {
 
 	e.init = function() {
 		e.update({reset_timer: true})
+		e.bind(true)
 	}
 
 	e.popup_target_updated = function(target) {
@@ -1259,7 +1353,7 @@ component('x-tooltip', function(e) {
 		e.update({reset_timer: true})
 	}
 
-	let remove_timer = timer(function() { e.target = false })
+	let remove_timer = timer(function() { e.target = null })
 	function reset_timeout_timer() {
 		if (!e.initialized)
 			return
@@ -1417,7 +1511,7 @@ component('x-checkbox', function(e) {
 	e.set_text = function(s) { e.text_div.set(s, 'pre-wrap') }
 	e.prop('text', {store: 'var', default: 'Check me!'})
 
-	e.update_val = function() {
+	e.do_update_val = function() {
 		let v = e.checked
 		e.class('checked', v)
 		e.icon_div.class('fa', v)
@@ -1532,7 +1626,7 @@ component('x-radiogroup', function(e) {
 
 	let sel_item
 
-	e.update_val = function(i) {
+	e.do_update_val = function(i) {
 		if (sel_item) {
 			sel_item.class('selected', false)
 			sel_item.at[0].class('fa-dot-circle', false)
@@ -1618,7 +1712,7 @@ component('x-input', function(e) {
 	e.from_text = function(s) { return e.field.from_text(s) }
 	e.to_text = function(v) { return e.field ? e.field.to_text(v) : '' }
 
-	e.update_val = function(v, ev) {
+	e.do_update_val = function(v, ev) {
 		if (ev && ev.input == e && ev.typing)
 			return
 		let s = e.to_text(v)
@@ -1918,7 +2012,7 @@ component('x-slider', function(e) {
 		fill.style.width = ((p2 - p1) * 100)+'%'
 	}
 
-	e.update_val = function(v) {
+	e.do_update_val = function(v) {
 		let input_p = progress_for(v)
 		let val_p = progress_for(e.val)
 		let diff = input_p != val_p
@@ -2071,14 +2165,14 @@ component('x-dropdown', function(e) {
 
 	// val updating
 
-	e.update_val = function(v, ev) {
+	e.do_update_val = function(v, ev) {
 		// nothing: wait for when the picker updates itself
 		// and use picker-provided value.
 	}
 
-	let error_tooltip_check = e.error_tooltip_check
-	e.error_tooltip_check = function() {
-		return error_tooltip_check() || (e.invalid && e.isopen)
+	let do_error_tooltip_check = e.do_error_tooltip_check
+	e.do_error_tooltip_check = function() {
+		return do_error_tooltip_check() || (e.invalid && e.isopen)
 	}
 
 	// focusing
@@ -2316,7 +2410,7 @@ component('x-calendar', function(e) {
 		e.sel_month.bind(on)
 	})
 
-	e.update_val = function(v) {
+	e.do_update_val = function(v) {
 		assert(e.attached)
 		v = or(as_ts(v), time())
 		let t = day(v)
@@ -2772,12 +2866,12 @@ component('x-menu', function(e) {
 
 component('x-widget-placeholder', function(e) {
 
+	e.props.align_x = {default: 'stretch'}
+	e.props.align_y = {default: 'stretch'}
+
 	serializable_widget(e)
 	selectable_widget(e)
 	cssgrid_item_widget(e)
-
-	e.align_x = 'stretch'
-	e.align_y = 'stretch'
 
 	e.classes = 'x-widget x-widget-placeholder'
 
@@ -2845,6 +2939,97 @@ component('x-widget-placeholder', function(e) {
 })
 
 // ---------------------------------------------------------------------------
+// widget-items widget mixin
+// ---------------------------------------------------------------------------
+// publishes:
+//   e.items
+// implements:
+//   e.child_widgets()
+//   e.remove_child_widget()
+// calls:
+//   e.do_init_items(items)
+//   e.do_remove_item(item)
+// ---------------------------------------------------------------------------
+
+widget_items_widget = function(e) {
+
+	function same_items(t, items) {
+		if (t.length != items.length)
+			return false
+		for (let i = 0; i < t.length; i++)
+			if (!(typeof t[i] == 'string' && items[i].gid === t[i]))
+				return false
+		return true
+	}
+
+	function diff_items(t, cur_items) {
+
+		if (typeof t == 'string')
+			t = t.split(/\s+/)
+
+		if (same_items(t, cur_items))
+			return cur_items
+
+		// diff between t and cur_items keyed on gid or item identity.
+
+		// map current items by identity and by gid.
+		let cur_set = new Set()
+		let cur_by_gid = new Map()
+		for (let item of cur_items) {
+			cur_set.add(item)
+			if (item.gid)
+				cur_by_gid.set(item.gid, item)
+		}
+
+		// create new items or reuse-by-gid.
+		let items = new Set()
+		for (let v of t) {
+			// v is either an item from cur_items, a gid, or the attrs for a new item.
+			let cur_item = cur_set.has(v) ? v : cur_by_gid.get(v)
+			items.add(component.create(v, cur_item))
+		}
+
+		// remove gids that are missing in the new set.
+		for (let item of cur_items)
+			if (!items.has(item))
+				e.do_remove_item(item)
+
+		items = [...items]
+
+		e.do_init_items(items)
+
+		return items
+	}
+
+	function serialize_items(items) {
+		let t = []
+		for (let item of items)
+			t.push(item.serialize())
+		return t
+	}
+
+	e.set_items = e.update
+
+	e.prop('items', {store: 'var', convert: diff_items, serialize: serialize_items, default: []})
+
+	// parent-of selectable widget protocol.
+	e.child_widgets = function() {
+		return e.items.slice()
+	}
+
+	// parent-of selectable widget protocol.
+	e.remove_child_widget = function(item) {
+		e.items = [...e.items].remove_value(item)
+	}
+
+	// widget-items widget protocol.
+	e.do_remove_item = function(item) {
+		item.remove()
+	}
+
+}
+
+// ---------------------------------------------------------------------------
 // pagelist
 // ---------------------------------------------------------------------------
 
@@ -2853,89 +3038,105 @@ component('x-pagelist', function(e) {
 	selectable_widget(e)
 	editable_widget(e)
 	cssgrid_item_widget(e)
+	serializable_widget(e)
+	widget_items_widget(e)
 
 	e.align_x = 'stretch'
 	e.align_y = 'stretch'
-	serializable_widget(e)
 	e.classes = 'x-widget x-pagelist'
 
-	e.prop('tabs', {store: 'attr', type: 'enum', enum_values: ['above', 'below'], default: 'above'})
+	e.prop('tabs_side', {store: 'attr', type: 'enum', enum_values: ['top', 'bottom'], default: 'top'})
 
-	e.header = div({class: 'x-pagelist-header'})
+	e.selection_bar = div({class: 'x-pagelist-selection-bar'})
+	e.add_button = div({class: 'x-pagelist-tab x-pagelist-add-button fa fa-plus', tabindex: 0})
+	e.header = div({class: 'x-pagelist-header'}, e.selection_bar, e.add_button)
 	e.content = div({class: 'x-pagelist-content'})
-	e.add_button = div({class: 'x-pagelist-item x-pagelist-add-button fa fa-plus', tabindex: 0})
 	e.add(e.header, e.content)
 
-	function add_item(page) {
-		let item = {}
-		item.page = component.create(page || {type: 'widget_placeholder', title: 'New'})
-		let xbutton = div({class: 'x-pagelist-xbutton fa fa-times'})
-		xbutton.hide()
-		let tdiv = div({class: 'x-pagelist-text'})
-		let idiv = div({class: 'x-pagelist-item', tabindex: 0}, tdiv, xbutton)
-		idiv.text_div = tdiv
-		idiv.xbutton = xbutton
-		tdiv.set(item.page.title, 'pre-wrap')
-		tdiv.title = item.page.title
-		idiv.on('pointerdown', idiv_pointerdown)
-		idiv.on('dblclick'   , idiv_dblclick)
-		idiv.on('keydown'    , idiv_keydown)
-		tdiv.on('input'      , tdiv_input)
-		tdiv.on('blur'       , tdiv_blur)
-		xbutton.on('pointerdown', xbutton_pointerdown)
-		idiv.item = item
-		item.idiv = idiv
-		e.header.add(idiv)
-		e.items.push(item)
+	function add_item(item) {
+		if (!item._tab) {
+			let xbutton = div({class: 'x-pagelist-xbutton fa fa-times'})
+			xbutton.hide()
+			let title_div = div({class: 'x-pagelist-title'})
+			let tab = div({class: 'x-pagelist-tab', tabindex: 0}, title_div, xbutton)
+			tab.title_div = title_div
+			tab.xbutton = xbutton
+			title_div.set(item.title, 'pre-wrap')
+			title_div.title = item.title
+			tab.on('pointerdown' , tab_pointerdown)
+			tab.on('dblclick'    , tab_dblclick)
+			tab.on('keydown'     , tab_keydown)
+			title_div.on('input' , title_input)
+			title_div.on('blur'  , title_blur)
+			xbutton.on('pointerdown', xbutton_pointerdown)
+			tab.item = item
+			item._tab = tab
+		}
+		item._tab.x = null
+		e.header.add(item._tab)
+	}
+
+	// widget-items widget protocol.
+	e.do_init_items = function(items) {
+		let sel_tab = e.selected_tab
+
+		e.header.clear()
+		for (let item of items)
+			add_item(item)
+		e.header.add(e.selection_bar)
+		e.header.add(e.add_button)
+
+		if (sel_tab && sel_tab.parent) // tab was kept
+			select_tab(sel_tab)
+		else
+			select_default_tab()
+	}
+
+	// widget-items widget protocol.
+	e.do_remove_item = function(item) {
+		let tab = item._tab
+		tab.remove()
+		item.remove()
+		item._tab = null
+	}
+
+	// widget placeholder protocol.
+	e.replace_widget = function(old_widget, new_widget) {
+		for (let item of e.items)
+			if (item == old_widget) {
+				old_widget.parent.replace(old_widget, new_widget)
+				new_widget._tab = item._tab
+				break
+			}
 	}
 
 	e.init = function() {
-		let items = e.items
-		e.items = []
-		if (items)
-			for (let item of items)
-				add_item(item)
-		e.header.add(e.add_button)
-		e.selection_bar = div({class: 'x-pagelist-selection-bar'})
-		e.header.add(e.selection_bar)
-		e.update()
+		if (!e.items)
+			e.items = [{type: 'widget_placeholder', title: 'New'}]
 	}
 
-	let inh_serialize = e.serialize
-	e.serialize = function() {
-		let t = inh_serialize()
-		if (isobject(t)) {
-			t.items = []
-			for (let item of e.items) {
-				t.items.push(item.page.serialize())
-			}
-		}
-		return t
-	}
-
-	function update_item(idiv, select) {
-		idiv.xbutton.show(select && (e.can_remove_items || e.widget_editing))
-		idiv.text_div.contenteditable = select && (e.widget_editing || e.renaming)
+	function update_tab(tab, select) {
+		tab.xbutton.show(select && (e.can_remove_items || e.widget_editing))
+		tab.title_div.contenteditable = select && (e.widget_editing || e.renaming)
 	}
 
 	function update_selection_bar() {
-		let idiv = e.selected_item
-		e.selection_bar.x = idiv ? idiv.ox : 0
-		e.selection_bar.w = idiv ? idiv.rect().w   : 0
-		e.selection_bar.show(!!idiv)
+		let tab = e.selected_tab
+		e.selection_bar.x = tab ? tab.ox : 0
+		e.selection_bar.w = tab ? tab.rect().w   : 0
+		e.selection_bar.show(!!tab)
 	}
 
 	e.do_update = function() {
 		update_selection_bar()
-		let idiv = e.selected_item
-		if (idiv)
-			update_item(idiv, true)
+		if (e.selected_tab)
+			update_tab(e.selected_tab, true)
 		e.add_button.show(e.can_add_items || e.widget_editing)
 	}
 
-	e.set_can_add_items    = update
-	e.set_can_remove_items = update
-	e.set_can_rename_items = update
+	e.set_can_add_items    = e.update
+	e.set_can_remove_items = e.update
+	e.set_can_rename_items = e.update
 
 	e.prop('can_rename_items', {store: 'var', type: 'bool', default: false})
 	e.prop('can_add_items'   , {store: 'var', type: 'bool', default: false})
@@ -2944,31 +3145,30 @@ component('x-pagelist', function(e) {
 
 	e.on('bind', function(on) {
 		if (on)
-			e.selected_index = or(e.selected_index, 0)
+			select_default_tab()
 	})
 
-	function select_item(idiv, focus_page, enter_editing) {
-		if (e.selected_item != idiv) {
-			if (e.selected_item) {
-				e.selected_item.class('selected', false)
-				e.fire('close', e.selected_item.index)
+	function select_tab(tab, focus_tab, enter_editing) {
+		if (e.selected_tab != tab) {
+			if (e.selected_tab) {
+				e.selected_tab.class('selected', false)
+				e.fire('close', e.selected_tab.index)
 				e.content.clear()
-				update_item(e.selected_item, false)
+				update_tab(e.selected_tab, false)
 			}
-			e.selected_item = idiv
+			e.selected_tab = tab
 			e.update()
-			if (idiv) {
-				idiv.class('selected', true)
-				e.fire('open', idiv.index)
-				let page = idiv.item.page
-				e.content.set(page)
+			if (tab) {
+				tab.class('selected', true)
+				e.fire('open', tab.index)
+				e.content.set(tab.item)
 			}
 		}
 		if (enter_editing) {
 			e.widget_editing = true
 			return
 		}
-		if (!e.widget_editing && focus_page != false) {
+		if (!e.widget_editing && focus_tab != false) {
 			let first_focusable = e.content.focusables()[0]
 			if (first_focusable)
 				first_focusable.focus()
@@ -2977,48 +3177,92 @@ component('x-pagelist', function(e) {
 
 	e.property('selected_index',
 		function() {
-			return e.selected_item ? e.selected_item.index : null
+			return e.selected_tab ? e.selected_tab.index : null
 		},
 		function(i) {
-			let idiv = i != null ? e.header.at[clamp(i, 0, e.items.length-1)] : null
-			select_item(idiv)
+			let tab = i != null ? e.header.at[clamp(i, 0, e.items.length-1)] : null
+			select_tab(tab)
 		}
 	)
+
+	// selected-item persistent property --------------------------------------
+
+	function format_item(item) {
+		return item.title || item.gid
+	}
+
+	function format_gid(gid) {
+		let item = e.items.find(item => item.gid == gid)
+		return item && item.title || gid
+	}
+
+	function item_select_editor(...opt) {
+
+		let rows = []
+		for (let item of e.items)
+			if (item.gid)
+				rows.push([item.gid, item])
+
+		return list_dropdown({
+			rowset: {
+				fields: [{name: 'gid'}, {name: 'item', format: format_item}],
+				rows: rows,
+			},
+			nolabel: true,
+			val_col: 'gid',
+			display_col: 'item',
+			mode: 'fixed',
+		}, ...opt)
+
+	}
+
+	e.prop('selected_item_gid', {store: 'var', text: 'Selected Item',
+		editor: item_select_editor, format: format_gid})
+
+	function select_default_tab() {
+		if (e.selected_item_gid) {
+			let item = e.items.find(item => item.gid == e.selected_item_gid)
+			if (item)
+				select_tab(item._tab)
+		} else {
+			select_tab(e.header.at[0])
+		}
+	}
 
 	// drag-move tabs ---------------------------------------------------------
 
 	live_move_mixin(e)
 
 	e.set_movable_element_pos = function(i, x) {
-		let idiv = e.items[i].idiv
-		idiv.x = x - idiv._offset_x
+		let tab = e.items[i]._tab
+		tab.x = x - tab._offset_x
 	}
 
 	e.movable_element_size = function(i) {
-		return e.items[i].idiv.rect().w
+		return e.items[i]._tab.rect().w
 	}
 
 	let dragging, drag_mx
 
-	function idiv_pointerdown(ev, mx, my) {
-		if (this.text_div.contenteditable && !ev.ctrlKey) {
+	function tab_pointerdown(ev, mx, my) {
+		if (this.title_div.contenteditable && !ev.ctrlKey) {
 			ev.stopPropagation()
 			return
 		}
-		select_item(this)
+		select_tab(this)
 		if (ev.ctrlKey)
 			return // bubble-up to enter editing mode.
 		this.focus()
-		return this.capture_pointer(ev, idiv_pointermove, idiv_pointerup)
+		return this.capture_pointer(ev, tab_pointermove, tab_pointerup)
 	}
 
-	function idiv_pointermove(ev, mx, my, down_mx, down_my) {
+	function tab_pointermove(ev, mx, my, down_mx, down_my) {
 		if (!dragging) {
 			dragging = e.can_move_items
 				&& abs(down_mx - mx) > 4 || abs(down_my - my) > 4
 			if (dragging) {
 				for (let item of e.items)
-					item.idiv._offset_x = item.idiv.ox
+					item._tab._offset_x = item._tab.ox
 				e.move_element_start(this.index, 1, 0, e.items.length)
 				drag_mx = down_mx - this.ox
 				e.class('moving', true)
@@ -3027,36 +3271,36 @@ component('x-pagelist', function(e) {
 			}
 		} else {
 			e.move_element_update(mx - drag_mx)
-			e.update()
+			update_selection_bar()
 		}
 	}
 
-	function idiv_pointerup() {
+	function tab_pointerup() {
 		if (dragging) {
+
 			let over_i = e.move_element_stop()
 			let insert_i = over_i - (over_i > this.index ? 1 : 0)
-			e.items.remove(this.index)
-			e.items.insert(insert_i, this.item)
-			this.remove()
-			e.header.insert(insert_i, this)
-			for (let item of e.items)
-				item.idiv.x = null
-			update_selection_bar()
+			let items = [...e.items]
+			let rem_item = items.remove(this.index)
+			items.insert(insert_i, rem_item)
+			e.items = items
+
 			e.class('moving', false)
 			this.class('moving', false)
+
 			dragging = false
 		}
-		select_item(this, true)
+		select_tab(this, true)
 	}
 
 	// key bindings -----------------------------------------------------------
 
 	function set_renaming(renaming) {
 		e.renaming = !!renaming
-		e.selected_item.text_div.contenteditable = e.renaming
+		e.selected_tab.title_div.contenteditable = e.renaming
 	}
 
-	function idiv_keydown(key, shift, ctrl) {
+	function tab_keydown(key, shift, ctrl) {
 		if (key == 'F2' && e.can_rename_items) {
 			set_renaming(!e.renaming)
 			return false
@@ -3064,7 +3308,7 @@ component('x-pagelist', function(e) {
 		if (e.widget_editing || e.renaming) {
 			if (key == 'Enter') {
 				if (ctrl)
-					this.text_div.insert_at_caret('<br>')
+					this.title_div.insert_at_caret('<br>')
 				else
 					e.widget_editing = false
 				return false
@@ -3078,13 +3322,13 @@ component('x-pagelist', function(e) {
 		}
 		if (!e.widget_editing && !e.renaming) {
 			if (key == ' ' || key == 'Enter') {
-				select_item(this)
+				select_tab(this)
 				return false
 			}
 			if (key == 'ArrowRight' || key == 'ArrowLeft') {
 				e.selected_index += (key == 'ArrowRight' ? 1 : -1)
-				if (e.selected_item)
-					e.selected_item.focus()
+				if (e.selected_tab)
+					e.selected_tab.focus()
 				return false
 			}
 		}
@@ -3092,22 +3336,18 @@ component('x-pagelist', function(e) {
 
 	e.set_widget_editing = function(v) {
 		if (!v)
-			tdiv_input()
+			title_input()
 		e.update()
 	}
 
 	e.add_button.on('click', function() {
-		if (e.selected_item == this)
+		if (e.selected_tab == this)
 			return
-		e.selection_bar.remove()
-		e.add_button.remove()
-		add_item()
-		e.header.add(e.selection_bar)
-		e.header.add(e.add_button)
+		e.items = [...e.items, {type: 'widget_placeholder', title: 'New'}]
 		return false
 	})
 
-	function idiv_dblclick() {
+	function tab_dblclick() {
 		if (e.renaming || !e.can_rename_items)
 			return
 		set_renaming(true)
@@ -3115,39 +3355,19 @@ component('x-pagelist', function(e) {
 		return false
 	}
 
-	function tdiv_input() {
-		e.items[e.selected_index].page.title = e.selected_item.text_div.innerText
+	function title_input() {
+		e.selected_tab.item.title = e.selected_tab.title_div.innerText
 		e.update()
 	}
 
-	function tdiv_blur() {
+	function title_blur() {
 		e.widget_editing = false
 	}
 
 	function xbutton_pointerdown() {
-		let idiv = this.parent
-		select_item(null)
-		idiv.remove()
-		e.items.remove_value(idiv.item)
+		select_tab(null)
+		e.remove_child_widget(this.parent.item)
 		return false
-	}
-
-	// xmodule protocol -------------------------------------------------------
-
-	e.child_widgets = function() {
-		let widgets = []
-		for (let item of e.items)
-			widgets.push(item.page)
-		return widgets
-	}
-
-	e.replace_widget = function(old_widget, new_widget) {
-		for (let item of e.items)
-			if (item.page == old_widget) {
-				old_widget.parent.replace(old_widget, new_widget)
-				item.page = new_widget
-				break
-			}
 	}
 
 })
@@ -3315,23 +3535,21 @@ component('x-split', function(e) {
 		return false
 	})
 
-	// xmodule protocol -------------------------------------------------------
-
+	// parent-of selectable widget protocol.
 	e.child_widgets = function() {
 		return [e.item1, e.item2]
 	}
 
-	function widget_index(ce) {
-		return e.item1 == ce && 1 || e.item2 == ce && 2 || null
+	// parent-of selectable widget protocol.
+	e.remove_child_widget = function(item) {
+		e.replace_widget(item, widget_placeholder())
 	}
 
-	e.remove_child_widget = function(ce) {
-		e.replace_widget(ce, widget_placeholder())
-	}
-
-	e.replace_widget = function(old_widget, new_widget) {
-		e[widget_index(old_widget)] = new_widget
-		old_widget.parent.replace(old_widget, new_widget)
+	// widget placeholder protocol.
+	e.replace_widget = function(old_item, new_item) {
+		let ITEM = e.item1 == old_item && 'item1' || e.item2 == old_item && 'item2' || null
+		e[ITEM] = new_item
+		old_item.parent.replace(old_item, new_item)
 		e.update()
 	}
 
@@ -3364,9 +3582,11 @@ component('x-toaster', function(e) {
 		}
 	}
 
-	function popup_removed() {
-		e.tooltips.delete(this)
-		update_stack()
+	function popup_target_bind(target, on) {
+		if (!on) {
+			e.tooltips.delete(this)
+			update_stack()
+		}
 	}
 
 	function popup_check() {
@@ -3384,7 +3604,7 @@ component('x-toaster', function(e) {
 			align: e.align,
 			timeout: strict_or(timeout, e.timeout),
 			check: popup_check,
-			popup_target_detached: popup_removed,
+			popup_target_bind: popup_target_bind,
 		})
 		e.tooltips.add(t)
 		update_stack()
@@ -3579,7 +3799,7 @@ component('x-toolbox', function(e) {
 	e.prop('popup_y'     , {store: 'var', type: 'number', default: 0})
 
 	e.do_update = function() {
-		e.popup(e.popup_widget, e.popup_side, e.popup_align, e.popup_x, e.popup_y)
+		e.popup(e.popup_widget || document.body, e.popup_side, e.popup_align, e.popup_x, e.popup_y)
 	}
 
 	e.init = function() {
@@ -3587,9 +3807,13 @@ component('x-toolbox', function(e) {
 		e.content_div.set(e.content)
 		e.add(e.content_div)
 		e.hide()
-		e.do_update()
-		e.popup(e.popup_widget || document.body)
+		e.bind(true)
 	}
+
+	e.on('focusin', function(ev) {
+		e.update()
+		ev.target.focus()
+	})
 
 	e.titlebar.on('pointerdown', function(ev, mx, my) {
 		e.focus()

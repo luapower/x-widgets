@@ -14,31 +14,8 @@ function xmodule(e) {
 
 	e.resolve = gid => e.widgets[gid]
 
-	e.create_nav_gid_editor = function(...options) {
-		let dd = list_dropdown({
-			rowset: {
-				fields: [{name: 'gid'}],
-			},
-			nolabel: true,
-			val_col: 'gid',
-			display_col: 'gid',
-			mode: 'fixed',
-		}, ...options)
-		function reset_nav() {
-			let rows = []
-			for (let gid in e.widgets) {
-				let te = e.widgets[gid]
-				if (te.isnav && te.can_select_widget)
-					rows.push([gid])
-			}
-			dd.picker.rowset.rows = rows
-			dd.picker.reset()
-		}
-		dd.on('bind', function(on) {
-			document.on('widget_tree_changed', reset_nav, on)
-		})
-		reset_nav()
-		return dd
+	e.nav_editor = function(...options) {
+		return widget_select_editor(e.widgets, e => e.isnav, ...options)
 	}
 
 	document.on('widget_attached', function(te) {
@@ -53,26 +30,9 @@ function xmodule(e) {
 	})
 
 	document.on('prop_changed', function(te, k, v, v0, def) {
-		if (!te.gid) return
-		if (te.xmodule_updating) return
-
-		let slot = e.selected_prop_slot || def.slot || 'base'
-
-		if (slot == 'base' && v === def.default)
-			return
-
-		let layer_obj = e.prop_layer_slots[slot]
-		if (!layer_obj) return
-
-		if (def.serialize)
-			v = def.serialize(v)
-		else if (isobject(v) && v.serialize)
-			v = v.serialize()
-		if (v === undefined)
-			return
-
-		layer_obj.modified = true
-		attr(layer_obj.widgets, te.gid)[k] = v
+		if (te.xmodule_updating_props) return
+		let slot = e.selected_prop_slot || te.props[k].slot || 'base'
+		e.set_prop(te, slot, k, v)
 	})
 
 	e.prop_vals = function(gid) {
@@ -92,7 +52,7 @@ function xmodule(e) {
 			return
 		te.begin_update()
 		let vals = e.prop_vals(te.gid)
-		te.xmodule_updating = true
+		te.xmodule_updating_props = true
 		let pv0 = te.__pv0 // prop values before the last override.
 		te.__pv0 = {} // prop values before this override.
 		// restore prop vals that were overriden last time and that
@@ -106,7 +66,7 @@ function xmodule(e) {
 			te.__pv0[prop] = te[prop]
 			te[prop] = vals[prop]
 		}
-		te.xmodule_updating = false
+		te.xmodule_updating_props = false
 		te.end_update()
 	}
 
@@ -179,12 +139,34 @@ function xmodule(e) {
 		}
 	}
 
-	e.set_prop = function(widget, slot, prop, val) {
-		if (!widget.gid) return
+	e.set_prop = function(te, slot, k, v) {
+		if (!te.gid) return
+
 		let layer_obj = e.prop_layer_slots[slot]
 		if (!layer_obj) return
+
+		let def = te.props[k]
+		if (slot == 'base' && v === def.default)
+			v = undefined // delete defaults from store.
+		else if (def.serialize)
+			v = def.serialize(v)
+		else if (isobject(v) && v.serialize)
+			v = v.serialize()
+
+		let t = layer_obj.widgets[te.gid]
+
+		if (t && t[k] === v) // value already stored.
+			return
+
+		if (!t) {
+			t = {}
+			layer_obj.widgets[te.gid] = t
+		}
 		layer_obj.modified = true
-		attr(layer_obj.widgets, widget.gid)[prop] = val
+		if (v === undefined)
+			delete t[k] // can't store `undefined` because nav can't.
+		else
+			t[k] = v
 	}
 
 	e.save = function() {
@@ -202,7 +184,6 @@ function xmodule(e) {
 			async: false,
 			success: function(gid) {
 				widget.gid = gid
-				on_success(gid)
 			},
 		})
 	}
@@ -269,77 +250,41 @@ field_types.col.editor = function(...options) {
 }
 */
 
-// nav
-
-field_types.nav = {}
-
-field_types.nav.editor = function(...options) {
-
-	let rows = []
-	let rowset = {
-		fields: [{name: 'name'}],
-		rows: rows,
-	}
-
-	function global_changed(te, name, last_name) {
-		if (last_name && name) {
-			let field = nav.fields[0]
-			let row = nav.lookup(field, last_name)
-			nav.set_val(row, field, name)
-		} else {
-			global_detached(te, last_name)
-			global_attached(te, name)
-		}
-	}
-
-	function global_attached(te, name) {
-		if (!name)
-			return
-		nav.insert_rows([{name: name}])
-	}
-
-	function global_detached(te, name) {
-		if (!name)
-			return
-		let row = nav.lookup(nav.fields[0], name)
-		if (row)
-			nav.remove_row(row, {forever: true})
-	}
-
-	document.on('global_changed' , global_changed )
-	document.on('global_attached', global_attached)
-	document.on('global_detached', global_detached)
-
-	let exclude_e = null // TODO: exclude self
-
-	let resolve = global_widget_resolver('nav')
-	for (let e of $('[id]')) {
-		e = e != exclude_e && resolve(e.id)
-		if (e)
-			rows.push([e.id])
-	}
-
-	let dd = list_dropdown(update({
-		nolabel: true,
-		rowset: rowset,
-		val_col: 'name',
-		display_col: 'name',
-		mode: 'fixed',
-	}, ...options))
-
-	let nav = dd.listbox
-
-	return dd
-}
-
-field_types.nav_gid = {}
-field_types.nav_gid.editor = function(...args) {
-	return xmodule.create_nav_gid_editor(...args)
-}
-
 // ---------------------------------------------------------------------------
 // property inspector
 // ---------------------------------------------------------------------------
+
+function widget_select_editor(widgets_gid_map, filter, ...options) {
+	let dd = list_dropdown({
+		rowset: {
+			fields: [{name: 'gid'}],
+		},
+		nolabel: true,
+		val_col: 'gid',
+		display_col: 'gid',
+		mode: 'fixed',
+	}, ...options)
+	function reset_nav() {
+		let rows = []
+		for (let gid in widgets_gid_map) {
+			let te = widgets_gid_map[gid]
+			if (te.can_select_widget && filter(te))
+				rows.push([gid])
+		}
+		dd.picker.rowset.rows = rows
+		dd.picker.reset()
+	}
+	dd.on('bind', function(on) {
+		document.on('widget_tree_changed', reset_nav, on)
+	})
+	reset_nav()
+	return dd
+}
+
+field_types.nav = {}
+field_types.nav.editor = function(...args) {
+	return xmodule.nav_editor(...args)
+}
 
 component('x-prop-inspector', function(e) {
 
@@ -403,6 +348,8 @@ component('x-prop-inspector', function(e) {
 		let field = e.all_fields[k]
 		if (!field)
 			return
+		if (e.editor && e.focused_field == field)
+			return
 		e.focus_cell(0, e.field_index(field))
 		e.reset_val(e.focused_row, field, v)
 	}
@@ -450,7 +397,7 @@ component('x-prop-inspector', function(e) {
 
 		e.title_text = ([...widgets].map(e => e.type + (e.gid ? ' ' + e.gid : ''))).join(' ')
 
-		e.fire('property_inspector_changed')
+		e.fire('prop_inspector_changed')
 	}
 
 	// prevent unselecting all widgets by default on document.pointerdown.
@@ -656,7 +603,7 @@ function properties_toolbox(tb_opt, insp_opt) {
 		can_select_widget: false,
 	}, tb_opt))
 	tb.inspector = pg
-	pg.on('property_inspector_changed', function() {
+	pg.on('prop_inspector_changed', function() {
 		tb.text = pg.title_text + ' properties'
 	})
 	return tb

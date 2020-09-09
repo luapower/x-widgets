@@ -1,7 +1,15 @@
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // grid widget
 // ---------------------------------------------------------------------------
+uses:
+	...
+implements:
+	nav widget protocol.
+calls:
+	e.do_update_cell_val(cell, row, field, input_val)
+	e.do_update_cell_error(cell, row, field, err)
+--------------------------------------------------------------------------- */
 
 component('x-grid', function(e) {
 
@@ -416,7 +424,7 @@ component('x-grid', function(e) {
 			let checked = !rs.val(this.focused_row, f0)
 			rs.set_val(this.focused_row, f0, checked)
 			rs.filtered_count = (rs.filtered_count || 0) + (checked ? -1 : 1)
-			dd.update_val()
+			dd.do_update_val()
 		}
 
 		dd.picker.on('keydown', function(key) {
@@ -461,7 +469,7 @@ component('x-grid', function(e) {
 		}
 	}
 
-	e.update_cell_val = function(cell, row, field, input_val) {
+	e.do_update_cell_val = function(cell, row, field, input_val) {
 		let v = e.cell_display_val_for(row, field, input_val)
 		cell.input_val = v
 		let node = cell.childNodes[cell.indent ? 1 : 0]
@@ -475,7 +483,7 @@ component('x-grid', function(e) {
 		cell.class('empty', input_val == '')
 	}
 
-	e.update_cell_error = function(cell, row, field, err) {
+	e.do_update_cell_error = function(cell, row, field, err) {
 		let invalid = !!err
 		cell.class('invalid', invalid)
 		cell.attr('title', err || null)
@@ -526,8 +534,8 @@ component('x-grid', function(e) {
 			cell.indent = null
 		}
 
-		e.update_cell_val(cell, row, field, e.cell_input_val(row, field))
-		e.update_cell_error(cell, row, field, e.cell_error(row, field))
+		e.do_update_cell_val(cell, row, field, e.cell_input_val(row, field))
+		e.do_update_cell_error(cell, row, field, e.cell_error(row, field))
 
 		row_focused = or(row_focused, e.focused_row == row)
 		let cell_focused = row_focused && (!e.can_focus_cells || field == e.focused_field)
@@ -717,9 +725,9 @@ component('x-grid', function(e) {
 
 	}
 
-	let create_editor = e.create_editor
-	e.create_editor = function(field, ...opt) {
-		create_editor(field, {
+	let do_create_editor = e.do_create_editor
+	e.do_create_editor = function(field, ...opt) {
+		do_create_editor(field, {
 			inner_label: false,
 		}, ...opt)
 		if (!e.editor)
@@ -730,7 +738,7 @@ component('x-grid', function(e) {
 		update_editor()
 	}
 
-	e.update_cell_editing = function(ri, fi, editing) {
+	e.do_update_cell_editing = function(ri, fi, editing) {
 		let cell = e.cells.at[cell_index(ri, fi)]
 		if (cell)
 			cell.class('editing', editing)
@@ -779,19 +787,19 @@ component('x-grid', function(e) {
 				e.scroll_to_cell(...opt.scroll_to_cell)
 	}
 
-	e.update_cell_state = function(ri, fi, prop, val) {
+	e.do_update_cell_state = function(ri, fi, prop, val) {
 		let cell = e.cells.at[cell_index(ri, fi)]
 		if (!cell)
 			return
 		if (prop == 'input_val')
-			e.update_cell_val(cell, e.rows[ri], e.fields[fi], val)
+			e.do_update_cell_val(cell, e.rows[ri], e.fields[fi], val)
 		else if (prop == 'cell_error')
-			e.update_cell_error(cell, e.rows[ri], e.fields[fi], val)
+			e.do_update_cell_error(cell, e.rows[ri], e.fields[fi], val)
 		else if (prop == 'cell_modified')
 			cell.class('modified', val)
 	}
 
-	e.update_row_state = function(ri, prop, val, ev) {
+	e.do_update_row_state = function(ri, prop, val, ev) {
 		let ci = cell_index(ri, 0)
 		if (ci == null)
 			return
@@ -806,7 +814,7 @@ component('x-grid', function(e) {
 			}, cls, val)
 	}
 
-	e.update_load_progress = function(p) {
+	e.do_update_load_progress = function(p) {
 		e.progress_bar.w = (lerp(p, 0, 1, .2, 1) * 100) + '%'
 	}
 
@@ -1081,7 +1089,7 @@ component('x-grid', function(e) {
 				let i2 = row2 ? row_indent(row2) : 0
 				// if the row can be a child of the row above,
 				// the indent right limit is increased one unit.
-				let ii1 = i1 + (row1 && !row1.collapsed && e.can_have_children(row1) ? 1 : 0)
+				let ii1 = i1 + (row1 && !row1.collapsed && e.row_can_have_children(row1) ? 1 : 0)
 				hit_indent = min(floor(lerp(hit_p, 0, 1, ii1 + 1, i2)), ii1)
 				let parent_i = i1 - hit_indent
 				hit_parent_row = parent_i >= 0 ? row1 && row1.parent_rows[parent_i] : row1

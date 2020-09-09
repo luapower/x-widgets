@@ -1,20 +1,25 @@
 
-// ---------------------------------------------------------------------------
-// nav widget mixin
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+	nav widget mixin
+------------------------------------------------------------------------------
 
-/*
-	nav widgets must implement:
-		update_cell_state(ri, fi, prop, val, ev)
-		update_row_state(ri, prop, val, ev)
-		update_cell_editing(ri, [fi], editing)
-		scroll_to_cell(ri, [fi])
+implements:
+	val widget mixin.
 
-	fields: [{attr->val}, ...]
+typing:
+	isnav: t
+
+rowset:
+	needs:
+		e.rowset <- {fields: [field1,...], rows: [row1,...]}
+	publishes:
+		e.reset()
+
+rowset field attributes:
 
 	identification:
 		name           : field name (defaults to field's numeric index)
-		type           : for choosing a field template.
+		type           : for choosing a field preset.
 
 	rendering:
 		text           : field name for display purposes (auto-generated default).
@@ -62,24 +67,181 @@
 		compare_types  : f(v1, v2) -> -1|0|1  (for sorting)
 		compare_values : f(v1, v2) -> -1|0|1  (for sorting)
 
-	rows: [row1,...]
-		row[i]             : current cell value (always valid).
-		row.focusable      : row can be focused (true).
-		row.editable       : allow modifying (true).
-		row.input_val[i]   : currently set cell value, whether valid or not.
-		row.error[i]       : error message if cell is invalid.
-		row.row_error      : error message if row is invalid.
-		row.modified[i]    : value was modified, change not on server yet.
-		row.old_value[i]   : initial value before modifying.
-		row.is_new         : new row, not added on server yet.
-		row.cells_modified : one or more row cells were modified.
-		row.removed        : removed row, not removed on server yet.
+rowset row attributes:
+	row[i]             : current cell value (always valid).
+	row.focusable      : row can be focused (true).
+	row.editable       : allow modifying (true).
+	row.input_val[i]   : currently set cell value, whether valid or not.
+	row.error[i]       : error message if cell is invalid.
+	row.row_error      : error message if row is invalid.
+	row.modified[i]    : value was modified, change not on server yet.
+	row.old_value[i]   : initial value before modifying.
+	row.is_new         : new row, not added on server yet.
+	row.cells_modified : one or more row cells were modified.
+	row.removed        : removed row, not removed on server yet.
 
-	field_types : {type -> {attr->val}}
+fields:
+	publishes:
+		e.all_fields[col|fi] -> field
+		e.add_field(field)
+		e.remove_field(field)
 
-	nav.name_col   : default `display_col` of navs that lookup into this nav.
+visible fields:
+	publishes:
+		e.fields[fi] -> field
+		e.field_index(field) -> fi
+		e.show_field(field, on, at_fi)
+		e.move_field(fi, over_fi)
 
-*/
+rows:
+	publishes:
+		e.all_rows[ri] -> row
+		e.rows[ri] -> row
+		e.row_index(row) -> ri
+
+vlookup:
+	e.lookup()
+
+tree:
+	needs:
+		e.tree_col
+		e.name_col
+	publishes:
+		e.each_child_row(row, f)
+		e.child_row_count(ri) -> n
+
+focusing and selection:
+	publishes:
+		e.focused_row, e.focused_field
+		e.selected_row, e.selected_field
+		e.last_focused_col
+		e.selected_rows: Map(row -> true|Set(field))
+		e.focus_cell()
+		e.focus_next_cell()
+		e.select_all_cells()
+	calls:
+		e.can_change_val()
+		e.can_focus_cell()
+		e.is_cell_disabled()
+		e.can_select_cell()
+		e.is_row_selected()
+		e.is_last_row_focused()
+		e.first_focusable_cell()
+
+scrolling:
+	publishes:
+		e.scroll_to_focused_cell()
+	calls:
+		e.scroll_to_cell(ri, [fi])
+
+sorting:
+	publishes:
+		e.order_by <- 'col1[:desc] ...'
+	calls:
+		e.compare_rows(row1, row2)
+		e.compare_types(v1, v2)
+		e.compare_vals(v1, v2)
+
+quicksearch:
+	e.quicksearch()
+
+tree node collapsing:
+	e.set_collapsed()
+	e.toggle_collapsed()
+
+row adding, removing, moving:
+	publishes:
+		e.remove_rows()
+		e.remove_selected_rows()
+		e.insert_rows()
+		e.start_move_selected_rows() -> state; state.finish()
+	calls:
+		e.can_remove_row()
+
+cell values & state:
+	publishes:
+		e.cell_state()
+		e.cell_val()
+		e.cell_input_val()
+		e.cell_old_val()
+		e.cell_prev_val()
+		e.cell_error()
+		e.cell_modified()
+		e.pk_vals()
+
+updating cells:
+	publishes:
+		e.set_cell_state()
+		e.validate_val()
+		e.on_validate_val()
+		e.set_cell_val()
+		e.reset_cell_val()
+	calls:
+		e.do_update_cell_state(ri, fi, prop, val, ev)
+		e.do_update_cell_editing(ri, [fi], editing)
+
+row state:
+	publishes:
+		row.<key>
+		e.row_has_errors()
+		e.row_can_have_children()
+
+updating row state:
+	publishes:
+		e.set_row_state()
+		e.validate_row()
+		e.set_row_error()
+	calls:
+		e.do_update_row_state(ri, prop, val, ev)
+
+updating rowset:
+	publishes:
+		e.revert()
+		e.set_null_selected_cells()
+
+editing:
+	publishes:
+		e.editor
+		e.enter_edit()
+		e.exit_edit()
+		e.exit_focused_row()
+	calls:
+		e.do_create_editor()
+
+loading & saving:
+	needs:
+		e.rowset_name
+		e.rowset_url
+	publishes:
+		e.reload()
+		e.abort_loading()
+		e.save()
+	calls:
+		e.notify()
+		e.do_update_loading()
+		e.do_update_load_progress()
+		e.do_update_load_slow()
+		e.do_update_load_fail()
+		e.load_overlay()
+
+display val & text val:
+	publishes:
+		e.cell_display_val_for()
+		e.cell_display_val()
+		e.cell_text_val()
+		e.'display_vals_changed'
+		e.'display_vals_changed_for_<col>'
+
+picker:
+	publishes:
+		e.display_col
+		e.row_display_val()
+		e.dropdown_display_val()
+		e.pick_near_val()
+
+field_types : {type -> {attr->val}}
+
+--------------------------------------------------------------------------- */
 
 {
 	let upper = function(s) {
@@ -415,7 +577,7 @@ function nav_widget(e) {
 		bind_param_nav_cols(nav1, e.params, true)
 	}
 	e.prop('param_nav', {store: 'var', private: true})
-	e.prop('param_nav_name', {store: 'var', bind: 'param_nav', type: 'nav', text: 'Param Nav'})
+	e.prop('param_nav_gid', {store: 'var', bind_gid: 'param_nav', type: 'nav', text: 'Param Nav'})
 
 	e.set_params = function(params1, params0) {
 		bind_param_nav_cols(e.param_nav, params0, false)
@@ -427,7 +589,7 @@ function nav_widget(e) {
 	// all rows in load order -------------------------------------------------
 
 	function init_all_rows() {
-		e.update_load_fail(false)
+		e.do_update_load_fail(false)
 		// TODO: unbind_filter_rowsets()
 		e.all_rows = e.attached && e.rowset && e.rowset.rows || []
 		init_tree()
@@ -474,17 +636,17 @@ function nav_widget(e) {
 	e.property('selected_row_index'  , () => e.row_index(e.selected_row))
 	e.property('selected_field_index', () => e.field_index(e.selected_field))
 
-	e.can_focus_cell = function(row, field, for_editing) {
-		return (!row || row.focusable != false)
-			&& (field == null || !e.can_focus_cells || field.focusable != false)
-			&& (!for_editing || e.can_change_val(row, field))
-	}
-
 	e.can_change_val = function(row, field) {
 		return e.can_edit && e.can_change_rows
 			&& (!row || (row.editable != false && !row.removed))
 			&& (!field || field.editable)
 			&& e.can_focus_cell(row, field)
+	}
+
+	e.can_focus_cell = function(row, field, for_editing) {
+		return (!row || row.focusable != false)
+			&& (field == null || !e.can_focus_cells || field.focusable != false)
+			&& (!for_editing || e.can_change_val(row, field))
 	}
 
 	e.is_cell_disabled = function(row, field) {
@@ -988,7 +1150,7 @@ function nav_widget(e) {
 
 	// row moving -------------------------------------------------------------
 
-	e.move_row = function(row, parent_row, ev) {
+	function change_row_parent(row, parent_row, ev) {
 		if (!e.parent_field)
 			return
 		if (parent_row == row.parent_row)
@@ -1397,7 +1559,7 @@ function nav_widget(e) {
 		let ri = e.row_index(row, ev && ev.row_index)
 		let fi = e.field_index(field, ev && ev.field_index)
 		if (fi != null) {
-			e.update_cell_state(ri, fi, prop, val, ev)
+			e.do_update_cell_state(ri, fi, prop, val, ev)
 			if (row == e.focused_row) {
 				e.fire('focused_row_cell_state_changed_for_'+field.name, prop, val, ev)
 				e.fire('focused_row_'+prop+'_changed_for_'+field.name, val, ev)
@@ -1408,7 +1570,7 @@ function nav_widget(e) {
 	function row_state_changed(row, prop, val, ev) {
 
 		let ri = e.row_index(row, ev && ev.row_index)
-		e.update_row_state(ri, prop, val, ev)
+		e.do_update_row_state(ri, prop, val, ev)
 		if (row == e.focused_row) {
 			e.fire('focused_row_state_changed', prop, val, ev)
 			e.fire('focused_row_'+prop+'_changed', val, ev)
@@ -1466,7 +1628,7 @@ function nav_widget(e) {
 		return e.fire('validate', row)
 	}
 
-	e.can_have_children = function(row) {
+	e.row_can_have_children = function(row) {
 		return row.can_have_children != false
 	}
 
@@ -1572,7 +1734,7 @@ function nav_widget(e) {
 
 	// responding to val changes ----------------------------------------------
 
-	e.update_val = function(v, ev) {
+	e.do_update_val = function(v, ev) {
 		if (ev && ev.input == e)
 			return // coming from focus_cell(), avoid recursion.
 		if (!e.val_field)
@@ -1590,7 +1752,7 @@ function nav_widget(e) {
 
 	e.editor = null
 
-	e.create_editor = function(field, ...opt) {
+	e.do_create_editor = function(field, ...opt) {
 		if (!field.editor_instance) {
 			e.editor = field.editor({
 				nav: e,
@@ -1612,11 +1774,11 @@ function nav_widget(e) {
 		if (!e.can_focus_cell(e.focused_row, e.focused_field, true))
 			return false
 
-		e.create_editor(e.focused_field)
+		e.do_create_editor(e.focused_field)
 		if (!e.editor)
 			return false
 
-		e.update_cell_editing(e.focused_row_index, e.focused_field_index, true)
+		e.do_update_cell_editing(e.focused_row_index, e.focused_field_index, true)
 
 		e.editor.on('lost_focus', editor_lost_focus)
 
@@ -1654,7 +1816,7 @@ function nav_widget(e) {
 		e.editor.hide()
 		e.editor = null
 
-		e.update_cell_editing(e.focused_row_index, e.focused_field_index, false)
+		e.do_update_cell_editing(e.focused_row_index, e.focused_field_index, false)
 		if (had_focus)
 			e.focus()
 
@@ -2001,7 +2163,8 @@ function nav_widget(e) {
 
 			let row = move_rows[0]
 			let old_parent_row = row.parent_row
-			e.move_row(row, parent_row)
+
+			change_row_parent(row, parent_row)
 
 			update_row_index()
 
@@ -2102,11 +2265,6 @@ function nav_widget(e) {
 		return true
 	}
 
-	e.load_fields = function() {
-		e.load_fields = noop
-		e.reload(update({limit: 0}, e.params))
-	}
-
 	e.abort_loading = function() {
 		if (!e.load_request)
 			return
@@ -2115,12 +2273,12 @@ function nav_widget(e) {
 	}
 
 	function load_progress(p, loaded, total) {
-		e.update_load_progress(p, loaded, total)
+		e.do_update_load_progress(p, loaded, total)
 		e.fire('load_progress', p, loaded, total)
 	}
 
 	function load_slow(show) {
-		e.update_load_slow(show)
+		e.do_update_load_slow(show)
 		e.fire('load_slow', show)
 	}
 
@@ -2167,7 +2325,7 @@ function nav_widget(e) {
 			err = S('error_load_timeout', 'Loading failed: timed out.')
 		if (err)
 			e.notify('error', err, body)
-		e.update_load_fail(true, err, type, status, message, body)
+		e.do_update_load_fail(true, err, type, status, message, body)
 		e.fire('load_fail', err, type, status, message, body)
 	}
 
@@ -2222,7 +2380,7 @@ function nav_widget(e) {
 		}
 	}
 
-	e.pack_changes = function(row) {
+	function pack_changes(row) {
 		let changes = {rows: []}
 		if (!row) {
 			for (let row of e.changed_rows)
@@ -2232,7 +2390,7 @@ function nav_widget(e) {
 		return changes
 	}
 
-	e.apply_result = function(result, changed_rows) {
+	function apply_result(result, changed_rows) {
 		let rows_to_remove = []
 		for (let i = 0; i < result.rows.length; i++) {
 			let rt = result.rows[i]
@@ -2278,10 +2436,10 @@ function nav_widget(e) {
 			e.set_row_state(row, 'save_request', req)
 	}
 
-	e.save_to_url = function(url, row) {
+	function save_to_url(url, row) {
 		let req = ajax({
 			url: url,
-			upload: e.pack_changes(row),
+			upload: pack_changes(row),
 			changed_rows: Array.from(e.changed_rows),
 			success: save_success,
 			fail: save_fail,
@@ -2299,7 +2457,7 @@ function nav_widget(e) {
 		if (!e.changed_rows)
 			return
 		if (e.rowset_url)
-			e.save_to_url(e.rowset_url, row)
+			save_to_url(e.rowset_url, row)
 	}
 
 	function save_slow(show) {
@@ -2313,7 +2471,7 @@ function nav_widget(e) {
 	}
 
 	function save_success(result) {
-		e.apply_result(result, this.changed_rows)
+		apply_result(result, this.changed_rows)
 	}
 
 	function save_fail(type, status, message, body) {
@@ -2351,21 +2509,21 @@ function nav_widget(e) {
 		e.fire('notify', type, message, ...args)
 	}
 
-	e.update_loading = function(on) { // stub
+	e.do_update_loading = function(on) { // stub
 		if (!on) return
 		e.load_overlay(true)
 	}
 
 	function loading(on) {
 		e.class('loading', on)
-		e.update_loading(on)
-		e.update_load_progress(0)
+		e.do_update_loading(on)
+		e.do_update_load_progress(0)
 		e.fire('loading', on)
 	}
 
-	e.update_load_progress = noop // stub
+	e.do_update_load_progress = noop // stub
 
-	e.update_load_slow = function(on) { // stub
+	e.do_update_load_slow = function(on) { // stub
 		if (on)
 			e.load_overlay(true, 'waiting',
 				S('slow', 'Still working on it...'),
@@ -2376,7 +2534,7 @@ function nav_widget(e) {
 				S('stop_loading', 'Stop loading'))
 	}
 
-	e.update_load_fail = function(on, error, type, status, message, body) {
+	e.do_update_load_fail = function(on, error, type, status, message, body) {
 		if (!e.attached)
 			return
 		if (type == 'abort')
@@ -2538,12 +2696,15 @@ function nav_widget(e) {
 component('x-bare-nav', function(e) {
 	nav_widget(e)
 	e.scroll_to_cell = noop
-	e.update_cell_state = noop
-	e.update_row_state = noop
+	e.do_update_cell_state = noop
+	e.do_update_row_state = noop
 	let init = e.init
 	e.init = function() {
 		init()
 		e.bind(true)
+	}
+	e.free = function() {
+		e.bind(false)
 	}
 })
 

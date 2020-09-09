@@ -106,7 +106,6 @@ h2 {
 <script src="x-listbox.js"></script>
 <script src="x-grid.js"></script>
 <script src="x-cssgrid.js"></script>
-<script src="x-country-dropdown.js"></script>
 
 </head>
 
@@ -1199,6 +1198,8 @@ ace_editor = ace.edit(code, {
 // disable Tab in the editor since we need to demo tab navigation.
 ace_editor.commands.removeCommand(ace_editor.commands.byName.indent)
 ace_editor.commands.removeCommand(ace_editor.commands.byName.outdent)
+
+xmodule = {resolve: noop}
 
 function run_script() {
 	let s = ace_editor.getSession().getValue()

@@ -1,51 +1,22 @@
 
 component('x-cssgrid', function(e) {
 
+	e.props.align_x = {default: 'stretch'}
+	e.props.align_y = {default: 'stretch'}
+
 	serializable_widget(e)
 	selectable_widget(e)
 	editable_widget(e)
 	cssgrid_item_widget(e)
+	widget_items_widget(e)
 
-	e.align_x = 'stretch'
-	e.align_y = 'stretch'
 	e.classes = 'x-widget x-cssgrid'
 
-	e.init = function() {
-		let items = e.items || []
-		e.items = []
-		for (let item of items) {
-			item = component.create(item)
-			e.add_child_widget(item)
-		}
-	}
-
-	let inh_serialize = e.serialize
-	e.serialize = function() {
-		let t = inh_serialize()
-		if (isobject(t)) {
-			t.items = []
-			for (let item of e.items)
-				t.items.push(item.serialize())
-		}
-		return t
-	}
-
-	// add/remove items -------------------------------------------------------
-
-	e.child_widgets = function() {
-		return e.items.slice()
-	}
-
-	e.add_child_widget = function(item) {
-		e.items.push(item)
-		e.add(item)
-	}
-
-	e.remove_child_widget = function(item) {
-		let i = e.items.indexOf(item)
-		assert(i >= 0)
-		e.items.remove(i)
-		item.remove()
+	// widget-items widget protocol.
+	e.do_init_items = function(items) {
+		e.clear()
+		for (let item of items)
+			e.add(item)
 	}
 
 	// get/set gaps -----------------------------------------------------------
@@ -70,8 +41,7 @@ component('x-cssgrid', function(e) {
 	e.prop('sizes_x')
 	e.prop('sizes_y')
 
-	// edit mode --------------------------------------------------------------
-
+	// editable widget protocol.
 	e.set_widget_editing = function(v, ...args) {
 		if (!v) return
 		cssgrid_widget_editing(e)
