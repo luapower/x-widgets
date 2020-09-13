@@ -115,7 +115,7 @@ function component(tag, cons) {
 
 	customElements.define(tag, cls)
 
-	function init(e, ...args) {
+	function init(e, opt) {
 		if (e.initialized)
 			return
 		component_prop_system(e)
@@ -127,7 +127,14 @@ function component(tag, cons) {
 		cons(e)
 		e.initialized = false
 		e.begin_update()
-		update(e, ...args)
+		if (opt.__pv0) {
+			e.__pv0 = {}
+			delete opt.__pv0
+			for (let k in opt)
+				e.__pv0[k] = e.get_prop(k)
+		}
+		for (let k in opt)
+			e.set_prop(k, opt[k])
 		e.end_update()
 		e.initialized = true
 		e.init()
@@ -135,7 +142,7 @@ function component(tag, cons) {
 
 	function create(...args) {
 		let e = new cls()
-		init(e, ...args)
+		init(e, update({}, ...args))
 		return e
 	}
 
@@ -157,6 +164,7 @@ component.create = function(t, e0) {
 		if (e0 && e0.gid == t)
 			return e0  // already created (called as prop's `convert()`).
 		t = xmodule.prop_vals(t)
+		t.__pv0 = true
 	}
 	let create = component.types[t.type]
 	return create && create(t)
@@ -234,7 +242,7 @@ calls:
 	e.get_<prop>() -> v
 	e.set_<prop>(v1, v0)
 fires:
-	document.'prop_changed' (e, prop, v1, v0, prop_attrs)
+	document.'prop_changed' (e, prop, v1, v0, slot)
 --------------------------------------------------------------------------- */
 
 /* TODO: use it or scrape it.
@@ -246,8 +254,8 @@ method(HTMLElement, 'override', function(method, func) {
 })
 */
 
-let fire_prop_changed = function(e, prop, v1, v0, opt) {
-	document.fire('prop_changed', e, prop, v1, v0, opt)
+let fire_prop_changed = function(e, prop, v1, v0, slot) {
+	document.fire('prop_changed', e, prop, v1, v0, slot)
 }
 
 global_widget_resolver = memoize(function(type) {
@@ -284,6 +292,7 @@ function component_prop_system(e) {
 		if (!e[setter])
 			e[setter] = noop
 		let prop_changed = fire_prop_changed
+		let slot = opt.slot
 		let dv = repl(opt.default, undefined, null) // `undefined` is not valid.
 
 		if (opt.store == 'var') {
@@ -299,7 +308,7 @@ function component_prop_system(e) {
 				v = v1
 				e[setter](v1, v0)
 				if (!priv)
-					prop_changed(e, prop, v1, v0, opt)
+					prop_changed(e, prop, v1, v0, slot)
 			}
 		} else if (opt.store == 'attr') {  // for attr-based styling
 			let attr = prop.replace(/_/g, '-')
@@ -318,7 +327,7 @@ function component_prop_system(e) {
 					e.attr(attr, v1)
 					e[setter](v1, v0)
 					if (!priv)
-						prop_changed(e, prop, v1, v0, opt)
+						prop_changed(e, prop, v1, v0, slot)
 				}
 			} else {
 				if (dv != null)
@@ -334,7 +343,7 @@ function component_prop_system(e) {
 					e.attr(attr, v1)
 					e[setter](v1, v0)
 					if (!priv)
-						prop_changed(e, prop, v1, v0, opt)
+						prop_changed(e, prop, v1, v0, slot)
 				}
 			}
 		} else if (opt.style) {
@@ -357,7 +366,7 @@ function component_prop_system(e) {
 					return
 				e[setter](v, v0)
 				if (!priv)
-					prop_changed(e, prop, v, v0, opt)
+					prop_changed(e, prop, v, v0, slot)
 			}
 		} else {
 			assert(!('default' in opt))
@@ -371,7 +380,7 @@ function component_prop_system(e) {
 					return
 				e[setter](v, v0)
 				if (!priv)
-					prop_changed(e, prop, v, v0, opt)
+					prop_changed(e, prop, v, v0, slot)
 			}
 		}
 
@@ -399,8 +408,8 @@ function component_prop_system(e) {
 					e.on('bind', bind, gid1 != null)
 				}
 			}
-			prop_changed = function(e, k, v1, v0, opt) {
-				fire_prop_changed(e, k, v1, v0, opt)
+			prop_changed = function(e, k, v1, v0, slot) {
+				fire_prop_changed(e, k, v1, v0, slot)
 				if (k == GID)
 					gid_changed(v1, v0)
 			}
@@ -439,8 +448,8 @@ function component_prop_system(e) {
 					e.on('bind', bind, name != null)
 				}
 			}
-			prop_changed = function(e, k, v1, v0, opt) {
-				fire_prop_changed(e, k, v1, v0, opt)
+			prop_changed = function(e, k, v1, v0, slot) {
+				fire_prop_changed(e, k, v1, v0, slot)
 				if (k == NAME)
 					name_changed(v1, v0)
 			}
@@ -454,6 +463,9 @@ function component_prop_system(e) {
 			e.props[prop] = opt
 
 	}
+
+	e.set_prop = function(k, v) { e[k] = v; } // stub
+	e.get_prop = (k) => e[k] // stub
 
 }
 
@@ -602,7 +614,7 @@ function selectable_widget(e) {
 		inherited.call(this, id)
 		if (id === id0)
 			return
-		document.fire('prop_changed', e, 'id', id, id0, e.props.id)
+		document.fire('prop_changed', e, 'id', id, id0, null)
 		document.fire('global_changed', this, id, id0)
 	})
 
@@ -792,7 +804,7 @@ function pagelist_item_widget(e) {
 		inherited.call(this, v)
 		if (v === v0)
 			return
-		document.fire('prop_changed', e, 'title', v, v0, e.props.title)
+		document.fire('prop_changed', e, 'title', v, v0, 'lang')
 	})
 
 }
@@ -3456,10 +3468,7 @@ component('x-split', function(e) {
 		e.fixed_pane[horiz ? 'min_w' : 'min_h'] = e.min_size
 		e.auto_pane.min_w = null
 		e.auto_pane.min_h = null
-	}
 
-	function update_size() {
-		e.update()
 		document.fire('layout_changed')
 	}
 

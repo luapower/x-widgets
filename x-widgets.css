@@ -1542,6 +1542,13 @@
 	overflow: auto;                /* make resize work */
 	resize: both;
 	z-index: 2;
+	opacity: .2;
+	transition: opacity .5s;
+}
+
+.x-toolbox:hover {
+	opacity: 1;
+	transition: opacity 0s;
 }
 
 .x-toolbox, .x-toolbox:focus-within {

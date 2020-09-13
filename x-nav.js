@@ -40,6 +40,7 @@ rowset field attributes:
 	validation:
 		allow_null     : allow null (true).
 		validate       : f(v, field) -> undefined|err_string
+		convert        : f(v) -> v
 		min            : min value (0).
 		max            : max value (inf).
 		maxlen         : max text length (256).
@@ -308,19 +309,6 @@ function nav_widget(e) {
 	}
 	e.prop('rowset_name', {store: 'var', type: 'rowset'})
 
-	// serialization ----------------------------------------------------------
-
-	e.props.col_attrs = {name: 'col_attrs'}
-
-	let inh_serialize = e.serialize
-	e.serialize = function() {
-		let t = inh_serialize()
-		if (isobject(t)) {
-			t.col_attrs = e.col_attrs
-		}
-		return t
-	}
-
 	// fields array matching 1:1 to row contents ------------------------------
 
 	function init_tree_field() {
@@ -467,6 +455,40 @@ function nav_widget(e) {
 		e.update({state: true})
 	}
 	e.prop('quicksearch_col', {store: 'var'})
+
+	e.set_col_attr = function(col, k, v, slot) {
+		let field = e.all_fields[col]
+		let v0 = field ? field[k] : (e.col_attrs ? e.col_attrs[k] : undefined)
+		if (v === v0)
+			return
+		attr(attr(e, 'col_attrs'), col)[k] = v
+		if (field)
+			field[k] = v
+		e.fire('prop_changed', 'col.'+col+'.'+k, v, v0, field, slot)
+		e.update({fields: true})
+	}
+
+	e.get_col_attr = function(col, k) {
+		let field = e.all_fields[col]
+		return field ? field[k] : (e.col_attrs ? e.col_attrs[k] : all_field_types[k])
+	}
+
+	e.get_prop = function(prop) {
+		if (prop.starts('col.')) {
+			let [_, col, k] = prop.match(/^col\.([^\.]+)\.(.*)/)
+			return e.get_col_attr(col, k)
+		}
+		return e[prop]
+	}
+
+	e.set_prop = function(prop, v, slot) {
+		if (prop.starts('col.')) {
+			let [_, col, k] = prop.match(/^col\.([^\.]+)\.(.*)/)
+			e.set_col_attr(col, k, v, slot)
+			return
+		}
+		e[prop] = v
+	}
 
 	// all_fields subset in custom order --------------------------------------
 
@@ -1211,7 +1233,7 @@ function nav_widget(e) {
 		let refocus = refocus_state('row')
 		init_rows()
 		e.begin_update()
-		update({rows: true})
+		e.update({rows: true})
 		refocus()
 		e.end_update()
 	}
@@ -1595,6 +1617,10 @@ function nav_widget(e) {
 
 	e.pk_vals = (row) => e.pk_fields.map((field) => row[field.val_index])
 
+	e.convert_val = function(field, val, row, ev) {
+		return field.convert ? field.convert.call(e, val, field, row) : val
+	}
+
 	e.validate_val = function(field, val, row, ev) {
 
 		if (val == null)
@@ -1617,7 +1643,7 @@ function nav_widget(e) {
 				return S('error_lookup', 'Value not found in lookup nav')
 		}
 
-		let err = field.validate && field.validate.call(e, val, field)
+		let err = field.validate && field.validate.call(e, val, field, row)
 		if (typeof err == 'string')
 			return err
 
@@ -1658,6 +1684,7 @@ function nav_widget(e) {
 	e.set_cell_val = function(row, field, val, ev) {
 		if (val === undefined)
 			val = null
+		val = e.convert_val(field, val, row, ev)
 		let err = e.validate_val(field, val, row, ev)
 		err = typeof err == 'string' ? err : undefined
 		let invalid = err != null

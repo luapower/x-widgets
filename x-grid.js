@@ -288,8 +288,7 @@ component('x-grid', function(e) {
 		let field = e.fields[fi]
 		w = clamp(w, field.min_w, field.max_w)
 		field.w = w
-		if (e.widget_editing)
-			attr(attr(e, 'col_attrs'), field.name).w = w
+		e.set_col_attr(field, 'w', w)
 		e.header.at[fi]._w = w
 	}
 
@@ -949,7 +948,7 @@ component('x-grid', function(e) {
 			must_not_move_row: true,
 			enter_edit: !over_indent && e.can_edit
 				&& !ctrl && !shift
-				&& (e.enter_edit_on_click
+				&& ((e.enter_edit_on_click || e.fields[cell.fi].type =='bool')
 					|| (e.enter_edit_on_click_focused && already_on_it)),
 			focus_editor: true,
 			editor_state: 'select_all',
@@ -1680,8 +1679,10 @@ component('x-grid', function(e) {
 		}
 
 		if (!e.editor && key == ' ' && !e.quicksearch_text) {
-			if (e.focused_row)
+			if (e.focused_row && (!e.can_focus_cells || e.focused_field == e.tree_field))
 				e.toggle_collapsed(e.focused_row, shift)
+			else if (e.focused_field && e.focused_field.type == 'bool')
+				e.enter_edit() // toggle value.
 			return false
 		}
 

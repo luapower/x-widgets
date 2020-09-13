@@ -7,7 +7,7 @@ function xmodule(e) {
 
 	let generation = 0
 
-	assert(e.prop_layer_slots) // {slot -> layer_obj} in correct order.
+	assert(e.prop_layer_slots) // {slot -> layer_obj} in application order.
 	e.widgets = {} // {gid -> e}
 	e.prop_layers = {} // {layer -> {slot:, name:, widgets: {gid -> prop_vals}}}
 	e.selected_prop_slot = null
@@ -29,9 +29,9 @@ function xmodule(e) {
 		document.fire('widget_tree_changed')
 	})
 
-	document.on('prop_changed', function(te, k, v, v0, def) {
+	document.on('prop_changed', function(te, k, v, v0, slot) {
 		if (te.xmodule_updating_props) return
-		let slot = e.selected_prop_slot || te.props[k].slot || 'base'
+		slot = e.selected_prop_slot || slot || 'base'
 		e.set_prop(te, slot, k, v)
 	})
 
@@ -53,29 +53,30 @@ function xmodule(e) {
 		te.begin_update()
 		let vals = e.prop_vals(te.gid)
 		te.xmodule_updating_props = true
-		let pv0 = te.__pv0 // prop values before the last override.
-		te.__pv0 = {} // prop values before this override.
-		// restore prop vals that were overriden last time and that
-		// are not present in this override.
-		if (pv0)
-			for (let prop in pv0)
-				if (!(prop in vals))
-					te[prop] = pv0[prop]
-		// apply this override preserving previous values.
+		let pv0 = attr(te, '__pv0') // prop values before any layer overrides.
+		// restore prop vals that are not present in this override.
+		for (let prop in pv0)
+			if (!(prop in vals)) {
+				te.set_prop(prop, pv0[prop])
+				delete pv0[prop]
+			}
+		// apply this override saving previous values that were not saved.
 		for (let prop in vals) {
-			te.__pv0[prop] = te[prop]
-			te[prop] = vals[prop]
+			if (!(prop in pv0))
+				pv0[prop] = te.get_prop(prop)
+			te.set_prop(prop, vals[prop])
 		}
 		te.xmodule_updating_props = false
 		te.end_update()
 	}
 
-	e.set_prop_layer = function(slot, layer, reload, on_loaded) {
+	e.update_widgets = function(layer_widgets) {
+		for (let gid in e.widgets)
+			if (layer_widgets && layer_widgets[gid])
+				e.update_widget(e.widgets[gid])
+	}
 
-		if (!layer) {
-			e.prop_layer_slots[slot] = null
-			return
-		}
+	e.set_prop_layer = function(slot, layer, reload, on_loaded) {
 
 		function update_layer(layer_widgets) {
 
@@ -91,16 +92,23 @@ function xmodule(e) {
 			if (slot)
 				e.prop_layer_slots[slot] = layer_obj
 
-			// update all live widgets.
-			for (let gid in e.widgets)
-				if (layer_widgets[gid])
-					e.update_widget(e.widgets[gid])
+			e.update_widgets(layer_widgets)
 
 			if (slot)
 				document.fire('prop_layer_slots_changed')
 
 			if (on_loaded)
 				on_loaded()
+		}
+
+		if (!layer) {
+			let layer_obj = e.prop_layer_slots[slot]
+			if (!layer_obj)
+				return
+			e.prop_layer_slots[slot] = null
+			slot = null
+			update_layer(layer_obj.widgets)
+			return
 		}
 
 		let layer_obj = e.prop_layers[layer]
@@ -132,7 +140,7 @@ function xmodule(e) {
 			if (props) {
 				let te = e.widgets[gid]
 				for (let k in props)
-					set_layer_prop(te, layer_obj, k, te[k])
+					set_layer_prop(te, layer_obj, k, te.get_prop(k))
 			}
 		}
 
@@ -560,16 +568,27 @@ component('x-prop-layers-inspector', function(e) {
 
 	e.can_select_widget = false
 
+	let barrier
 	function reset() {
+		if (barrier)
+			return
 		let rows = []
 		for (let slot in xmodule.prop_layer_slots) {
 			let layer_obj = xmodule.prop_layer_slots[slot]
 			let layer = layer_obj ? layer_obj.name : null
-			rows.push([true, slot, layer])
+			let row = [true, true, true, slot, layer]
+			rows.push(row)
 		}
 		e.rowset = {
 			fields: [
-				{name: 'active', type: 'bool', w: 24,
+				{name: 'active', type: 'bool', visible: false},
+				{name: 'selected', type: 'bool', w: 24,
+					format: (_, row) => e.cell_val(row, e.all_fields.active)
+						? H('<div class="fa fa-chevron'
+							+(e.cell_val(row, e.all_fields.slot) == xmodule.selected_prop_slot ? '-circle' : '')
+							+'-right" style="font-size: 80%"></div>') : '',
+				},
+				{name: 'visible', type: 'bool', w: 24,
 					true_text: () => H('<div class="fa fa-eye" style="font-size: 80%"></div>'),
 					false_text: '',
 				},
@@ -581,8 +600,55 @@ component('x-prop-layers-inspector', function(e) {
 		e.reset()
 	}
 
-	e.on('bind', reset)
-	document.on('prop_layer_slots_changed', reset)
+	let can_change_val = e.can_change_val
+	e.can_change_val = function(row, field) {
+		return can_change_val(row, field)
+			&& (!row || !field || e.cell_val(row, e.all_fields.slot) != 'base'
+					|| field.name == 'selected' || field.name == 'active')
+	}
+
+	e.on('bind', function(on) {
+		document.on('prop_layer_slots_changed', reset, on)
+		reset()
+	})
+
+	e.on('cell_state_changed_for_selected', function(row, prop, val) {
+		if (prop != 'val')
+			return
+		if (barrier)
+			return
+		barrier = true
+		e.begin_update()
+		let sel_slot = e.cell_val(row, e.all_fields.slot)
+		xmodule.selected_prop_slot = sel_slot
+		let active = true
+		for (let row of e.rows) {
+			let slot    = e.cell_val(row, e.all_fields.slot)
+			let layer   = e.cell_val(row, e.all_fields.layer)
+			let visible = e.cell_val(row, e.all_fields.visible)
+			let layer_obj = xmodule.prop_layers[layer]
+			xmodule.set_prop_layer(slot, active && visible ? layer : null)
+			e.reset_cell_val(row, e.all_fields.active, active)
+			if (slot == sel_slot)
+				active = false
+		}
+		e.end_update()
+		barrier = false
+	})
+
+	e.on('cell_state_changed_for_visible', function(row, prop, val) {
+		if (prop != 'val')
+			return
+		if (barrier)
+			return
+		barrier = true
+		let slot    = e.cell_val(row, e.all_fields.slot)
+		let layer   = e.cell_val(row, e.all_fields.layer)
+		let active  = e.cell_val(row, e.all_fields.active)
+		let visible = e.cell_val(row, e.all_fields.visible)
+		xmodule.set_prop_layer(slot, active && visible ? layer : null)
+		barrier = false
+	})
 
 })
 
