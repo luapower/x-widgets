@@ -381,8 +381,14 @@ function nav_widget(e) {
 
 	function init_all_fields() {
 
-		if (e.all_fields)
+		if (e.all_fields) {
+
+			for (let field of e.all_fields)
+				if (field.editor_instance)
+					field.editor_instance.remove()
+
 			bind_lookup_navs(false)
+		}
 
 		e.all_fields = [] // fields in row value order.
 		e.pk_fields = [] // primary key fields.
@@ -464,7 +470,7 @@ function nav_widget(e) {
 		attr(attr(e, 'col_attrs'), col)[k] = v
 		if (field)
 			field[k] = v
-		e.fire('prop_changed', 'col.'+col+'.'+k, v, v0, field, slot)
+		document.fire('prop_changed', e, 'col.'+col+'.'+k, v, v0, slot)
 		e.update({fields: true})
 	}
 
@@ -543,7 +549,7 @@ function nav_widget(e) {
 		init_fields()
 		e.update({fields: true})
 	}
-	e.prop('cols', {store: 'var'})
+	e.prop('cols', {store: 'var', slot: 'user'})
 
 	let all_cols = () => e.all_fields.map((f) => f.name)
 
@@ -589,7 +595,7 @@ function nav_widget(e) {
 			return
 		nav.on('focused_row_changed', params_changed, on)
 		for (let param of params.split(/\s+/))
-			nav.on('focused_row_val_changed_for_'+(param.replace(/[^=]*=/, '')), params_changed, on)
+			nav.on('focused_row_cell_val_changed_for_'+(param.replace(/[^=]*=/, '')), params_changed, on)
 	}
 
 	function bind_param_nav(on) {
@@ -1404,7 +1410,7 @@ function nav_widget(e) {
 		e.update({vals: true, state: true, sort_order: true})
 		e.scroll_to_focused_cell()
 	}
-	e.prop('order_by', {store: 'var'})
+	e.prop('order_by', {store: 'var', slot: 'user'})
 
 	e.set_order_by_dir = function(field, dir, keep_others) {
 		if (!field.sortable)
@@ -1579,17 +1585,15 @@ function nav_widget(e) {
 			return
 		e.fire('cell_state_changed', row, field, prop, val, ev)
 		e.fire('cell_state_changed_for_'+field.name, row, prop, val, ev)
-		e.fire(prop+'_changed', row, field, val, ev)
-		e.fire(prop+'_changed_for_'+field.name, row, val, ev)
+		e.fire('cell_'+prop+'_changed', row, field, val, ev)
+		e.fire('cell_'+prop+'_changed_for_'+field.name, row, val, ev)
 
-		let ri = e.row_index(row, ev && ev.row_index)
-		let fi = e.field_index(field, ev && ev.field_index)
-		if (fi != null) {
-			e.do_update_cell_state(ri, fi, prop, val, ev)
-			if (row == e.focused_row) {
-				e.fire('focused_row_cell_state_changed_for_'+field.name, prop, val, ev)
-				e.fire('focused_row_'+prop+'_changed_for_'+field.name, val, ev)
-			}
+		let ri = e.row_index(row)
+		let fi = e.field_index(field)
+		e.do_update_cell_state(ri, fi, prop, val, ev)
+		if (row == e.focused_row) {
+			e.fire('focused_row_cell_state_changed_for_'+field.name, prop, val, ev)
+			e.fire('focused_row_cell_'+prop+'_changed_for_'+field.name, val, ev)
 		}
 	}
 
@@ -1601,9 +1605,8 @@ function nav_widget(e) {
 			e.fire('focused_row_state_changed', prop, val, ev)
 			e.fire('focused_row_'+prop+'_changed', val, ev)
 		}
-
 		e.fire('row_state_changed', row, prop, val, ev)
-		e.fire(prop+'_changed', row, val, ev)
+		e.fire('row_'+prop+'_changed', row, val, ev)
 	}
 
 	// get/set cell vals and cell & row state ---------------------------------
@@ -1668,8 +1671,8 @@ function nav_widget(e) {
 			e.notify('error', err)
 			print(err)
 		}
-		if (e.set_row_state(row, 'row_error', err))
-			row_state_changed(row, 'row_error', err, ev)
+		if (e.set_row_state(row, 'error', err))
+			row_state_changed(row, 'error', err, ev)
 	}
 
 	e.row_has_errors = function(row) {
@@ -1693,7 +1696,7 @@ function nav_widget(e) {
 
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val)
 		let cell_err_changed = e.set_cell_state(row, field, 'error', err)
-		let row_err_changed = e.set_row_state(row, 'row_error')
+		let row_err_changed = e.set_row_state(row, 'error')
 
 		if (val_changed) {
 			let was_modified = e.cell_modified(row, field)
@@ -1711,18 +1714,18 @@ function nav_widget(e) {
 
 			cell_state_changed(row, field, 'val', val, ev)
 			if (cell_modified_changed)
-				cell_state_changed(row, field, 'cell_modified', modified, ev)
+				cell_state_changed(row, field, 'modified', modified, ev)
 			if (row_modified_changed)
-				row_state_changed(row, 'row_modified', true, ev)
+				row_state_changed(row, 'modified', true, ev)
 			row_changed(row)
 		}
 
 		if (input_val_changed)
 			cell_state_changed(row, field, 'input_val', val, ev)
 		if (cell_err_changed)
-			cell_state_changed(row, field, 'cell_error', err, ev)
+			cell_state_changed(row, field, 'error', err, ev)
 		if (row_err_changed)
-			row_state_changed(row, 'row_error', undefined, ev)
+			row_state_changed(row, 'error', undefined, ev)
 
 		return !invalid
 	}
@@ -1742,7 +1745,7 @@ function nav_widget(e) {
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val)
 		let cell_modified_changed = e.set_cell_state(row, field, 'modified', false, false)
 		let cell_err_changed = e.set_cell_state(row, field, 'error', err)
-		let row_err_changed = e.set_row_state(row, 'row_error')
+		let row_err_changed = e.set_row_state(row, 'error')
 		e.set_cell_state(row, field, 'old_val', val)
 		if (val !== cur_val) {
 			row[field.val_index] = val
@@ -1754,11 +1757,11 @@ function nav_widget(e) {
 		if (input_val_changed)
 			cell_state_changed(row, field, 'input_val', val, ev)
 		if (cell_modified_changed)
-			cell_state_changed(row, field, 'cell_modified', false, ev)
+			cell_state_changed(row, field, 'modified', false, ev)
 		if (cell_err_changed)
-			cell_state_changed(row, field, 'cell_error', err, ev)
+			cell_state_changed(row, field, 'error', err, ev)
 		if (row_err_changed)
-			row_state_changed(row, 'row_error', undefined, ev)
+			row_state_changed(row, 'error', undefined, ev)
 
 		return !invalid
 	}
@@ -1805,11 +1808,13 @@ function nav_widget(e) {
 		if (!e.can_focus_cell(e.focused_row, e.focused_field, true))
 			return false
 
-		if (e.focused_field.type == 'bool') {
+		if (editor_state == 'toggle' && e.focused_field && e.focused_field.type == 'bool') {
 			e.set_cell_val(e.focused_row, e.focused_field,
-				!e.cell_val(e.focused_row, e.focused_field))
+				!e.cell_val(e.focused_row, e.focused_field), {input: e})
 			return false
 		}
+		if (editor_state == 'toggle')
+			editor_state = 'select_all'
 
 		e.do_create_editor(e.focused_field)
 		if (!e.editor)
@@ -1918,9 +1923,9 @@ function nav_widget(e) {
 				ln.on('loaded'      , field.lookup_nav_loaded, on)
 				ln.on('rows_added'  , field.lookup_nav_display_vals_changed, on)
 				ln.on('rows_removed', field.lookup_nav_display_vals_changed, on)
-				ln.on('input_val_changed_for_'+field.lookup_col,
+				ln.on('cell_input_val_changed_for_'+field.lookup_col,
 					field.lookup_nav_display_vals_changed, on)
-				ln.on('input_val_changed_for_'+(field.display_col || ln.name_col),
+				ln.on('cell_input_val_changed_for_'+(field.display_col || ln.name_col),
 					field.lookup_nav_display_vals_changed, on)
 			}
 		}
@@ -2094,10 +2099,10 @@ function nav_widget(e) {
 
 				e.each_child_row(row, function(row) {
 					if (e.set_row_state(row, 'removed', removed, false))
-						row_state_changed(row, 'row_removed', removed, ev)
+						row_state_changed(row, 'removed', removed, ev)
 				})
 				if (e.set_row_state(row, 'removed', removed, false))
-					row_state_changed(row, 'row_removed', removed, ev)
+					row_state_changed(row, 'removed', removed, ev)
 
 				row_changed(row)
 
@@ -2444,9 +2449,9 @@ function nav_widget(e) {
 					let not_new = e.set_row_state(row, 'is_new', false, false)
 					let not_modified = e.set_row_state(row, 'cells_modified', false, false)
 					if (not_new)
-						row_state_changed(row, 'row_is_new', false)
+						row_state_changed(row, 'is_new', false)
 					if (not_modified)
-						row_state_changed(row, 'row_modified', false)
+						row_state_changed(row, 'modified', false)
 				}
 				if (rt.field_errors) {
 					for (let k in rt.field_errors) {
@@ -2454,7 +2459,7 @@ function nav_widget(e) {
 						let err = rt.field_errors[k]
 						err = typeof err == 'string' ? err : undefined
 						if (e.set_cell_state(row, field, 'error', err))
-							cell_state_changed(row, field, 'cell_error', err)
+							cell_state_changed(row, field, 'error', err)
 					}
 				}
 				if (rt.values)
@@ -2923,12 +2928,29 @@ global_val_nav = function() {
 	let enm = {}
 	field_types.enum = enm
 
-	enm.editor = function(...options) {
+	enm.editor = function(...opt) {
 		return list_dropdown(update({
 			nolabel: true,
 			items: this.enum_values,
 			mode: 'fixed',
-		}, ...options))
+			val_col: 0,
+		}, ...opt))
+	}
+
+	// colors
+
+	let color = {}
+	field_types.color = color
+
+	color.format = function(color) {
+		return div({class: 'x-item-color', style: 'background-color: '+color}, H('&nbsp;'))
+	}
+
+	color.editor = function(...opt) {
+		return color_dropdown(update({
+			nolabel: true,
+			mode: 'fixed',
+		}, ...opt))
 	}
 
 }

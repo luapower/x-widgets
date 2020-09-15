@@ -321,6 +321,16 @@
 	animation-fill-mode: forwards;
 }
 
+.x-tooltip-content {
+	display: flex;
+	padding: .5em 0;
+
+	/* styling */
+	border-radius: .25em;
+	background-color: white;
+	box-shadow: 2px 2px 10px #00000044;
+}
+
 /* visibility animation */
 
 .x-tooltip.visible {
@@ -338,18 +348,21 @@
 .x-tooltip.visible[side=bottom] { animation-name: x-tooltip-bottom; }
 
 .x-tooltip-text {
-
 	/* layouting */
-	display: inline-block;        /* shrink-wrap and also word-wrap when reaching container width */
+	display: inline-block; /* shrink-wrap and also word-wrap when reaching container width */
+	padding: 0 1em;
+}
 
-	/* sizing */
+.x-tooltip-xbutton {
+	font-size: 80%;
+	color: #ccc;
 	padding: .5em 1em;
+	border-left: 1px solid #ffffff66;
+	pointer-events: all;
+}
 
-	/* styling */
-	border-radius: .25em;
-	background-color: white;
-
-	box-shadow: 2px 2px 10px #00000044;
+.x-tooltip-xbutton:hover {
+	color: #fff;
 }
 
 .x-tooltip-tip {
@@ -403,14 +416,14 @@
 
 /* styling based on kind attr */
 
-.x-tooltip[kind=search] > .x-tooltip-text { background-color: var(--x-search-bg-color); }
-.x-tooltip[kind=search] > .x-tooltip-tip  { color: var(--x-search-bg-color); }
+.x-tooltip[kind=search] > .x-tooltip-content { background-color: var(--x-search-bg-color); }
+.x-tooltip[kind=search] > .x-tooltip-tip { color: var(--x-search-bg-color); }
 
-.x-tooltip[kind=info] > .x-tooltip-text { background-color: var(--x-info-bg-color); color: var(--x-inverted-fg-color); }
-.x-tooltip[kind=info] > .x-tooltip-tip  { color: var(--x-info-bg-color); }
+.x-tooltip[kind=info] > .x-tooltip-content { background-color: var(--x-info-bg-color); color: var(--x-inverted-fg-color); }
+.x-tooltip[kind=info] > .x-tooltip-tip { color: var(--x-info-bg-color); }
 
-.x-tooltip[kind=error] > .x-tooltip-text { background-color: var(--x-error-bg-color); color: var(--x-inverted-fg-color); }
-.x-tooltip[kind=error] > .x-tooltip-tip  { color: var(--x-error-bg-color); }
+.x-tooltip[kind=error] > .x-tooltip-content { background-color: var(--x-error-bg-color); color: var(--x-inverted-fg-color); }
+.x-tooltip[kind=error] > .x-tooltip-tip { color: var(--x-error-bg-color); }
 
 /* checkbox & radiogroup = markbox ---------------------------------------- */
 
@@ -962,6 +975,12 @@
 
 .x-select-button > .x-item:not(:first-child) {
 	border-left: 0;
+}
+
+/* colors listbox --------------------------------------------------------- */
+
+.x-item-color {
+	width: 100%;
 }
 
 /* calendar --------------------------------------------------------------- */
@@ -1546,6 +1565,7 @@
 	transition: opacity .5s;
 }
 
+.x-toolbox.pinned,
 .x-toolbox:hover {
 	opacity: 1;
 	transition: opacity 0s;
@@ -1563,7 +1583,7 @@
 	color: white;
 	background: #333;
 	cursor: move;
-	padding: .25em .5em;
+	padding: 0 0 0 .5em;
 }
 
 .x-toolbox:focus-within > .x-toolbox-titlebar {
@@ -1577,19 +1597,27 @@
 	text-overflow: ellipsis;
 }
 
-.x-toolbox-xbutton {
+.x-toolbox-button {
 	color: #ccc;
 	flex: 0;
-	padding: .25em .25em;
+	padding: .5em .5em;
 	cursor: default;
 }
 
-.x-toolbox-xbutton:hover {
+.x-toolbox:not(.pinned) > .x-toolbox-titlebar > .x-toolbox-pin-button:not(:hover):not(:active) {
+	color: #999;
+}
+
+.x-toolbox-button:hover {
 	color: #eee;
 }
 
-.x-toolbox-xbutton:active {
+.x-toolbox-button:active {
 	color: #fff;
+}
+
+.x-toolbox-pin-button {
+	font-size: 85%;
 }
 
 .x-toolbox-content {
@@ -1747,6 +1775,11 @@
 	font-weight: bold;
 }
 
+.x-grid-header-cell.editing {
+	outline: 2px dotted red;
+	outline-offset: -2px;
+}
+
 .x-grid-header-sort-icon-td {
 	padding: 0;
 	width: 0;
@@ -1794,9 +1827,12 @@
 	position: relative;        /* required: anchor rows div */
 	min-height: 0;
 	flex: 1;
+	display: grid;
 }
 
 .x-grid-cells-ct {
+	grid-row-start: 1;
+	grid-column-start: 1;
 	overflow: hidden;          /* required: hide surplus bottom rows */
 	position: relative;        /* required: to activate `overflow: hidden` on abs. pos. child */
 }
@@ -2021,6 +2057,13 @@ x-prop-layers-inspector > .x-grid-header {
 	min-height: calc(2em + 1px);
 }
 
+x-prop-inspector .x-grid-cell:not(.focused):not(.selected):not(.invalid).modified {
+	background-color: var(--x-row-focused-bg-color);
+}
+
+x-prop-inspector .x-grid-cell:not(.modified) {
+	color: #999;
+}
 
 /* ------------------------------------------------------------------------ */
 /* dark theme                                                               */

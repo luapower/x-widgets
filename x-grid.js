@@ -287,8 +287,7 @@ component('x-grid', function(e) {
 	function set_col_w(fi, w) { // hgrid
 		let field = e.fields[fi]
 		w = clamp(w, field.min_w, field.max_w)
-		field.w = w
-		e.set_col_attr(field, 'w', w)
+		e.set_col_attr(field.name, 'w', w, e.widget_editing ? 'base' : 'user')
 		e.header.at[fi]._w = w
 	}
 
@@ -372,10 +371,12 @@ component('x-grid', function(e) {
 			let field = e.fields[fi]
 			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
 			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
-			let e1 = H.td({class: 'x-grid-header-title-td'})
-			e1.set(field.text)
-			e1.title = field.hint || e1.textContent
-			let e2 = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
+			let title_div = H.td({class: 'x-grid-header-title-td'})
+			title_div.set(field.text)
+			title_div.title = field.hint || title_div.textContent
+			let sort_icon_div = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
+			let e1 = title_div
+			let e2 = sort_icon_div
 			if (horiz && field.align == 'right')
 				[e1, e2] = [e2, e1]
 			e1.attr('align', 'left')
@@ -383,6 +384,7 @@ component('x-grid', function(e) {
 			let title_table = H.table({class: 'x-grid-header-cell-table'}, H.tr(0, e1, e2))
 			let hcell = div({class: 'x-grid-header-cell'}, title_table)
 			hcell.fi = fi
+			hcell.title_div = title_div
 			hcell.sort_icon = sort_icon
 			hcell.sort_icon_pri = sort_icon_pri
 			e.header.add(hcell)
@@ -466,6 +468,7 @@ component('x-grid', function(e) {
 				e.cells.add(cell)
 			}
 		}
+		e.empty_rt.show(!e.rows.length)
 	}
 
 	e.do_update_cell_val = function(cell, row, field, input_val) {
@@ -728,6 +731,7 @@ component('x-grid', function(e) {
 	e.do_create_editor = function(field, ...opt) {
 		do_create_editor(field, {
 			inner_label: false,
+			grid_editor_for: e,
 		}, ...opt)
 		if (!e.editor)
 			return
@@ -792,9 +796,9 @@ component('x-grid', function(e) {
 			return
 		if (prop == 'input_val')
 			e.do_update_cell_val(cell, e.rows[ri], e.fields[fi], val)
-		else if (prop == 'cell_error')
+		else if (prop == 'error')
 			e.do_update_cell_error(cell, e.rows[ri], e.fields[fi], val)
-		else if (prop == 'cell_modified')
+		else if (prop == 'modified')
 			cell.class('modified', val)
 	}
 
@@ -944,14 +948,20 @@ component('x-grid', function(e) {
 			cell.ri == e.focused_row_index &&
 			cell.fi == e.focused_field_index
 
+		let toggle =
+			!e.enter_edit_on_click
+			&& !e.stay_in_edit_mode
+			&& !e.editor
+			&& e.fields[cell.fi].type == 'bool'
+
 		return e.focus_cell(cell.ri, cell.fi, 0, 0, {
 			must_not_move_row: true,
 			enter_edit: !over_indent && e.can_edit
 				&& !ctrl && !shift
-				&& ((e.enter_edit_on_click || e.fields[cell.fi].type =='bool')
+				&& ((e.enter_edit_on_click || toggle)
 					|| (e.enter_edit_on_click_focused && already_on_it)),
 			focus_editor: true,
-			editor_state: 'select_all',
+			editor_state: toggle ? 'toggle' : 'select_all',
 			expand_selection: shift,
 			invert_selection: ctrl,
 			input: e,
@@ -1376,11 +1386,41 @@ component('x-grid', function(e) {
 		e.move_field(hit.fi, over_fi)
 	}
 
+	// empty placeholder text -------------------------------------------------
+
+	e.empty_rt = richtext({
+		classes: 'x-grid-empty-rt',
+		align_x: 'center',
+		align_y: 'center',
+	})
+	e.empty_rt.hide()
+	e.cells_view.add(e.empty_rt)
+
+	let barrier
+	e.set_empty_text = function(s) {
+		if (barrier) return
+		e.empty_rt.content = s
+	}
+
+	e.on('bind', function(on) {
+		document.on('prop_changed', function(te, k, v) {
+			if (te == e.empty_rt && k == 'content') {
+				barrier = true
+				e.empty_text = v
+				barrier = false
+			}
+		})
+	})
+
+	e.prop('empty_text', {store: 'var', slot: 'lang'})
+
 	// mouse bindings ---------------------------------------------------------
 
 	let hit = {}
 
 	function pointermove(ev, mx, my) {
+		if (e.widget_editing)
+			return
 		if (hit.state == 'header_resizing') {
 			mm_header_resize(mx, my, hit)
 		} else if (hit.state == 'col_resizing') {
@@ -1421,8 +1461,26 @@ component('x-grid', function(e) {
 		}
 	}
 
+	let editing_field, editing_div
+
+	e.set_widget_editing = function(v) {
+		if (editing_field) {
+			let cell = e.header.at[editing_field.index]
+			cell.class('editing', v)
+			editing_div.contenteditable = v
+			editing_div.focus()
+			if (!v) {
+				e.set_col_attr(editing_field.name, 'text', editing_div.textContent, 'lang')
+				editing_field = null
+				editing_div = null
+			}
+		}
+	}
+
 	function pointerdown(ev, mx, my) {
 
+		if (e.widget_editing)
+			return
 		if (!hit.state)
 			pointermove(ev, mx, my)
 		if (!hit.state)
@@ -1438,6 +1496,13 @@ component('x-grid', function(e) {
 			e.class('col-resizing')
 			create_resize_guides()
 		} else if (hit.state == 'col_drag') {
+			if (ev.ctrlKey) {
+				editing_field = e.fields[hit.fi]
+				let cell = e.header.at[editing_field.index]
+				editing_div = cell.$('.x-grid-header-title-td')[0]
+				e.widget_editing = true
+				return
+			}
 			hit.state = 'col_dragging'
 		} else if (hit.state == 'row_drag') {
 			if (e.widget_editing && !ev.shiftKey && !ev.ctrlKey) {
@@ -1455,6 +1520,8 @@ component('x-grid', function(e) {
 
 	function rightpointerdown(ev, mx, my) {
 
+		if (e.widget_editing)
+			return
 		if (!hit.state)
 			pointermove(ev, mx, my)
 		if (!hit.state)
@@ -1474,6 +1541,8 @@ component('x-grid', function(e) {
 	}
 
 	function pointerup(ev) {
+		if (e.widget_editing)
+			return
 		if (!hit.state)
 			return
 		if (hit.state == 'header_resizing') {
@@ -1483,7 +1552,9 @@ component('x-grid', function(e) {
 			mu_col_resize()
 		} else if (hit.state == 'col_dragging') {
 			if (ev.ctrlKey) {
-				e.select_all_cells(hit.fi)
+				//e.widget_editing = true
+				//e.header.at[hit.fi].$('.x-grid-header-title-td')[0].contenteditable = true
+				//e.select_all_cells(hit.fi)
 			} else {
 				if (e.can_sort_rows)
 					e.set_order_by_dir(e.fields[hit.fi], 'toggle', ev.shiftKey)
@@ -1522,6 +1593,20 @@ component('x-grid', function(e) {
 	// keyboard bindings ------------------------------------------------------
 
 	e.on('keydown', function(key, shift, ctrl) {
+
+		if (e.widget_editing) {
+			if (key == 'Enter') {
+				if (ctrl) {
+					if (editing_div)
+						editing_div.insert_at_caret('<br>')
+					return
+				} else {
+					e.widget_editing = false
+					return false
+				}
+			}
+			return
+		}
 
 		if (e.disabled)
 			return
@@ -1636,7 +1721,7 @@ component('x-grid', function(e) {
 			} else if (e.hasclass('picker')) {
 				e.pick_val()
 			} else if (!e.editor) {
-				e.enter_edit('select_all')
+				e.enter_edit('toggle')
 			} else if (!e.exit_edit_on_enter || e.exit_edit()) {
 				if (e.advance_on_enter == 'next_row')
 					e.focus_cell(true, true, 1, 0, {editor_state: 'select_all', input: e, enter_edit: e.stay_in_edit_mode})
@@ -1682,7 +1767,7 @@ component('x-grid', function(e) {
 			if (e.focused_row && (!e.can_focus_cells || e.focused_field == e.tree_field))
 				e.toggle_collapsed(e.focused_row, shift)
 			else if (e.focused_field && e.focused_field.type == 'bool')
-				e.enter_edit() // toggle value.
+				e.enter_edit('toggle')
 			return false
 		}
 
@@ -1702,6 +1787,8 @@ component('x-grid', function(e) {
 	// printable characters: enter quick edit mode.
 	e.on('keypress', function(c) {
 
+		if (e.widget_editing)
+			return
 		if (e.disabled)
 			return
 

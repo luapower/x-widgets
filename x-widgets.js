@@ -33,7 +33,7 @@ and we use those events to solve the so-called "lapsed listener problem"
 alas, the web people could't get that one right either).
 --------------------------------------------------------------------------- */
 
-let repl_empty_str = v => repl(v, '', null)
+let repl_empty_str = v => repl(v, '', undefined)
 
 bind_events = true
 
@@ -126,16 +126,15 @@ function component(tag, cons) {
 		e.init = noop
 		cons(e)
 		e.initialized = false
-		e.begin_update()
 		if (opt.__pv0) {
-			e.__pv0 = {}
 			delete opt.__pv0
+			xmodule.init_widget(e, opt)
+		} else {
+			e.begin_update()
 			for (let k in opt)
-				e.__pv0[k] = e.get_prop(k)
+				e.set_prop(k, opt[k])
+			e.end_update()
 		}
-		for (let k in opt)
-			e.set_prop(k, opt[k])
-		e.end_update()
 		e.initialized = true
 		e.init()
 	}
@@ -217,11 +216,9 @@ let component_deferred_updating = function(e) {
 			return
 		if (!e.attached)
 			return
-		if (invalid) {
-			e.do_update(opt)
-			opt = null
-			invalid = false
-		}
+		e.do_update(opt)
+		opt = null
+		invalid = false
 	}
 
 }
@@ -293,7 +290,7 @@ function component_prop_system(e) {
 			e[setter] = noop
 		let prop_changed = fire_prop_changed
 		let slot = opt.slot
-		let dv = repl(opt.default, undefined, null) // `undefined` is not valid.
+		let dv = opt.default
 
 		if (opt.store == 'var') {
 			let v = dv
@@ -384,6 +381,8 @@ function component_prop_system(e) {
 			}
 		}
 
+		// gid-based dynamic binding.
+
 		if (opt.bind_gid) {
 			let resolve = opt.resolve || xmodule.resolve
 			let GID = prop
@@ -416,6 +415,8 @@ function component_prop_system(e) {
 			if (e[GID] != null)
 				gid_changed(e[GID])
 		}
+
+		// id-based dynamic binding.
 
 		if (opt.bind_id) {
 			let resolve = opt.resolve || global_widget_resolver(type)
@@ -464,8 +465,23 @@ function component_prop_system(e) {
 
 	}
 
-	e.set_prop = function(k, v) { e[k] = v; } // stub
-	e.get_prop = (k) => e[k] // stub
+	// dynamic properties.
+
+	e.set_prop = function(k, v) { e[k] = v } // stub
+	e.get_prop = k => e[k] // stub
+
+	// prop serialization.
+
+	e.serialize_prop = function(k, v, even_if_default) {
+		let def = e.props[k]
+		if (def && !even_if_default && v === def.default)
+			return undefined // undefined is not stored.
+		if (def && def.serialize)
+			v = def.serialize(v)
+		else if (isobject(v) && v.serialize)
+			v = v.serialize()
+		return v
+	}
 
 }
 
@@ -603,6 +619,7 @@ function selectable_widget(e) {
 	e.props.id = {
 		name: 'id',
 		unique: true, // don't show in prop inspector when selecting multiple objects.
+		default: '',
 		validate: function(id) {
 			return window[id] === undefined || window[id] == e || 'id already in use'
 		},
@@ -796,7 +813,7 @@ function editable_widget(e) {
 
 function pagelist_item_widget(e) {
 
-	e.props.title = {name: 'title', slot: 'lang'}
+	e.props.title = {name: 'title', slot: 'lang', default: ''}
 
 	override_property_setter(e, 'title', function(inherited, v) {
 		if (!v) v = ''
@@ -1050,16 +1067,9 @@ function serializable_widget(e) {
 		let t = {type: e.type}
 		if (e.props)
 			for (let prop in e.props) {
-				let v = e[prop]
-				let def = e.props[prop]
-				if (v !== def.default) {
-					if (def.serialize)
-						v = def.serialize(v)
-					else if (isobject(v) && v.serialize)
-						v = v.serialize()
-					if (v !== undefined)
-						t[prop] = v
-				}
+				let v = e.serialize_prop(prop, e[prop])
+				if (v !== undefined)
+					t[prop] = v
 			}
 		return t
 	}
@@ -1083,7 +1093,7 @@ function focusable_widget(e, fe) {
 	e.set_tabindex = function(i) {
 		fe.attr('tabindex', focusable ? i : -1)
 	}
-	e.prop('tabindex', {store: 'var', default: 0})
+	e.prop('tabindex', {store: 'var', type: 'number', default: 0})
 
 	e.property('focusable', () => focusable, function(v) {
 		v = !!v
@@ -1219,8 +1229,8 @@ function val_widget(e, enabled_without_nav) {
 			bind_nav(nav0, col0, false)
 			bind_nav(nav1, col1, true)
 			init_field()
-			e.update()
 		}
+		e.update()
 	}
 
 	let nav
@@ -1346,18 +1356,20 @@ component('x-tooltip', function(e) {
 	e.classes = 'x-widget x-tooltip'
 
 	e.text_div = div({class: 'x-tooltip-text'})
+	e.content = div({class: 'x-tooltip-content'}, e.text_div)
 	e.pin = div({class: 'x-tooltip-tip'})
-	e.add(e.text_div, e.pin)
+	e.add(e.content, e.pin)
 
-	e.prop('target'     , {store: 'var', private: true})
-	e.prop('target_name', {store: 'var', type: 'element', bind: 'target'})
-	e.prop('text'       , {store: 'var', slot: 'lang'})
-	e.prop('side'       , {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
-	e.prop('align'      , {store: 'attr', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
-	e.prop('kind'       , {store: 'attr', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
-	e.prop('px'         , {store: 'var', type: 'number', default: 0})
-	e.prop('py'         , {store: 'var', type: 'number', default: 0})
-	e.prop('timeout'    , {store: 'var'})
+	e.prop('target'      , {store: 'var', private: true})
+	e.prop('target_name' , {store: 'var', type: 'element', bind: 'target'})
+	e.prop('text'        , {store: 'var', slot: 'lang'})
+	e.prop('side'        , {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
+	e.prop('align'       , {store: 'attr', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
+	e.prop('kind'        , {store: 'attr', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
+	e.prop('px'          , {store: 'var', type: 'number', default: 0})
+	e.prop('py'          , {store: 'var', type: 'number', default: 0})
+	e.prop('timeout'     , {store: 'var'})
+	e.prop('close_button', {store: 'var', type: 'bool'})
 
 	e.init = function() {
 		e.update({reset_timer: true})
@@ -1369,7 +1381,21 @@ component('x-tooltip', function(e) {
 		e.class('visible', visible)
 	}
 
+	e.close = function() {
+		if (e.fire('closed'))
+			e.target = null
+	}
+
+	function close() { e.close() }
+
 	e.do_update = function(opt) {
+		if (e.close_button && !e.xbutton) {
+			e.xbutton = div({class: 'x-tooltip-xbutton fa fa-times'})
+			e.xbutton.on('pointerup', close)
+			e.content.add(e.xbutton)
+		} else if (e.xbutton) {
+			e.xbutton.show(e.close_button)
+		}
 		e.popup(e.target, e.side, e.align, e.px, e.py)
 		if (opt && opt.reset_timer)
 			reset_timeout_timer()
@@ -1382,13 +1408,14 @@ component('x-tooltip', function(e) {
 	e.set_kind   = update
 	e.set_px     = update
 	e.set_py     = update
+	e.set_close_button = update
 
 	e.set_text = function(s) {
 		e.text_div.set(s, 'pre-wrap')
 		e.update({reset_timer: true})
 	}
 
-	let remove_timer = timer(function() { e.target = null })
+	let remove_timer = timer(close)
 	function reset_timeout_timer() {
 		if (!e.initialized)
 			return
@@ -1475,6 +1502,9 @@ component('x-button', function(e) {
 	})
 
 	e.on('pointerdown', function(ev) {
+		if (e.widget_editing)
+			return
+		e.focus()
 		return this.capture_pointer(ev, null, function() {
 			if(e.action)
 				e.action()
@@ -1536,8 +1566,8 @@ component('x-checkbox', function(e) {
 	e.get_checked = function() {
 		return e.val === e.checked_val
 	}
-	e.set_checked = function(v) {
-		e.val = v ? e.checked_val : e.unchecked_val
+	e.set_checked = function(v, ev) {
+		e.set_val(v ? e.checked_val : e.unchecked_val, ev)
 	}
 	e.prop('checked', {private: true})
 
@@ -1557,8 +1587,8 @@ component('x-checkbox', function(e) {
 
 	// controller
 
-	e.toggle = function() {
-		e.checked = !e.checked
+	e.toggle = function(ev) {
+		e.set_checked(!e.checked, ev)
 	}
 
 	e.on('pointerdown', function(ev) {
@@ -1571,16 +1601,12 @@ component('x-checkbox', function(e) {
 	e.on('click', function(ev) {
 		if (e.widget_editing)
 			return
-		e.toggle()
+		e.toggle({input: e})
 		return false
 	})
 
 	e.on('keydown', function(key, shift, ctrl) {
 		if (e.widget_editing) {
-			if (key == 'Escape') {
-				e.widget_editing = false
-				return false
-			}
 			if (key == 'Enter') {
 				if (ctrl)
 					e.text_div.insert_at_caret('<br>')
@@ -1591,7 +1617,7 @@ component('x-checkbox', function(e) {
 			return
 		}
 		if (key == 'Enter' || key == ' ') {
-			e.toggle()
+			e.toggle({input: e})
 			return false
 		}
 	})
@@ -2190,7 +2216,7 @@ component('x-dropdown', function(e) {
 			document.on('rightpointerdown', document_pointerdown, on)
 			document.on('stopped_event'   , document_stopped_event, on)
 			e.picker.bind(true)
-			e.update()
+			//e.update()
 		} else {
 			e.close()
 			e.picker.bind(false)
@@ -2250,9 +2276,9 @@ component('x-dropdown', function(e) {
 	e.open   = function(focus) { e.set_open(true, focus) }
 	e.close  = function(focus) { e.set_open(false, focus) }
 	e.toggle = function(focus) { e.set_open(!e.isopen, focus) }
-	e.cancel = function(focus) {
+	e.cancel = function(focus, ev) {
 		if (e.isopen)
-			e.set_val(e.cancel_val)
+			e.set_val(e.cancel_val, ev)
 		e.close(focus)
 	}
 
@@ -2991,9 +3017,12 @@ widget_items_widget = function(e) {
 	function same_items(t, items) {
 		if (t.length != items.length)
 			return false
-		for (let i = 0; i < t.length; i++)
-			if (!(typeof t[i] == 'string' && items[i].gid === t[i]))
+		for (let i = 0; i < t.length; i++) {
+			let gid0 = items[i].gid
+			let gid1 = typeof t[i] == 'string' ? t[i] : t[i].gid
+			if (gid1 != gid0)
 				return false
+		}
 		return true
 	}
 
@@ -3649,8 +3678,10 @@ component('x-toaster', function(e) {
 			check: popup_check,
 			popup_target_bind: popup_target_bind,
 		})
+		t.on('close', close)
 		e.tooltips.add(t)
 		update_stack()
+		return t
 	}
 
 	e.close_all = function() {
@@ -3818,11 +3849,12 @@ component('x-toolbox', function(e) {
 
 	focusable_widget(e)
 
-	e.classes = 'x-widget x-toolbox'
+	e.classes = 'x-widget x-toolbox pinned'
 
-	e.xbutton = div({class: 'x-toolbox-xbutton fa fa-times'})
+	e.pin_button = div({class: 'x-toolbox-button x-toolbox-pin-button fa fa-thumbtack'})
+	e.xbutton = div({class: 'x-toolbox-button x-toolbox-xbutton fa fa-times'})
 	e.title_div = div({class: 'x-toolbox-title'})
-	e.titlebar = div({class: 'x-toolbox-titlebar'}, e.title_div, e.xbutton)
+	e.titlebar = div({class: 'x-toolbox-titlebar'}, e.title_div, e.pin_button, e.xbutton)
 	e.add(e.titlebar)
 
 	e.get_text = () => e.title_div.textContent
@@ -3834,12 +3866,14 @@ component('x-toolbox', function(e) {
 	e.set_popup_widget = e.update
 	e.set_popup_x      = e.update
 	e.set_popup_y      = e.update
+	e.set_pinned       = e.update
 
 	e.prop('popup_side'  , {store: 'var', type: 'enum', enum_values: ['inner-right', 'inner-left', 'inner-top', 'inner-bottom', 'left', 'right', 'top', 'bottom'], default: 'inner-right'})
 	e.prop('popup_align' , {store: 'var', type: 'enum', enum_values: ['start', 'center', 'end'], default: 'start'})
 	e.prop('popup_widget', {store: 'var', type: 'widget'})
 	e.prop('popup_x'     , {store: 'var', type: 'number', default: 0})
 	e.prop('popup_y'     , {store: 'var', type: 'number', default: 0})
+	e.prop('pinned'      , {store: 'attr', type: 'bool', default: true})
 
 	e.do_update = function() {
 		e.popup(e.popup_widget || document.body, e.popup_side, e.popup_align, e.popup_x, e.popup_y)
@@ -3865,7 +3899,7 @@ component('x-toolbox', function(e) {
 		if (first_focusable)
 			first_focusable.focus()
 
-		if (ev.target == e.xbutton)
+		if (ev.target == e.xbutton || ev.target == e.pin_button)
 			return
 
 		let r = e.rect()
@@ -3886,6 +3920,11 @@ component('x-toolbox', function(e) {
 		return false
 	})
 
+	e.pin_button.on('pointerup', function() {
+		e.class('pinned', !e.hasclass('pinned'))
+		return false
+	})
+
 	e.detect_style_size_changes()
 	e.on('style_size_changed', function() {
 		document.fire('layout_changed')
@@ -3899,23 +3938,23 @@ component('x-toolbox', function(e) {
 
 component('x-richtext', function(e) {
 
+	e.props.align_x = {default: 'stretch'}
+	e.props.align_y = {default: 'stretch'}
+
 	serializable_widget(e)
 	selectable_widget(e)
 	editable_widget(e)
 	cssgrid_item_widget(e)
 
 	e.classes = 'x-widget x-richtext'
-	e.align_x = 'stretch'
-	e.align_y = 'stretch'
 
 	e.content_div = div({class: 'x-richedit-content'})
 	e.add(e.content_div)
 
 	// content property
 
-	e.get_content = function()  { return e.content_div.html }
 	e.set_content = function(s) { e.content_div.html = s }
-	e.prop('content', {slot: 'lang'})
+	e.prop('content', {store: 'var', slot: 'lang'})
 
 	// widget editing ---------------------------------------------------------
 
@@ -4051,20 +4090,35 @@ function richtext_widget_editing(e) {
 	}
 	e.actionbar.popup(e, 'top', 'left')
 
+	let barrier
+	let inh_set_content = e.set_content
+	e.set_content = function(...args) {
+		if (barrier) return
+		inh_set_content(...args)
+	}
+
 	e.content_div.on('input', function(ev) {
 		let e1 = ev.target.first
 		if (e1 && e1.nodeType == 3)
 			exec('formatBlock', '<p>')
 		else if (e.content_div.html == '<br>')
 			e.content_div.html = ''
+		barrier = true
+		e.content = e.content_div.html
+		barrier = false
 	})
 
-	e.content_div.on('keydown', function(ev) {
-		if (ev.key === 'Enter')
+	e.content_div.on('keydown', function(key, shift, ctrl, alt, ev) {
+		if (key === 'Enter')
 			if (document.queryCommandValue('formatBlock') == 'blockquote')
 				after(0, function() { exec('formatBlock', '<p>') })
 			else if (document.queryCommandValue('formatBlock') == 'pre')
 				after(0, function() { exec('formatBlock', '<br>') })
+		ev.stopPropagation()
+	})
+
+	e.content_div.on('keypress', function(key, shift, ctr, alt, ev) {
+		ev.stopPropagation()
 	})
 
 	e.content_div.on('pointerdown', function(ev) {

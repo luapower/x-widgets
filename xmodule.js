@@ -8,6 +8,7 @@ function xmodule(e) {
 	let generation = 0
 
 	assert(e.prop_layer_slots) // {slot -> layer_obj} in application order.
+	attr(e, 'prop_layer_slot_colors')
 	e.widgets = {} // {gid -> e}
 	e.prop_layers = {} // {layer -> {slot:, name:, widgets: {gid -> prop_vals}}}
 	e.selected_prop_slot = null
@@ -30,9 +31,10 @@ function xmodule(e) {
 	})
 
 	document.on('prop_changed', function(te, k, v, v0, slot) {
+		if (!te.gid) return
 		if (te.xmodule_updating_props) return
 		slot = e.selected_prop_slot || slot || 'base'
-		e.set_prop(te, slot, k, v)
+		e.set_prop_val(te, slot, k, v)
 	})
 
 	e.prop_vals = function(gid) {
@@ -47,27 +49,39 @@ function xmodule(e) {
 		return t
 	}
 
+	e.init_widget = function(te, vals) {
+		te.xmodule_updating_props = true
+		te.begin_update()
+		te.__pv0 = {}
+		for (let k in vals)
+			te.__pv0[k] = te.get_prop(k)
+		for (let k in vals)
+			te.set_prop(k, vals[k])
+		te.end_update()
+		te.xmodule_updating_props = false
+	}
+
 	e.update_widget = function(te) {
 		if (te.prop_layers_generation == generation)
 			return
+		te.xmodule_updating_props = true
 		te.begin_update()
 		let vals = e.prop_vals(te.gid)
-		te.xmodule_updating_props = true
-		let pv0 = attr(te, '__pv0') // prop values before any layer overrides.
+		let pv0 = attr(te, '__pv0') // initial vals of overriden props.
 		// restore prop vals that are not present in this override.
 		for (let prop in pv0)
 			if (!(prop in vals)) {
 				te.set_prop(prop, pv0[prop])
 				delete pv0[prop]
 			}
-		// apply this override saving previous values that were not saved.
+		// apply this override saving initial vals that were not saved before.
 		for (let prop in vals) {
 			if (!(prop in pv0))
 				pv0[prop] = te.get_prop(prop)
 			te.set_prop(prop, vals[prop])
 		}
-		te.xmodule_updating_props = false
 		te.end_update()
+		te.xmodule_updating_props = false
 	}
 
 	e.update_widgets = function(layer_widgets) {
@@ -76,7 +90,7 @@ function xmodule(e) {
 				e.update_widget(e.widgets[gid])
 	}
 
-	e.set_prop_layer = function(slot, layer, reload, on_loaded) {
+	e.set_prop_layer = function(slot, layer, reload, on_loaded, async) {
 
 		function update_layer(layer_widgets) {
 
@@ -118,6 +132,7 @@ function xmodule(e) {
 				success: function(widgets) {
 					update_layer(widgets)
 				},
+				async: async,
 				fail: function(how, status) {
 					if (how == 'http' && status == 404)
 						update_layer({})
@@ -134,16 +149,6 @@ function xmodule(e) {
 		if (layer_obj.save_request)
 			return // already saving...
 
-		// refresh stored props of live widgets.
-		for (let gid in e.widgets) {
-			let props = layer_obj.widgets[gid]
-			if (props) {
-				let te = e.widgets[gid]
-				for (let k in props)
-					set_layer_prop(te, layer_obj, k, te.get_prop(k))
-			}
-		}
-
 		layer_obj.save_request = ajax({
 			url: 'xmodule-layer.json/'+layer,
 			upload: json(layer_obj.widgets, null, '\t'),
@@ -158,19 +163,11 @@ function xmodule(e) {
 		}
 	}
 
-	function set_layer_prop(te, layer_obj, k, v) {
+	e.set_prop_val = function(te, slot, k, v) {
+		let layer_obj = e.prop_layer_slots[slot]
+		if (!layer_obj) return
 
-		let def = te.props[k]
-		if (!def) {
-			print('removing old prop from store:', k, '=', v)
-			v = undefined // delete old props from store.
-		} else if (layer_obj.name == 'base' && v === def.default) {
-			print('removing default from store:', k, '=', v)
-			v = undefined // delete defaults from store.
-		} else if (def.serialize)
-			v = def.serialize(v)
-		else if (isobject(v) && v.serialize)
-			v = v.serialize()
+		v = te.serialize_prop(k, v)
 
 		let t = layer_obj.widgets[te.gid]
 
@@ -183,16 +180,9 @@ function xmodule(e) {
 		}
 		layer_obj.modified = true
 		if (v === undefined)
-			delete t[k] // can't store `undefined` because nav can't.
+			delete t[k] // can't store `undefined`.
 		else
 			t[k] = v
-	}
-
-	e.set_prop = function(te, slot, k, v) {
-		if (!te.gid) return
-		let layer_obj = e.prop_layer_slots[slot]
-		if (!layer_obj) return
-		set_layer_prop(te, layer_obj, k, v)
 	}
 
 	e.save = function() {
@@ -277,7 +267,139 @@ field_types.col.editor = function(...options) {
 */
 
 // ---------------------------------------------------------------------------
-// property inspector
+// state toaster
+// ---------------------------------------------------------------------------
+
+window.on('load', function() {
+	state_toaster = toaster({
+		timeout: null,
+	})
+	document.body.add(state_toaster)
+})
+
+// ---------------------------------------------------------------------------
+// prop layers inspector
+// ---------------------------------------------------------------------------
+
+component('x-prop-layers-inspector', function(e) {
+
+	grid.construct(e)
+	e.cell_h = 22
+
+	e.can_select_widget = false
+
+	let barrier
+	function reset() {
+		if (barrier)
+			return
+		let rows = []
+		for (let slot in xmodule.prop_layer_slots) {
+			let layer_obj = xmodule.prop_layer_slots[slot]
+			let layer = layer_obj ? layer_obj.name : null
+			let row = [true, true, true, xmodule.prop_layer_slot_colors[slot] || '#fff', slot, layer]
+			rows.push(row)
+		}
+		e.rowset = {
+			fields: [
+				{name: 'active', type: 'bool', visible: false},
+				{name: 'selected', type: 'bool', w: 24,
+					format: (_, row) => e.cell_val(row, e.all_fields.active)
+						? H('<div class="fa fa-chevron'
+							+(e.cell_val(row, e.all_fields.slot) == xmodule.selected_prop_slot ? '-circle' : '')
+							+'-right" style="font-size: 80%"></div>') : '',
+				},
+				{name: 'visible', type: 'bool', w: 24,
+					true_text: () => H('<div class="fa fa-eye" style="font-size: 80%"></div>'),
+					false_text: '',
+				},
+				{name: 'color', w: 24, type: 'color'},
+				{name: 'slot', w: 60},
+				{name: 'layer', w: 60},
+			],
+			rows: rows,
+		}
+		e.reset()
+	}
+
+	let can_change_val = e.can_change_val
+	e.can_change_val = function(row, field) {
+		return can_change_val(row, field)
+			&& (!row || !field || e.cell_val(row, e.all_fields.slot) != 'base'
+					|| field.name == 'selected' || field.name == 'active')
+	}
+
+	e.on('bind', function(on) {
+		document.on('prop_layer_slots_changed', reset, on)
+		reset()
+	})
+
+	function set_selected_prop_slot(sel_slot) {
+		if (barrier)
+			return
+		barrier = true
+
+		xmodule.selected_prop_slot = sel_slot
+
+		e.begin_update()
+		let active = true
+		for (let row of e.rows) {
+			let slot    = e.cell_val(row, e.all_fields.slot)
+			let layer   = e.cell_val(row, e.all_fields.layer)
+			let visible = e.cell_val(row, e.all_fields.visible)
+			let layer_obj = xmodule.prop_layers[layer]
+			xmodule.set_prop_layer(slot, active && visible ? layer : null)
+			e.reset_cell_val(row, e.all_fields.active, active)
+			if (slot == sel_slot)
+				active = false
+		}
+		e.update({vals: true})
+		e.end_update()
+
+		if (e.state_tooltip)
+			e.state_tooltip.close()
+
+		if (sel_slot) {
+			let layer_obj = xmodule.prop_layer_slots[xmodule.selected_prop_slot]
+			let s = sel_slot + ': '+ (layer_obj ? layer_obj.name : 'none')
+			e.state_tooltip = state_toaster.post(s, 'error')
+			e.state_tooltip.close_button = true
+			e.state_tooltip.on('closed', function() {
+				e.state_tooltip = null
+				if (barrier) return
+				set_selected_prop_slot(null)
+			})
+		}
+
+		barrier = false
+	}
+
+	e.on('cell_val_changed_for_selected', function(row, val) {
+		let sel_slot = e.cell_val(row, e.all_fields.slot)
+		set_selected_prop_slot(sel_slot)
+	})
+
+	e.on('cell_val_changed_for_visible', function(row, val) {
+		if (barrier)
+			return
+		barrier = true
+		let slot    = e.cell_val(row, e.all_fields.slot)
+		let layer   = e.cell_val(row, e.all_fields.layer)
+		let active  = e.cell_val(row, e.all_fields.active)
+		let visible = e.cell_val(row, e.all_fields.visible)
+		xmodule.set_prop_layer(slot, active && visible ? layer : null)
+		barrier = false
+	})
+
+	e.on('cell_val_changed_for_color', function(row, val) {
+		let slot = e.cell_val(row, e.all_fields.slot)
+		xmodule.prop_layer_slot_colors[slot] = val
+		document.fire('selected_widgets_changed')
+	})
+
+})
+
+// ---------------------------------------------------------------------------
+// nav editor for prop inspector
 // ---------------------------------------------------------------------------
 
 function widget_select_editor(widgets_gid_map, filter, ...options) {
@@ -312,6 +434,10 @@ field_types.nav.editor = function(...args) {
 	return xmodule.nav_editor(...args)
 }
 
+// ---------------------------------------------------------------------------
+// property inspector
+// ---------------------------------------------------------------------------
+
 component('x-prop-inspector', function(e) {
 
 	grid.construct(e)
@@ -336,6 +462,8 @@ component('x-prop-inspector', function(e) {
 	e.exit_edit_on_enter = false
 	e.stay_in_edit_mode = true
 
+	e.empty_text = 'No widgets selected or focused'
+
 	e.on('bind', function(on) {
 		document.on('selected_widgets_changed', selected_widgets_changed, on)
 		document.on('prop_changed', prop_changed, on)
@@ -344,11 +472,11 @@ component('x-prop-inspector', function(e) {
 			reset()
 	})
 
-	e.on('val_changed', function(row, field, val) {
-		if (!widgets)
-			reset()
-		for (let e of widgets)
-			e[field.name] = val
+	e.on('cell_val_changed', function(row, field, val, ev) {
+		if (!ev)
+			return // from reset()
+		for (let te of widgets)
+			te.set_prop(field.name, val)
 	})
 
 	function selected_widgets_changed() {
@@ -368,15 +496,21 @@ component('x-prop-inspector', function(e) {
 		barrier = false
 	}
 
-	function prop_changed(widget, k, v) {
-		if (!widgets.has(widget))
+	function prop_changed(te, k, v) {
+		if (!widgets.has(te))
 			return
 		let field = e.all_fields[k]
 		if (!field)
 			return
 		if (e.editor && e.focused_field == field)
 			return
-		e.focus_cell(0, e.field_index(field))
+		e.focus_cell(0, e.field_index(field), 0, 0, {
+			// NOTE: override these options because if we're in updating mode,
+			// editor_state = 'toggle' from the last time would be applied,
+			// which would result in an infinte loop.
+			enter_edit: true,
+			editor_state: 'select_all',
+		})
 		e.reset_val(e.focused_row, field, v)
 	}
 
@@ -395,31 +529,58 @@ component('x-prop-inspector', function(e) {
 		if (!selected_widgets.size && focused_widget() && !up_widget_which(focused_widget(), e => !e.can_select_widget))
 			widgets = new Set([focused_widget()])
 
+		let i = 0
+		for (let te of widgets) // for debugging...
+			window['$'+i++] = te
+
 		let rs = {}
 		rs.fields = []
-		let vals = []
-		rs.rows = [vals]
+		let row = []
+		rs.rows = []
 
 		let prop_counts = {}
-		let props = {}
-		let prop_vals = {}
+		let defs = {}
+		let pv0 = {}
+		let pv1 = {}
+		let slots = {}
 
-		for (let e of widgets)
-			for (let prop in e.props)
-					if (widgets.size == 1 || !e.props[prop].unique) {
-						prop_counts[prop] = (prop_counts[prop] || 0) + 1
-						props[prop] = e.props[prop]
-						prop_vals[prop] = prop in prop_vals && prop_vals[prop] !== e[prop] ? undefined : e[prop]
-					}
+		for (let te of widgets)
+			for (let prop in te.props)
+				if (widgets.size == 1 || !te.props[prop].unique) {
+					prop_counts[prop] = (prop_counts[prop] || 0) + 1
+					defs[prop] = te.props[prop]
+					let v1 = te.serialize_prop(prop, te[prop], true)
+					let v0 = te.serialize_prop(prop, defs[prop].default, true)
+					pv0[prop] = prop in pv0 && pv0[prop] !== v0 ? undefined : v0
+					pv1[prop] = prop in pv1 && pv1[prop] !== v1 ? undefined : v1
+					slots[prop] = defs[prop].slot
+				}
 
 		for (let prop in prop_counts)
 			if (prop_counts[prop] == widgets.size) {
-				rs.fields.push(props[prop])
-				vals.push(prop_vals[prop])
+				rs.fields.push(update({}, defs[prop], {convert: null}))
+				row.push(repl(pv0[prop], undefined, null))
 			}
+
+		if (row.length)
+			rs.rows.push(row)
 
 		e.rowset = rs
 		e.reset()
+
+		let inh_do_update_cell_val = e.do_update_cell_val
+		e.do_update_cell_val = function(cell, row, field, input_val) {
+			inh_do_update_cell_val(cell, row, field, input_val)
+			let color = xmodule.prop_layer_slot_colors[slots[field.name]]
+			let hcell = e.header.at[field.index]
+			hcell.style['border-right'] = '4px solid'+color
+		}
+
+		if (e.all_rows.length) {
+			let row = e.all_rows[0]
+			for (let field of e.all_fields)
+				e.set_cell_val(row, field, pv1[field.name])
+		}
 
 		e.title_text = ([...widgets].map(e => e.type + (e.gid ? ' ' + e.gid : ''))).join(' ')
 
@@ -558,101 +719,6 @@ component('x-widget-tree', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// prop layers inspector
-// ---------------------------------------------------------------------------
-
-component('x-prop-layers-inspector', function(e) {
-
-	grid.construct(e)
-	e.cell_h = 22
-
-	e.can_select_widget = false
-
-	let barrier
-	function reset() {
-		if (barrier)
-			return
-		let rows = []
-		for (let slot in xmodule.prop_layer_slots) {
-			let layer_obj = xmodule.prop_layer_slots[slot]
-			let layer = layer_obj ? layer_obj.name : null
-			let row = [true, true, true, slot, layer]
-			rows.push(row)
-		}
-		e.rowset = {
-			fields: [
-				{name: 'active', type: 'bool', visible: false},
-				{name: 'selected', type: 'bool', w: 24,
-					format: (_, row) => e.cell_val(row, e.all_fields.active)
-						? H('<div class="fa fa-chevron'
-							+(e.cell_val(row, e.all_fields.slot) == xmodule.selected_prop_slot ? '-circle' : '')
-							+'-right" style="font-size: 80%"></div>') : '',
-				},
-				{name: 'visible', type: 'bool', w: 24,
-					true_text: () => H('<div class="fa fa-eye" style="font-size: 80%"></div>'),
-					false_text: '',
-				},
-				{name: 'slot', w: 80},
-				{name: 'layer', w: 80},
-			],
-			rows: rows,
-		}
-		e.reset()
-	}
-
-	let can_change_val = e.can_change_val
-	e.can_change_val = function(row, field) {
-		return can_change_val(row, field)
-			&& (!row || !field || e.cell_val(row, e.all_fields.slot) != 'base'
-					|| field.name == 'selected' || field.name == 'active')
-	}
-
-	e.on('bind', function(on) {
-		document.on('prop_layer_slots_changed', reset, on)
-		reset()
-	})
-
-	e.on('cell_state_changed_for_selected', function(row, prop, val) {
-		if (prop != 'val')
-			return
-		if (barrier)
-			return
-		barrier = true
-		e.begin_update()
-		let sel_slot = e.cell_val(row, e.all_fields.slot)
-		xmodule.selected_prop_slot = sel_slot
-		let active = true
-		for (let row of e.rows) {
-			let slot    = e.cell_val(row, e.all_fields.slot)
-			let layer   = e.cell_val(row, e.all_fields.layer)
-			let visible = e.cell_val(row, e.all_fields.visible)
-			let layer_obj = xmodule.prop_layers[layer]
-			xmodule.set_prop_layer(slot, active && visible ? layer : null)
-			e.reset_cell_val(row, e.all_fields.active, active)
-			if (slot == sel_slot)
-				active = false
-		}
-		e.end_update()
-		barrier = false
-	})
-
-	e.on('cell_state_changed_for_visible', function(row, prop, val) {
-		if (prop != 'val')
-			return
-		if (barrier)
-			return
-		barrier = true
-		let slot    = e.cell_val(row, e.all_fields.slot)
-		let layer   = e.cell_val(row, e.all_fields.layer)
-		let active  = e.cell_val(row, e.all_fields.active)
-		let visible = e.cell_val(row, e.all_fields.visible)
-		xmodule.set_prop_layer(slot, active && visible ? layer : null)
-		barrier = false
-	})
-
-})
-
-// ---------------------------------------------------------------------------
 // sql rowset editor
 // ---------------------------------------------------------------------------
 
@@ -680,6 +746,17 @@ function globals_list() {
 // toolboxes
 // ---------------------------------------------------------------------------
 
+function prop_layers_toolbox(tb_opt, insp_opt) {
+	let pg = prop_layers_inspector(insp_opt)
+	let tb = toolbox(update({
+		text: 'property layers',
+		content: pg,
+		can_select_widget: false,
+	}, tb_opt))
+	tb.inspector = pg
+	return tb
+}
+
 function properties_toolbox(tb_opt, insp_opt) {
 	let pg = prop_inspector(insp_opt)
 	let tb = toolbox(update({
@@ -705,15 +782,32 @@ function widget_tree_toolbox(tb_opt, wt_opt) {
 	return tb
 }
 
-function prop_layers_toolbox(tb_opt, insp_opt) {
-	let pg = prop_layers_inspector(insp_opt)
-	let tb = toolbox(update({
-		text: 'property layers',
-		content: pg,
-		can_select_widget: false,
-	}, tb_opt))
-	tb.inspector = pg
-	return tb
+function show_toolboxes(on) {
+
+	if (on !== false) {
+		prop_layers_tb = prop_layers_toolbox({
+			popup_y: 2, w: 222, h: 225,
+		})
+		prop_layers_tb.show(true, true)
+
+		props_tb = properties_toolbox({
+			popup_y: 230, w: 222, h: 397,
+		}, {header_w: 80})
+		props_tb.show(true, true)
+
+		tree_tb = widget_tree_toolbox({
+			popup_y: 630, w: 222, h: 311,
+		})
+		tree_tb.show(true, true)
+	} else {
+		prop_layers_tb.remove()
+		prop_tb.remove()
+		tree_tb.remove()
+
+		prop_layers_tb = null
+		prop_tb = null
+		tree_tb = null
+	}
 }
 
 // ---------------------------------------------------------------------------

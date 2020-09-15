@@ -77,33 +77,23 @@ xmodule = xmodule({
 		app: null,
 		user: null,
 	},
+	prop_layer_slot_colors: {
+		lang: '#f66',
+		lang2: '#f69',
+		user: '#99f',
+	},
 })
 
 root_widget = null
 
-xmodule.set_prop_layer('lang', 'lang-ro', null, function() {
+xmodule.set_prop_layer('user', 'user-admin', null, null, false)
+xmodule.set_prop_layer('lang', 'lang-ro'   , null, null, false)
+xmodule.set_prop_layer('base', 'base'      , null, null, false)
 
-	xmodule.set_prop_layer('base', 'base', null, function() {
-		root_widget = component.create('lma1')
-		document.body.add(root_widget)
-	})
+root_widget = component.create('lma1')
+document.body.add(root_widget)
 
-})
-
-prop_layers_tb = prop_layers_toolbox({
-	popup_y: 2, w: 222, h: 225,
-})
-prop_layers_tb.show(true, true)
-
-props_tb = properties_toolbox({
-	popup_y: 230, w: 222, h: 397,
-}, {header_w: 80})
-props_tb.show(true, true)
-
-tree_tb = widget_tree_toolbox({
-	popup_y: 630, w: 222, h: 311,
-})
-tree_tb.show(true, true)
+show_toolboxes()
 
 </script>
 </body>

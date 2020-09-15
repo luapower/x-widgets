@@ -680,3 +680,35 @@ component('x-country-dropdown', function(e) {
 	e.val_col = 'country_code'
 	e.display_col = 'country_name'
 })
+
+
+// ---------------------------------------------------------------------------
+// colors listbox & dropdown
+// ---------------------------------------------------------------------------
+
+default_colors = ['#fff', '#ffa5a5', '#ffffc2', '#c8e7ed', '#bfcfff']
+
+function colors_listbox(...opt) {
+	return listbox({
+		rowset: {
+			fields: [{name: 'color', type: 'color'}],
+			rows: [],
+		},
+		val_col: 'color',
+	}, ...opt)
+}
+
+component('x-color-dropdown', function(e) {
+	list_dropdown.construct(e)
+	e.picker = colors_listbox()
+	e.val_col = 'color'
+	e.display_col = 'color'
+
+	e.set_colors = function(t) {
+		e.picker.rowset.rows = t.map(s => [s])
+		e.picker.reset()
+	}
+	e.prop('colors', {store: 'var', default: default_colors})
+	e.set_colors(default_colors)
+
+})
