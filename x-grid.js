@@ -1466,15 +1466,15 @@ component('x-grid', function(e) {
 		e.widget_editing = false
 	}
 
-	function editing_field_keypress(c, shift, ctrl, alt, ev) {
-		if (c == '\n' && ctrl) {
-			let hcell = e.header.at[editing_field.index]
-			let title_div = hcell.title_div
-			title_div.insert_at_caret('<br>')
-			return false
-		}
-		if (c == 'Enter' && !ctrl) {
-			e.widget_editing = false
+	function editing_field_keydown(key, shift, ctrl, alt, ev) {
+		if (key == 'Enter') {
+			if (ctrl) {
+				let hcell = e.header.at[editing_field.index]
+				let title_div = hcell.title_div
+				title_div.insert_at_caret('<br>')
+			} else {
+				e.widget_editing = false
+			}
 			return false
 		}
 	}
@@ -1490,7 +1490,7 @@ component('x-grid', function(e) {
 		title_div.on('pointerdown', prevent_bubbling, on)
 		title_div.on('pointerup'  , prevent_bubbling, on)
 		title_div.on('click'      , prevent_bubbling, on)
-		title_div.on('keypress'   , editing_field_keypress, on)
+		title_div.on('keydown'    , editing_field_keydown, on)
 		if (!on) {
 			let s = title_div.textContent
 			e.set_col_attr(editing_field.name, 'text', s, 'lang')
