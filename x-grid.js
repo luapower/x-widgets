@@ -287,7 +287,7 @@ component('x-grid', function(e) {
 	function set_col_w(fi, w) { // hgrid
 		let field = e.fields[fi]
 		w = clamp(w, field.min_w, field.max_w)
-		e.set_col_attr(field.name, 'w', w, e.widget_editing ? 'base' : 'user')
+		e.set_col_attr(field.name, 'w', w, 'user')
 		e.header.at[fi]._w = w
 	}
 
@@ -1303,7 +1303,6 @@ component('x-grid', function(e) {
 			mm_row_move = null
 			mu_row_move = null
 			update_cells_moving = null
-			hit.state = null
 
 			e.class('row-moving', false)
 			if (e.editor)
@@ -1343,9 +1342,9 @@ component('x-grid', function(e) {
 	}
 
 	function ht_col_drag(mx, my, hit, ev) {
-		let hcell_table = ev.target.closest('.x-grid-header-cell-table')
-		if (!hcell_table) return
-		hit.fi = hcell_table.parent.index
+		let hcell = ev.target.closest('.x-grid-header-cell')
+		if (!hcell) return
+		hit.fi = hcell.index
 		hit.mx = mx
 		hit.my = my
 		return true
@@ -1414,13 +1413,96 @@ component('x-grid', function(e) {
 
 	e.prop('empty_text', {store: 'var', slot: 'lang'})
 
+	// widget editing protocol ------------------------------------------------
+
+	let editing_field
+
+	e.hit_test_widget_editing = function(ev, mx, my) {
+		if (!hit.state)
+			pointermove(ev, mx, my)
+		return hit.state == 'col_drag'
+	}
+
+	e.set_widget_editing = function(on) {
+		set_editing_field(on)
+	}
+
+	e.on('pointerdown', function(ev, mx, my) {
+		if (!e.widget_editing)
+			return
+		if (!hit.state)
+			pointermove(ev, mx, my)
+
+		if (hit.state != 'col_drag' || !ev.ctrlKey) {
+			unselect_all_widgets()
+			return false
+		}
+
+		// editable_widget mixin's `pointerdown` handler must have ran before
+		// this handler and must have called unselect_all_widgets().
+		assert(!editing_field)
+
+		editing_field = e.fields[hit.fi]
+		set_editing_field(true)
+
+		// for convenience: select-all text if clicking near it but not on it.
+		let hcell = e.header.at[editing_field.index]
+		let title_div = hcell.title_div
+		if (ev.target != title_div && hcell.contains(ev.target)) {
+			title_div.focus()
+			title_div.select_all()
+			return false
+		}
+
+		// don't prevent default to let the caret land under the mouse.
+		ev.stopPropagation()
+	})
+
+	function prevent_bubbling(ev) {
+		ev.stopPropagation()
+	}
+
+	function exit_widget_editing() {
+		e.widget_editing = false
+	}
+
+	function editing_field_keypress(c, shift, ctrl, alt, ev) {
+		if (c == '\n' && ctrl) {
+			let hcell = e.header.at[editing_field.index]
+			let title_div = hcell.title_div
+			title_div.insert_at_caret('<br>')
+			return false
+		}
+		if (c == 'Enter' && !ctrl) {
+			e.widget_editing = false
+			return false
+		}
+	}
+
+	function set_editing_field(on) {
+		if (!editing_field)
+			return
+		let hcell = e.header.at[editing_field.index]
+		let title_div = hcell.title_div
+		hcell.class('editing', on)
+		title_div.contenteditable = on
+		title_div.on('blur'       , exit_widget_editing, on)
+		title_div.on('pointerdown', prevent_bubbling, on)
+		title_div.on('pointerup'  , prevent_bubbling, on)
+		title_div.on('click'      , prevent_bubbling, on)
+		title_div.on('keypress'   , editing_field_keypress, on)
+		if (!on) {
+			let s = title_div.textContent
+			e.set_col_attr(editing_field.name, 'text', s, 'lang')
+			editing_field = null
+		}
+	}
+
 	// mouse bindings ---------------------------------------------------------
 
 	let hit = {}
 
 	function pointermove(ev, mx, my) {
-		if (e.widget_editing)
-			return
 		if (hit.state == 'header_resizing') {
 			mm_header_resize(mx, my, hit)
 		} else if (hit.state == 'col_resizing') {
@@ -1444,7 +1526,11 @@ component('x-grid', function(e) {
 			hit.state = null
 			e.class('col-resize', false)
 			if (!e.disabled) {
-				if (ht_header_resize(mx, my, hit)) {
+				if (e.widget_editing) {
+					if (ht_col_drag(mx, my, hit, ev)) {
+						hit.state = 'col_drag'
+					}
+				} else if (ht_header_resize(mx, my, hit)) {
 					hit.state = 'header_resize'
 					e.class('col-resize', true)
 				} else if (ht_col_resize(mx, my, hit)) {
@@ -1458,22 +1544,6 @@ component('x-grid', function(e) {
 			}
 			if (hit.state)
 				return false
-		}
-	}
-
-	let editing_field, editing_div
-
-	e.set_widget_editing = function(v) {
-		if (editing_field) {
-			let cell = e.header.at[editing_field.index]
-			cell.class('editing', v)
-			editing_div.contenteditable = v
-			editing_div.focus()
-			if (!v) {
-				e.set_col_attr(editing_field.name, 'text', editing_div.textContent, 'lang')
-				editing_field = null
-				editing_div = null
-			}
 		}
 	}
 
@@ -1496,19 +1566,8 @@ component('x-grid', function(e) {
 			e.class('col-resizing')
 			create_resize_guides()
 		} else if (hit.state == 'col_drag') {
-			if (ev.ctrlKey) {
-				editing_field = e.fields[hit.fi]
-				let cell = e.header.at[editing_field.index]
-				editing_div = cell.$('.x-grid-header-title-td')[0]
-				e.widget_editing = true
-				return
-			}
 			hit.state = 'col_dragging'
 		} else if (hit.state == 'row_drag') {
-			if (e.widget_editing && !ev.shiftKey && !ev.ctrlKey) {
-				e.widget_editing = false
-				return false
-			}
 			hit.state = 'row_dragging'
 			if (!md_row_drag(ev, mx, my, ev.shiftKey, ev.ctrlKey))
 				return false
@@ -1541,32 +1600,29 @@ component('x-grid', function(e) {
 	}
 
 	function pointerup(ev) {
+
 		if (e.widget_editing)
 			return
 		if (!hit.state)
 			return
+
 		if (hit.state == 'header_resizing') {
 			e.class('col-resizing', false)
 			e.update({sizes: true})
 		} else if (hit.state == 'col_resizing') {
 			mu_col_resize()
 		} else if (hit.state == 'col_dragging') {
-			if (ev.ctrlKey) {
-				//e.widget_editing = true
-				//e.header.at[hit.fi].$('.x-grid-header-title-td')[0].contenteditable = true
-				//e.select_all_cells(hit.fi)
-			} else {
-				if (e.can_sort_rows)
-					e.set_order_by_dir(e.fields[hit.fi], 'toggle', ev.shiftKey)
-				else if (e.focus_cell_on_click_header)
-					e.focus_cell(true, hit.fi)
-			}
+			if (e.can_sort_rows)
+				e.set_order_by_dir(e.fields[hit.fi], 'toggle', ev.shiftKey)
+			else if (e.focus_cell_on_click_header)
+				e.focus_cell(true, hit.fi)
 		} else if (hit.state == 'col_moving') {
 			mu_col_move()
 		} else if (hit.state == 'row_moving') {
 			mu_row_move()
 		} else if (hit.state == 'row_dragging')
 			e.pick_val()
+
 		hit.state = null
 		return false
 	}
@@ -1594,20 +1650,8 @@ component('x-grid', function(e) {
 
 	e.on('keydown', function(key, shift, ctrl) {
 
-		if (e.widget_editing) {
-			if (key == 'Enter') {
-				if (ctrl) {
-					if (editing_div)
-						editing_div.insert_at_caret('<br>')
-					return
-				} else {
-					e.widget_editing = false
-					return false
-				}
-			}
+		if (e.widget_editing)
 			return
-		}
-
 		if (e.disabled)
 			return
 
@@ -1804,8 +1848,6 @@ component('x-grid', function(e) {
 			return false
 		}
 	})
-
-	e.property('ctrl_click_used', () => e.can_select_multiple)
 
 	// column context menu ----------------------------------------------------
 

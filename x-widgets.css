@@ -1775,11 +1775,6 @@
 	font-weight: bold;
 }
 
-.x-grid-header-cell.editing {
-	outline: 2px dotted red;
-	outline-offset: -2px;
-}
-
 .x-grid-header-sort-icon-td {
 	padding: 0;
 	width: 0;
@@ -1899,8 +1894,8 @@
 .x-grid.col-resize {
 	cursor: ew-resize;
 }
-.x-grid:not(.col-resize) .x-grid-header-cell-table {
-	cursor: pointer;           /* required: resizing area is underneath */
+.x-grid:not(.col-resize) .x-grid-header-cell {
+	cursor: pointer; /* required: resizing area is underneath */
 }
 
 .x-grid-resize-guides {
@@ -1982,6 +1977,18 @@
 
 .x-grid-filter-dropdown-grid {
 	font-size: 90%;
+}
+
+/* grid widget editing */
+
+.x-widget.x-grid.widget-editing {
+	outline: none;
+}
+
+.x-grid-header-cell.editing.editing {
+	outline: 2px dotted red;
+	outline-offset: -2px;
+	cursor: initial;
 }
 
 /* ------------------------------------------------------------------------ */

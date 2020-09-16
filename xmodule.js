@@ -285,6 +285,7 @@ component('x-prop-layers-inspector', function(e) {
 
 	grid.construct(e)
 	e.cell_h = 22
+	e.stay_in_edit_mode = false
 
 	e.can_select_widget = false
 
@@ -349,6 +350,7 @@ component('x-prop-layers-inspector', function(e) {
 			let layer_obj = xmodule.prop_layers[layer]
 			xmodule.set_prop_layer(slot, active && visible ? layer : null)
 			e.reset_cell_val(row, e.all_fields.active, active)
+			e.reset_cell_val(row, e.all_fields.selected, e.cell_val(row, e.all_fields.selected))
 			if (slot == sel_slot)
 				active = false
 		}

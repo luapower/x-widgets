@@ -42,7 +42,6 @@ component('x-listbox', function(e) {
 		function rows_added(rows, ri1) {
 			for (let row of rows) {
 				let item = e.create_item()
-				item.ctrl_click_used = true
 				setup_item(item)
 				row[0] = item
 			}
@@ -332,8 +331,6 @@ component('x-listbox', function(e) {
 		if (e.display_field)
 			e.quicksearch(c, e.display_field)
 	})
-
-	e.property('ctrl_click_used', () => e.can_select_multiple)
 
 })
 

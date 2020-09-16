@@ -719,7 +719,9 @@ function selectable_widget(e) {
 		p.remove_child_widget(e)
 	}
 
-	e.on('pointerdown', function(ev) {
+	e.hit_test_widget_editing = return_true
+
+	e.on('pointerdown', function(ev, mx, my) {
 
 		if (!e.can_select_widget)
 			return
@@ -727,7 +729,10 @@ function selectable_widget(e) {
 		if (e.widget_selected)
 			return false // prevent dropdown from opening.
 
-		if (ev.ctrlKey && (!e.ctrl_click_used || ev.shiftKey)) {
+		if (!ev.ctrlKey)
+			return
+
+		if (ev.shiftKey) {
 
 			// prevent accidentally clicking on the parent of any of the selected widgets.
 			for (let e1 of selected_widgets) {
@@ -739,20 +744,24 @@ function selectable_widget(e) {
 				}
 			}
 
-			if (!ev.shiftKey || (e.ctrl_click_used && e.can_edit_widget && !e.widget_editing && !selected_widgets.size)) {
-				if (e.can_edit_widget) {
-					unselect_all_widgets()
+			e.widget_editing = false
+			e.widget_selected = true
+
+		} else {
+
+			unselect_all_widgets()
+
+			if (e.can_edit_widget && !selected_widgets.size)
+				if (e.hit_test_widget_editing(ev, mx, my)) {
 					e.widget_editing = true
-					ev.stopPropagation()
 					// don't prevent default to let the caret land under the mouse.
-				} else
-					return false
-			} else {
-				e.widget_editing = false
-				e.widget_selected = true
-				return false
-			}
+					ev.stopPropagation()
+					return
+				}
+
 		}
+
+		return false
 
 	})
 
@@ -787,6 +796,7 @@ function editable_widget(e) {
 				return
 			e.class('widget-editing', v)
 			if (v) {
+				assert(editing_widget != e)
 				if (editing_widget)
 					editing_widget.widget_editing = false
 				assert(editing_widget == null)
@@ -1521,15 +1531,15 @@ component('x-button', function(e) {
 	}
 
 	e.on('pointerdown', function(ev) {
-		if (e.widget_editing && ev.target != e.text_div) // prevent :active state
-			return this.capture_pointer(ev, null, function() {
-				e.text_div.focus()
-				e.text_div.select_all()
-			})
+		if (e.widget_editing && ev.target != e.text_div) {
+			e.text_div.focus()
+			e.text_div.select_all()
+			return this.capture_pointer(ev)
+		}
 	})
 
 	function prevent_bubbling(ev) {
-		if (e.widget_editing && !ev.ctrlKey)
+		if (e.widget_editing)
 			ev.stopPropagation()
 	}
 	e.text_div.on('pointerdown', prevent_bubbling)
