@@ -2799,12 +2799,12 @@ global_val_nav = function() {
 	}
 
 	all_field_types.to_text = function(v) {
-		return v != null ? String(v) : ''
+		return v != null ? String(v).replace('\n', '\\n') : ''
 	}
 
 	all_field_types.from_text = function(s) {
 		s = s.trim()
-		return s !== '' ? s : null
+		return s !== '' ? s.replace('\\n', '\n') : null
 	}
 
 	field_types = {}
