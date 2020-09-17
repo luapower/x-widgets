@@ -3069,7 +3069,7 @@ widget_items_widget = function(e) {
 			items.add(component.create(v, cur_item))
 		}
 
-		// remove gids that are missing in the new set.
+		// remove items that are missing from the new set.
 		for (let item of cur_items)
 			if (!items.has(item))
 				e.do_remove_item(item)

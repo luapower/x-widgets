@@ -194,7 +194,7 @@ function xmodule(e) {
 			}
 		} else {
 			t[k] = v
-			print('prop-val-set', te.gid, k, v, slot, layer_obj.name)
+			print('prop-val-set', te.gid, k, slot, layer_obj.name, v)
 		}
 	}
 
@@ -356,6 +356,7 @@ component('x-prop-layers-inspector', function(e) {
 
 		e.begin_update()
 		let active = true
+
 		for (let row of e.rows) {
 			let slot    = e.cell_val(row, e.all_fields.slot)
 			let layer   = e.cell_val(row, e.all_fields.layer)
@@ -410,6 +411,13 @@ component('x-prop-layers-inspector', function(e) {
 		xmodule.prop_layer_slot_colors[slot] = val
 		document.fire('selected_widgets_changed')
 	})
+
+	e.reset_to_default = function() {
+		for (let row of e.rows)
+			e.reset_cell_val(row, e.all_fields.visible, true)
+		if (e.state_tooltip)
+			e.state_tooltip.close()
+	}
 
 })
 
@@ -797,7 +805,14 @@ function widget_tree_toolbox(tb_opt, wt_opt) {
 	return tb
 }
 
+prop_layers_tb = null
+props_tb = null
+tree_tb = null
+
 function show_toolboxes(on) {
+
+	if (on == 'toggle')
+		on = !prop_layers_tb
 
 	if (on !== false) {
 		prop_layers_tb = prop_layers_toolbox({
@@ -815,12 +830,15 @@ function show_toolboxes(on) {
 		})
 		tree_tb.show(true, true)
 	} else {
+
+		prop_layers_tb.inspector.reset_to_default()
+
 		prop_layers_tb.remove()
-		prop_tb.remove()
+		props_tb.remove()
 		tree_tb.remove()
 
 		prop_layers_tb = null
-		prop_tb = null
+		props_tb = null
 		tree_tb = null
 	}
 }

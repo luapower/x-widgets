@@ -93,7 +93,13 @@ xmodule.set_prop_layer('base', 'base'      , null, null, false)
 root_widget = component.create('lma1')
 document.body.add(root_widget)
 
-show_toolboxes()
+document.on('keydown', function(key) {
+	if (key == 'F9')
+		show_toolboxes('toggle')
+})
+
+//show_toolboxes()
+
 
 </script>
 </body>
