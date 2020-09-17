@@ -101,8 +101,13 @@ function xmodule(e) {
 				if (old_layer_obj)
 					old_layer_obj.slot = null
 			}
-			let layer_obj = {slot: slot, name: layer, widgets: layer_widgets}
-			e.prop_layers[layer] = layer_obj
+			let layer_obj = e.prop_layers[layer]
+			if (!layer_obj) {
+				layer_obj = {slot: slot, name: layer, widgets: layer_widgets}
+				e.prop_layers[layer] = layer_obj
+			} else {
+				layer_obj.layer_widgets = layer_widgets
+			}
 			if (slot)
 				e.prop_layer_slots[slot] = layer_obj
 
@@ -165,7 +170,10 @@ function xmodule(e) {
 
 	e.set_prop_val = function(te, slot, k, v) {
 		let layer_obj = e.prop_layer_slots[slot]
-		if (!layer_obj) return
+		if (!layer_obj) {
+			print('prop-val-lost', te.gid, k, v, slot)
+			return
+		}
 
 		v = te.serialize_prop(k, v)
 
@@ -179,10 +187,15 @@ function xmodule(e) {
 			layer_obj.widgets[te.gid] = t
 		}
 		layer_obj.modified = true
-		if (v === undefined)
-			delete t[k] // can't store `undefined`.
-		else
+		if (v === undefined) {
+			if (t[k] !== undefined) {
+				print('prop-val-deleted', te.gid, k, slot, layer_obj.name)
+				delete t[k] // can't store `undefined`.
+			}
+		} else {
 			t[k] = v
+			print('prop-val-set', te.gid, k, v, slot, layer_obj.name)
+		}
 	}
 
 	e.save = function() {

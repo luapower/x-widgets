@@ -469,6 +469,7 @@ function component_prop_system(e) {
 
 	e.set_prop = function(k, v) { e[k] = v } // stub
 	e.get_prop = k => e[k] // stub
+	e.get_prop_attrs = k => e.props[k] // stub
 
 	// prop serialization.
 
@@ -1186,6 +1187,10 @@ function val_widget(e, enabled_without_nav) {
 		e.update()
 	}
 
+	function label_changed() {
+		e.update()
+	}
+
 	function cell_state_changed(prop, val, ev) {
 		if (e.updating)
 			return
@@ -1208,6 +1213,7 @@ function val_widget(e, enabled_without_nav) {
 		nav.on('focused_row_cell_state_changed_for_'+col, cell_state_changed, on)
 		nav.on('display_vals_changed_for_'+col, val_changed, on)
 		nav.on('loaded', loaded, on)
+		nav.on('label_changed_for_'+col, label_changed, on)
 	}
 
 	let field_opt

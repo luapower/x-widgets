@@ -311,33 +311,78 @@ function nav_widget(e) {
 
 	// fields array matching 1:1 to row contents ------------------------------
 
-	function init_tree_field() {
-		let rs = e.rowset || empty
-		e.tree_field = or(e.all_fields[or(e.tree_col, e.name_col)], or(rs.tree_col, rs.name_col))
+	function convert_field_attr(field, f, k, v) {
+		if (k == 'text') {
+			if (v == null)
+				v = auto_display_name(f.name)
+		} else if (k == 'w') {
+			v = clamp(v, field.min_w, field.max_w)
+		}
+		return v
 	}
 
-	function init_field(f, i) {
-		let custom_attrs = e.col_attrs && e.col_attrs[f.name]
-		let type = f.type || (custom_attrs && custom_attrs.type)
-		let type_attrs = type && (e.field_types && e.field_types[type] || field_types[type])
-		let field = update({}, all_field_types, e.all_field_types, type_attrs, f, custom_attrs)
+	function init_field_attrs(field, f) {
+
+		let pt = e.prop_col_attrs && e.prop_col_attrs[field.name]
+		let ct = e.col_attrs && e.col_attrs[field.name]
+		let type = f.type || (ct && ct.type)
+		let tt = field_types[type]
+		let att = all_field_types
+
+		update(field, att, tt, f, ct, pt)
+
+		field.w    = convert_field_attr(field, f, 'w'   , field.w)
+		field.text = convert_field_attr(field, f, 'text', field.text)
+	}
+
+	function set_field_attr(field, k, v) {
+
+		let f = e.rowset.fields[field.val_index]
+
+		if (v === undefined) {
+
+			let ct = e.col_attrs && e.col_attrs[field.name]
+			let type = f.type || (ct && ct.type)
+			let tt = type && field_types[type]
+			let att = all_field_types
+
+			v = ct && ct[k]
+			v = strict_or(v, f[k])
+			v = strict_or(v, tt && tt[k])
+			v = strict_or(v, att[k])
+		}
+
+		v = convert_field_attr(field, f, k, v)
+
+		if (field[k] === v)
+			return
+		field[k] = v
+
+		if (k == 'text')
+			e.fire('label_changed_for_'+field.name)
+	}
+
+	function init_field(f, fi) {
 
 		// disambiguate field name.
-		let name = (f.name || 'f'+i).replace(/ /g, '_')
+		let name = (f.name || 'f'+fi).replace(/ /g, '_')
 		if (name in e.all_fields) {
 			let suffix = 2
 			while (name+suffix in e.all_fields)
 				suffix++
 			name += suffix
 		}
-		field.name = name
 
-		field.val_index = i
+		let field = {}
+
+		field.name = name
+		field.val_index = fi
 		field.nav = e
 
-		field.w = clamp(field.w, field.min_w, field.max_w)
-		if (field.text == null)
-			field.text = auto_display_name(f.name)
+		init_field_attrs(field, f)
+
+		e.all_fields[fi] = field
+		e.all_fields[name] = field
 
 		return field
 	}
@@ -345,8 +390,6 @@ function nav_widget(e) {
 	e.add_field = function(f) {
 		let fn = e.all_fields.length
 		let field = init_field(f, fn)
-		e.all_fields[fn] = field
-		e.all_fields[field.name] = field
 		for (let ri = 0; ri < e.all_rows.length; ri++) {
 			let row = e.all_rows[ri]
 			// append a val slot to the row.
@@ -400,12 +443,8 @@ function nav_widget(e) {
 		if (e.attached) {
 
 			if (rs.fields)
-				for (let i = 0; i < rs.fields.length; i++) {
-					let f = rs.fields[i]
-					let field = init_field(f, i)
-					e.all_fields[i] = field
-					e.all_fields[field.name] = field
-				}
+				for (let fi = 0; fi < rs.fields.length; fi++)
+					init_field(rs.fields[fi], fi)
 
 			let pk = rs.pk
 			if (e.attached && pk) {
@@ -432,6 +471,13 @@ function nav_widget(e) {
 		init_fields()
 
 		init_all_rows()
+	}
+
+	// `*_col` properties
+
+	function init_tree_field() {
+		let rs = e.rowset || empty
+		e.tree_field = or(e.all_fields[or(e.tree_col, e.name_col)], or(rs.tree_col, rs.name_col))
 	}
 
 	e.set_val_col = function(v) {
@@ -462,38 +508,57 @@ function nav_widget(e) {
 	}
 	e.prop('quicksearch_col', {store: 'var'})
 
-	e.set_col_attr = function(col, k, v, slot) {
-		let field = e.all_fields[col]
-		let v0 = field ? field[k] : (e.col_attrs ? e.col_attrs[k] : undefined)
-		if (v === v0)
-			return
-		attr(attr(e, 'col_attrs'), col)[k] = v
-		if (field)
-			field[k] = v
-		document.fire('prop_changed', e, 'col.'+col+'.'+k, v, v0, slot)
-		e.update({fields: true})
+	// field attributes exposed as `col.*` props
+
+	function get_col_attr(col, k) {
+		return e.prop_col_attrs && e.prop_col_attrs[col] ? e.prop_col_attrs[col][k] : undefined
 	}
 
-	e.get_col_attr = function(col, k) {
+	function set_col_attr(prop, col, k, v) {
+		let v0 = get_col_attr(col, k)
+		if (v === v0)
+			return
+		attr(attr(e, 'prop_col_attrs'), col)[k] = v
+
 		let field = e.all_fields[col]
-		return field ? field[k] : (e.col_attrs ? e.col_attrs[k] : all_field_types[k])
+		if (field) {
+			set_field_attr(field, k, v)
+			e.update({fields: true})
+		}
+
+		let attrs = field_prop_attrs[k]
+		let slot = attrs && attrs.slot
+		document.fire('prop_changed', e, prop, v, v0, slot)
+	}
+
+	function parse_col_prop_name(prop) {
+		let [_, col, k] = prop.match(/^col\.([^\.]+)\.(.*)/)
+		return [col, k]
 	}
 
 	e.get_prop = function(prop) {
 		if (prop.starts('col.')) {
-			let [_, col, k] = prop.match(/^col\.([^\.]+)\.(.*)/)
-			return e.get_col_attr(col, k)
+			let [col, k] = parse_col_prop_name(prop)
+			return get_col_attr(col, k)
 		}
 		return e[prop]
 	}
 
-	e.set_prop = function(prop, v, slot) {
+	e.set_prop = function(prop, v) {
 		if (prop.starts('col.')) {
-			let [_, col, k] = prop.match(/^col\.([^\.]+)\.(.*)/)
-			e.set_col_attr(col, k, v, slot)
+			let [col, k] = parse_col_prop_name(prop)
+			set_col_attr(prop, col, k, v)
 			return
 		}
 		e[prop] = v
+	}
+
+	e.get_prop_attrs = function(prop) {
+		if (prop.starts('col.')) {
+			let [col, k] = parse_col_prop_name(prop)
+			return field_prop_attrs[k]
+		}
+		return e.props[prop]
 	}
 
 	// all_fields subset in custom order --------------------------------------
@@ -2767,10 +2832,14 @@ global_val_nav = function() {
 }
 
 // ---------------------------------------------------------------------------
-// field types
+// field types and prop attrs
 // ---------------------------------------------------------------------------
 
 {
+	field_prop_attrs = {
+		text : {slot: 'lang'},
+		w    : {slot: 'user'},
+	}
 
 	all_field_types = {
 		w: 100,

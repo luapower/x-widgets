@@ -287,7 +287,7 @@ component('x-grid', function(e) {
 	function set_col_w(fi, w) { // hgrid
 		let field = e.fields[fi]
 		w = clamp(w, field.min_w, field.max_w)
-		e.set_col_attr(field.name, 'w', w, 'user')
+		e.set_prop(`col.${field.name}.w`, w)
 		e.header.at[fi]._w = w
 	}
 
@@ -1493,7 +1493,7 @@ component('x-grid', function(e) {
 		title_div.on('keydown'    , editing_field_keydown, on)
 		if (!on) {
 			let s = title_div.textContent
-			e.set_col_attr(editing_field.name, 'text', s, 'lang')
+			e.set_prop(`col.${editing_field.name}.text`, s)
 			editing_field = null
 		}
 	}
