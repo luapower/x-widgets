@@ -1415,16 +1415,19 @@ component('x-grid', function(e) {
 
 	// widget editing protocol ------------------------------------------------
 
-	let editing_field
+	let editing_field, editing_sql
 
 	e.hit_test_widget_editing = function(ev, mx, my) {
 		if (!hit.state)
 			pointermove(ev, mx, my)
-		return hit.state == 'col_drag'
+		return hit.state == 'col_drag' || hit.state == 'row_drag' || !hit.state
 	}
 
 	e.set_widget_editing = function(on) {
-		set_editing_field(on)
+		if (editing_field)
+			set_editing_field(on)
+		else if (editing_sql)
+			set_editing_sql(on)
 	}
 
 	e.on('pointerdown', function(ev, mx, my) {
@@ -1433,7 +1436,7 @@ component('x-grid', function(e) {
 		if (!hit.state)
 			pointermove(ev, mx, my)
 
-		if (hit.state != 'col_drag' || !ev.ctrlKey) {
+		if (!(hit.state == 'col_drag' || hit.state == 'row_drag' || !hit.state) || !ev.ctrlKey) {
 			unselect_all_widgets()
 			return false
 		}
@@ -1441,17 +1444,28 @@ component('x-grid', function(e) {
 		// editable_widget mixin's `pointerdown` handler must have ran before
 		// this handler and must have called unselect_all_widgets().
 		assert(!editing_field)
+		assert(!editing_sql)
 
-		editing_field = e.fields[hit.fi]
-		set_editing_field(true)
+		if (hit.state == 'col_drag') {
 
-		// for convenience: select-all text if clicking near it but not on it.
-		let hcell = e.header.at[editing_field.index]
-		let title_div = hcell.title_div
-		if (ev.target != title_div && hcell.contains(ev.target)) {
-			title_div.focus()
-			title_div.select_all()
-			return false
+			editing_field = e.fields[hit.fi]
+			if (editing_field) {
+				set_editing_field(true)
+				// for convenience: select-all text if clicking near it but not on it.
+				let hcell = e.header.at[editing_field.index]
+				let title_div = hcell.title_div
+				if (ev.target != title_div && hcell.contains(ev.target)) {
+					title_div.focus()
+					title_div.select_all()
+					return false
+				}
+			}
+
+		} else {
+
+			editing_sql = true
+			set_editing_sql(true)
+
 		}
 
 		// don't prevent default to let the caret land under the mouse.
@@ -1459,6 +1473,11 @@ component('x-grid', function(e) {
 	})
 
 	function prevent_bubbling(ev) {
+		ev.stopPropagation()
+	}
+
+	function prevent_bubbling2(ev) {
+		print(ev.type)
 		ev.stopPropagation()
 	}
 
@@ -1480,21 +1499,51 @@ component('x-grid', function(e) {
 	}
 
 	function set_editing_field(on) {
-		if (!editing_field)
-			return
 		let hcell = e.header.at[editing_field.index]
 		let title_div = hcell.title_div
 		hcell.class('editing', on)
 		title_div.contenteditable = on
-		title_div.on('blur'       , exit_widget_editing, on)
-		title_div.on('pointerdown', prevent_bubbling, on)
-		title_div.on('pointerup'  , prevent_bubbling, on)
-		title_div.on('click'      , prevent_bubbling, on)
-		title_div.on('keydown'    , editing_field_keydown, on)
+		title_div.on('blur'        , exit_widget_editing, on)
+		title_div.on('raw:pointerdown' , prevent_bubbling, on)
+		title_div.on('raw:pointerup'   , prevent_bubbling, on)
+		title_div.on('raw:click'       , prevent_bubbling, on)
+		title_div.on('raw:contextmenu' , prevent_bubbling, on)
+		title_div.on('keydown'         , editing_field_keydown, on)
 		if (!on) {
 			let s = title_div.textContent
 			e.set_prop(`col.${editing_field.name}.text`, s)
 			editing_field = null
+		}
+	}
+
+	let sql_editor, sql_editor_ct
+
+	function set_editing_sql(on) {
+		e.cells_view.class('editing', on)
+		if (on) {
+			sql_editor_ct = div({class: 'x-grid-sql-editor'})
+			sql_editor = ace.edit(sql_editor_ct, {
+				mode: 'ace/mode/mysql',
+				highlightActiveLine: false,
+				printMargin: false,
+				displayIndentGuides: false,
+				tabSize: 3,
+				enableBasicAutocompletion: true,
+			})
+			sql_editor_ct.on('blur'        , exit_widget_editing, on)
+			sql_editor_ct.on('raw:pointerdown' , prevent_bubbling, on)
+			sql_editor_ct.on('raw:pointerup'   , prevent_bubbling, on)
+			sql_editor_ct.on('raw:click'       , prevent_bubbling, on)
+			sql_editor_ct.on('raw:contextmenu' , prevent_bubbling, on)
+			sql_editor.getSession().setValue(e.sql_select || '')
+			e.cells_view.add(sql_editor_ct)
+		} else {
+			e.sql_select = sql_editor.getSession().getValue()
+			sql_editor.destroy()
+			sql_editor = null
+			sql_editor_ct.remove()
+			sql_editor_ct = null
+			editing_sql = null
 		}
 	}
 
@@ -1713,7 +1762,7 @@ component('x-grid', function(e) {
 		if (key == up_arrow) {
 			if (e.is_last_row_focused()) {
 				let row = e.focused_row
-				if (row.is_new && !row.cells_modified) {
+				if (row.is_new && !row.modified) {
 					if (e.remove_selected_rows({refocus: true}))
 						return false
 				}
@@ -2010,7 +2059,7 @@ component('x-grid', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// grid_dropdown
+// grid dropdown
 // ---------------------------------------------------------------------------
 
 component('x-grid-dropdown', function(e) {
@@ -2021,6 +2070,7 @@ component('x-grid-dropdown', function(e) {
 	init = e.init
 	e.init = function() {
 		e.picker = grid(update({
+			gid: e.gid && e.gid + '.dropdown',
 			rowset: e.rowset,
 			rowset_name: e.rowset_name,
 			nav: e.nav,
@@ -2040,5 +2090,16 @@ component('x-grid-dropdown', function(e) {
 	e.on('opened', function() {
 		e.picker.scroll_to_focused_cell()
 	})
+
+})
+
+// ---------------------------------------------------------------------------
+// grid profile
+// ---------------------------------------------------------------------------
+
+component('x-grid-profile', function(e) {
+
+	pagelist_item_widget(e)
+
 
 })

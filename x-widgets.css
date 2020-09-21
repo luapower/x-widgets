@@ -243,12 +243,8 @@
 	outline-offset: -2px;
 }
 
-.x-cssgrid > .x-button {
-	align-items: center;
-}
-
 .x-button-icon {
-	margin-right: .25em;
+	margin-right: .5em;
 }
 
 .x-button-text {
@@ -308,10 +304,10 @@
 
 	/* positioning */
 	position: absolute;
-	z-index: 2;
+	z-index: 2; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
 
 	/* sizing */
-	max-width: 400px;                 /* max. width of the message bubble before wrapping */
+	max-width: 400px;  /* max. width of the message bubble before wrapping */
 
 	/* animation */
 	opacity: 0;
@@ -871,7 +867,7 @@
 	border: 1px solid #999;
 	background-color: var(--x-input-focused-bg-color);
 	box-shadow: 2px 2px 2px #000000aa;
-	z-index: 2;
+	z-index: 3; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
 }
 
 /* input & dropdown common styles ----------------------------------------- */
@@ -1087,7 +1083,7 @@
 	background: white;         /* required: submenus overlap their parent */
 	padding: .25em 0;
 
-	z-index: 1;
+	z-index: 4; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
 
 	/* styling */
 	font-size: 12px;
@@ -1166,6 +1162,16 @@
 	min-height: 0;  /* don't let the content make the pagelist itself overflow */
 }
 
+.x-pagelist[tabs-side=left ],
+.x-pagelist[tabs-side=right] {
+	flex-flow: row;
+}
+
+.x-pagelist[tabs-side=left ] > .x-pagelist-header,
+.x-pagelist[tabs-side=right] > .x-pagelist-header {
+	flex-flow: column;
+}
+
 .x-pagelist-header {
 
 	/* layouting */
@@ -1178,8 +1184,10 @@
 
 }
 
-.x-pagelist[tabs-side=top]    > .x-pagelist-header { border-bottom-width: 1px; }
-.x-pagelist[tabs-side=bottom] > .x-pagelist-header { border-top-width   : 1px; }
+.x-pagelist[tabs-side=top   ] > .x-pagelist-header { border-bottom-width : 1px; }
+.x-pagelist[tabs-side=bottom] > .x-pagelist-header { border-top-width    : 1px; }
+.x-pagelist[tabs-side=left  ] > .x-pagelist-header { border-right-width  : 1px; }
+.x-pagelist[tabs-side=right ] > .x-pagelist-header { border-left-width   : 1px; }
 
 .x-pagelist-content {
 	flex: 1;
@@ -1187,8 +1195,11 @@
 	min-height: 0;  /* don't let the content make the pagelist itself overflow */
 }
 
-.x-pagelist[tabs-side=top]    > .x-pagelist-header { order: 0; }
-.x-pagelist[tabs-side=bottom] > .x-pagelist-header { order: 1; }
+.x-pagelist[tabs-side=top   ],
+.x-pagelist[tabs-side=left  ] > .x-pagelist-header { order: 0; }
+
+.x-pagelist[tabs-side=bottom],
+.x-pagelist[tabs-side=right ] > .x-pagelist-header { order: 1; }
 
 .x-pagelist-tab {
 	position: relative;
@@ -1231,18 +1242,17 @@
 
 .x-pagelist-selection-bar {
 	position: absolute;
-	bottom: 0;
-	height: 2px;
 	background-color: #66f;
 	z-index: 2;
 }
 
-.x-pagelist[tabs-side=top]    > .x-pagelist-header > .x-pagelist-selection-bar { bottom: 0; }
-.x-pagelist[tabs-side=bottom] > .x-pagelist-header > .x-pagelist-selection-bar { top   : 0; }
+.x-pagelist[tabs-side=top   ] > .x-pagelist-header > .x-pagelist-selection-bar { bottom : 0; height: 2px; }
+.x-pagelist[tabs-side=bottom] > .x-pagelist-header > .x-pagelist-selection-bar { top    : 0; height: 2px; }
+.x-pagelist[tabs-side=left  ] > .x-pagelist-header > .x-pagelist-selection-bar { right  : 0; width: 2px; }
+.x-pagelist[tabs-side=right ] > .x-pagelist-header > .x-pagelist-selection-bar { left   : 0; width: 2px; }
 
 .x-pagelist:not(.moving) > .x-pagelist-header > .x-pagelist-selection-bar {
-	transition: width .15s;
-	transition: left .15s;
+	transition: width .15s, height .15s, left .15s, top .15s;
 }
 
 .x-pagelist-tab.moving {
@@ -1251,7 +1261,7 @@
 }
 
 .x-pagelist.moving > .x-pagelist-header > .x-pagelist-tab:not(.moving) {
-	transition: left .1s;
+	transition: left .1s, top: .1s;
 }
 
 .x-pagelist-tab.selected {
@@ -1560,7 +1570,7 @@
 	background: white;
 	overflow: auto;                /* make resize work */
 	resize: both;
-	z-index: 2;
+	z-index: 1; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
 	opacity: .2;
 	transition: opacity .5s;
 }
@@ -1595,6 +1605,7 @@
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	pointer-events: none;
 }
 
 .x-toolbox-button {
@@ -1991,6 +2002,10 @@
 	cursor: initial;
 }
 
+.x-grid-cells-view.editing > .x-grid-cells-ct {
+	display: none;
+}
+
 /* ------------------------------------------------------------------------ */
 /* editable richtext                                                        */
 /* ------------------------------------------------------------------------ */
@@ -2050,6 +2065,18 @@
 	display: flex;
 	align-items: center;
 	justify-content: start;
+}
+
+/* icons listbox ---------------------------------------------------------- */
+
+.x-icons-listbox-item {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.x-icons-listbox-icon {
+	min-width : 20px;
 }
 
 /* xmodule stuff ---------------------------------------------------------- */

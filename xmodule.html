@@ -10,6 +10,7 @@ html, body {
 	margin: 0;
 	height: 100%;
 	display: grid;
+	overflow: hidden;
 }
 
 * { box-sizing: border-box; }
@@ -32,10 +33,10 @@ html, body {
 }
 </style>
 
-<script src="ace.js" integrity="sha256-+svOVB1WmhKhTy7N21gWvtyXn91qF0r52P2hIArRRug="></script>
-
 <link rel="stylesheet" type="text/css" href="fontawesome.css">
 <link rel="stylesheet" type="text/css" href="x-widgets.css">
+
+<script src="ace/ace.js"></script>
 
 <script src="glue.js"></script>
 <script src="divs.js"></script>
@@ -69,27 +70,36 @@ document.body.on('keydown', function(key, shift, ctrl) {
 	}
 })
 
+let prop_layers = {
+	base        : 'base-lma',
+	base_server : 'base-server-lma',
+	base_dba    : 'base-dba',
+	lang2       : 'lang-it',
+	lang        : 'lang-ro',
+	user        : 'user-admin',
+	dev         : 'user-cosmin',
+}
+
+let prop_layer_slots = {}
+
+for (let k in prop_layers)
+	prop_layer_slots[k] = null
+
 xmodule = xmodule({
-	prop_layer_slots: {
-		base: null,
-		lang: null,
-		lang2: null,
-		app: null,
-		user: null,
-	},
+	prop_layer_slots: prop_layer_slots,
 	prop_layer_slot_colors: {
+		base_server: '#000',
 		lang: '#f66',
 		lang2: '#f69',
 		user: '#99f',
+		dev: '#33a',
 	},
 })
 
+for (let slot of keys(prop_layers).reverse())
+	xmodule.set_prop_layer(slot, prop_layers[slot], null, null, false)
+
 root_widget = null
-
-xmodule.set_prop_layer('user', 'user-admin', null, null, false)
-xmodule.set_prop_layer('lang', 'lang-ro'   , null, null, false)
-xmodule.set_prop_layer('base', 'base'      , null, null, false)
-
 root_widget = component.create('lma1')
 document.body.add(root_widget)
 

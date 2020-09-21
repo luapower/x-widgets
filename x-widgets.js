@@ -118,7 +118,11 @@ function component(tag, cons) {
 	function init(e, opt) {
 		if (e.initialized)
 			return
-		component_prop_system(e)
+		let gid = opt.gid
+		let prop_vals
+		if (gid && !e.type) // put prop_vals on top of instance options.
+			update(opt, xmodule.prop_vals(gid))
+		component_prop_system(e, opt)
 		component_deferred_updating(e)
 		e.iswidget = true
 		e.type = type
@@ -126,15 +130,14 @@ function component(tag, cons) {
 		e.init = noop
 		cons(e)
 		e.initialized = false
-		if (opt.__pv0) {
-			delete opt.__pv0
-			xmodule.init_widget(e, opt)
-		} else {
-			e.begin_update()
-			for (let k in opt)
-				e.set_prop(k, opt[k])
-			e.end_update()
-		}
+		e.begin_update()
+		e.xmodule_updating_props = true
+		for (let k in opt)
+			e.set_prop(k, opt[k])
+		e.xmodule_updating_props = false
+		if (gid)
+			xmodule.init_widget(e)
+		e.end_update()
 		e.initialized = true
 		e.init()
 	}
@@ -156,17 +159,16 @@ function component(tag, cons) {
 
 component.types = {} // {type -> create}
 
-component.create = function(t, e0) {
-	if (t instanceof HTMLElement)
-		return t
-	if (typeof t == 'string') { // t is a gid
-		if (e0 && e0.gid == t)
-			return e0  // already created (called as prop's `convert()`).
-		t = xmodule.prop_vals(t)
-		t.__pv0 = true
+component.create = function(e, e0) {
+	if (e instanceof HTMLElement)
+		return e
+	if (typeof e == 'string') { // e is a gid
+		if (e0 && e0.gid == e)
+			return e0  // already created (called from a prop's `convert()`).
+		e = xmodule.prop_vals(e) // to get e.type
 	}
-	let create = component.types[t.type]
-	return create && create(t)
+	let create = component.types[e.type]
+	return create && create(e)
 }
 
 /* ---------------------------------------------------------------------------
@@ -263,7 +265,7 @@ global_widget_resolver = memoize(function(type) {
 	}
 })
 
-function component_prop_system(e) {
+function component_prop_system(e, opt) {
 
 	/* TODO: use this or scrape it
 	e.bind_ext = function(te, ev, f) {
@@ -276,10 +278,11 @@ function component_prop_system(e) {
 	}
 
 	e.props = {}
+	let iprops = opt.props
 
 	e.prop = function(prop, opt) {
 		opt = opt || {}
-		update(opt, e.props[prop]) // class overrides
+		update(opt, e.props[prop], iprops && iprops[prop]) // class & instance overrides
 		let getter = 'get_'+prop
 		let setter = 'set_'+prop
 		let type = opt.type
@@ -1475,12 +1478,12 @@ component('x-button', function(e) {
 
 	e.set_icon = function(v) {
 		if (typeof v == 'string')
-			e.icon_div.attr('class', 'x-button-icon '+v)
+			e.icon_div.attr('class', 'x-button-icon fa '+v)
 		else
 			e.icon_div.set(v)
 		e.icon_div.show(!!v)
 	}
-	e.prop('icon', {store: 'var'})
+	e.prop('icon', {store: 'var', type: 'icon'})
 
 	e.prop('primary', {store: 'attr', type: 'bool', default: false})
 
@@ -2166,6 +2169,8 @@ component('x-dropdown', function(e) {
 
 	e.props.mode.enum_values = ['default', 'inline', 'wrap', 'fixed']
 
+	e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
+
 	e.val_div = span({class: 'x-input-value x-dropdown-value'})
 	e.button = span({class: 'x-dropdown-button fa fa-caret-down'})
 	e.inner_label_div = div({class: 'x-input-inner-label x-dropdown-inner-label'})
@@ -2232,7 +2237,6 @@ component('x-dropdown', function(e) {
 			document.on('rightpointerdown', document_pointerdown, on)
 			document.on('stopped_event'   , document_stopped_event, on)
 			e.picker.bind(true)
-			//e.update()
 		} else {
 			e.close()
 			e.picker.bind(false)
@@ -2274,6 +2278,9 @@ component('x-dropdown', function(e) {
 			if (open) {
 				e.cancel_val = e.input_val
 				e.picker.min_w = e.rect().w
+				if (e.picker_w)
+					e.picker.auto_w = false
+				e.picker.w = e.picker_w
 				e.picker.show(!hidden)
 				e.picker.popup(e, 'bottom', e.align)
 				e.fire('opened')
@@ -2339,7 +2346,7 @@ component('x-dropdown', function(e) {
 			}
 		}
 		if (key == 'Delete') {
-			e.val = null
+			e.set_val(null, {input: e})
 			return false
 		}
 	})
@@ -2970,23 +2977,24 @@ component('x-widget-placeholder', function(e) {
 		['LD', 'list_dropdown'],
 		['GD', 'grid_dropdown'],
 		['DD', 'date_dropdown', true],
+		['CD', 'color_dropdown', true],
+		['ID', 'icon_dropdown', true],
 		['B', 'button'],
 	]
 
 	function replace_with_widget() {
-		let widget = component.create({type: this.type})
-		xmodule.assign_gid(widget, function() {
-			xmodule.set_prop(widget, 'base', 'type', this.type)
-		})
+		let te = component.create({type: this.type})
+		xmodule.assign_gid(te)
+		document.fire('prop_changed', te, 'type', this.type, undefined, null)
 		let pe = e.parent_widget
 		if (pe)
-			pe.replace_widget(e, widget)
+			pe.replace_child_widget(e, te)
 		else {
 			let pe = e.parent
-			pe.replace(e, widget)
-			root_widget = widget
+			pe.replace(e, te)
+			root_widget = te
 		}
-		widget.focus()
+		te.focus()
 	}
 
 	function create_widget_buttons(widgets) {
@@ -2998,6 +3006,7 @@ component('x-widget-placeholder', function(e) {
 			if (sep)
 				btn.style['margin-right'] = '.5em'
 			e.add(btn)
+			btn.can_select_widget = false
 			btn.type = type
 			btn.action = replace_with_widget
 		}
@@ -3098,6 +3107,14 @@ widget_items_widget = function(e) {
 	}
 
 	// parent-of selectable widget protocol.
+	e.replace_child_widget = function(old_item, new_item) {
+		let i = e.items.indexOf(old_item)
+		let items = [...e.items]
+		items[i] = new_item
+		e.items = items
+	}
+
+	// parent-of selectable widget protocol.
 	e.remove_child_widget = function(item) {
 		e.items = [...e.items].remove_value(item)
 	}
@@ -3125,7 +3142,12 @@ component('x-pagelist', function(e) {
 	e.align_y = 'stretch'
 	e.classes = 'x-widget x-pagelist'
 
-	e.prop('tabs_side', {store: 'attr', type: 'enum', enum_values: ['top', 'bottom'], default: 'top'})
+	e.set_header_width = function(v) {
+		e.header.w = v
+	}
+
+	e.prop('tabs_side', {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right'], default: 'top'})
+	e.prop('header_width', {store: 'var', type: 'number'})
 
 	e.selection_bar = div({class: 'x-pagelist-selection-bar'})
 	e.add_button = div({class: 'x-pagelist-tab x-pagelist-add-button fa fa-plus', tabindex: 0})
@@ -3180,13 +3202,12 @@ component('x-pagelist', function(e) {
 	}
 
 	// widget placeholder protocol.
-	e.replace_widget = function(old_widget, new_widget) {
-		for (let item of e.items)
-			if (item == old_widget) {
-				old_widget.parent.replace(old_widget, new_widget)
-				new_widget._tab = item._tab
-				break
-			}
+	let inh_replace_child_widget = e.replace_child_widget
+	e.replace_child_widget = function(old_widget, new_widget) {
+		let i = e.items.indexOf(old_widget)
+		let tab = e.items[i]._tab
+		new_widget._tab = tab
+		inh_replace_child_widget(old_widget, new_widget)
 	}
 
 	e.init = function() {
@@ -3207,8 +3228,18 @@ component('x-pagelist', function(e) {
 
 	function update_selection_bar() {
 		let tab = e.selected_tab
-		e.selection_bar.x = tab ? tab.ox : 0
-		e.selection_bar.w = tab ? tab.rect().w   : 0
+		let horiz = e.tabs_side == 'top' || e.tabs_side == 'bottom'
+		if (horiz) {
+			e.selection_bar.x = tab ? tab.ox : 0
+			e.selection_bar.w = tab ? tab.rect().w : 0
+			e.selection_bar.y = null
+			e.selection_bar.h = null
+		} else {
+			e.selection_bar.y = tab ? tab.oy : 0
+			e.selection_bar.h = tab ? tab.rect().h : 0
+			e.selection_bar.x = null
+			e.selection_bar.w = null
+		}
 		e.selection_bar.show(!!tab)
 	}
 
@@ -3630,14 +3661,13 @@ component('x-split', function(e) {
 
 	// parent-of selectable widget protocol.
 	e.remove_child_widget = function(item) {
-		e.replace_widget(item, widget_placeholder())
+		e.replace_child_widget(item, widget_placeholder())
 	}
 
 	// widget placeholder protocol.
-	e.replace_widget = function(old_item, new_item) {
+	e.replace_child_widget = function(old_item, new_item) {
 		let ITEM = e.item1 == old_item && 'item1' || e.item2 == old_item && 'item2' || null
 		e[ITEM] = new_item
-		old_item.parent.replace(old_item, new_item)
 		e.update()
 	}
 
@@ -3865,6 +3895,7 @@ component('x-toolbox', function(e) {
 
 	focusable_widget(e)
 
+	e.istoolbox = true
 	e.classes = 'x-widget x-toolbox pinned'
 
 	e.pin_button = div({class: 'x-toolbox-button x-toolbox-pin-button fa fa-thumbtack'})
@@ -3887,12 +3918,34 @@ component('x-toolbox', function(e) {
 	e.prop('popup_side'  , {store: 'var', type: 'enum', enum_values: ['inner-right', 'inner-left', 'inner-top', 'inner-bottom', 'left', 'right', 'top', 'bottom'], default: 'inner-right'})
 	e.prop('popup_align' , {store: 'var', type: 'enum', enum_values: ['start', 'center', 'end'], default: 'start'})
 	e.prop('popup_widget', {store: 'var', type: 'widget'})
-	e.prop('popup_x'     , {store: 'var', type: 'number', default: 0})
-	e.prop('popup_y'     , {store: 'var', type: 'number', default: 0})
-	e.prop('pinned'      , {store: 'attr', type: 'bool', default: true})
+	e.prop('popup_x'     , {store: 'var', type: 'number', default: false, slot: 'user'})
+	e.prop('popup_y'     , {store: 'var', type: 'number', default: false, slot: 'user'})
+	e.prop('pinned'      , {store: 'attr', type: 'bool', default: true, slot: 'user'})
 
-	e.do_update = function() {
-		e.popup(e.popup_widget || document.body, e.popup_side, e.popup_align, e.popup_x, e.popup_y)
+	function is_top() {
+		let last = document.body.last
+		while (last) {
+			if (e == last)
+				return true
+			else if (last.istoolbox)
+				return false
+			last = last.prev
+		}
+	}
+
+	e.do_update = function(opt) {
+		e.popup(e.popup_widget || document.body, e.popup_side, e.popup_align, e.popup_x || 0, e.popup_y || 0)
+
+		// move to top if the update was user-triggered not layout-triggered.
+		if (opt && opt.input == e && !is_top()) {
+			let sx = e.scrollLeft
+			let sy = e.scrollTop
+			bind_events = false
+			document.body.add(e)
+			bind_events = true
+			e.scroll(sx, sy)
+		}
+
 	}
 
 	e.init = function() {
@@ -3900,6 +3953,7 @@ component('x-toolbox', function(e) {
 		e.content_div.set(e.content)
 		e.add(e.content_div)
 		e.hide()
+		e.update()
 		e.bind(true)
 	}
 
@@ -3910,23 +3964,31 @@ component('x-toolbox', function(e) {
 
 	e.titlebar.on('pointerdown', function(ev, mx, my) {
 		e.focus()
+		e.update({input: e})
 
 		let first_focusable = e.content_div.focusables()[0]
 		if (first_focusable)
 			first_focusable.focus()
 
-		if (ev.target == e.xbutton || ev.target == e.pin_button)
+		if (ev.target != e.titlebar)
 			return
 
 		let r = e.rect()
-		let drag_x = mx - e.popup_x
-		let drag_y = my - e.popup_y
+		let drag_x = mx - r.x
+		let drag_y = my - r.y
 
 		return this.capture_pointer(ev, function(ev, mx, my) {
 			let r = this.rect()
 			e.begin_update()
-			e.popup_x = clamp(0, mx - drag_x, window.innerWidth  - r.w)
-			e.popup_y = clamp(0, my - drag_y, window.innerHeight - r.h)
+			e.update({input: e})
+			let px = clamp(0, mx - drag_x, window.innerWidth  - r.w)
+			let py = clamp(0, my - drag_y, window.innerHeight - r.h)
+			if (e.popup_side == 'inner-right')
+				px = window.innerWidth  - px - r.w
+			else if (e.popup_side == 'inner-bottom')
+				py = window.innerHeight - py - r.h
+			e.popup_x = px
+			e.popup_y = py
 			e.end_update()
 		})
 	})

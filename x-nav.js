@@ -72,13 +72,13 @@ rowset row attributes:
 	row[i]             : current cell value (always valid).
 	row.focusable      : row can be focused (true).
 	row.editable       : allow modifying (true).
-	row.input_val[i]   : currently set cell value, whether valid or not.
-	row.error[i]       : error message if cell is invalid.
-	row.row_error      : error message if row is invalid.
-	row.modified[i]    : value was modified, change not on server yet.
-	row.old_value[i]   : initial value before modifying.
+	row[input_val_i]   : currently set cell value, whether valid or not.
+	row[error_i]       : error message if cell is invalid.
+	row.error          : error message if row is invalid.
+	row[modified_i]    : value was modified, change not on server yet.
+	row[old_value_i]   : initial value before modifying.
 	row.is_new         : new row, not added on server yet.
-	row.cells_modified : one or more row cells were modified.
+	row.modified       : one or more row cells were modified.
 	row.removed        : removed row, not removed on server yet.
 
 fields:
@@ -240,6 +240,21 @@ picker:
 		e.dropdown_display_val()
 		e.pick_near_val()
 
+server-side properties:
+	publishes:
+		e.sql_select_all
+		e.sql_select
+		e.sql_select_one
+		e.sql_select_one_update
+		e.sql_pk
+		e.sql_insert_fields
+		e.sql_update_fields
+		e.sql_where
+		e.sql_where_row
+		e.sql_where_row_update
+		e.sql_schema
+		e.sql_db
+
 field_types : {type -> {attr->val}}
 
 --------------------------------------------------------------------------- */
@@ -302,6 +317,38 @@ function nav_widget(e) {
 			init_all()
 		}
 	})
+
+	function update_static_rowset() {
+		let rs = e.static_rowset
+		e.rowset = rs ? update({}, rs) : null
+		e.reset()
+	}
+
+	function static_rows() {
+		if (!e.static_rows)
+			return
+		let rows = []
+		for (vals of e.static_rows) {
+			let row = []
+			for (let fi = 0; fi < e.all_fields.length; fi++)
+				row[fi] = strict_or(vals[e.all_fields[fi].name], null)
+			rows.push(row)
+		}
+		return rows
+	}
+
+	function reset_with_static_rows() {
+		if (!e.rowset)
+			return
+		e.rowset.rows = static_rows()
+		e.reset()
+	}
+
+	e.set_static_rowset = update_static_rowset
+	e.prop('static_rowset', {store: 'var'})
+
+	e.set_static_rows = update_static_rowset
+	e.prop('static_rows', {store: 'var'})
 
 	e.set_rowset_name = function(v) {
 		e.rowset_url = v ? 'rowset.json/' + v : null
@@ -686,7 +733,7 @@ function nav_widget(e) {
 	function init_all_rows() {
 		e.do_update_load_fail(false)
 		// TODO: unbind_filter_rowsets()
-		e.all_rows = e.attached && e.rowset && e.rowset.rows || []
+		e.all_rows = e.attached && e.rowset && (e.static_rows && static_rows() || e.rowset.rows) || []
 		init_tree()
 		init_rows()
 	}
@@ -1393,8 +1440,8 @@ function nav_widget(e) {
 				s.push('}')
 				// modified rows come after
 				s.push('{')
-				s.push('  let v1 = !r1.cells_modified')
-				s.push('  let v2 = !r2.cells_modified')
+				s.push('  let v1 = !r1.modified')
+				s.push('  let v2 = !r2.modified')
 				s.push('  if (v1 < v2) return -1')
 				s.push('  if (v1 > v2) return  1')
 				s.push('}')
@@ -1773,7 +1820,7 @@ function nav_widget(e) {
 				e.set_cell_state(row, field, 'old_val', cur_val)
 			let cell_modified_changed = e.set_cell_state(row, field, 'modified', modified, false)
 			let row_modified_changed = modified && (!(ev && ev.row_not_modified))
-				&& e.set_row_state(row, 'cells_modified', true, false)
+				&& e.set_row_state(row, 'modified', true, false)
 
 			each_lookup('val_changed', row, field, val)
 
@@ -1782,6 +1829,7 @@ function nav_widget(e) {
 				cell_state_changed(row, field, 'modified', modified, ev)
 			if (row_modified_changed)
 				row_state_changed(row, 'modified', true, ev)
+
 			row_changed(row)
 		}
 
@@ -1868,6 +1916,8 @@ function nav_widget(e) {
 	}
 
 	e.enter_edit = function(editor_state, focus) {
+		if (!e.focused_field)
+			return
 		if (e.editor)
 			return true
 		if (!e.can_focus_cell(e.focused_row, e.focused_field, true))
@@ -1943,7 +1993,7 @@ function nav_widget(e) {
 			return true
 		if (!e.exit_edit(force))
 			return false
-		if (row.cells_modified) {
+		if (row.modified) {
 			let err = e.validate_row(row)
 			e.set_row_error(row, err)
 		}
@@ -2445,7 +2495,7 @@ function nav_widget(e) {
 
 	function row_changed(row) {
 		if (row.is_new)
-			if (!row.row_modified)
+			if (!row.modified)
 				return
 			else assert(!row.removed)
 		e.changed_rows = e.changed_rows || new Set()
@@ -2470,7 +2520,7 @@ function nav_widget(e) {
 			for (let field of e.pk_fields)
 				t.values[field.name] = e.cell_old_val(row, field)
 			rows.push(t)
-		} else if (row.cells_modified) {
+		} else if (row.modified) {
 			let t = {type: 'update', values: {}}
 			let found
 			for (let field of e.all_fields) {
@@ -2512,7 +2562,7 @@ function nav_widget(e) {
 			} else {
 				if (!row_failed) {
 					let not_new = e.set_row_state(row, 'is_new', false, false)
-					let not_modified = e.set_row_state(row, 'cells_modified', false, false)
+					let not_modified = e.set_row_state(row, 'modified', false, false)
 					if (not_new)
 						row_state_changed(row, 'is_new', false)
 					if (not_modified)
@@ -2543,9 +2593,9 @@ function nav_widget(e) {
 			e.set_row_state(row, 'save_request', req)
 	}
 
-	function save_to_url(url, row) {
+	function save_to_server(row) {
 		let req = ajax({
-			url: url,
+			url: e.rowset_url,
 			upload: pack_changes(row),
 			changed_rows: Array.from(e.changed_rows),
 			success: save_success,
@@ -2564,7 +2614,9 @@ function nav_widget(e) {
 		if (!e.changed_rows)
 			return
 		if (e.rowset_url)
-			save_to_url(e.rowset_url, row)
+			save_to_server(row)
+		else if (e.static_rowset)
+			save_to_static_rowset(row)
 	}
 
 	function save_slow(show) {
@@ -2603,10 +2655,28 @@ function nav_widget(e) {
 				//
 			else if (row.removed)
 				//
-			else if (row.cells_modified)
+			else if (row.modified)
 				//
 			*/
 		e.changed_rows = null
+	}
+
+	function save_to_static_rowset() {
+		e.changed_rows = null
+		let rows = []
+		for (let row of e.all_rows) {
+			let vals = {}
+			for (let fi = 0; fi < e.all_fields.length; fi++) {
+				let v = row[fi]
+				if (v != null)
+					vals[e.all_fields[fi].name] = v
+				rows.push(vals)
+			}
+		}
+		let set_static_rows = e.set_static_rows
+		e.set_static_rows = noop
+		e.static_rows = rows
+		e.set_static_rows = set_static_rows
 	}
 
 	// responding to notifications from the server ----------------------------
@@ -2793,6 +2863,30 @@ function nav_widget(e) {
 	e.prop('display_col', {store: 'var'})
 
 	init_all()
+
+	// server-side props ------------------------------------------------------
+
+	e.set_sql_db = function(v) {
+		if (!e.gid)
+			return
+		e.rowset_url = v ? 'sql_rowset.json/' + e.gid : null
+		e.reload()
+	}
+
+	e.set_sql_select = e.reload
+
+	e.prop('sql_select_all'        , {store: 'var', slot: 'base_server'})
+	e.prop('sql_select'            , {store: 'var', slot: 'base_server'})
+	e.prop('sql_select_one'        , {store: 'var', slot: 'base_server'})
+	e.prop('sql_select_one_update' , {store: 'var', slot: 'base_server'})
+	e.prop('sql_pk'                , {store: 'var', slot: 'base_server'})
+	e.prop('sql_insert_fields'     , {store: 'var', slot: 'base_server'})
+	e.prop('sql_update_fields'     , {store: 'var', slot: 'base_server'})
+	e.prop('sql_where'             , {store: 'var', slot: 'base_server'})
+	e.prop('sql_where_row'         , {store: 'var', slot: 'base_server'})
+	e.prop('sql_where_row_update'  , {store: 'var', slot: 'base_server'})
+	e.prop('sql_schema'            , {store: 'var', slot: 'base_server'})
+	e.prop('sql_db'                , {store: 'var', slot: 'base_server'})
 
 }
 
@@ -3017,6 +3111,22 @@ global_val_nav = function() {
 
 	color.editor = function(...opt) {
 		return color_dropdown(update({
+			nolabel: true,
+			mode: 'fixed',
+		}, ...opt))
+	}
+
+	// icons
+
+	let icon = {}
+	field_types.icon = icon
+
+	icon.format = function(icon) {
+		return div({class: 'fa '+icon})
+	}
+
+	icon.editor = function(...opt) {
+		return icon_dropdown(update({
 			nolabel: true,
 			mode: 'fixed',
 		}, ...opt))

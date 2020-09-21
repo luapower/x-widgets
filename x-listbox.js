@@ -709,3 +709,54 @@ component('x-color-dropdown', function(e) {
 	e.set_colors(default_colors)
 
 })
+
+// ---------------------------------------------------------------------------
+// icons listbox & dropdown
+// ---------------------------------------------------------------------------
+
+default_icons = memoize(function() {
+	let t = []
+	for (let ss of document.styleSheets) {
+		if (ss.href && ss.href.ends('/fontawesome.css')) {
+			for (let rule of ss.rules) {
+				let s = rule.selectorText
+				if (s && s.ends('::before')) {
+					let [_, cls] = s.match(/^\.([^\:]+)/)
+					t.push(cls)
+				}
+			}
+			break
+		}
+	}
+	return t
+})
+
+function icons_listbox(...opt) {
+	return listbox({
+		rowset: {
+			fields: [{name: 'icon'}],
+			rows: [],
+		},
+		val_col: 'icon',
+		row_display_val: function(row) {
+			let s = row[0].replace(/^fa\-/, '')
+			return div({class: 'x-icons-listbox-item'},
+				div({class: 'x-icons-listbox-icon fa fa-'+s}), s)
+		}
+	}, ...opt)
+}
+
+component('x-icon-dropdown', function(e) {
+	list_dropdown.construct(e)
+	e.picker = icons_listbox()
+	e.val_col = 'icon'
+	e.display_col = 'icon'
+
+	e.set_icons = function(t) {
+		e.picker.rowset.rows = t.map(s => [s])
+		e.picker.reset()
+	}
+	e.prop('colors', {store: 'var', default: default_icons()})
+	e.set_icons(default_icons())
+})
+

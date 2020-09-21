@@ -7,7 +7,7 @@ Model-driven live-editable web components in pure JavaScript.
 (but note that it may be broken in some days until the first stable version
 is released.)
 
-Also see the [TODO list](https://github.com/luapower/x-widgets/blob/master/x-widgets-todo.txt)
+Also see the [TODO list](https://trello.com/b/xde8hdAZ/luapower)
 because this is still in active development.
 
 This library is designed for data-dense business-type apps with a focus
@@ -50,7 +50,8 @@ to tweak the layout of your application while it's running. Press Esc
 or click outside and it goes back to normal mode. The widgets include
 full built-in customizable (de)serialization to help with making those
 changes persistent. There's also an object inspector and a widget tree,
-the building blocks of a designer UI.
+which together make up a fully functional UI designer built right into
+your living app, so you can fully design your app while it's running.
 
 All navigation widgets as well as the single-value widgets are model-driven
 (we used to call these data-driven way back when wearing a t-shirt over

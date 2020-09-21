@@ -45,10 +45,28 @@ end
 action['xmodule_layer.json'] = function(layer)
 	layer = check(str_arg(layer))
 	assert(layer:find'^[%w_%-]+$')
-	local file = xmodule_file(_('xmodule-%s.json', layer))
+	local fn = _('xmodule-%s.json', layer)
+	local file = xmodule_file(fn)
+	if not fs.is(file) then
+		file = fn
+	end
+
 	if method'post' then
 		writefile(file, post())
 	else
 		return readfile(file) or '{}'
 	end
 end
+
+action['sql_rowset.json'] = function(gid, ...)
+	local layer = json(check(readfile(xmodule_file'xmodule-base-server-lma.json')))
+	local t = check(layer[gid])
+	local rs = {}
+	for k,v in pairs(t) do
+		if k:starts'sql_' then
+			rs[k:sub(5)] = v
+		end
+	end
+	return sql_rowset(rs):respond()
+end
+

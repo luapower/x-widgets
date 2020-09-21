@@ -21,7 +21,7 @@ function xmodule(e) {
 
 	document.on('widget_attached', function(te) {
 		e.widgets[te.gid] = te
-		e.update_widget(te)
+		update_widget(te)
 		document.fire('widget_tree_changed')
 	})
 
@@ -34,11 +34,14 @@ function xmodule(e) {
 		if (!te.gid) return
 		if (te.xmodule_updating_props) return
 		slot = e.selected_prop_slot || slot || 'base'
-		e.set_prop_val(te, slot, k, v)
+		if (slot == 'none')
+			return
+		set_prop_val(te, slot, k, v, v0)
 	})
 
 	e.prop_vals = function(gid) {
-		let t = {gid: gid, prop_layers_generation: generation}
+		let t = {}
+		let opt = {gid: gid, prop_layers_generation: generation, __pv: t}
 		for (let slot in e.prop_layer_slots) {
 			let layer_obj = e.prop_layer_slots[slot]
 			if (layer_obj) {
@@ -46,48 +49,104 @@ function xmodule(e) {
 				update(t, prop_vals)
 			}
 		}
-		return t
+		opt.type = t.type
+		delete t.type
+		return opt
 	}
 
-	e.init_widget = function(te, vals) {
+	e.init_widget = function(te) {
 		te.xmodule_updating_props = true
 		te.begin_update()
-		te.__pv0 = {}
-		for (let k in vals)
+		let pv = te.__pv // the props set via prop_vals().
+		te.__pv = null // don't need them after this.
+		te.__pv0 = {} // prop vals before overrides.
+		for (let k in pv)
 			te.__pv0[k] = te.get_prop(k)
-		for (let k in vals)
-			te.set_prop(k, vals[k])
+		for (let k in pv)
+			te.set_prop(k, pv[k])
 		te.end_update()
 		te.xmodule_updating_props = false
 	}
 
-	e.update_widget = function(te) {
+	function update_widget(te) {
 		if (te.prop_layers_generation == generation)
 			return
 		te.xmodule_updating_props = true
 		te.begin_update()
-		let vals = e.prop_vals(te.gid)
+		let pv = e.prop_vals(te.gid).__pv
 		let pv0 = attr(te, '__pv0') // initial vals of overriden props.
 		// restore prop vals that are not present in this override.
 		for (let prop in pv0)
-			if (!(prop in vals)) {
+			if (!(prop in pv)) {
 				te.set_prop(prop, pv0[prop])
 				delete pv0[prop]
 			}
-		// apply this override saving initial vals that were not saved before.
-		for (let prop in vals) {
+		// apply this override, saving current vals that were not saved before.
+		for (let prop in pv) {
 			if (!(prop in pv0))
 				pv0[prop] = te.get_prop(prop)
-			te.set_prop(prop, vals[prop])
+			te.set_prop(prop, pv[prop])
 		}
 		te.end_update()
 		te.xmodule_updating_props = false
 	}
 
+	function set_prop_val(te, slot, k, v, v0) {
+		let layer_obj = e.prop_layer_slots[slot]
+		if (!layer_obj) {
+			print('prop-val-lost', te.gid, k, v, slot)
+			return
+		}
+
+		v = te.serialize_prop(k, v)
+
+		let t = layer_obj.widgets[te.gid]
+
+		if (t && t[k] === v) // value already stored.
+			return
+
+		if (!t) {
+			t = {}
+			layer_obj.widgets[te.gid] = t
+		}
+		layer_obj.modified = true
+		let pv0 = attr(te, '__pv0')
+		if (v === undefined) { // `undefined` signals removal.
+			if (t[k] !== undefined) {
+				print('prop-val-deleted', te.gid, k, slot, layer_obj.name)
+				delete t[k]
+				delete pv0[k] // no need to keep this anymore.
+			}
+		} else {
+			if (!(k in pv0)) // save current val if it wasn't saved before.
+				pv0[k] = v0
+			t[k] = v
+			print('prop-val-set', te.gid, k, slot, layer_obj.name, v)
+		}
+	}
+
 	e.update_widgets = function(layer_widgets) {
 		for (let gid in e.widgets)
 			if (layer_widgets && layer_widgets[gid])
-				e.update_widget(e.widgets[gid])
+				update_widget(e.widgets[gid])
+	}
+
+	function add_prop_layer_slot(slot) {
+
+		// find a place for the slot.
+		let before_slot; {
+			let slots = keys(e.prop_layer_slots)
+			slots.push(slot)
+			slots.sort()
+			before_slot = slots[slots.indexOf(slot) - 1]
+		}
+		let slots = keys(e.prop_layer_slots)
+		slots.insert(slots.indexOf(before_slot) + 1, slot)
+
+		let t = {}
+		for (let slot of slots)
+			t[slot] = e.prop_layer_slots[slot]
+		e.prop_layer_slots = t
 	}
 
 	e.set_prop_layer = function(slot, layer, reload, on_loaded, async) {
@@ -97,6 +156,10 @@ function xmodule(e) {
 			generation++
 
 			if (slot) {
+
+				if (!(slot in e.prop_layer_slots))
+					add_prop_layer_slot(slot)
+
 				let old_layer_obj = e.prop_layer_slots[slot]
 				if (old_layer_obj)
 					old_layer_obj.slot = null
@@ -165,36 +228,6 @@ function xmodule(e) {
 		for (let layer in e.prop_layers) {
 			let layer_obj = e.prop_layers[layer]
 			e.set_prop_layer(layer_obj.slot, layer, true)
-		}
-	}
-
-	e.set_prop_val = function(te, slot, k, v) {
-		let layer_obj = e.prop_layer_slots[slot]
-		if (!layer_obj) {
-			print('prop-val-lost', te.gid, k, v, slot)
-			return
-		}
-
-		v = te.serialize_prop(k, v)
-
-		let t = layer_obj.widgets[te.gid]
-
-		if (t && t[k] === v) // value already stored.
-			return
-
-		if (!t) {
-			t = {}
-			layer_obj.widgets[te.gid] = t
-		}
-		layer_obj.modified = true
-		if (v === undefined) {
-			if (t[k] !== undefined) {
-				print('prop-val-deleted', te.gid, k, slot, layer_obj.name)
-				delete t[k] // can't store `undefined`.
-			}
-		} else {
-			t[k] = v
-			print('prop-val-set', te.gid, k, slot, layer_obj.name, v)
 		}
 	}
 
@@ -769,24 +802,38 @@ function globals_list() {
 // toolboxes
 // ---------------------------------------------------------------------------
 
+let dev_toolbox_props = {
+	text: {slot: 'none'},
+	popup_x: {slot: 'dev'},
+	popup_y: {slot: 'dev'},
+}
+
 function prop_layers_toolbox(tb_opt, insp_opt) {
-	let pg = prop_layers_inspector(insp_opt)
+	let pg = prop_layers_inspector(update({
+			gid: 'prop_layers_inspector',
+		}, insp_opt))
 	let tb = toolbox(update({
-		text: 'property layers',
-		content: pg,
-		can_select_widget: false,
-	}, tb_opt))
+			gid: 'prop_layers_toolbox',
+			text: 'property layers',
+			props: dev_toolbox_props,
+			content: pg,
+			can_select_widget: false,
+		}, tb_opt))
 	tb.inspector = pg
 	return tb
 }
 
-function properties_toolbox(tb_opt, insp_opt) {
-	let pg = prop_inspector(insp_opt)
+function props_toolbox(tb_opt, insp_opt) {
+	let pg = prop_inspector(update({
+			gid: 'prop_inspector',
+		}, insp_opt))
 	let tb = toolbox(update({
-		text: 'properties',
-		content: pg,
-		can_select_widget: false,
-	}, tb_opt))
+			gid: 'props_toolbox',
+			text: 'properties',
+			props: dev_toolbox_props,
+			content: pg,
+			can_select_widget: false,
+		}, tb_opt))
 	tb.inspector = pg
 	pg.on('prop_inspector_changed', function() {
 		tb.text = pg.title_text + ' properties'
@@ -795,12 +842,16 @@ function properties_toolbox(tb_opt, insp_opt) {
 }
 
 function widget_tree_toolbox(tb_opt, wt_opt) {
-	let wt = widget_tree(wt_opt)
+	let wt = widget_tree(update({
+			gid: 'widget_tree',
+		}, wt_opt))
 	let tb = toolbox(update({
-		text: 'widget tree',
-		content: wt,
-		can_select_widget: false,
-	}, tb_opt))
+			gid: 'widget_tree_toolbox',
+			text: 'widget tree',
+			props: dev_toolbox_props,
+			content: wt,
+			can_select_widget: false,
+		}, tb_opt))
 	tb.tree = wt
 	return tb
 }
@@ -820,7 +871,7 @@ function show_toolboxes(on) {
 		})
 		prop_layers_tb.show(true, true)
 
-		props_tb = properties_toolbox({
+		props_tb = props_toolbox({
 			popup_y: 230, w: 222, h: 397,
 		}, {header_w: 80})
 		props_tb.show(true, true)
