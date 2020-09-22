@@ -239,7 +239,7 @@ function xmodule(e) {
 
 	e.assign_gid = function(widget) {
 		ajax({
-			url: 'xmodule-next-gid',
+			url: 'xmodule-next-gid/'+assert(widget.module),
 			method: 'post',
 			// TODO: find another way since smart-ass condescending w3c people
 			// deprecated synchronous requests.

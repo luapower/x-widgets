@@ -348,7 +348,7 @@ function cssgrid_widget_editing(e) {
 	e.add_button.hide()
 	e.add(e.add_button)
 	e.add_button.on('click', function() {
-		let item = widget_placeholder()
+		let item = widget_placeholder({module: e.module})
 		item.pos_x = this.pos_x
 		item.pos_y = this.pos_y
 		e.items.push(item)

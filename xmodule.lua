@@ -25,41 +25,35 @@ end
 
 --xmodule --------------------------------------------------------------------
 
-function xmodule_file(file)
-	return path.combine(config'app_dir', file)
+function xmodule_file(layer)
+	return _('x-%s.json', layer)
 end
 
-local xmodule_ns = config('xmodule_ns', '')
-assert(not xmodule_ns:find(' ', 1, true))
-
-function action.xmodule_next_gid()
-	local fn = xmodule_file'xmodule-next-gid'
+function action.xmodule_next_gid(prefix)
+	local fn = _('xmodule-%s-next-gid', prefix)
 	local id = tonumber(assert(readfile(fn)))
 	if method'post' then
 		assert(writefile(fn, tostring(id + 1), nil, fn..'.tmp'))
 	end
 	setmime'txt'
-	out(xmodule_ns..id)
+	out(prefix..id)
 end
 
 action['xmodule_layer.json'] = function(layer)
 	layer = check(str_arg(layer))
 	assert(layer:find'^[%w_%-]+$')
-	local fn = _('xmodule-%s.json', layer)
-	local file = xmodule_file(fn)
-	if not fs.is(file) then
-		file = fn
-	end
+	local file = xmodule_file(layer)
 
 	if method'post' then
-		writefile(file, post())
+		writefile(file, post(), nil, file..'.tmp')
 	else
 		return readfile(file) or '{}'
 	end
 end
 
 action['sql_rowset.json'] = function(gid, ...)
-	local layer = json(check(readfile(xmodule_file'xmodule-base-server-lma.json')))
+	local prefix = check(gid:match'^[^_%d]+')
+	local layer = json(check(readfile(xmodule_file(_('%s-server', prefix)))))
 	local t = check(layer[gid])
 	local rs = {}
 	for k,v in pairs(t) do

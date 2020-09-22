@@ -2983,7 +2983,7 @@ component('x-widget-placeholder', function(e) {
 	]
 
 	function replace_with_widget() {
-		let te = component.create({type: this.type})
+		let te = component.create({type: this.type, module: e.module})
 		xmodule.assign_gid(te)
 		document.fire('prop_changed', te, 'type', this.type, undefined, null)
 		let pe = e.parent_widget
@@ -3523,8 +3523,8 @@ component('x-split', function(e) {
 
 	e.do_update = function() {
 
-		if (!e.item1) e.item1 = widget_placeholder()
-		if (!e.item2) e.item2 = widget_placeholder()
+		if (!e.item1) e.item1 = widget_placeholder({module: e.module})
+		if (!e.item2) e.item2 = widget_placeholder({module: e.module})
 
 		horiz = e.orientation == 'horizontal'
 		left = e.fixed_side == 'first'
@@ -3661,7 +3661,7 @@ component('x-split', function(e) {
 
 	// parent-of selectable widget protocol.
 	e.remove_child_widget = function(item) {
-		e.replace_child_widget(item, widget_placeholder())
+		e.replace_child_widget(item, widget_placeholder({module: e.module}))
 	}
 
 	// widget placeholder protocol.

@@ -318,12 +318,6 @@ function nav_widget(e) {
 		}
 	})
 
-	function update_static_rowset() {
-		let rs = e.static_rowset
-		e.rowset = rs ? update({}, rs) : null
-		e.reset()
-	}
-
 	function static_rows() {
 		if (!e.static_rows)
 			return
@@ -337,17 +331,16 @@ function nav_widget(e) {
 		return rows
 	}
 
-	function reset_with_static_rows() {
-		if (!e.rowset)
-			return
-		e.rowset.rows = static_rows()
+	e.set_static_rowset = function() {
+		let rs = e.static_rowset
+		e.rowset = rs ? update({}, rs) : null
 		e.reset()
 	}
-
-	e.set_static_rowset = update_static_rowset
 	e.prop('static_rowset', {store: 'var'})
 
-	e.set_static_rows = update_static_rowset
+	e.set_static_rows = function() {
+		e.reset()
+	}
 	e.prop('static_rows', {store: 'var'})
 
 	e.set_rowset_name = function(v) {
@@ -2670,8 +2663,8 @@ function nav_widget(e) {
 				let v = row[fi]
 				if (v != null)
 					vals[e.all_fields[fi].name] = v
-				rows.push(vals)
 			}
+			rows.push(vals)
 		}
 		let set_static_rows = e.set_static_rows
 		e.set_static_rows = noop
