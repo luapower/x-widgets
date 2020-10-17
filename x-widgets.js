@@ -1077,13 +1077,11 @@ publishes:
 function focusable_widget(e, fe) {
 	fe = fe || e
 
-	e.class('x-focusable')
-
 	let focusable = true
 	fe.attr('tabindex', 0)
 
 	e.set_tabindex = function(i) {
-		fe.attr('tabindex', focusable ? i : -1)
+		fe.attr('tabindex', focusable && !e.disabled ? i : -1)
 	}
 	e.prop('tabindex', {store: 'var', type: 'number', default: 0})
 
@@ -1093,6 +1091,15 @@ function focusable_widget(e, fe) {
 		focusable = v
 		e.set_tabindex(e.tabindex)
 	})
+
+	e.set_disabled = function(v) {
+		e.set_tabindex(e.tabindex)
+	}
+
+	e.prop('disabled', {store: 'attr', type: 'bool'})
+	if (e.disabled)
+		e.set_disabled(e.disabled)
+
 }
 
 /* ---------------------------------------------------------------------------
@@ -1235,6 +1242,14 @@ component('x-button', function(e) {
 
 	e.prop('primary', {store: 'attr', type: 'bool', default: false})
 
+	e.activate = function() {
+		if (e.disabled)
+			return
+		if (e.action)
+			e.action()
+		e.fire('activate')
+	}
+
 	e.on('keydown', function keydown(key, shift, ctrl) {
 		if (e.widget_editing) {
 			if (key == 'Enter') {
@@ -1261,7 +1276,7 @@ component('x-button', function(e) {
 			// could've been selected by pressing Enter which closed the menu
 			// and focused this button back and that Enter's keyup got here.
 			if (key == ' ' || key == 'Enter') {
-				e.click()
+				e.activate()
 				e.class('active', false)
 			}
 			return false
@@ -1273,9 +1288,7 @@ component('x-button', function(e) {
 			return
 		e.focus()
 		return this.capture_pointer(ev, null, function() {
-			if(e.action)
-				e.action()
-			e.fire('action')
+			e.activate()
 		})
 	})
 
@@ -1331,7 +1344,7 @@ component('x-menu', function(e) {
 		let sub_td    = H.td ({class: 'x-menu-sub-td'}, sub_div)
 		sub_div.style.visibility = item.items ? null : 'hidden'
 		let tr = H.tr({class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
-		tr.attr('disabled', item.enabled == false)
+		tr.class('disabled', item.enabled == false)
 		tr.item = item
 		tr.check_div = check_div
 		update_check(tr)
@@ -1852,13 +1865,20 @@ component('x-pagelist', function(e) {
 
 	function update_selection_bar() {
 		let tab = e.selected_tab
-		let horiz = e.tabs_side == 'top' || e.tabs_side == 'bottom'
-		let r = tab && tab.at[0].rect()
-		e.selection_bar.x = tab ? tab.ox + tab.at[0].ox + (horiz  ? 0 : r.w) : 0
-		e.selection_bar.y = tab ? tab.oy + tab.at[0].oy + (!horiz ? 0 : r.h) : 0
-		e.selection_bar.w = horiz  ? (r ? r.w : 0) : null
-		e.selection_bar.h = !horiz ? (r ? r.h : 0) : null
-		e.selection_bar.show(!!tab)
+		let b = e.selection_bar
+		let sl = e.tabs_side == 'left'
+		let sr = e.tabs_side == 'right'
+		let st = e.tabs_side == 'top'
+		let sb = e.tabs_side == 'bottom'
+		let horiz = st || sb
+		let hr = e.header.rect()
+		let cr = tab && tab.at[0].rect()
+		let br = b.rect()
+		b.x = cr ? (cr.x - hr.x) + (sr ? cr.w - br.w : 0) : 0
+		b.y = cr ? (cr.y - hr.y) + (st ? cr.h - br.h : 0) : 0
+		b.w =  horiz ? (cr ? cr.w : 0) : null
+		b.h = !horiz ? (cr ? cr.h : 0) : null
+		b.show(!!tab)
 	}
 
 	e.do_update = function() {
@@ -2411,12 +2431,12 @@ component('x-action-band', function(e) {
 				btn.style['text-transform'] = 'capitalize'
 			}
 			if (name == 'ok' || spec.has('ok')) {
-				btn.on('action', function() {
+				btn.on('activate', function() {
 					e.ok()
 				})
 			}
 			if (name == 'cancel' || spec.has('cancel')) {
-				btn.on('action', function() {
+				btn.on('activate', function() {
 					e.cancel()
 				})
 			}

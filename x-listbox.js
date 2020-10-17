@@ -5,6 +5,7 @@
 
 component('x-listbox', function(e) {
 
+	e.class('x-focusable-within')
 	e.class('x-stretched')
 
 	val_widget(e, true)

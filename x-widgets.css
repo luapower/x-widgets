@@ -22,6 +22,7 @@
 	--x-error-bg-color              : #a33;  /* bg color for invalid inputs and error bubbles */
 
 	--x-focus-shadow                : 0 0 0 1px #99f; /* to be used in place of focus outline */
+	--x-focus-shadow-button         : 0 0 1px 1px #99f; /* to be used in place of focus outline */
 	--x-item-unfocused-bg-color          : #999;
 	--x-item-focused-bg-color            : #ddd;
 	--x-item-unfocused-selected-bg-color : #333;
@@ -78,7 +79,7 @@
 	box-shadow: var(--x-focus-shadow);
 }
 
-.x-focusable:focus {
+.x-focusable-within:focus {
 	/* focusables show focus through their focused x-item */
 	outline: none;
 	box-shadow: none;
@@ -129,8 +130,8 @@
 
 [hidden] { display: none !important; }
 
-.x-item[disabled] { color: #999; }
-.x-item[disabled].focused { color: #ccc; }
+.x-item.disabled { color: #999; }
+.x-item.disabled.focused { color: #ccc; }
 .x-item.null      { color: #999; }
 .x-item.empty     { color: #999; }
 .x-item.removed   { text-decoration: line-through; }
@@ -152,12 +153,12 @@
 	background-color: var(--x-new-modified-bg-color);
 }
 
-.x-focusable .x-item:not(.focused).selected:not(.invalid) {
+.x-focusable-within .x-item:not(.focused).selected:not(.invalid) {
 	background-color: var(--x-unselected-bg-color);
 	color: var(--x-inverted-fg-color);
 }
 
-.x-focusable:focus-within .x-item.selected:not(.invalid) {
+.x-focusable-within:focus-within .x-item.selected:not(.invalid) {
 	background-color: var(--x-selected-bg-color);
 	color: var(--x-inverted-fg-color);
 }
@@ -166,29 +167,29 @@
 	background-color: var(--x-row-focused-bg-color);
 }
 
-.x-focusable .x-item.focused:not(.invalid) {
+.x-focusable-within .x-item.focused:not(.invalid) {
 	background-color: var(--x-item-unfocused-bg-color);
 }
 
-.x-focusable:focus-within .x-item.focused:not(.invalid):not([disabled]):active {
+.x-focusable-within:focus-within .x-item.focused:not(.invalid):not(.disabled):active {
 	background-color: var(--x-item-focused-selected-bg-color);
 	color: var(--x-inverted-fg-color);
 }
 
-.x-focusable:focus-within .x-item.focused:not(.invalid) {
+.x-focusable-within:focus-within .x-item.focused:not(.invalid) {
 	background-color: var(--x-item-focused-bg-color);
 }
 
-.x-focusable .x-item.focused.selected:not(.invalid) {
+.x-focusable-within .x-item.focused.selected:not(.invalid) {
 	background-color: var(--x-item-unfocused-selected-bg-color);
 	color: var(--x-inverted-fg-color);
 }
 
-.x-focusable:focus-within .x-item.focused.selected:not(.invalid) {
+.x-focusable-within:focus-within .x-item.focused.selected:not(.invalid) {
 	background-color: var(--x-item-focused-selected-bg-color);
 }
 
-.x-focusable:focus-within .x-item.focused.invalid {
+.x-focusable-within:focus-within .x-item.focused.invalid {
 	background-color: var(--x-item-focused-invalid-bg-color);
 }
 
@@ -264,11 +265,21 @@
 	border-radius: .25em;
 	font-weight: bold;
 	line-height: normal;
-	box-shadow: 1px 1px 3px #00000022;
 
 	/* behavior */
-	cursor: pointer;
 	user-select: none;
+}
+
+.x-button:not([disabled]) {
+	cursor: pointer;
+}
+
+.x-button:not(:focus) {
+	box-shadow: 1px 1px 2px #00000022;
+}
+
+.x-button:focus {
+	box-shadow: var(--x-focus-shadow-button);
 }
 
 .x-button.widget-editing {
@@ -295,8 +306,8 @@
 	background-size: 110% 110%;
 }
 
-.x-button:active:not(.widget-editing):not(.widget-selected),
-.x-button.active:not(.widget-editing):not(.widget-selected) {
+.x-button:active:not([disabled]):not(.widget-editing):not(.widget-selected),
+.x-button.active:not([disabled]):not(.widget-editing):not(.widget-selected) {
 	outline: none;
 	border-color: rgba(27,31,35,.35);
 	background-color: #e9ecef;
@@ -311,8 +322,8 @@
 	background-image: linear-gradient(-180deg,#34d058,#28a745 90%);
 }
 
-.x-button[primary]:active:not(.widget-editing):not(.widget-selected),
-.x-button[primary].active:not(.widget-editing):not(.widget-selected) {
+.x-button[primary]:not([disabled]):active:not(.widget-editing):not(.widget-selected),
+.x-button[primary]:not([disabled]).active:not(.widget-editing):not(.widget-selected) {
 	outline: none;
 	border-color: rgba(27,31,35,.5);
 	background-color: #279f43;
@@ -1282,12 +1293,9 @@
 	position: absolute;
 	background-color: #66f;
 	z-index: 2;
+	width: 2px;
+	height: 2px;
 }
-
-.x-pagelist[tabs-side=top   ] > .x-pagelist-header > .x-pagelist-selection-bar { bottom : 0; height: 2px; }
-.x-pagelist[tabs-side=bottom] > .x-pagelist-header > .x-pagelist-selection-bar { top    : 0; height: 2px; }
-.x-pagelist[tabs-side=left  ] > .x-pagelist-header > .x-pagelist-selection-bar { right  : 0; width: 2px; }
-.x-pagelist[tabs-side=right ] > .x-pagelist-header > .x-pagelist-selection-bar { left   : 0; width: 2px; }
 
 .x-pagelist:not(.moving) > .x-pagelist-header > .x-pagelist-selection-bar {
 	transition: width .15s, height .15s, left .15s, top .15s;
@@ -2220,11 +2228,11 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 .x-dark .x-item.focused > .x-item.focused       { background-color: #777; }
 .x-dark .x-item.focused > .x-item.focused:hover { background-color: #888; }
 
-//.x-dark .x-focusable:focus-within                   .x-item.focused       { background-color: #47a; }
-//.x-dark .x-focusable:focus-within                   .x-item.focused:hover { background-color: #58b; }
-//.x-dark .x-focusable:focus-within .x-item.focused > .x-item:hover         { background-color: #69c; }
-//.x-dark .x-focusable:focus-within .x-item.focused > .x-item.focused       { background-color: #7ad; }
-//.x-dark .x-focusable:focus-within .x-item.focused > .x-item.focused:hover { background-color: #8be; }
+//.x-dark .x-focusable-within:focus-within                   .x-item.focused       { background-color: #47a; }
+//.x-dark .x-focusable-within:focus-within                   .x-item.focused:hover { background-color: #58b; }
+//.x-dark .x-focusable-within:focus-within .x-item.focused > .x-item:hover         { background-color: #69c; }
+//.x-dark .x-focusable-within:focus-within .x-item.focused > .x-item.focused       { background-color: #7ad; }
+//.x-dark .x-focusable-within:focus-within .x-item.focused > .x-item.focused:hover { background-color: #8be; }
 
 /* button ----------------------------------------------------------------- */
 

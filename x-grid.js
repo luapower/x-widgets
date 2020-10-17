@@ -13,6 +13,7 @@ calls:
 
 component('x-grid', function(e, is_val_widget) {
 
+	e.class('x-focusable-within')
 	e.class('x-stretched')
 
 	if (is_val_widget !== false)
