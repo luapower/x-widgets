@@ -1,3 +1,15 @@
+/*
+
+	Model-driven tree-grid widget.
+	Written by Cosmin Apreutesei. Public Domain.
+
+	Widgets:
+
+		grid
+		grid_dropdown
+		row_form
+
+*/
 
 /* ---------------------------------------------------------------------------
 // grid widget

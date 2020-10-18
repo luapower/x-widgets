@@ -1,7 +1,22 @@
 /*
 
-	X-WIDGETS: Model-driven live-editable web components in JavaScript.
+	X-WIDGETS: Web Components in JavaScript.
 	Written by Cosmin Apreutesei. Public Domain.
+
+	Widgets:
+
+		tooltip
+		button
+		menu
+		widget_placeholder
+		pagelist
+		split
+		slides
+		toaster
+		action_band
+		dialog
+		toolbox
+		widget_switcher
 
 */
 
@@ -40,10 +55,20 @@ let repl_empty_str = v => repl(v, '', undefined)
 
 bind_events = true
 
+let dom_loaded = false
+let dom_components = []
+
 // component(tag, cons) -> create({option: value}) -> element.
 function component(tag, cons) {
 
 	let type = tag.replace(/^[^\-]+\-/, '').replace(/\-/g, '_')
+
+	// override cons() so that calling `parent_widget.construct()` always
+	// sets the css class for parent_widget.
+	function construct(e, ...args) {
+		e.class(tag)
+		cons(e, ...args)
+	}
 
 	let cls = class extends HTMLElement {
 
@@ -53,15 +78,45 @@ function component(tag, cons) {
 			this.attached = false
 		}
 
+		_initialize(opt) {
+			let e = this
+			if (e.initialized)
+				return
+			props_mixin(e, opt && opt.props)
+			component_deferred_updating(e)
+			e.isinstance = true   // because you can have non-widget instances.
+			e.iswidget = true     // to diff from normal html elements.
+			e.type = type         // for serialization.
+			e.init = noop         // init point when all props are set.
+			e.class('x-widget')
+			construct(e)
+			e.initialized = false // setter barrier to delay init to e.init().
+			if (opt)
+				if (opt.gid) {
+					xmodule.init_instance(e, opt)
+				} else {
+					e.begin_update()
+					for (let k in opt)
+						e.set_prop(k, opt[k])
+					e.end_update()
+				}
+			e.initialized = true
+			e.init()
+		}
+
 		connectedCallback() {
 			if (this.attached)
 				return
 			if (!this.isConnected)
 				return
+			if (!dom_loaded) {
+				dom_components.push(this)
+				return
+			}
 			// elements created by the browser must be initialized on first
 			// attach as they aren't allowed to create children or set
 			// attributes in the constructor.
-			init(this)
+			this._initialize()
 			this.bind(true)
 		}
 
@@ -118,41 +173,9 @@ function component(tag, cons) {
 
 	customElements.define(tag, cls)
 
-	// override cons() so that calling `parent_widget.construct()` always
-	// sets the css class for parent_widget.
-	function construct(e, ...args) {
-		e.class(tag)
-		cons(e, ...args)
-	}
-
-	function init(e, opt) {
-		if (e.initialized)
-			return
-		props_mixin(e, opt && opt.props)
-		component_deferred_updating(e)
-		e.isinstance = true   // because you can have non-widget instances.
-		e.iswidget = true     // to diff from normal html elements.
-		e.type = type         // for serialization.
-		e.init = noop         // init point when all props are set.
-		e.class('x-widget')
-		construct(e)
-		e.initialized = false // setter barrier to delay init to e.init().
-		if (opt)
-			if (opt.gid) {
-				xmodule.init_instance(e, opt)
-			} else {
-				e.begin_update()
-				for (let k in opt)
-					e.set_prop(k, opt[k])
-				e.end_update()
-			}
-		e.initialized = true
-		e.init()
-	}
-
 	function create(...args) {
 		let e = new cls()
-		init(e, update({}, ...args))
+		e._initialize(update({}, ...args))
 		return e
 	}
 
@@ -189,6 +212,25 @@ component.create = function(e, e0) {
 	}
 	return create(e)
 }
+
+// because stupid web components trigger connectedCallback() on the element
+// before its children are even parsed let alone created, we defer binding
+// the main document's components up until the html is fully parsed so that
+// they can access their children before creating other children.
+
+function init_dom_components() {
+	dom_loaded = true
+	for (let e of dom_components) {
+		e._initialize()
+		e.bind(true)
+	}
+	dom_components = null
+}
+
+if (document.readyState === 'loading')
+	document.on('DOMContentLoaded', init_dom_components)
+else // `DOMContentLoaded` already fired
+	init_dom_components()
 
 /* ---------------------------------------------------------------------------
 // component partial deferred updating mixin
@@ -1081,7 +1123,10 @@ function focusable_widget(e, fe) {
 	fe.attr('tabindex', 0)
 
 	e.set_tabindex = function(i) {
-		fe.attr('tabindex', focusable && !e.disabled ? i : -1)
+		let can_be_focused = focusable && !e.disabled
+		fe.attr('tabindex', can_be_focused ? i : -1)
+		if (!can_be_focused)
+			e.blur()
 	}
 	e.prop('tabindex', {store: 'var', type: 'number', default: 0})
 
@@ -1726,7 +1771,13 @@ widget_items_widget = function(e) {
 		return t
 	}
 
-	e.set_items = function(items) {
+	e.do_init_items = noop // stub
+
+	e.do_remove_item = function(item) { // stub
+		item.remove()
+	}
+
+	e.set_items = function() {
 		e.do_init_items()
 		e.update()
 	}
@@ -1753,11 +1804,6 @@ widget_items_widget = function(e) {
 		e.items = items
 	}
 
-	// widget-items widget protocol.
-	e.do_remove_item = function(item) {
-		item.remove()
-	}
-
 }
 
 // ---------------------------------------------------------------------------
@@ -1773,6 +1819,9 @@ component('x-pagelist', function(e) {
 	contained_widget(e)
 	serializable_widget(e)
 	widget_items_widget(e)
+
+	let dom_children = [...e.at]
+	e.clear()
 
 	e.prop('tabs_side', {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right'], default: 'top'})
 
@@ -2133,6 +2182,8 @@ component('x-pagelist', function(e) {
 		e.remove_child_widget(this.parent.item)
 		return false
 	}
+
+	e.items = dom_children
 
 })
 
@@ -2701,3 +2752,49 @@ component('x-widget-switcher', function(e) {
 
 })
 
+// ---------------------------------------------------------------------------
+// progress
+// ---------------------------------------------------------------------------
+
+component('x-progress', function() {
+
+})
+
+
+// ---------------------------------------------------------------------------
+// slides
+// ---------------------------------------------------------------------------
+
+component('x-slides', function(e) {
+
+	e.class('x-stretched')
+
+	serializable_widget(e)
+	selectable_widget(e)
+	contained_widget(e)
+	widget_items_widget(e)
+
+	e.do_init_items = function() {
+		e.clear()
+		for (let ce of e.items) {
+			ce.class('x-slide', true)
+			ce.style.opacity = 0
+			e.add(ce)
+		}
+		e.set_selected_index(e.selected_index)
+	}
+
+	e.set_selected_index = function(i1, i0) {
+		let e0 = e.items[i0]
+		let e1 = e.items[i1]
+		if (e0) e0.style.opacity = 0
+		if (e1) e1.style.opacity = 1
+		if (e1)
+			e.fire('slide_changed', i1)
+	}
+
+	e.prop('selected_index', {store: 'var', default: 0})
+
+	e.items = [...e.at]
+
+})

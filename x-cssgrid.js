@@ -1,4 +1,8 @@
 
+// ---------------------------------------------------------------------------
+// cssgrid widget
+// ---------------------------------------------------------------------------
+
 component('x-cssgrid', function(e) {
 
 	e.class('x-stretched')
@@ -44,6 +48,8 @@ component('x-cssgrid', function(e) {
 		cssgrid_widget_editing(e)
 		e.set_widget_editing(true, ...args)
 	}
+
+	e.items = [...e.at]
 
 })
 

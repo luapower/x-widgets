@@ -2955,51 +2955,65 @@ function nav_widget(e) {
 	// saving changes ---------------------------------------------------------
 
 	function row_changed(row) {
-		if (row.nosave || (row.is_new && (!row.modified || row.removed)))
+		if (row.nosave)
 			return
-		e.changed_rows = e.changed_rows || new Set()
-		e.changed_rows.add(row)
-		e.show_action_band(true)
-	}
-
-	function add_row_changes(row, rows) {
-		if (row.save_request)
-			return // currently saving this row.
-		if (row.is_new) {
-			let t = {type: 'new', values: {}}
-			for (let fi = 0; fi < e.all_fields.length; fi++) {
-				let field = e.all_fields[fi]
-				let val = row[fi]
-				if (val !== field.default && !field.nosave)
-					t.values[field.name] = val
+		if (!row.modified || (row.is_new && row.removed)) {
+			if (e.changed_rows) {
+				e.changed_rows.delete(row)
+				if (!e.changed_rows.size)
+					e.changed_rows = null
 			}
-			rows.push(t)
-		} else if (row.removed) {
-			let t = {type: 'remove', values: {}}
-			for (let col of e.pk.split(/\s+/))
-				t.values[col] = e.cell_old_val(row, col)
-			rows.push(t)
-		} else if (row.modified) {
-			let t = {type: 'update', values: {}}
-			let found
-			for (let field of e.all_fields) {
-				if (e.cell_modified(row, field) && !field.nosave) {
-					t.values[field.name] = row[field.val_index]
-					found = true
-				}
-			}
-			if (found) {
-				for (let col of e.pk.split(/\s+/))
-					t.values[col+':old'] = e.cell_old_val(row, col)
-				rows.push(t)
-			}
+		} else {
+			e.changed_rows = e.changed_rows || new Set()
+			e.changed_rows.add(row)
 		}
+		e.show_action_band(!!e.changed_rows)
 	}
 
 	function pack_changes() {
-		let changes = {rows: []}
-		for (let row of e.changed_rows)
-			add_row_changes(row, changes.rows)
+
+		let rows = []
+		let changes = {rows: rows}
+
+		if (!e.pk)
+			print('pk missing for', e.gid || e.id)
+
+		let pk_fields = e.pk ? flds(e.pk) : e.all_fields
+
+		for (let row of e.changed_rows) {
+			if (row.save_request)
+				return // currently saving this row.
+			if (row.is_new) {
+				let t = {type: 'new', values: {}}
+				for (let fi = 0; fi < e.all_fields.length; fi++) {
+					let field = e.all_fields[fi]
+					let val = row[fi]
+					if (val !== field.default && !field.nosave)
+						t.values[field.name] = val
+				}
+				rows.push(t)
+			} else if (row.removed) {
+				let t = {type: 'remove', values: {}}
+				for (let col of e.pk.split(/\s+/))
+					t.values[col] = e.cell_old_val(row, col)
+				rows.push(t)
+			} else if (row.modified) {
+				let t = {type: 'update', values: {}}
+				let found
+				for (let field of e.all_fields) {
+					if (e.cell_modified(row, field) && !field.nosave) {
+						t.values[field.name] = row[field.val_index]
+						found = true
+					}
+				}
+				if (found) {
+					for (let f of pk_fields)
+						t.values[f.name+':old'] = e.cell_old_val(row, f)
+					rows.push(t)
+				}
+			}
+		}
+
 		return changes
 	}
 
@@ -3616,9 +3630,23 @@ component('x-lookup-dropdown', function(e) {
 
 })
 
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
 // field types and prop attrs
 // ---------------------------------------------------------------------------
+
+	number
+	filesize
+	date
+	datetime
+	bool
+	enum
+	color
+	icon
+	email
+	phone
+	image
+
+*/
 
 {
 	field_prop_attrs = {
@@ -3840,6 +3868,8 @@ component('x-lookup-dropdown', function(e) {
 			mode: 'fixed',
 		}, ...opt))
 	}
+
+	// email
 
 }
 

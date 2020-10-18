@@ -1,6 +1,21 @@
+/*
+
+	Model-driven widget listbox widget.
+	Written by Cosmin Apreutesei. Public Domain.
+
+	Widgets:
+
+		listbox
+		list_dropdown
+		select_button
+		country_dropdown
+		color_dropdown
+		icon_dropdown
+
+*/
 
 // ---------------------------------------------------------------------------
-// listbox
+// listbox widget
 // ---------------------------------------------------------------------------
 
 component('x-listbox', function(e) {

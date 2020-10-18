@@ -1686,6 +1686,29 @@
 	display: grid;
 }
 
+
+/* items switcher --------------------------------------------------------- */
+
+.x-widget-switcher {
+	display: grid;
+}
+
+/* slides ----------------------------------------------------------------- */
+
+.x-slides {
+	position: relative;
+}
+
+.x-slide {
+	position: absolute;
+	opacity: 0;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	transition: opacity .2s;
+}
+
 /* x-nav ------------------------------------------------------------------ */
 
 .x-loading-overlay {
@@ -2104,13 +2127,7 @@
 	background-color: #F0F0F0;
 }
 
-/* items switcher --------------------------------------------------------- */
-
-.x-widget-switcher {
-	display: grid;
-}
-
-/* pie chart -------------------------------------------------------------- */
+/* charts ----------------------------------------------------------------- */
 
 .x-chart {
 	padding: 1em;

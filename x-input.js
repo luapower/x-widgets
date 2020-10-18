@@ -1,3 +1,23 @@
+/*
+
+	Model-driven single-value input widgets.
+	Written by Cosmin Apreutesei. Public Domain.
+
+	Widgets:
+
+		checkbox
+		radiogroup
+		input
+		spin_input
+		slider
+		dropdown
+		calendar
+		date_dropdown
+		richtext
+		sql_editor
+		chart
+
+*/
 
 /* ---------------------------------------------------------------------------
 // val widget mixin
@@ -1072,6 +1092,8 @@ component('x-dropdown', function(e) {
 // ---------------------------------------------------------------------------
 
 component('x-calendar', function(e) {
+
+	e.class('x-focusable-within')
 
 	focusable_widget(e)
 	val_widget(e)
