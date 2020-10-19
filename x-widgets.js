@@ -22,8 +22,6 @@
 
 DEBUG_ATTACH_TIME = false
 
-xmodule = {resolve: noop}
-
 /* ---------------------------------------------------------------------------
 // creating & setting up web components
 // ---------------------------------------------------------------------------
@@ -53,15 +51,45 @@ alas, the web people could't get that one right either).
 
 let repl_empty_str = v => repl(v, '', undefined)
 
+xmodule = null
 bind_events = true
 
 let dom_loaded = false
 let dom_components = []
 
+function set_attr_func(e, k, opt) {
+	let to_attr
+	return function(v) {
+		if (to_attr)
+			v = to_attr(v)
+		else if (isobject(v) && v.to_attr)
+			v = v.to_attr()
+		e.attr(k, v)
+	}
+}
+
+function attr_val_opt(e) {
+	let opt = {}
+	for (let attr of e.attrs) {
+		let k = attr.name
+		let v = attr.value
+		let popt = e.props[k]
+		if (popt) {
+			if (popt.from_attr)
+				v = popt.from_attr(v)
+			else if (isobject(v) && v.from_attr)
+				v = v.from_attr()
+			if (!(k in opt))
+				opt[k] = v
+		}
+	}
+	return opt
+}
+
 // component(tag, cons) -> create({option: value}) -> element.
 function component(tag, cons) {
 
-	let type = tag.replace(/^[^\-]+\-/, '').replace(/\-/g, '_')
+	let type = tag.replace(/^[^\-]+\-/, '').replaceAll('-', '_')
 
 	// override cons() so that calling `parent_widget.construct()` always
 	// sets the css class for parent_widget.
@@ -76,6 +104,9 @@ function component(tag, cons) {
 			super()
 			this.initialized = null // for log_add_event().
 			this.attached = false
+			// elements created by the browser must be initialized on first
+			// attach as they aren't allowed to create children or set
+			// attributes in the constructor, hence _initialize(), called later.
 		}
 
 		_initialize(opt) {
@@ -90,16 +121,16 @@ function component(tag, cons) {
 			e.init = noop         // init point when all props are set.
 			e.class('x-widget')
 			construct(e)
+			opt = update(attr_val_opt(e), opt)
 			e.initialized = false // setter barrier to delay init to e.init().
-			if (opt)
-				if (opt.gid) {
-					xmodule.init_instance(e, opt)
-				} else {
-					e.begin_update()
-					for (let k in opt)
-						e.set_prop(k, opt[k])
-					e.end_update()
-				}
+			if (xmodule) {
+				xmodule.init_instance(e, opt)
+			} else {
+				e.begin_update()
+				for (let k in opt)
+					e.set_prop(k, opt[k])
+				e.end_update()
+			}
 			e.initialized = true
 			e.init()
 		}
@@ -113,9 +144,6 @@ function component(tag, cons) {
 				dom_components.push(this)
 				return
 			}
-			// elements created by the browser must be initialized on first
-			// attach as they aren't allowed to create children or set
-			// attributes in the constructor.
 			this._initialize()
 			this.bind(true)
 		}
@@ -136,9 +164,9 @@ function component(tag, cons) {
 				this.attached = true
 				this.begin_update()
 				this.fire('bind', true)
-				if (this.gid) {
+				if (this.id) {
 					document.fire('widget_bind', this, true)
-					document.fire(this.gid+'.bind', this, true)
+					document.fire(this.id+'.bind', this, true)
 				}
 				this.end_update()
 
@@ -153,16 +181,15 @@ function component(tag, cons) {
 					return
 				this.attached = false
 				this.fire('bind', false)
-				if (this.gid) {
+				if (this.id) {
 					document.fire('widget_bind', this, false)
-					document.fire(this.gid+'.bind', this, false)
+					document.fire(this.id+'.bind', this, false)
 				}
 			}
 		}
 
 		debug_name(prefix) {
-			prefix = (prefix && prefix + ' < ' || '') + this.type
-				+ (this.gid != null ? ' ' + this.gid : '')
+			prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
 			let p = this; do { p = p.popup_target || p.parent } while (p && !p.debug_name)
 			if (!(p && p.debug_name))
 				return prefix
@@ -193,21 +220,21 @@ component.types = {} // {type -> create}
 component.create = function(e, e0) {
 	if (e instanceof Node || (isobject(e) && e.isinstance))
 		return e // instances pass through.
-	let gid = typeof e == 'string' ? e : e.gid
-	if (e0 && e0.gid == gid)
+	let id = typeof e == 'string' ? e : e.id
+	if (e0 && e0.id == id)
 		return e0  // already created (called from a prop's `convert()`).
-	if (typeof e == 'string') // e is a gid
-		e = {gid: e}
+	if (typeof e == 'string') // e is a id
+		e = {id: e}
 	if (!e.type) {
-		e.type = xmodule.instance_type(gid)
+		e.type = xmodule.instance_type(id)
 		if (!e.type) {
-			print('gid not found', gid)
+			print('id not found', id)
 			return
 		}
 	}
 	let create = component.types[e.type]
 	if (!create) {
-		print('component type not found', e.type, e.gid)
+		print('component type not found', e.type, e.id)
 		return
 	}
 	return create(e)
@@ -217,20 +244,14 @@ component.create = function(e, e0) {
 // before its children are even parsed let alone created, we defer binding
 // the main document's components up until the html is fully parsed so that
 // they can access their children before creating other children.
-
-function init_dom_components() {
+on_dom_load(function() {
 	dom_loaded = true
 	for (let e of dom_components) {
 		e._initialize()
 		e.bind(true)
 	}
 	dom_components = null
-}
-
-if (document.readyState === 'loading')
-	document.on('DOMContentLoaded', init_dom_components)
-else // `DOMContentLoaded` already fired
-	init_dom_components()
+})
 
 /* ---------------------------------------------------------------------------
 // component partial deferred updating mixin
@@ -314,17 +335,18 @@ method(HTMLElement, 'override', function(method, func) {
 */
 
 let fire_prop_changed = function(e, prop, v1, v0, slot) {
-	// TODO: add this to simplify some things? e.fire('prop_changed', e, prop, v1, v0, slot)
+	// TODO: add this to simplify some things?
+	// e.fire('prop_changed', e, prop, v1, v0, slot)
 	document.fire('prop_changed', e, prop, v1, v0, slot)
 }
 
-global_widget_resolver = memoize(function(type) {
-	let ISTYPE = 'is'+type
-	return function(name) {
-		let e = window[name]
-		return isobject(e) && e.attached && e[ISTYPE] && e.can_select_widget ? e : null
-	}
-})
+function resolve_widget_id(id) {
+	let e = window[id]
+	return isobject(e) && e.iswidget && e.attached && e.can_select_widget ? e : null
+}
+
+let from_attr_bool = v => repl(repl(v, '', true), 'false', false)
+let from_attr_number = num
 
 function props_mixin(e, iprops) {
 
@@ -349,11 +371,18 @@ function props_mixin(e, iprops) {
 		opt.name = prop
 		let convert = opt.convert || return_arg
 		let priv = opt.private
+		let serialize = opt.serialize
 		if (!e[setter])
 			e[setter] = noop
 		let prop_changed = fire_prop_changed
 		let slot = opt.slot
 		let dv = opt.default
+
+		let attr = opt.attr
+		opt.from_attr = attr && opt.from_attr
+			|| opt.type == 'bool' && from_attr_bool
+			|| opt.type == 'number' && from_attr_number
+		let set_attr = attr && set_attr_func(e, prop, opt)
 
 		if (opt.store == 'var') {
 			let v = dv
@@ -367,45 +396,13 @@ function props_mixin(e, iprops) {
 					return
 				v = v1
 				e[setter](v1, v0)
+				if (attr)
+					set_attr(v1)
 				if (!priv)
 					prop_changed(e, prop, v1, v0, slot)
 			}
-		} else if (opt.store == 'attr') {  // for attr-based styling
-			let attr = prop.replaceAll('_', '-')
-			if (type == 'bool') {
-				dv = dv || false
-				if (dv && !e.hasattr(attr))
-					e.attr(attr, true)
-				function get() {
-					return e.attrval(attr) || false
-				}
-				function set(v1) {
-					let v0 = get()
-					v1 = convert(v1, v0) && true || false
-					if (v1 === v0)
-						return
-					e.attr(attr, v1)
-					e[setter](v1, v0)
-					if (!priv)
-						prop_changed(e, prop, v1, v0, slot)
-				}
-			} else {
-				if (dv != null && !e.hasattr(attr))
-					e.attr(attr, dv)
-				function get() {
-					return e.attrval(attr)
-				}
-				function set(v1) {
-					let v0 = get()
-					v1 = convert(v1, v0)
-					if (v1 === v0)
-						return
-					e.attr(attr, v1)
-					e[setter](v1, v0)
-					if (!priv)
-						prop_changed(e, prop, v1, v0, slot)
-				}
-			}
+			if (attr && !e.hasattr(prop))
+				set_attr(dv)
 		} else if (opt.style) {
 			let style = opt.style
 			let format = opt.style_format || return_arg
@@ -444,39 +441,38 @@ function props_mixin(e, iprops) {
 			}
 		}
 
-		// gid-based dynamic binding.
-
-		if (opt.bind_gid) {
-			let resolve = opt.resolve || xmodule.resolve
-			let GID = prop
-			let REF = opt.bind_gid
+		// id-based dynamic binding.
+		if (opt.bind_id) {
+			let resolve = opt.resolve || resolve_widget_id
+			let ID = prop
+			let REF = opt.bind_id
 			function widget_attached(te) {
-				if (e[GID] == te.gid)
+				if (e[ID] == te.id)
 					e[REF] = te
 			}
 			function widget_detached(te) {
-				if (e[GID] == te.gid)
+				if (e[ID] == te.id)
 					e[REF] = null
 			}
 			function bind(on) {
-				e[REF] = on ? resolve(e[GID]) : null
+				e[REF] = on ? resolve(e[ID]) : null
 				document.on('widget_attached', widget_attached, on)
 				document.on('widget_detached', widget_detached, on)
 			}
-			function gid_changed(gid1, gid0) {
+			function id_changed(id1, id0) {
 				if (e.attached)
-					e[REF] = resolve(gid1)
-				if ((gid1 != null) != (gid0 != null)) {
-					e.on('bind', bind, gid1 != null)
+					e[REF] = resolve(id1)
+				if ((id1 != null) != (id0 != null)) {
+					e.on('bind', bind, id1 != null)
 				}
 			}
 			prop_changed = function(e, k, v1, v0, slot) {
 				fire_prop_changed(e, k, v1, v0, slot)
-				if (k == GID)
-					gid_changed(v1, v0)
+				if (k == ID)
+					id_changed(v1, v0)
 			}
-			if (e[GID] != null)
-				gid_changed(e[GID])
+			if (e[ID] != null)
+				id_changed(e[ID])
 		}
 
 		e.property(prop, get, set)
@@ -1094,8 +1090,8 @@ publishes:
 function serializable_widget(e) {
 
 	e.serialize = function() {
-		if (e.gid)
-			return e.gid
+		if (e.id)
+			return e.id
 		let t = {type: e.type}
 		if (e.props)
 			for (let prop in e.props) {
@@ -1113,6 +1109,7 @@ function serializable_widget(e) {
 // ---------------------------------------------------------------------------
 publishes:
 	e.tabindex
+	e.disabled
 	e.focusable
 --------------------------------------------------------------------------- */
 
@@ -1141,9 +1138,9 @@ function focusable_widget(e, fe) {
 		e.set_tabindex(e.tabindex)
 	}
 
-	e.prop('disabled', {store: 'attr', type: 'bool'})
+	e.prop('disabled', {store: 'var', type: 'bool', attr: true})
 	if (e.disabled)
-		e.set_disabled(e.disabled)
+		e.set_disabled(true)
 
 }
 
@@ -1182,9 +1179,9 @@ component('x-tooltip', function(e) {
 	e.prop('target'      , {store: 'var', private: true})
 	e.prop('target_name' , {store: 'var', type: 'element', bind: 'target'})
 	e.prop('text'        , {store: 'var', slot: 'lang'})
-	e.prop('side'        , {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
-	e.prop('align'       , {store: 'attr', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center'})
-	e.prop('kind'        , {store: 'attr', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default'})
+	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top', attr: true})
+	e.prop('align'       , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center', attr: true})
+	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default', attr: true})
 	e.prop('px'          , {store: 'var', type: 'number', default: 0})
 	e.prop('py'          , {store: 'var', type: 'number', default: 0})
 	e.prop('timeout'     , {store: 'var'})
@@ -1272,7 +1269,7 @@ component('x-button', function(e) {
 	e.add(e.icon_div, e.text_div)
 
 	e.set_text = function(s) { e.text_div.set(s, 'pre-wrap') }
-	e.prop('text', {store: 'attr', default: 'OK', slot: 'lang'})
+	e.prop('text', {store: 'var', default: 'OK', slot: 'lang'})
 
 	e.set_text(e.text)
 
@@ -1285,7 +1282,7 @@ component('x-button', function(e) {
 	}
 	e.prop('icon', {store: 'var', type: 'icon'})
 
-	e.prop('primary', {store: 'attr', type: 'bool', default: false})
+	e.prop('primary', {store: 'var', type: 'bool', attr: true})
 
 	e.activate = function() {
 		if (e.disabled)
@@ -1663,7 +1660,7 @@ component('x-widget-placeholder', function(e) {
 
 	function create_btn_action() {
 		let pe = e.parent_widget
-		let te = component.create({type: this.type, gid: true, module: pe.module || e.module})
+		let te = component.create({type: this.type, id: '<new>', module: pe.module || e.module})
 		if (pe)
 			pe.replace_child_widget(e, te)
 		else {
@@ -1720,9 +1717,9 @@ widget_items_widget = function(e) {
 		if (t.length != items.length)
 			return false
 		for (let i = 0; i < t.length; i++) {
-			let gid0 = items[i].gid
-			let gid1 = typeof t[i] == 'string' ? t[i] : t[i].gid
-			if (!gid1 || !gid0 || gid1 != gid0)
+			let id0 = items[i].id
+			let id1 = typeof t[i] == 'string' ? t[i] : t[i].id
+			if (!id1 || !id0 || id1 != id0)
 				return false
 		}
 		return true
@@ -1736,22 +1733,22 @@ widget_items_widget = function(e) {
 		if (same_items(t, cur_items))
 			return cur_items
 
-		// diff between t and cur_items keyed on gid or item identity.
+		// diff between t and cur_items keyed on id or item identity.
 
-		// map current items by identity and by gid.
+		// map current items by identity and by id.
 		let cur_set = new Set()
-		let cur_by_gid = new Map()
+		let cur_by_id = new Map()
 		for (let item of cur_items) {
 			cur_set.add(item)
-			if (item.gid)
-				cur_by_gid.set(item.gid, item)
+			if (item.id)
+				cur_by_id.set(item.id, item)
 		}
 
-		// create new items or reuse-by-gid.
+		// create new items or reuse-by-id.
 		let items = new Set()
 		for (let v of t) {
-			// v is either an item from cur_items, a gid, or the attrs for a new item.
-			let cur_item = cur_set.has(v) ? v : cur_by_gid.get(v)
+			// v is either an item from cur_items, a id, or the attrs for a new item.
+			let cur_item = cur_set.has(v) ? v : cur_by_id.get(v)
 			items.add(component.create(v, cur_item))
 		}
 
@@ -1823,7 +1820,7 @@ component('x-pagelist', function(e) {
 	let dom_children = [...e.at]
 	e.clear()
 
-	e.prop('tabs_side', {store: 'attr', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right'], default: 'top'})
+	e.prop('tabs_side', {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right'], default: 'top', attr: true})
 
 	e.set_header_width = function(v) {
 		e.header.w = v
@@ -1999,40 +1996,40 @@ component('x-pagelist', function(e) {
 	// selected-item persistent property --------------------------------------
 
 	function format_item(item) {
-		return item.title || item.gid
+		return item.title || item.id
 	}
 
-	function format_gid(gid) {
-		let item = e.items.find(item => item.gid == gid)
-		return item && item.title || gid
+	function format_id(id) {
+		let item = e.items.find(item => item.id == id)
+		return item && item.title || id
 	}
 
 	function item_select_editor(...opt) {
 
 		let rows = []
 		for (let item of e.items)
-			if (item.gid)
-				rows.push([item.gid, item])
+			if (item.id)
+				rows.push([item.id, item])
 
 		return list_dropdown({
 			rowset: {
-				fields: [{name: 'gid'}, {name: 'item', format: format_item}],
+				fields: [{name: 'id'}, {name: 'item', format: format_item}],
 				rows: rows,
 			},
 			nolabel: true,
-			val_col: 'gid',
+			val_col: 'id',
 			display_col: 'item',
 			mode: 'fixed',
 		}, ...opt)
 
 	}
 
-	e.prop('selected_item_gid', {store: 'var', text: 'Selected Item',
-		editor: item_select_editor, format: format_gid})
+	e.prop('selected_item_id', {store: 'var', text: 'Selected Item',
+		editor: item_select_editor, format: format_id})
 
 	function select_default_tab() {
-		if (e.selected_item_gid) {
-			let item = e.items.find(item => item.gid == e.selected_item_gid)
+		if (e.selected_item_id) {
+			let item = e.items.find(item => item.id == e.selected_item_id)
 			if (item)
 				select_tab(item._tab)
 		} else {
@@ -2249,9 +2246,9 @@ component('x-split', function(e) {
 	e.set_fixed_size  = e.update
 	e.set_min_size    = e.update
 
-	e.prop('orientation', {store: 'attr', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal'})
-	e.prop('fixed_side' , {store: 'attr', type: 'enum', enum_values: ['first', 'second'], default: 'first'})
-	e.prop('resizeable' , {store: 'attr', type: 'bool', default: true})
+	e.prop('orientation', {store: 'var', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal', attr: true})
+	e.prop('fixed_side' , {store: 'var', type: 'enum', enum_values: ['first', 'second'], default: 'first'})
+	e.prop('resizeable' , {store: 'var', type: 'bool', default: true})
 	e.prop('fixed_size' , {store: 'var', type: 'number', default: 200})
 	e.prop('min_size'   , {store: 'var', type: 'number', default:   0})
 
@@ -2601,7 +2598,7 @@ component('x-toolbox', function(e) {
 	e.prop('popup_widget', {store: 'var', type: 'widget'})
 	e.prop('popup_x'     , {store: 'var', type: 'number', default: false, slot: 'user'})
 	e.prop('popup_y'     , {store: 'var', type: 'number', default: false, slot: 'user'})
-	e.prop('pinned'      , {store: 'attr', type: 'bool', default: true, slot: 'user'})
+	e.prop('pinned'      , {store: 'var', type: 'bool', default: true, slot: 'user'})
 
 	function is_top() {
 		let last = document.body.last
@@ -2726,23 +2723,23 @@ component('x-widget-switcher', function(e) {
 		e.update()
 	}
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_gid' , {store: 'var', bind_gid: 'nav', type: 'nav'})
+	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav'})
 
 	// view -------------------------------------------------------------------
 
-	e.format_item_gid = function(vals) {
-		return e.module + '_' + e.item_gid_format.subst(vals)
+	e.format_item_id = function(vals) {
+		return e.module + '_' + e.item_id_format.subst(vals)
 	}
 
 	e.item_create_options = noop // stub
 
-	e.prop('item_gid_format', {store: 'var'})
+	e.prop('item_id_format', {store: 'var'})
 
 	e.do_update = function() {
 		let row = e.nav && e.nav.focused_row
 		let vals = row && e.nav.serialize_row_vals(row)
-		let gid = vals && e.format_item_gid(vals)
-		let item = gid && component.create(update({gid: gid}, e.item_create_options(vals))) || null
+		let id = vals && e.format_item_id(vals)
+		let item = id && component.create(update({id: id}, e.item_create_options(vals))) || null
 		e.set(item)
 	}
 

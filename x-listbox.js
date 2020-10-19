@@ -29,7 +29,7 @@ component('x-listbox', function(e) {
 
 	e.can_focus_cells = false
 
-	e.prop('orientation'   , {store: 'attr', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical'})
+	e.prop('orientation'   , {store: 'var', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical', attr: true})
 	e.prop('can_move_items', {store: 'var', type: 'bool', default: true})
 	e.prop('item_type'     , {store: 'var', default: 'richtext'})
 
@@ -371,7 +371,7 @@ component('x-list-dropdown', function(e) {
 	e.create_picker = function(opt) {
 		return component.create(update(opt, {
 			type: 'listbox',
-			gid: e.gid && e.gid + '.picker',
+			id: e.id && e.id + '.picker',
 			val_col: e.val_col,
 			display_col: e.display_col,
 			items: e.items,

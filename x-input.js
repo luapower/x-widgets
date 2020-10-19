@@ -145,7 +145,7 @@ function val_widget(e, enabled_without_nav) {
 		set_nav_col(nav1, nav0, e.col, e.col)
 	}
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_gid' , {store: 'var', bind_gid: 'nav', type: 'nav'})
+	e.prop('nav_id' , {store: 'var', bind_id: 'nav', type: 'nav'})
 
 	e.set_col = function(col1, col0) {
 		set_nav_col(e.nav, e.nav, col1, col0)
@@ -261,7 +261,7 @@ component('x-checkbox', function(e) {
 
 	e.class('x-markbox')
 
-	e.prop('align', {store: 'attr', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
+	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
 
 	e.checked_val = true
 	e.unchecked_val = false
@@ -394,7 +394,7 @@ component('x-radiogroup', function(e) {
 		for (let idiv of e.children)
 			idiv.attr('align', align)
 	}
-	e.prop('align', {store: 'attr', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
+	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
 
 	let sel_item
 
@@ -445,15 +445,15 @@ component('x-radiogroup', function(e) {
 
 function input_widget(e) {
 
-	e.prop('align', {store: 'attr', type: 'enum', enum_values: ['left', 'right'], default: 'left'})
-	e.prop('mode' , {store: 'attr', type: 'enum', enum_values: ['default', 'inline'], default: 'default'})
+	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
+	e.prop('mode' , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default', attr: true})
 
 	function update_inner_label() {
 		e.class('with-inner-label', !e.nolabel && e.field && !!e.field.text)
 	}
 
 	e.class('with-inner-label', true)
-	e.prop('nolabel', {store: 'attr', type: 'bool'})
+	e.prop('nolabel', {store: 'var', type: 'bool'})
 	e.set_nolabel = update_inner_label
 
 	let inh_do_update = e.do_update
@@ -613,8 +613,8 @@ component('x-spin-input', function(e) {
 
 	e.set_button_style     = e.update
 	e.set_button_placement = e.update
-	e.prop('button_style'    , {store: 'attr', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus'})
-	e.prop('button_placement', {store: 'attr', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side'})
+	e.prop('button_style'    , {store: 'var', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus', attr: true})
+	e.prop('button_placement', {store: 'var', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side', attr: true})
 
 	e.up   = div({class: 'x-spin-input-button fa'})
 	e.down = div({class: 'x-spin-input-button fa'})
@@ -1812,7 +1812,7 @@ component('x-chart', function(e) {
 	}
 
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_gid' , {store: 'var', bind_gid: 'nav', type: 'nav'})
+	e.prop('nav_id' , {store: 'var', bind_id: 'nav', type: 'nav'})
 
 	e.set_sum_col         = redraw
 	e.set_other_threshold = redraw
@@ -1847,8 +1847,10 @@ component('x-chart', function(e) {
 	e.prop('cat_cols', {store: 'var', type: 'col', col_nav: () => e.nav})
 	e.prop('other_threshold', {store: 'var', type: 'number', default: .05, multiple_of: null})
 	e.prop('other_text', {store: 'var', default: 'Other'})
-	e.prop('shape', {store: 'attr', type: 'enum',
+	e.prop('shape', {
+		store: 'var', type: 'enum',
 		enum_values: ['pie', 'stack', 'line', 'area', 'column', 'bar', 'stackbar', 'bubble', 'scatter'],
-		default: 'pie'})
+		default: 'pie', attr: true,
+	})
 
 })

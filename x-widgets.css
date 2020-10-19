@@ -592,23 +592,6 @@
 	text-align: right;
 }
 
-.x-input[mode=inline] {
-	border: 0;
-	border-radius: 0;
-}
-
-.x-input[mode=inline] {
-	border-bottom: 1px dashed black;
-}
-
-.x-input[mode=inline] > .x-input-value {
-	padding-bottom: .1em;
-}
-
-.x-input[mode=inline]:focus-within {
-	box-shadow: none;
-}
-
 .x-input.modified {
 	/* background-color: var(--x-modified-bg-color); */
 }
@@ -656,6 +639,23 @@
 .x-input.with-inner-label > .x-input-value:not(.empty) {
 	top: 0; /* fixate to top so we only have to set the top padding */
 	padding: var(--x-input-il-padding-value);
+}
+
+.x-input[mode=inline] {
+	border: 0;
+	border-radius: 0;
+}
+
+.x-input[mode=inline] {
+	border-bottom: 1px dashed black;
+}
+
+.x-input[mode=inline] > .x-input-value {
+	padding-bottom: .1em;
+}
+
+.x-input[mode=inline]:focus-within {
+	box-shadow: none;
 }
 
 .x-input[mode=inline].with-inner-label > .x-input-value:not(.empty) {
@@ -717,13 +717,13 @@
 
 /* inner label adjustments */
 
-.x-spin-input[button-placement=left]      > .x-input-inner-label.empty,
-.x-spin-input[button-placement=each-side] > .x-input-inner-label.empty {
+.x-spin-input[button_placement=left]      > .x-input-inner-label.empty,
+.x-spin-input[button_placement=each-side] > .x-input-inner-label.empty {
 	padding-left: 2em;
 }
 
-.x-spin-input[button-style=left-right][button-placement=left]      > .x-input-inner-label.empty,
-.x-spin-input[button-style=left-right][button-placement=each-side] > .x-input-inner-label.empty {
+.x-spin-input[button_style=left-right][button_placement=left]      > .x-input-inner-label.empty,
+.x-spin-input[button_style=left-right][button_placement=each-side] > .x-input-inner-label.empty {
 	padding-left: 1.5em;
 }
 
@@ -1210,13 +1210,13 @@
 	min-height: 0;  /* don't let the content make the pagelist itself overflow */
 }
 
-.x-pagelist[tabs-side=left ],
-.x-pagelist[tabs-side=right] {
+.x-pagelist[tabs_side=left ],
+.x-pagelist[tabs_side=right] {
 	flex-flow: row;
 }
 
-.x-pagelist[tabs-side=left ] > .x-pagelist-header,
-.x-pagelist[tabs-side=right] > .x-pagelist-header {
+.x-pagelist[tabs_side=left ] > .x-pagelist-header,
+.x-pagelist[tabs_side=right] > .x-pagelist-header {
 	flex-flow: column;
 }
 
@@ -1233,10 +1233,10 @@
 
 }
 
-.x-pagelist[tabs-side=top   ] > .x-pagelist-header { border-bottom-width : 1px; }
-.x-pagelist[tabs-side=bottom] > .x-pagelist-header { border-top-width    : 1px; }
-.x-pagelist[tabs-side=left  ] > .x-pagelist-header { border-right-width  : 1px; }
-.x-pagelist[tabs-side=right ] > .x-pagelist-header { border-left-width   : 1px; }
+.x-pagelist[tabs_side=top   ] > .x-pagelist-header { border-bottom-width : 1px; }
+.x-pagelist[tabs_side=bottom] > .x-pagelist-header { border-top-width    : 1px; }
+.x-pagelist[tabs_side=left  ] > .x-pagelist-header { border-right-width  : 1px; }
+.x-pagelist[tabs_side=right ] > .x-pagelist-header { border-left-width   : 1px; }
 
 .x-pagelist-content {
 	display: grid;
@@ -1245,11 +1245,11 @@
 	overflow: auto;
 }
 
-.x-pagelist[tabs-side=top   ],
-.x-pagelist[tabs-side=left  ] > .x-pagelist-header { order: 0; }
+.x-pagelist[tabs_side=top   ],
+.x-pagelist[tabs_side=left  ] > .x-pagelist-header { order: 0; }
 
-.x-pagelist[tabs-side=bottom],
-.x-pagelist[tabs-side=right ] > .x-pagelist-header { order: 1; }
+.x-pagelist[tabs_side=bottom],
+.x-pagelist[tabs_side=right ] > .x-pagelist-header { order: 1; }
 
 .x-pagelist-tab {
 	position: relative;

@@ -16,8 +16,8 @@ function xmodule(opt) {
 
 	xm.slots = opt.slots || {} // {name -> {color:, }}
 	xm.modules = opt.modules || {} // {name -> {icon:, }}
-	xm.layers = {} // {name -> {name:, props: {gid -> {k -> v}}}}
-	xm.instances = {} // {gid -> [e1,...]}
+	xm.layers = {} // {name -> {name:, props: {id -> {k -> v}}}}
+	xm.instances = {} // {id -> [e1,...]}
 	xm.selected_module = null
 	xm.selected_slot = null
 	xm.active_layers = {} // {'module:slot' -> layer} in override order
@@ -31,8 +31,8 @@ function xmodule(opt) {
 
 	function init_root_widget() {
 		if (opt.root_module) {
-			root_widget = opt.root_gid
-				? component.create(opt.root_gid)
+			root_widget = opt.root_id
+				? component.create(opt.root_id)
 				: widget_placeholder({module: opt.root_module})
 			document.body.set(root_widget)
 		}
@@ -63,13 +63,13 @@ function xmodule(opt) {
 
 	// loading layer prop vals into instances ---------------------------------
 
-	function prop_vals(gid) {
+	function prop_vals(id) {
 		let pv = {}
 		let layer0
 		for (let k in xm.active_layers) {
 			let layer = xm.active_layers[k]
 			if (layer != layer0) {
-				update(pv, layer.props[gid])
+				update(pv, layer.props[id])
 				layer0 = layer
 			}
 		}
@@ -77,9 +77,9 @@ function xmodule(opt) {
 		return pv
 	}
 
-	xm.instance_type = function(gid) {
+	xm.instance_type = function(id) {
 		for (let k in xm.active_layers) {
-			let props = xm.active_layers[k].props[gid]
+			let props = xm.active_layers[k].props[id]
 			if (props && props.type)
 				return props.type
 		}
@@ -87,21 +87,22 @@ function xmodule(opt) {
 
 	xm.init_instance = function(e, opt) {
 		let pv
-		if (opt.gid === true) {
+		opt.id = opt.id || e.id
+		if (opt.id == '<new>') {
 			assert(e.type)
 			assert(opt.module)
-			opt.gid = xm.next_gid(opt.module)
-			xm.set_val(null, opt.gid, 'type', e.type, null, null, opt.module)
+			opt.id = xm.next_id(opt.module)
+			xm.set_val(null, opt.id, 'type', e.type, null, null, opt.module)
 			pv = empty
-		} else if (opt.gid) {
-			pv = prop_vals(opt.gid)
-			opt.module = opt.gid.match(/^[^_\d]+/)[0]
+		} else if (opt.id) {
+			pv = prop_vals(opt.id)
+			opt.module = opt.id.match(/^[^_\d]+/)[0]
 		}
 		e.xmodule_noupdate = true
 		e.begin_update()
 		for (let k in opt)
 			e.set_prop(k, opt[k])
-		if (e.gid) {
+		if (e.id) {
 			e.xmodule_generation = generation
 			e.__pv0 = {} // save prop vals before overrides.
 			for (let k in pv)
@@ -119,7 +120,7 @@ function xmodule(opt) {
 		e.xmodule_generation = generation
 		e.xmodule_noupdate = true
 		e.begin_update()
-		let pv = prop_vals(e.gid)
+		let pv = prop_vals(e.id)
 		let pv0 = attr(e, '__pv0') // initial vals of overriden props.
 		// restore prop vals that are not present in this override.
 		for (let k in pv0)
@@ -139,15 +140,13 @@ function xmodule(opt) {
 
 	xm.bind_instance = function(e, on) {
 		if (on) {
-			window[e.gid] = e
-			array_attr(xm.instances, e.gid).push(e)
+			array_attr(xm.instances, e.id).push(e)
 			update_instance(e)
 		} else {
-			let t = xm.instances[e.gid]
+			let t = xm.instances[e.id]
 			t.remove_value(e)
 			if (!t.length)
-				delete xm.instances[e.gid]
-			delete window[e.gid]
+				delete xm.instances[e.id]
 		}
 	}
 
@@ -166,26 +165,26 @@ function xmodule(opt) {
 		return [module, slot, layer]
 	}
 
-	xm.set_val = function(e, gid, k, v, v0, slot, module, serialize) {
+	xm.set_val = function(e, id, k, v, v0, slot, module, serialize) {
 		slot = xm.selected_slot || slot || 'base'
 		if (slot == 'none')
 			return
 		module = xm.selected_module || module
 		let layer = xm.active_layers[module+':'+slot]
 		if (!layer) {
-			print('prop-val-lost', '['+module+':'+slot+']', gid, k, json(v))
+			print('prop-val-lost', '['+module+':'+slot+']', id, k, json(v))
 			return
 		}
 		if (serialize)
 			v = serialize(k, v)
-		let t = attr(layer.props, gid)
+		let t = attr(layer.props, id)
 		if (t[k] === v) // value already stored.
 			return
 		layer.modified = true
 		let pv0 = e && attr(e, '__pv0')
 		if (v === undefined) { // `undefined` signals removal.
 			if (k in t) {
-				print('prop-val-deleted', '['+module+':'+slot+'='+layer.name+']', gid, k)
+				print('prop-val-deleted', '['+module+':'+slot+'='+layer.name+']', id, k)
 				delete t[k]
 				if (pv0)
 					delete pv0[k] // no need to keep this anymore.
@@ -194,11 +193,11 @@ function xmodule(opt) {
 			if (pv0 && !(k in pv0)) // save current val if it wasn't saved before.
 				pv0[k] = v0
 			t[k] = v
-			print('prop-val-set', '['+module+':'+slot+'='+layer.name+']', gid, k, json(v))
+			print('prop-val-set', '['+module+':'+slot+'='+layer.name+']', id, k, json(v))
 		}
 
-		// synchronize other instances of this gid.
-		let instances = xm.instances[gid] || empty_array
+		// synchronize other instances of this id.
+		let instances = xm.instances[id] || empty_array
 		for (let e1 of instances) {
 			if (e1 != e) {
 				e1.xmodule_noupdate = true
@@ -213,9 +212,9 @@ function xmodule(opt) {
 	}
 
 	document.on('prop_changed', function(e, k, v, v0, slot) {
-		if (!e.gid) return
+		if (!e.id) return
 		if (e.xmodule_noupdate) return
-		xm.set_val(e, e.gid, k, v, v0, slot, e.module, e.serialize_prop)
+		xm.set_val(e, e.id, k, v, v0, slot, e.module, e.serialize_prop)
 	})
 
 	// loading prop layers and assigning to slots -----------------------------
@@ -225,28 +224,28 @@ function xmodule(opt) {
 		generation++
 		let [layer0, layer1] = set_active_layer(module, slot, layer)
 		if (opt.update_instances !== false) {
-			let gids1 = layer1 && layer1.props
-			let gids0 = layer0 && layer0.props
-			for (let gid in xm.instances)
-				if ((gids1 && gids1[gid]) || (gids0 && gids0[gid]))
-					for (let e of xm.instances[gid])
+			let ids1 = layer1 && layer1.props
+			let ids0 = layer0 && layer0.props
+			for (let id in xm.instances)
+				if ((ids1 && ids1[id]) || (ids0 && ids0[id]))
+					for (let e of xm.instances[id])
 						update_instance(e)
 			if (module && slot)
 				document.fire('prop_layer_slots_changed')
 		}
 	}
 
-	// gid generation ---------------------------------------------------------
+	// id generation ---------------------------------------------------------
 
-	xm.next_gid = function(module) {
-		let ret_gid
+	xm.next_id = function(module) {
+		let ret_id
 		ajax({
-			url: 'xmodule-next-gid/'+assert(module),
+			url: 'xmodule-next-id/'+assert(module),
 			method: 'post',
 			async: false,
-			success: gid => ret_gid = gid,
+			success: id => ret_id = id,
 		})
-		return ret_gid
+		return ret_id
 	}
 
 	// loading & saving prop layers -------------------------------------------
@@ -282,15 +281,13 @@ function xmodule(opt) {
 		}
 	}
 
-	// gid-based dynamic prop binding -----------------------------------------
-
-	xm.resolve = gid => { let t = xm.instances[gid]; return t && t[0] }
+	// id-based dynamic prop binding -----------------------------------------
 
 	xm.nav_editor = function(...options) {
 		return widget_select_editor(xm.instances, e => e.isnav, ...options)
 	}
 
-	init()
+	on_dom_load(init)
 
 }
 
@@ -521,22 +518,22 @@ component('x-prop-layers-inspector', function(e) {
 // nav editor for prop inspector
 // ---------------------------------------------------------------------------
 
-function widget_select_editor(widgets_gid_map, filter, ...options) {
+function widget_select_editor(widgets_id_map, filter, ...options) {
 	let dd = list_dropdown({
 		rowset: {
-			fields: [{name: 'gid'}],
+			fields: [{name: 'id'}],
 		},
 		nolabel: true,
-		val_col: 'gid',
-		display_col: 'gid',
+		val_col: 'id',
+		display_col: 'id',
 		mode: 'fixed',
 	}, ...options)
 	function reset_nav() {
 		let rows = []
-		for (let gid in widgets_gid_map)
-			for (let te of widgets_gid_map[gid])
+		for (let id in widgets_id_map)
+			for (let te of widgets_id_map[id])
 				if (te.can_select_widget && filter(te))
-					rows.push([gid])
+					rows.push([id])
 		dd.picker.rowset.rows = rows
 		dd.picker.reset()
 	}
@@ -697,7 +694,7 @@ component('x-prop-inspector', function(e) {
 				e.set_cell_val(row, field, pv1[field.name])
 		}
 
-		e.title_text = ([...widgets].map(e => e.type + (e.gid ? ' ' + e.gid : ''))).join(' ')
+		e.title_text = ([...widgets].map(e => e.type + (e.id ? ' ' + e.id : ''))).join(' ')
 
 		e.fire('prop_inspector_changed')
 	}
@@ -732,7 +729,7 @@ component('x-widget-tree', function(e) {
 		let rows = []
 		function add_widget(e, pe) {
 			if (!e) return
-			rows.push([e, pe, e.type, e.gid])
+			rows.push([e, pe, e.type, e.id])
 			if (e.child_widgets)
 				for (let ce of e.child_widgets())
 					add_widget(ce, e)
@@ -757,7 +754,7 @@ component('x-widget-tree', function(e) {
 			{name: 'widget'       , visible: false},
 			{name: 'parent_widget', visible: false},
 			{name: 'type' , w: 30, format: type_icon},
-			{name: 'gid'  , },
+			{name: 'id'   , },
 		],
 		rows: widget_tree_rows(),
 		pk: 'widget',
@@ -765,8 +762,8 @@ component('x-widget-tree', function(e) {
 	}
 
 	e.rowset = rs
-	e.cols = 'type gid'
-	e.tree_col = 'gid'
+	e.cols = 'type id'
+	e.tree_col = 'id'
 
 	e.can_select_widget = false
 	e.header_visible = false
@@ -884,10 +881,10 @@ let dev_toolbox_props = {
 
 function prop_layers_toolbox(tb_opt, insp_opt) {
 	let pg = prop_layers_inspector(update({
-			gid: 'dev_prop_layers_inspector',
+			id: 'dev_prop_layers_inspector',
 		}, insp_opt))
 	let tb = toolbox(update({
-			gid: 'dev_prop_layers_toolbox',
+			id: 'dev_prop_layers_toolbox',
 			text: 'property layers',
 			props: dev_toolbox_props,
 			content: pg,
@@ -899,10 +896,10 @@ function prop_layers_toolbox(tb_opt, insp_opt) {
 
 function props_toolbox(tb_opt, insp_opt) {
 	let pg = prop_inspector(update({
-			gid: 'dev_prop_inspector',
+			id: 'dev_prop_inspector',
 		}, insp_opt))
 	let tb = toolbox(update({
-			gid: 'dev_props_toolbox',
+			id: 'dev_props_toolbox',
 			text: 'properties',
 			props: dev_toolbox_props,
 			content: pg,
@@ -917,10 +914,10 @@ function props_toolbox(tb_opt, insp_opt) {
 
 function widget_tree_toolbox(tb_opt, wt_opt) {
 	let wt = widget_tree(update({
-			gid: 'dev_widget_tree',
+			id: 'dev_widget_tree',
 		}, wt_opt))
 	let tb = toolbox(update({
-			gid: 'dev_widget_tree_toolbox',
+			id: 'dev_widget_tree_toolbox',
 			text: 'widget tree',
 			props: dev_toolbox_props,
 			content: wt,

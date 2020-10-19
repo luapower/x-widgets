@@ -64,7 +64,7 @@ rowset field attributes:
 
 	vlookup:
 		lookup_nav     : nav to look up values of this field into.
-		lookup_nav_gid : nav gid for creating lookup_nav.
+		lookup_nav_id  : nav id for creating lookup_nav.
 		lookup_col     : field in lookup_nav that matches this field.
 		display_col    : field in lookup_nav to use as display_val of this field.
 		lookup_failed_display_val : f(v) -> s; what to use when lookup fails.
@@ -115,7 +115,7 @@ master-detail:
 	needs:
 		e.params <- 'param1[=master_col1] ...'
 		e.param_nav
-		e.param_nav_gid
+		e.param_nav_id
 
 tree:
 	needs:
@@ -360,11 +360,11 @@ function nav_widget(e) {
 	}
 	e.prop('rowset_name', {store: 'var', type: 'rowset'})
 
-	e.set_rowset_gid = function(v) {
+	e.set_rowset_id = function(v) {
 		e.rowset = xmodule.rowset(v)
 		e.reload()
 	}
-	e.prop('rowset_gid', {store: 'var', type: 'rowset'})
+	e.prop('rowset_id', {store: 'var', type: 'rowset'})
 
 	// utils ------------------------------------------------------------------
 
@@ -559,28 +559,28 @@ function nav_widget(e) {
 		if (e.val_field)
 			e.update()
 	}
-	e.prop('val_col', {store: 'var'})
+	e.prop('val_col', {store: 'var', type: 'col'})
 
 	e.set_tree_col = function() {
 		init_tree_field(e)
 		init_fields()
 		e.update({rows: true})
 	}
-	e.prop('tree_col', {store: 'var'})
+	e.prop('tree_col', {store: 'var', type: 'col'})
 
 	e.set_name_col = function(v) {
 		e.name_field = e.all_fields[v]
 		if (!e.tree_col)
 			e.set_tree_col()
 	}
-	e.prop('name_col', {store: 'var'})
+	e.prop('name_col', {store: 'var', type: 'col'})
 
 	e.set_quicksearch_col = function(v) {
 		e.quicksearch_field = e.all_fields[v]
 		reset_quicksearch()
 		e.update({state: true})
 	}
-	e.prop('quicksearch_col', {store: 'var'})
+	e.prop('quicksearch_col', {store: 'var', type: 'col'})
 
 	// field attributes exposed as `col.*` props
 
@@ -803,7 +803,7 @@ function nav_widget(e) {
 		e.reload()
 	}
 	e.prop('param_nav', {store: 'var', private: true})
-	e.prop('param_nav_gid', {store: 'var', bind_gid: 'param_nav', type: 'nav', text: 'Param Nav'})
+	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav', text: 'Param Nav'})
 
 	e.set_params = function(params1, params0) {
 		bind_param_nav_cols(e.param_nav, params0, false)
@@ -1872,7 +1872,7 @@ function nav_widget(e) {
 			return
 		}
 		let expr = ['&&']
-		if (e.param_vals && !e.rowset_url) {
+		if (e.param_vals && !e.rowset_url && e.all_fields.length) {
 			if (e.param_vals.length == 1) {
 				for (let k in e.param_vals[0])
 					expr.push(['===', k, e.param_vals[0][k]])
@@ -2244,9 +2244,9 @@ function nav_widget(e) {
 	e.do_create_editor = function(field, ...opt) {
 		if (!field.editor_instance) {
 			e.editor = field.editor({
-				// TODO: use original gid as template but
-				// load/save to this gid after instantiation.
-				//gid: e.gid && e.gid+'.editor.'+field.name,
+				// TODO: use original id as template but
+				// load/save to this id after instantiation.
+				//id: e.id && e.id+'.editor.'+field.name,
 				nav: e,
 				col: field.name,
 				can_select_widget: false,
@@ -2368,10 +2368,10 @@ function nav_widget(e) {
 
 	function bind_lookup_navs(on) {
 		for (let field of e.all_fields) {
-			let ln_gid = field.lookup_nav_gid
-			if (ln_gid) {
-				field.lookup_nav = component.create(ln_gid)
-				field.lookup_nav.gid = null // not saving into the original.
+			let ln_id = field.lookup_nav_id
+			if (ln_id) {
+				field.lookup_nav = component.create(ln_id)
+				field.lookup_nav.id = null // not saving into the original.
 				field.lookup_nav.hide()
 				e.add(field.lookup_nav)
 			}
@@ -2976,7 +2976,7 @@ function nav_widget(e) {
 		let changes = {rows: rows}
 
 		if (!e.pk)
-			print('pk missing for', e.gid || e.id)
+			print('pk missing for', e.id)
 
 		let pk_fields = e.pk ? flds(e.pk) : e.all_fields
 
@@ -3331,8 +3331,9 @@ function nav_widget(e) {
 			oe.remove()
 			oe = null
 		}
+		e.xmodule_noupdate = true
 		e.disabled = on
-		e.class('disabled', e.disabled)
+		e.xmodule_noupdate = false
 		if (!on)
 			return
 		oe = overlay({class: 'x-loading-overlay'})
@@ -3406,7 +3407,8 @@ function nav_widget(e) {
 			})
 			e.add(e.action_band)
 		}
-		e.action_band.show(on)
+		if (e.action_band)
+			e.action_band.show(on)
 	}
 
 	// quick-search -----------------------------------------------------------
@@ -3485,16 +3487,16 @@ function nav_widget(e) {
 		reset_quicksearch()
 		e.update({vals: true, state: true})
 	}
-	e.prop('display_col', {store: 'var'})
+	e.prop('display_col', {store: 'var', type: 'col'})
 
 	init_all()
 
 	// server-side props ------------------------------------------------------
 
 	e.set_sql_db = function(v) {
-		if (!e.gid)
+		if (!e.id)
 			return
-		e.rowset_url = v ? 'sql_rowset.json/' + e.gid : null
+		e.rowset_url = v ? 'sql_rowset.json/' + e.id : null
 		e.reload()
 	}
 
@@ -3581,13 +3583,13 @@ function nav_dropdown_widget(e) {
 		if (!e.picker) return
 		e.picker.val_col = v
 	}
-	e.prop('val_col', {store: 'var'})
+	e.prop('val_col', {store: 'var', type: 'col'})
 
 	e.set_display_col = function(v) {
 		if (!e.picker) return
 		e.picker.display_col = v
 	}
-	e.prop('display_col', {store: 'var'})
+	e.prop('display_col', {store: 'var', type: 'col'})
 
 	e.set_rowset_name = function(v) {
 		if (!e.picker) return
@@ -3603,7 +3605,7 @@ function nav_dropdown_widget(e) {
 }
 
 // ---------------------------------------------------------------------------
-// lookup dropdown (for binding to fields with `lookup_nav_gid`)
+// lookup dropdown (for binding to fields with `lookup_nav_id`)
 // ---------------------------------------------------------------------------
 
 component('x-lookup-dropdown', function(e) {
@@ -3611,15 +3613,15 @@ component('x-lookup-dropdown', function(e) {
 	dropdown.construct(e)
 
 	e.create_picker = function(opt) {
-		let ln_gid = e.field.lookup_nav_gid
-		if (!ln_gid)
+		let ln_id = e.field.lookup_nav_id
+		if (!ln_id)
 			return
-		opt.gid         = ln_gid
+		opt.id          = ln_id
 		opt.val_col     = e.field.lookup_col
 		opt.display_col = e.field.display_col
 
 		let picker = component.create(opt)
-		picker.gid = null // not saving into the original.
+		picker.id = null // not saving into the original.
 		return picker
 	}
 
@@ -3676,7 +3678,7 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	all_field_types.editor = function(...opt) {
-		if (this.lookup_nav_gid)
+		if (this.lookup_nav_id)
 			return lookup_dropdown(...opt)
 		return input(...opt)
 	}
@@ -3869,7 +3871,12 @@ component('x-lookup-dropdown', function(e) {
 		}, ...opt))
 	}
 
-	// email
+	// columns
+
+	let col = {}
+	field_types.col = col
+
+	col.convert = v => or(num(v), v)
 
 }
 

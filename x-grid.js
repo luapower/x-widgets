@@ -1717,8 +1717,6 @@ component('x-grid', function(e, is_val_widget) {
 
 		if (e.widget_editing)
 			return
-		if (e.disabled)
-			return
 
 		let left_arrow  =  horiz ? 'ArrowLeft'  : 'ArrowUp'
 		let right_arrow =  horiz ? 'ArrowRight' : 'ArrowDown'
@@ -1908,8 +1906,6 @@ component('x-grid', function(e, is_val_widget) {
 
 		if (e.widget_editing)
 			return
-		if (e.disabled)
-			return
 
 		if (e.quick_edit) {
 			if (!e.editor && e.focused_row && e.focused_field) {
@@ -2095,7 +2091,7 @@ component('x-grid-dropdown', function(e) {
 	e.create_picker = function(opt) {
 		return component.create(update(opt, {
 			type: 'grid',
-			gid: e.gid && e.gid + '.dropdown',
+			id: e.id && e.id + '.dropdown',
 			val_col: e.val_col,
 			display_col: e.display_col,
 			rowset: e.rowset,
@@ -2140,7 +2136,7 @@ component('x-row-form', function(e) {
 	}
 
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_gid' , {store: 'var', bind_gid: 'nav', type: 'nav'})
+	e.prop('nav_id' , {store: 'var', bind_id: 'nav', type: 'nav'})
 
 	function reset() {
 		e.rowset.fields = e.nav.all_fields
