@@ -7,7 +7,8 @@
 	--x-input-padding-x             : .5em;  /* x-padding for inputs and grid cells */
 
 	--x-input-il-padding            : 1em .5em;
-	--x-input-il-padding-value      : 1.5em .5em .5em .5em;
+	--x-input-il-padding-value      : 1.6em .5em .4em .5em;
+	--x-input-il-padding-value-top  : 1.6em;
 	--x-input-il-padding-top-label  : .2em;
 	--x-input-il-padding-top-label-animation-start : .6em;
 
@@ -482,9 +483,21 @@
 
 	/* sizing for inline use */
 	margin: .25em;
-	padding: .5em;
+	min-height: 3.4em; /* because line-height doesn't work on <input> */
 
 	cursor: default;
+}
+
+.x-markbox.with-label {
+	padding: var(--x-input-il-padding-value);
+	line-height: 1;
+	max-width: 100%;
+}
+
+.x-markbox.with-label > .x-markbox-label {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .x-markbox-icon {
@@ -553,6 +566,7 @@
 
 	/* sizing */
 	width: var(--x-input-width);
+	min-height: 3.4em;       /* because line-height doesn't work on <input> */
 
 	/* sizing for inline use */
 	margin: .25em;
@@ -868,6 +882,8 @@
 	border-left-style: inherit;
 	border-left-color: inherit;
 	border-left-width: 1px;
+
+	margin-top: var(--x-input-il-padding-value-top);
 }
 
 .x-dropdown-more-button {

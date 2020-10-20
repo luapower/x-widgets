@@ -161,9 +161,9 @@ main.add(
 <script>
 
 main.add(checkbox({
-	text: 'Wassup homie',
 	val: 'wrong',
 	field: {
+		text: 'Wassup homie',
 		validate: function(v) {
 			return typeof(v) == 'boolean' || 'Value not a boolean'
 		},
@@ -171,9 +171,10 @@ main.add(checkbox({
 }))
 
 c2 = checkbox({
-	text: H('Yo wasup<br>I am multiline and right-aligned.'),
 	align: 'right',
-	field: {},
+	field: {
+		text: H('Yo wasup<br>I am multiline and right-aligned.'),
+	},
 	val: true,
 })
 
@@ -1233,8 +1234,6 @@ ace_editor = ace.edit(code, {
 // disable Tab in the editor since we need to demo tab navigation.
 ace_editor.commands.removeCommand(ace_editor.commands.byName.indent)
 ace_editor.commands.removeCommand(ace_editor.commands.byName.outdent)
-
-xmodule = {resolve: noop}
 
 function run_script() {
 	let s = ace_editor.getSession().getValue()
