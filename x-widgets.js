@@ -2775,7 +2775,6 @@ component('x-slides', function(e) {
 		e.clear()
 		for (let ce of e.items) {
 			ce.class('x-slide', true)
-			ce.style.opacity = 0
 			e.add(ce)
 		}
 		e.set_selected_index(e.selected_index)
@@ -2784,8 +2783,8 @@ component('x-slides', function(e) {
 	e.set_selected_index = function(i1, i0) {
 		let e0 = e.items[i0]
 		let e1 = e.items[i1]
-		if (e0) e0.style.opacity = 0
-		if (e1) e1.style.opacity = 1
+		if (e0) e0.class('x-slide-selected', false)
+		if (e1) e1.class('x-slide-selected', true)
 		if (e1)
 			e.fire('slide_changed', i1)
 	}

@@ -3577,7 +3577,7 @@ global_val_nav = function() {
 
 function nav_dropdown_widget(e) {
 
-	dropdown.construct(e)
+	dropdown_widget(e)
 
 	e.set_val_col = function(v) {
 		if (!e.picker) return
@@ -3610,7 +3610,7 @@ function nav_dropdown_widget(e) {
 
 component('x-lookup-dropdown', function(e) {
 
-	dropdown.construct(e)
+	dropdown_widget(e)
 
 	e.create_picker = function(opt) {
 		let ln_id = e.field.lookup_nav_id
@@ -3680,7 +3680,7 @@ component('x-lookup-dropdown', function(e) {
 	all_field_types.editor = function(...opt) {
 		if (this.lookup_nav_id)
 			return lookup_dropdown(...opt)
-		return input(...opt)
+		return editbox(...opt)
 	}
 
 	all_field_types.to_text = function(v) {
@@ -3714,7 +3714,7 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	number.editor = function(...opt) {
-		return spin_input(update({
+		return spinedit(update({
 			button_placement: 'left',
 		}, ...opt))
 	}

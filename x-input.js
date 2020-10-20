@@ -7,8 +7,8 @@
 
 		checkbox
 		radiogroup
-		input
-		spin_input
+		editbox
+		spinedit
 		slider
 		dropdown
 		calendar
@@ -16,6 +16,7 @@
 		richtext
 		sql_editor
 		chart
+		input
 
 */
 
@@ -77,6 +78,8 @@ function val_widget(e, enabled_without_nav) {
 	function label_changed() {
 		e.update()
 	}
+
+	e.do_update_val = noop
 
 	function cell_state_changed(field, key, val, ev) {
 		if (e.updating)
@@ -250,6 +253,34 @@ function val_widget(e, enabled_without_nav) {
 }
 
 // ---------------------------------------------------------------------------
+// input widget mixin
+// ---------------------------------------------------------------------------
+
+function input_widget(e) {
+
+	e.prop('label'  , {store: 'var', slot: 'lang'})
+	e.prop('nolabel', {store: 'var', type: 'bool'})
+	e.prop('align'  , {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
+	e.prop('mode'   , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default', attr: true})
+
+	e.class('with-label', true)
+	function update_label() {
+		e.class('with-label', !e.nolabel && e.field && !!e.field.text)
+	}
+	e.set_nolabel = update_label
+	e.set_label   = update_label
+
+	let inh_do_update = e.do_update
+	e.do_update = function() {
+		inh_do_update()
+		update_label()
+		let s = or(e.label, e.field ? e.field.text : '(no field)')
+		e.label_div.set(s)
+	}
+
+}
+
+// ---------------------------------------------------------------------------
 // checkbox
 // ---------------------------------------------------------------------------
 
@@ -258,17 +289,16 @@ component('x-checkbox', function(e) {
 	focusable_widget(e)
 	editable_widget(e)
 	val_widget(e)
+	input_widget(e)
 
 	e.class('x-markbox')
-
-	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
 
 	e.checked_val = true
 	e.unchecked_val = false
 
 	e.icon_div = span({class: 'x-markbox-icon x-checkbox-icon far fa-square'})
-	e.text_div = span({class: 'x-markbox-text x-checkbox-text'})
-	e.add(e.icon_div, e.text_div)
+	e.label_div = span({class: 'x-markbox-label x-checkbox-label'})
+	e.add(e.icon_div, e.label_div)
 
 	// model
 
@@ -282,16 +312,14 @@ component('x-checkbox', function(e) {
 
 	// view
 
-	e.set_text = function(s) { e.text_div.set(s, 'pre-wrap') }
-	e.prop('text', {store: 'var', default: 'Check me!', slot: 'lang'})
-
-	e.do_update_val = function() {
-		let v = e.checked
-		e.class('checked', v)
-		e.icon_div.class('fa', v)
-		e.icon_div.class('fa-check-square', v)
-		e.icon_div.class('far', !v)
-		e.icon_div.class('fa-square', !v)
+	e.do_update_val = function(v) {
+		let c = e.checked
+		e.class('checked', c)
+		e.icon_div.class('fa', c)
+		e.icon_div.class('fa-check-square', c)
+		e.icon_div.class('far', !c)
+		e.icon_div.class('fa-square', !c)
+		e.label_div.class('empty', v === '')
 	}
 
 	// controller
@@ -318,7 +346,7 @@ component('x-checkbox', function(e) {
 		if (e.widget_editing) {
 			if (key == 'Enter') {
 				if (ctrl)
-					e.text_div.insert_at_caret('<br>')
+					e.label_div.insert_at_caret('<br>')
 				else
 					e.widget_editing = false
 				return false
@@ -338,16 +366,16 @@ component('x-checkbox', function(e) {
 	// widget editing ---------------------------------------------------------
 
 	e.set_widget_editing = function(v) {
-		e.text_div.contenteditable = v
+		e.label_div.contenteditable = v
 		if (!v)
-			e.text = e.text_div.innerText
+			e.label = e.label_div.innerText
 	}
 
 	e.on('pointerdown', function(ev) {
-		if (e.widget_editing && ev.target != e.text_div)
+		if (e.widget_editing && ev.target != e.label_div)
 			return this.capture_pointer(ev, null, function() {
-				e.text_div.focus()
-				e.text_div.select_all()
+				e.label_div.focus()
+				e.label_div.select_all()
 			})
 	})
 
@@ -355,10 +383,10 @@ component('x-checkbox', function(e) {
 		if (e.widget_editing && !ev.ctrlKey)
 			ev.stopPropagation()
 	}
-	e.text_div.on('pointerdown', prevent_bubbling)
-	e.text_div.on('click', prevent_bubbling)
+	e.label_div.on('pointerdown', prevent_bubbling)
+	e.label_div.on('click', prevent_bubbling)
 
-	e.text_div.on('blur', function() {
+	e.label_div.on('blur', function() {
 		e.widget_editing = false
 	})
 
@@ -377,7 +405,7 @@ component('x-radiogroup', function(e) {
 			if (typeof item == 'string' || item instanceof Node)
 				item = {text: item}
 			let radio_div = span({class: 'x-markbox-icon x-radio-icon far fa-circle'})
-			let text_div = span({class: 'x-markbox-text x-radio-text'})
+			let text_div = span({class: 'x-markbox-label x-radio-label'})
 			text_div.set(item.text)
 			let idiv = div({class: 'x-widget x-markbox x-radio-item', tabindex: 0},
 				radio_div, text_div)
@@ -439,44 +467,18 @@ component('x-radiogroup', function(e) {
 
 })
 
-// ---------------------------------------------------------------------------
-// input
-// ---------------------------------------------------------------------------
-
-function input_widget(e) {
-
-	e.prop('align', {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
-	e.prop('mode' , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default', attr: true})
-
-	function update_inner_label() {
-		e.class('with-inner-label', !e.nolabel && e.field && !!e.field.text)
-	}
-
-	e.class('with-inner-label', true)
-	e.prop('nolabel', {store: 'var', type: 'bool'})
-	e.set_nolabel = update_inner_label
-
-	let inh_do_update = e.do_update
-	e.do_update = function() {
-		inh_do_update()
-		update_inner_label()
-		e.inner_label_div.set(e.field ? e.field.text : '(no field)')
-	}
-
-}
-
-component('x-input', function(e) {
+component('x-editbox', function(e) {
 
 	val_widget(e)
 	input_widget(e)
 
-	e.input = H.input({class: 'x-input-value'})
-	e.inner_label_div = div({class: 'x-input-inner-label'})
-	e.add(e.input, e.inner_label_div)
+	e.input = H.input({class: 'x-editbox-value'})
+	e.label_div = div({class: 'x-editbox-label'})
+	e.add(e.input, e.label_div)
 
 	function update_state(s) {
 		e.input.class('empty', s == '')
-		e.inner_label_div.class('empty', s == '')
+		e.label_div.class('empty', s == '')
 	}
 
 	e.from_text = function(s) { return e.field.from_text(s) }
@@ -601,12 +603,12 @@ component('x-input', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// spin_input
+// spinedit
 // ---------------------------------------------------------------------------
 
-component('x-spin-input', function(e) {
+component('x-spinedit', function(e) {
 
-	input.construct(e)
+	editbox.construct(e)
 
 	e.align = 'right'
 	e.field_type = 'number'
@@ -616,8 +618,8 @@ component('x-spin-input', function(e) {
 	e.prop('button_style'    , {store: 'var', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus', attr: true})
 	e.prop('button_placement', {store: 'var', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side', attr: true})
 
-	e.up   = div({class: 'x-spin-input-button fa'})
-	e.down = div({class: 'x-spin-input-button fa'})
+	e.up   = div({class: 'x-spinedit-button fa'})
+	e.down = div({class: 'x-spinedit-button fa'})
 
 	let inh_do_update = e.do_update
 	e.do_update = function() {
@@ -844,12 +846,13 @@ component('x-slider', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// dropdown
+// dropdown widget mixin
 // ---------------------------------------------------------------------------
 
-component('x-dropdown', function(e) {
+function dropdown_widget(e) {
 
-	e.class('x-input')
+	e.class('x-editbox')
+	e.class('x-dropdown')
 
 	val_widget(e)
 	input_widget(e)
@@ -859,14 +862,14 @@ component('x-dropdown', function(e) {
 
 	e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
 
-	e.val_div = span({class: 'x-input-value x-dropdown-value'})
+	e.val_div = span({class: 'x-editbox-value x-dropdown-value'})
 	e.button = span({class: 'x-dropdown-button fa fa-caret-down'})
-	e.inner_label_div = div({class: 'x-input-inner-label x-dropdown-inner-label'})
-	e.add(e.val_div, e.button, e.inner_label_div)
+	e.label_div = div({class: 'x-editbox-label x-dropdown-label'})
+	e.add(e.val_div, e.button, e.label_div)
 
 	e.set_more_action = function(action) {
 		if (!e.more_button && action) {
-			e.more_button = div({class: 'x-input-more-button x-dropdown-more-button fa fa-ellipsis-h'})
+			e.more_button = div({class: 'x-editbox-more-button x-dropdown-more-button fa fa-ellipsis-h'})
 			e.add(e.more_button)
 			e.more_button.on('pointerdown', function(ev) {
 				return this.capture_pointer(ev, null, function() {
@@ -935,7 +938,7 @@ component('x-dropdown', function(e) {
 		let empty = text === ''
 		e.val_div.class('empty', empty)
 		e.val_div.class('null', false)
-		e.inner_label_div.class('empty', empty)
+		e.label_div.class('empty', empty)
 		e.val_div.set(empty ? H('&nbsp;') : text)
 	}
 
@@ -1085,7 +1088,7 @@ component('x-dropdown', function(e) {
 		e.fire('lost_focus') // grid editor protocol
 	})
 
-})
+}
 
 // ---------------------------------------------------------------------------
 // calendar widget
@@ -1116,7 +1119,7 @@ component('x-calendar', function(e) {
 		},
 	})
 
-	e.sel_year = spin_input({
+	e.sel_year = spinedit({
 		classes: 'x-calendar-sel-year',
 		field: {
 			min: -10000,
@@ -1330,7 +1333,7 @@ component('x-calendar', function(e) {
 // ---------------------------------------------------------------------------
 
 component('x-date-dropdown', function(e) {
-	dropdown.construct(e)
+	dropdown_widget(e)
 	e.field_type = 'date'
 	e.create_picker = calendar
 })
@@ -1556,8 +1559,8 @@ component('x-sql-editor', function(e) {
 
 	val_widget(e)
 
-	e.do_update_val = function(val, ev) {
-		e.editor.getSession().setValue(val || '')
+	e.do_update_val = function(v, ev) {
+		e.editor.getSession().setValue(v || '')
 	}
 
 	e.do_update_error = function(err, ev) {
@@ -1854,3 +1857,56 @@ component('x-chart', function(e) {
 	})
 
 })
+
+// ---------------------------------------------------------------------------
+// x-input
+// ---------------------------------------------------------------------------
+
+component('x-input', function(e) {
+
+	val_widget(e)
+
+	e.prop('widget', {store: 'var', type: 'enum', enum_values: []})
+
+	function widget_type(type) {
+		if (type) return type
+		let types = input.widget_types[e.field.type]
+		return types && types[0] || 'editbox'
+	}
+
+	function bind_field(on) {
+		if (on) {
+			e.input = component.create({
+				type: widget_type(e.widget),
+				nav: e.nav,
+				col: e.col,
+				classes: 'x-stretched',
+			})
+			e.set(e.input)
+		} else {
+			if (e.input) {
+				e.input.remove()
+				e.input = null
+			}
+		}
+	}
+
+	e.on('bind_field', bind_field)
+
+	e.set_widget = function(v) {
+		if (widget_type(v) == widget_type(e.widget))
+			return
+		bind_field(false)
+		bind_field(true)
+	}
+
+})
+
+input.widget_types = {
+	number   : ['spinedit', 'slider'],
+	bool     : ['checkbox'],
+	datetime : ['date_dropdown'],
+	date     : ['date_dropdown'],
+	enum     : ['enum_dropdown'],
+}
+

@@ -35,7 +35,7 @@
 	--x-item-bg-only-bg-color       : #eee;  /* slider background */
 	--x-item-bg-only-hover-bg-color : #ddd;  /* slider background */
 	--x-input-width                 : 12em;
-	--x-spin-input-width            : 12em;
+	--x-spinedit-width              : 12em;
 }
 
 /* default fonts ---------------------------------------------------------- */
@@ -195,6 +195,7 @@
 
 .x-stretched {
 	place-self: stretch;
+	flex: 1;
 }
 
 /* scrollbars ------------------------------------------------------------- */
@@ -506,12 +507,12 @@
 .x-markbox[align=right] > .x-markbox-icon {
 	order: 2;
 }
-.x-markbox[align=right] > .x-markbox-text {
+.x-markbox[align=right] > .x-markbox-label {
 	text-align: right;
 }
 
-.x-markbox[align=left]  > .x-markbox-text:not(:empty) { padding-left : .5em; }
-.x-markbox[align=right] > .x-markbox-text:not(:empty) { padding-right: .5em; }
+.x-markbox[align=left]  > .x-markbox-label:not(:empty) { padding-left : .5em; }
+.x-markbox[align=right] > .x-markbox-label:not(:empty) { padding-right: .5em; }
 
 .x-markbox.grid-editor { justify-content: center; }
 
@@ -542,9 +543,9 @@
 	justify-content: flex-end;
 }
 
-/* input ------------------------------------------------------------------ */
+/* editbox ---------------------------------------------------------------- */
 
-.x-input {
+.x-editbox {
 	/* layouting */
 	display: inline-flex;    /* the only way to get variable-width inputs */
 	align-items: baseline;   /* ...that are baseline-aligned */
@@ -559,18 +560,22 @@
 	border-width: 1px;
 	border-radius: .2em;
 
+	overflow: hidden;        /* required: label can overflow */
+
 	/* styling */
 	border-color: #ccc;
 	border-style: solid;
-	background-color: var(--x-input-focused-bg-color);
+	//background-color: var(--x-input-focused-bg-color);
 }
 
-.x-cssgrid > .x-input {
+.x-cssgrid > .x-editbox,
+.x-cssgrid > .x-input > .x-editbox
+{
 	width: auto;
 	min-width: 0;
 }
 
-.x-input-value {
+.x-editbox-value {
 	/* defaults */
 	margin: 0;
 	border: 0;
@@ -584,40 +589,39 @@
 	text-align: left;
 }
 
-.x-input-value:focus {
+.x-editbox-value:focus {
 	outline: none;
 }
 
-.x-input[align=right] > .x-input-value {
+.x-editbox[align=right] > .x-editbox-value {
 	text-align: right;
 }
 
-.x-input.modified {
+.x-editbox.modified {
 	/* background-color: var(--x-modified-bg-color); */
 }
 
-.x-input.invalid {
+.x-editbox.invalid {
 	background-color: var(--x-error-bg-color);
 	color: var(--x-inverted-fg-color);
 }
 
+/* editbox with animated inner label/placeholder -------------------------- */
 
-/* input with animated inner label/placeholder ---------------------------- */
-
-.x-input.with-inner-label {
+.x-editbox.with-label {
 	border-radius: .3em;
 	line-height: initial;  /* prevent inheriting it */
 }
 
-.x-input.with-inner-label[mode=inline] {
+.x-editbox.with-label[mode=inline] {
 	border-radius: 0;
 }
 
-.x-input.with-inner-label > .x-input-value {
+.x-editbox.with-label > .x-editbox-value {
 	padding: var(--x-input-il-padding);
 }
 
-.x-input-inner-label {
+.x-editbox-label {
 	vertical-align: top;
 	align-self: flex-start;
 	position: absolute;
@@ -628,72 +632,74 @@
 	visibility: hidden;
 }
 
-.x-input:not(.with-inner-label) > .x-input-inner-label {
+.x-editbox:not(.with-label) > .x-editbox-label {
 	display: none;
 }
 
-.x-input.with-inner-label > .x-input-inner-label {
+.x-editbox.with-label > .x-editbox-label {
 	visibility: visible;
 }
 
-.x-input.with-inner-label > .x-input-value:not(.empty) {
+.x-editbox.with-label > .x-editbox-value:not(.empty) {
 	top: 0; /* fixate to top so we only have to set the top padding */
 	padding: var(--x-input-il-padding-value);
 }
 
-.x-input[mode=inline] {
+.x-editbox[mode=inline] {
 	border: 0;
 	border-radius: 0;
 }
 
-.x-input[mode=inline] {
+.x-editbox[mode=inline] {
 	border-bottom: 1px dashed black;
 }
 
-.x-input[mode=inline] > .x-input-value {
+.x-editbox[mode=inline] > .x-editbox-value {
 	padding-bottom: .1em;
 }
 
-.x-input[mode=inline]:focus-within {
+.x-editbox[mode=inline]:focus-within {
 	box-shadow: none;
 }
 
-.x-input[mode=inline].with-inner-label > .x-input-value:not(.empty) {
+.x-editbox[mode=inline].with-label > .x-editbox-value:not(.empty) {
 	padding-bottom: .1em;
 }
 
-.x-input.with-inner-label > .x-input-inner-label:not(.empty) {
+.x-editbox.with-label > .x-editbox-label:not(.empty) {
 	top: 0; /* fixate to top so we only have to set the top padding */
 	user-select: none;
-	color: inherit;
+	//color: inherit;
 	font-size: 85%;
 	padding-top: var(--x-input-il-padding-top-label);
-	animation: x-input-inner-label-focused .2s;
+	animation: x-editbox-label-focused .2s;
 }
 
-.x-input[mode=inline].with-inner-label > .x-input-inner-label:not(.empty) {
+.x-editbox[mode=inline].with-label > .x-editbox-label:not(.empty) {
 	font-weight: bold;
 	opacity: .5;
 }
 
-@keyframes x-input-inner-label-focused {
+@keyframes x-editbox-label-focused {
 	from {
 		opacity: 0;
 		padding-top: var(--x-input-il-padding-top-label-animation-start);
 	}
 }
 
-/* spin_input ------------------------------------------------------------- */
+/* spinedit --------------------------------------------------------------- */
 
-.x-spin-input {
-	width: var(--x-spin-input-width);
+.x-spinedit {
+	width: var(--x-spinedit-width);
 }
 
-.x-cssgrid > .x-spin-input {
+.x-cssgrid > .x-spinedit,
+.x-cssgrid > .x-input > .x-spinedit
+{
 	width: auto;
 }
 
-.x-spin-input-button {
+.x-spinedit-button {
 	border-style: solid;
 	border-color: #999;
 	border-width: 0;
@@ -701,34 +707,34 @@
 	padding-right: var(--x-input-padding-x);
 }
 
-.x-spin-input-button.left  { border-right-width: 1px; }
-.x-spin-input-button.right { border-left-width : 1px; }
+.x-spinedit-button.left  { border-right-width: 1px; }
+.x-spinedit-button.right { border-left-width : 1px; }
 
-.x-spin-input-button.fa-plus,
-.x-spin-input-button.fa-minus {
+.x-spinedit-button.fa-plus,
+.x-spinedit-button.fa-minus {
 	font-size: 70%;
 	align-self: center;
 }
-.x-spin-input-button.fa-minus.leftmost { padding-left  : calc(1.428 * var(--x-input-padding-x)); }
-.x-spin-input-button.fa-plus.rightmost { padding-right : calc(1.428 * var(--x-input-padding-x)); }
+.x-spinedit-button.fa-minus.leftmost { padding-left  : calc(1.428 * var(--x-input-padding-x)); }
+.x-spinedit-button.fa-plus.rightmost { padding-right : calc(1.428 * var(--x-input-padding-x)); }
 
-.x-spin-input-button.fa-caret-left  { padding-right : calc(.5 * var(--x-input-padding-x)); }
-.x-spin-input-button.fa-caret-right { padding-left  : calc(.5 * var(--x-input-padding-x)); }
+.x-spinedit-button.fa-caret-left  { padding-right : calc(.5 * var(--x-input-padding-x)); }
+.x-spinedit-button.fa-caret-right { padding-left  : calc(.5 * var(--x-input-padding-x)); }
 
 /* inner label adjustments */
 
-.x-spin-input[button_placement=left]      > .x-input-inner-label.empty,
-.x-spin-input[button_placement=each-side] > .x-input-inner-label.empty {
+.x-spinedit[button_placement=left]      > .x-editbox-label.empty,
+.x-spinedit[button_placement=each-side] > .x-editbox-label.empty {
 	padding-left: 2em;
 }
 
-.x-spin-input[button_style=left-right][button_placement=left]      > .x-input-inner-label.empty,
-.x-spin-input[button_style=left-right][button_placement=each-side] > .x-input-inner-label.empty {
+.x-spinedit[button_style=left-right][button_placement=left]      > .x-editbox-label.empty,
+.x-spinedit[button_style=left-right][button_placement=each-side] > .x-editbox-label.empty {
 	padding-left: 1.5em;
 }
 
-.x-spin-input.with-inner-label > .x-spin-input-button.fa-plus,
-.x-spin-input.with-inner-label > .x-spin-input-button.fa-minus {
+.x-spinedit.with-label > .x-spinedit-button.fa-plus,
+.x-spinedit.with-label > .x-spinedit-button.fa-minus {
 	align-self: baseline;
 }
 
@@ -753,7 +759,9 @@
 	overflow: visible;
 }
 
-.x-cssgrid > .x-slider {
+.x-cssgrid > .x-slider,
+.x-cssgrid > .x-input > .x-slider,
+{
 	width: auto;
 	min-width: 1em;
 }
@@ -820,7 +828,7 @@
 
 /* dropdown --------------------------------------------------------------- */
 
-/* NOTE: .x-input is applied too on dropdowns so consider this a class extension! */
+/* NOTE: .x-editbox is applied too on dropdowns so consider this a class extension! */
 
 .x-dropdown {
 
@@ -831,7 +839,7 @@
 	/* styling */
 	cursor: default;
 
-	/* default mode: variable-width, no-wrap but with .x-input's min-width applied */
+	/* default mode: variable-width, no-wrap but with .x-editbox's min-width applied */
 	width: auto;                /* shrink-wrap */
 	min-width: var(--x-input-width);
 	white-space: nowrap;
@@ -899,10 +907,17 @@
 }
 
 /* fixed mode: fixed-width, no-wrap, hide-overflow */
-.x-dropdown[mode=fixed] {
+.x-dropdown[mode=fixed],
+.x-cssgrid > .x-dropdown,
+.x-cssgrid > .x-input > .x-dropdown
+{
 	width: 0;                /* fixed width, constrained by x-input's min-width */
 }
-.x-dropdown[mode=fixed] > .x-dropdown-value {
+
+.x-dropdown[mode=fixed] > .x-dropdown-value,
+.x-cssgrid > .x-dropdown > .x-dropdown-value,
+.x-cssgrid > .x-input > .x-dropdown > .x-dropdown-value
+{
 	white-space: nowrap;
 	overflow: hidden;
 }
@@ -917,9 +932,9 @@
 	z-index: 3; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
 }
 
-/* input & dropdown common styles ----------------------------------------- */
+/* editbox & dropdown common styles --------------------------------------- */
 
-.x-input:focus-within:not(.widget-selected):not(.invalid),
+.x-editbox:focus-within:not(.widget-selected):not(.invalid),
 .x-dropdown.open
 {
 	outline: none;
@@ -928,6 +943,17 @@
 .x-dropdown[mode=inline]:focus,
 .x-dropdown[mode=inline].open {
 	box-shadow: none;
+}
+
+/* input ------------------------------------------------------------------ */
+
+.x-input {
+	display: flex;
+}
+
+.x-cssgrid > .x-input {
+	min-width: 0;
+	width: auto;
 }
 
 /* listbox ---------------------------------------------------------------- */
@@ -1084,21 +1110,21 @@
 	align-self: flex-start;
 }
 
-.x-calendar-sel-month.x-input,
-.x-calendar-sel-year.x-input {
+.x-calendar-sel-month.x-editbox,
+.x-calendar-sel-year.x-editbox {
 	border: 0;
 }
 
-.x-calendar-sel-month.x-input {
+.x-calendar-sel-month.x-editbox {
 	min-width: 4.5em;        /* limit shrinking */
 	margin: .25em;           /* separate from day suffix */
 }
 
-.x-input.x-calendar-sel-month .x-listbox {
+.x-editbox.x-calendar-sel-month .x-listbox {
 	width: 100%;
 }
 
-.x-input.x-calendar-sel-year {
+.x-editbox.x-calendar-sel-year {
 	width: 6.5em;
 }
 
@@ -1701,11 +1727,19 @@
 
 .x-slide {
 	position: absolute;
-	opacity: 0;
 	top: 0;
 	left: 0;
 	right: 0;
 	bottom: 0;
+
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity .2s;
+}
+
+.x-slide-selected {
+	opacity: 1;
+	pointer-events: all;
 	transition: opacity .2s;
 }
 
@@ -2017,7 +2051,7 @@
 
 .x-widget.grid-editor,
 .x-widget.grid-editor.open:not(.widget-selected),            /* more specificity over x-dropdown */
-.x-widget.grid-editor:focus-within:not(.widget-selected)     /* more specificity over x-input */
+.x-widget.grid-editor:focus-within:not(.widget-selected)     /* more specificity over x-editbox */
 {
 	box-shadow: inset 2px 2px 6px -2px rgba(0,0,0,0.75);
 }
@@ -2271,12 +2305,12 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 
 /* inputs & dropdown ------------------------------------------------------ */
 
-.x-dark .x-input {
+.x-dark .x-editbox {
 	border-color: #444;
 }
 
-.x-dark .x-input:focus-within,
-.x-dark .x-input-value:focus,
+.x-dark .x-editbox:focus-within,
+.x-dark .x-editbox-value:focus,
 .x-dark .x-dropdown.open {
 	background-color: #080808;
 }
@@ -2285,7 +2319,7 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	background-color: #2a303e;
 }
 
-.x-dark .x-input.invalid > .x-input-value {
+.x-dark .x-editbox.invalid > .x-editbox-value {
 	background-color: var(--x-error-bg-color);
 }
 

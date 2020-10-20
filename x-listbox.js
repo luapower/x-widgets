@@ -7,6 +7,7 @@
 
 		listbox
 		list_dropdown
+		enum_dropdown
 		select_button
 		country_dropdown
 		color_dropdown
@@ -39,29 +40,27 @@ component('x-listbox', function(e) {
 	e.init = function() {
 		init()
 		init_as_picker()
-		if (e.items) {
-			create_rows_items()
-			e.items = null
-		}
 	}
 
 	// item-based rowset ------------------------------------------------------
+
+	e.prop('items', {store: 'var'})
 
 	function setup_item(item) {
 		item.classes = 'x-listbox-item x-item'
 		item.on('pointerdown', item_pointerdown)
 	}
 
-	function create_rows_items() {
-
-		function rows_added(rows, ri1) {
-			for (let row of rows) {
-				let item = e.create_item()
-				setup_item(item)
-				row[0] = item
-			}
+	function rows_added(rows, ri1) {
+		for (let row of rows) {
+			let item = e.create_item()
+			setup_item(item)
+			row[0] = item
 		}
-		e.on('rows_added', rows_added)
+	}
+	e.on('rows_added', rows_added)
+
+	e.set_items = function() {
 
 		e.display_col = 0
 		let rows = []
@@ -72,10 +71,13 @@ component('x-listbox', function(e) {
 				setup_item(item)
 			rows.push([item])
 		}
+
 		e.rowset = {
 			fields: [{format: e.format_item}],
 			rows: rows,
 		}
+
+		e.reload()
 	}
 
 	e.create_item = function() {
@@ -379,6 +381,22 @@ component('x-list-dropdown', function(e) {
 			rowset_name: e.rowset_name,
 		}, e.listbox))
 	}
+
+})
+
+// ---------------------------------------------------------------------------
+// enum dropdown
+// ---------------------------------------------------------------------------
+
+component('x-enum-dropdown', function(e) {
+
+	list_dropdown.construct(e)
+
+	e.on('bind_field', function(on) {
+		e.items = on ? e.field.enum_values : null
+	})
+
+	e.val_col = 0
 
 })
 
