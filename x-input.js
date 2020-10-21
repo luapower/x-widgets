@@ -1740,6 +1740,15 @@ component('x-image', function(e) {
 
 	// download
 
+	e.download_btn.on('click', function() {
+		let href = format_url()
+		let name = url(href).path.last
+		let link = tag('a', {href: href, download: name, style: 'display: none'})
+		e.add(link)
+		link.click()
+		link.remove()
+	})
+
 })
 
 // ---------------------------------------------------------------------------
