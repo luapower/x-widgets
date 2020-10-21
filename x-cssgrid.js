@@ -13,11 +13,27 @@ component('x-cssgrid', function(e) {
 	contained_widget(e)
 	widget_items_widget(e)
 
+	// generate a 3-letter value for `grid-area` based on item's `col` attr or `id`.
+	let names = {}
+	function area_name(item) {
+		let s = item.col || item.attrval('col') || item.id
+		if (!s) return
+		s = s.slice(0, 3)
+		if (names[s]) {
+			let x = num(names[s][2]) || 1
+			do { s = s.slice(0, 2) + (x + 1) } while (names[s])
+		}
+		names[s] = true
+		return s
+	}
+
 	// widget-items widget protocol.
 	e.do_init_items = function() {
-		e.clear()
-		for (let item of e.items)
+		for (let item of e.items) {
+			if (!item.style['grid-area'])
+				item.style['grid-area'] = area_name(item)
 			e.add(item)
+		}
 	}
 
 	// get/set gaps -----------------------------------------------------------

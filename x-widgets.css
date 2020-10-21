@@ -1,4 +1,10 @@
 
+/* divs.js ---------------------------------------------------------------- */
+
+[hidden] { display: none !important; }
+
+.popup { position: absolute; }
+
 /* variables -------------------------------------------------------------- */
 
 :root {
@@ -128,8 +134,6 @@
 }
 
 /* item states ------------------------------------------------------------ */
-
-[hidden] { display: none !important; }
 
 .x-item.disabled { color: #999; }
 .x-item.disabled.focused { color: #ccc; }
@@ -474,27 +478,33 @@
 
 .x-markbox {
 
-	/* layouting of self & children */
+	/* baseline-align in an inline context */
 	display: inline-flex;
 
 	/* layouting of children */
-	align-items: baseline;
+	align-items: center;
 	flex-flow: row nowrap;
 
 	/* sizing for inline use */
 	margin: .25em;
-	min-height: 3.4em; /* because line-height doesn't work on <input> */
 
 	cursor: default;
 }
 
 .x-markbox.with-label {
 	padding: var(--x-input-il-padding-value);
-	line-height: 1;
 	max-width: 100%;
+	line-height: initial;
+	min-height: 3.4em;    /* for alignment with x-editbox */
+	align-items: baseline;
+}
+
+.x-markbox-label {
+	display: none;
 }
 
 .x-markbox.with-label > .x-markbox-label {
+	display: block;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -566,7 +576,6 @@
 
 	/* sizing */
 	width: var(--x-input-width);
-	min-height: 3.4em;       /* because line-height doesn't work on <input> */
 
 	/* sizing for inline use */
 	margin: .25em;
@@ -579,7 +588,6 @@
 	/* styling */
 	border-color: #ccc;
 	border-style: solid;
-	//background-color: var(--x-input-focused-bg-color);
 }
 
 .x-cssgrid > .x-editbox,
@@ -624,7 +632,8 @@
 
 .x-editbox.with-label {
 	border-radius: .3em;
-	line-height: initial;  /* prevent inheriting it */
+	line-height: initial;    /* prevent inheriting it */
+	min-height: 3.4em;       /* because line-height doesn't work on <input> */
 }
 
 .x-editbox.with-label[mode=inline] {
@@ -644,6 +653,10 @@
 	color: #777;
 	white-space: nowrap;
 	visibility: hidden;
+}
+
+.x-editbox.invalid > .x-editbox-label {
+	color: var(--x-inverted-fg-color);
 }
 
 .x-editbox:not(.with-label) > .x-editbox-label {
@@ -882,8 +895,10 @@
 	border-left-style: inherit;
 	border-left-color: inherit;
 	border-left-width: 1px;
+}
 
-	margin-top: var(--x-input-il-padding-value-top);
+.x-dropdown.with-label > .x-dropdown-button {
+	margin-top: var(--x-input-il-padding-value-top); /* for alignment with the text */
 }
 
 .x-dropdown-more-button {
@@ -980,6 +995,7 @@
 	flex-wrap: nowrap;
 	margin: .25em;
 	position: relative; /* for item moving */
+	line-height: initial;  /* prevent inheriting it */
 }
 
 .x-listbox[orientation=vertical]   { flex-direction: column; }
@@ -2063,6 +2079,8 @@
 	font-size: inherit;
 	font-family: inherit;
 	outline: none;
+
+	background-color: var(--x-input-focused-bg-color);
 }
 
 .x-widget.grid-editor,

@@ -44,7 +44,7 @@ component('x-listbox', function(e) {
 
 	// item-based rowset ------------------------------------------------------
 
-	e.prop('items', {store: 'var'})
+	e.prop('items', {store: 'var', private: true})
 
 	function setup_item(item) {
 		item.classes = 'x-listbox-item x-item'
@@ -393,7 +393,7 @@ component('x-enum-dropdown', function(e) {
 	list_dropdown.construct(e)
 
 	e.on('bind_field', function(on) {
-		e.items = on ? e.field.enum_values : null
+		e.picker.items = on ? e.field.enum_values : null
 	})
 
 	e.val_col = 0

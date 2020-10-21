@@ -394,7 +394,7 @@ main.add(r)
 
 <!--------------------------------------------------------------------------->
 
-<template id=input_demo>
+<template id=editbox_demo>
 <script>
 
 function say_my_name(v) {
@@ -408,14 +408,14 @@ function say_my_name_long(v) {
 			'wraps decently and stays centered.'
 }
 
-main.add(H.div({}, 'type in "Klaus" to validate: ', input({
+main.add(H.div({}, 'type in "Klaus" to validate: ', editbox({
 	field: {
 		validate: say_my_name,
 	},
 	val: 'wrong',
 })))
 
-main.add(H.div({}, 'type in "Klaus" to validate: ', input({
+main.add(H.div({}, 'type in "Klaus" to validate: ', editbox({
 	field: {validate: say_my_name_long},
 })))
 
@@ -423,10 +423,10 @@ main.add(
 	H.div({style: 'padding-top: 2em'},
 		'Check out these inner labels:',
 		H.div({},
-			input({
+			editbox({
 				field: {name: "santa's_name", validate: say_my_name},
 			}),
-			input({
+			editbox({
 				field: {text: "devil's name"},
 				val: 'Anything goes',
 			})
@@ -439,24 +439,24 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=spin_input_demo>
+<template id=spinedit_demo>
 <script>
 
 main.add(H.div({},
-	spin_input({field: {val: 42}}),
-	spin_input({field: {val: 42, text: 'Heeey'}})
+	spinedit({field: {val: 42}}),
+	spinedit({field: {val: 42, text: 'Heeey'}})
 ))
 main.add(H.div({},
-	spin_input({button_style: 'up-down', field: {val: 42}}),
-	spin_input({button_style: 'up-down', field: {text: 'Hey hey'}})
+	spinedit({button_style: 'up-down', field: {val: 42}}),
+	spinedit({button_style: 'up-down', field: {text: 'Hey hey'}})
 ))
 main.add(H.div({},
-	spin_input({button_style: 'left-right', field: {val: 42}}),
-	spin_input({button_style: 'left-right', field: {text: 'Dis look good?'}})
+	spinedit({button_style: 'left-right', field: {val: 42}}),
+	spinedit({button_style: 'left-right', field: {text: 'Dis look good?'}})
 ))
 main.add(H.div({},
-	spin_input({field: {min: -2, max: 5, multiple_of: 1.5, val: 1}, button_placement: 'right'}),
-	spin_input({field: {min: -2, max: 5, multiple_of: 1.5, text: 'How bout dis?'}, button_placement: 'right'}),
+	spinedit({field: {min: -2, max: 5, multiple_of: 1.5, val: 1}, button_placement: 'right'}),
+	spinedit({field: {min: -2, max: 5, multiple_of: 1.5, text: 'How bout dis?'}, button_placement: 'right'}),
 ))
 
 </script>
@@ -538,7 +538,7 @@ main.add(lb, hlb, div({}, H('<h3>select_button</h3>'), sb))
 <template id=pagelist_demo>
 <script>
 
-console_page = H.div({title: 'Console'}, 'Console page. Contains focusble element. ', input())
+console_page = H.div({title: 'Console'}, 'Console page. Contains focusble element. ', editbox())
 source_page = H.div({title: 'Source'}, 'Source page contents.')
 
 main.add(
@@ -956,14 +956,14 @@ main.add(
 
 main.add(H.div({style: 'line-height: 3'},
 	'All ',
-	input({
+	editbox({
 		style: 'min-width: 4em',
 		label: 'imma input',
 		mode: 'inline',
 		val: 'inputs',
 	}),
 	'are baseline-aligned',
-	spin_input({
+	spinedit({
 		label: 'imma spinner',
 		style: 'min-width: 6em',
 		mode: 'inline',
