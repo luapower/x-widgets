@@ -62,6 +62,12 @@ component('x-listbox', function(e) {
 
 	e.set_items = function() {
 
+		if (!e.items) {
+			e.rowset = null
+			e.reload()
+			return
+		}
+
 		e.display_col = 0
 		let rows = []
 		for (let item of e.items) {

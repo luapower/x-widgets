@@ -2148,9 +2148,7 @@
 	display: none;
 }
 
-/* ------------------------------------------------------------------------ */
-/* editable richtext                                                        */
-/* ------------------------------------------------------------------------ */
+/* editable richtext ------------------------------------------------------ */
 
 .x-richtext {
 	position: relative;
@@ -2193,6 +2191,25 @@
 
 .x-richtext-button-selected {
 	background-color: #F0F0F0;
+}
+
+/* image ------------------------------------------------------------------ */
+
+.x-image {
+	margin: .25em;
+	border: 1px solid #ccc;
+	border-radius: .3em;   /* TODO: match radius of inputs with or without label */
+	overflow: hidden;
+	line-height: initial;  /* prevent inheriting it */
+	display: grid;
+}
+
+.x-image-img {
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	height: auto;
+	object-fit: contain;
 }
 
 /* charts ----------------------------------------------------------------- */

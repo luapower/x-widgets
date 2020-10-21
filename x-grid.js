@@ -1824,7 +1824,7 @@ component('x-grid', function(e, is_val_widget) {
 		// Enter: toggle edit mode, and navigate on exit
 		if (key == 'Enter') {
 			if (e.quicksearch_text) {
-				e.quicksearch(e.quicksearch_text, e.focused_row, 1)
+				e.quicksearch(e.quicksearch_text, e.focused_row, shift ? -1 : 1)
 			} else if (e.hasclass('picker')) {
 				e.pick_val()
 			} else if (!e.editor) {

@@ -3416,10 +3416,17 @@ function nav_widget(e) {
 	function* qs_reach_row(start_row, ri_offset) {
 		let n = e.rows.length
 		let ri1 = or(e.row_index(start_row), 0) + (ri_offset || 0)
-		for (let ri = ri1; ri < n; ri++)
-			yield ri
-		for (let ri = 0; ri < ri1; ri++)
-			yield ri
+		if (ri_offset >= 0) {
+			for (let ri = ri1; ri < n; ri++)
+				yield ri
+			for (let ri = 0; ri < ri1; ri++)
+				yield ri
+		} else {
+			for (let ri = ri1; ri >= 0; ri--)
+				yield ri
+			for (let ri = n-1; ri > ri1; ri--)
+				yield ri
+		}
 	}
 
 	function reset_quicksearch() {

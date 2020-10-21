@@ -14,6 +14,7 @@
 		calendar
 		date_dropdown
 		richtext
+		image
 		sql_editor
 		chart
 		input
@@ -21,11 +22,72 @@
 */
 
 /* ---------------------------------------------------------------------------
+// row widget mixin
+// ---------------------------------------------------------------------------
+publishes:
+	e.nav
+	e.nav_id
+	e.row
+implements:
+	do_update
+calls:
+	do_update_row([row])
+--------------------------------------------------------------------------- */
+
+function row_widget(e, enabled_without_nav) {
+
+	selectable_widget(e)
+	contained_widget(e)
+	serializable_widget(e)
+
+	e.isinput = true // auto-focused when pagelist items are changed.
+
+	e.do_update = function() {
+		let row = e.row
+		enabled = !!(enabled_without_nav || row)
+		e.class('disabled', !enabled)
+		e.focusable = enabled
+		e.do_update_row(row)
+	}
+
+	function row_changed() {
+		e.update()
+	}
+
+	function bind_nav(nav, on) {
+		if (!e.attached)
+			return
+		if (!nav)
+			return
+		nav.on('focused_row_changed', row_changed, on)
+		nav.on('focused_row_cell_state_changed', row_changed, on)
+		nav.on('display_vals_changed', row_changed, on)
+		nav.on('reset', row_changed, on)
+		nav.on('col_text_changed', row_changed, on)
+	}
+
+	e.set_nav = function(nav1, nav0) {
+		assert(nav1 != e)
+		bind_nav(nav0, false)
+		bind_nav(nav1, true)
+		e.update()
+	}
+	e.prop('nav', {store: 'var', private: true})
+	e.prop('nav_id' , {store: 'var', bind_id: 'nav', type: 'nav'})
+
+	e.property('row', () => e.nav && e.nav.focused_row)
+
+}
+
+/* ---------------------------------------------------------------------------
 // val widget mixin
 // ---------------------------------------------------------------------------
 publishes:
+	e.nav
+	e.nav_id
 	e.col
 	e.field
+	e.row
 	e.val
 	e.input_val
 	e.error
@@ -1550,6 +1612,41 @@ function richtext_widget_editing(e) {
 }
 
 // ---------------------------------------------------------------------------
+// image
+// ---------------------------------------------------------------------------
+
+component('x-image', function(e) {
+
+	e.class('x-stretched')
+
+	row_widget(e)
+
+	e.img = tag('img', {class: 'x-image-img'})
+	e.add(e.img)
+
+	e.img.on('load', function(ev) {
+		e.img.show()
+	})
+
+	e.img.on('error', function(ev) {
+		e.img.hide()
+	})
+
+	e.format_url = function(vals) {
+		return (e.url_template || '').subst(vals)
+	}
+
+	e.do_update_row = function(row) {
+		let vals = row && e.nav.serialize_row_vals(row)
+		let s = vals && e.format_url(vals)
+		e.img.attr('src', s)
+	}
+
+	e.prop('url_template', {store: 'var'})
+
+})
+
+// ---------------------------------------------------------------------------
 // sql editor
 // ---------------------------------------------------------------------------
 
@@ -1908,5 +2005,6 @@ input.widget_types = {
 	datetime : ['date_dropdown'],
 	date     : ['date_dropdown'],
 	enum     : ['enum_dropdown'],
+	image    : ['image'],
 }
 
