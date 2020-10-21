@@ -2934,13 +2934,7 @@ function nav_widget(e) {
 	}
 
 	function load_fail(type, status, message, body) {
-		let err
-		if (type == 'http')
-			err = S('error_http', 'Server returned {0} {1}').subst(status, message)
-		else if (type == 'network')
-			err = S('error_load_network', 'Loading failed: network error.')
-		else if (type == 'timeout')
-			err = S('error_load_timeout', 'Loading failed: timed out.')
+		let err = this.error_message(type, status, message, body)
 		if (err)
 			e.notify('error', err, body)
 		e.do_update_load_fail(true, err, type, status, message, body)

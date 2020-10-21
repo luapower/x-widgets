@@ -2202,6 +2202,7 @@
 	overflow: hidden;
 	line-height: initial;  /* prevent inheriting it */
 	display: grid;
+	position: relative;
 }
 
 .x-image-img {
@@ -2210,6 +2211,46 @@
 	width: 100%;
 	height: auto;
 	object-fit: contain;
+}
+
+.x-image-error {
+	justify-self: center;
+	align-self: center;
+	font-size: 200%;
+	color: #ccc;
+}
+
+.x-image-overlay {
+	position: absolute;
+	left: 0; top: 0; right: 0; bottom: 0;
+	display: grid;
+	justify-items: center;
+	align-items: center;
+}
+
+.x-image-button {
+	margin: .25em .15em;
+	font-size: 200%;
+	border-radius: 100%;
+	background-color: white;
+	width: 1.5em;
+	height: 1.5em;
+	padding-top: .2em;
+	text-align: center;
+	box-shadow: 0px 0px 3px #000;
+	opacity: .5;
+}
+
+.x-image-overlay > * {
+	visibility: hidden;
+}
+
+.x-image-overlay:hover > * {
+	visibility: visible;
+}
+
+.x-image-overlay > * > .x-image-button:active {
+	opacity: .8;
 }
 
 /* charts ----------------------------------------------------------------- */

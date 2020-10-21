@@ -1622,27 +1622,123 @@ component('x-image', function(e) {
 	row_widget(e)
 
 	e.img = tag('img', {class: 'x-image-img'})
-	e.add(e.img)
+
+	e.overlay = div({class: 'x-image-overlay'})
+
+	e.upload_btn = div({class: 'x-image-button x-image-upload-button fa fa-cloud-upload-alt'})
+	e.download_btn = div({class: 'x-image-button x-image-download-button fa fa-file-download'})
+	e.buttons = span(0, e.upload_btn, e.download_btn)
+	e.file_input = tag('input', {type: 'file', style: 'display: none'})
+	e.overlay.add(e.buttons, e.file_input)
+
+	e.add(e.img, e.overlay)
 
 	e.img.on('load', function(ev) {
 		e.img.show()
+		if (e.error_div)
+			e.error_div.hide()
 	})
 
 	e.img.on('error', function(ev) {
 		e.img.hide()
+		if (!e.error_div) {
+			e.error_div = div({class: 'x-image-error fa fa-camera'})
+			e.add(e.error_div)
+		}
+		e.error_div.show()
 	})
 
-	e.format_url = function(vals) {
-		return (e.url_template || '').subst(vals)
+	e.format_url = function(vals, purpose) {
+		return (purpose == 'upload' && e.upload_url_template || e.url_template || '').subst(vals)
 	}
 
-	e.do_update_row = function(row) {
-		let vals = row && e.nav.serialize_row_vals(row)
-		let s = vals && e.format_url(vals)
-		e.img.attr('src', s)
+	function format_url(purpose) {
+		let vals = e.row && e.nav.serialize_row_vals(e.row)
+		return vals && e.format_url(vals, purpose)
 	}
 
-	e.prop('url_template', {store: 'var'})
+	e.do_update_row = function() {
+
+		e.img.attr('src', format_url())
+
+		e.upload_btn.show(e.allow_upload)
+		e.download_btn.show(e.allow_download)
+	}
+
+	function refresh() {
+		e.update()
+	}
+
+	e.set_url_template        = refresh
+	e.set_upload_url_template = refresh
+	e.set_allow_upload        = refresh
+	e.set_allow_download      = refresh
+
+	e.prop('url_template'        , {store: 'var'})
+	e.prop('upload_url_template' , {store: 'var'})
+	e.prop('allow_upload'        , {store: 'var', type: 'bool', default: true})
+	e.prop('allow_download'      , {store: 'var', type: 'bool', default: true})
+
+	// upload/download error notifications
+
+	e.notify = function(type, message, ...args) {
+		notify(message, type)
+		e.fire('notify', type, message, ...args)
+	}
+
+	// upload
+
+	let upload_req
+	e.upload = function(file) {
+		if (upload_req)
+			upload_req.abort()
+		let reader = new FileReader()
+		reader.onload = function(ev) {
+			let file_contents = ev.target.result
+			upload_req = ajax({
+				url: format_url('upload'),
+				upload: file_contents,
+				success: function() {
+					e.update()
+				},
+				fail: function(type, status, message, body) {
+					let err = this.error_message(type, status, message, body)
+					if (err)
+						e.notify('error', err, body)
+				},
+				done: function() {
+					upload_req = null
+				},
+				upload_progress: function(p) {
+					// TODO:
+				},
+			})
+		}
+		reader.readAsBinaryString(file)
+	}
+
+	e.overlay.on('dragenter', return_false)
+	e.overlay.on('dragover', return_false)
+
+	e.overlay.on('drop', function(ev) {
+		if (!e.allow_upload)
+			return false
+		let files = ev.dataTransfer && ev.dataTransfer.files
+		if (files && files.length)
+			e.upload(files[0])
+		return false
+	})
+
+	e.upload_btn.on('click', function() {
+		e.file_input.click()
+	})
+
+	e.file_input.on('change', function() {
+		if (this.files && this.files.length)
+			e.upload(this.files[0])
+	})
+
+	// download
 
 })
 
