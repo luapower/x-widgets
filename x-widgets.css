@@ -599,7 +599,7 @@
 	min-width: 0;
 }
 
-.x-editbox-value {
+.x-editbox-input {
 	/* defaults */
 	margin: 0;
 	border: 0;
@@ -613,11 +613,11 @@
 	text-align: left;
 }
 
-.x-editbox-value:focus {
+.x-editbox-input:focus {
 	outline: none;
 }
 
-.x-editbox[align=right] > .x-editbox-value {
+.x-editbox[align=right] > .x-editbox-input {
 	text-align: right;
 }
 
@@ -642,7 +642,7 @@
 	border-radius: 0;
 }
 
-.x-editbox.with-label > .x-editbox-value {
+.x-editbox.with-label > .x-editbox-input {
 	padding: var(--x-input-il-padding);
 }
 
@@ -669,7 +669,7 @@
 	visibility: visible;
 }
 
-.x-editbox.with-label > .x-editbox-value:not(.empty) {
+.x-editbox.with-label > .x-editbox-input:not(.empty) {
 	top: 0; /* fixate to top so we only have to set the top padding */
 	padding: var(--x-input-il-padding-value);
 }
@@ -683,7 +683,7 @@
 	border-bottom: 1px dashed black;
 }
 
-.x-editbox[mode=inline] > .x-editbox-value {
+.x-editbox[mode=inline] > .x-editbox-input {
 	padding-bottom: .1em;
 }
 
@@ -691,7 +691,7 @@
 	box-shadow: none;
 }
 
-.x-editbox[mode=inline].with-label > .x-editbox-value:not(.empty) {
+.x-editbox[mode=inline].with-label > .x-editbox-input:not(.empty) {
 	padding-bottom: .1em;
 }
 
@@ -996,7 +996,7 @@
 }
 
 /* avoiding !important because the web is a piece of shit. */
-.x-tagsedit-value.x-tagsedit-value.x-tagsedit-value.x-tagsedit-value {
+.x-tagsedit-input.x-tagsedit-input.x-tagsedit-input.x-tagsedit-input {
 	min-width: 0;
 	width: 3em;
 	padding: 2px calc(.25em + 2px); /* reset */
@@ -1023,6 +1023,14 @@
 	margin: 1px .1em;
 	line-height: initial;
 	cursor: default;
+}
+
+.x-tagsedit.invalid > .x-tagsedit-tag {
+	background-color: var(--x-item-focused-invalid-bg-color);
+}
+
+.x-tagsedit.invalid > .x-tagsedit-tag > .x-tagsedit-tag-xbutton {
+	color: var(--x-inverted-fg-color);
 }
 
 .x-tagsedit-tag-xbutton {
@@ -2479,7 +2487,7 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 }
 
 .x-dark .x-editbox:focus-within,
-.x-dark .x-editbox-value:focus,
+.x-dark .x-editbox-input:focus,
 .x-dark .x-dropdown.open {
 	background-color: #080808;
 }
@@ -2488,7 +2496,7 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	background-color: #2a303e;
 }
 
-.x-dark .x-editbox.invalid > .x-editbox-value {
+.x-dark .x-editbox.invalid > .x-editbox-input {
 	background-color: var(--x-error-bg-color);
 }
 

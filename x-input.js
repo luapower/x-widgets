@@ -9,13 +9,13 @@
 		radiogroup
 		editbox
 		spinedit
+		tagsedit
 		slider
 		dropdown
 		calendar
 		date_dropdown
 		richtext
 		image
-		tagsedit
 		sql_editor
 		chart
 		input
@@ -530,12 +530,16 @@ component('x-radiogroup', function(e) {
 
 })
 
+// ---------------------------------------------------------------------------
+// editbox
+// ---------------------------------------------------------------------------
+
 component('x-editbox', function(e) {
 
 	val_widget(e)
 	input_widget(e)
 
-	e.input = H.input({class: 'x-editbox-value'})
+	e.input = H.input({class: 'x-editbox-input'})
 	e.label_div = div({class: 'x-editbox-label'})
 	e.add(e.input, e.label_div)
 
@@ -574,9 +578,104 @@ component('x-editbox', function(e) {
 			e.input.focus()
 	}
 
+	// suggestion picker ------------------------------------------------------
+
+	e.on('bind_field', bind_picker)
+
+	e.create_picker = noop // stub
+
+	function bind_picker(on) {
+		if (!e.attached)
+			return
+		if (on) {
+			e.picker = e.create_picker({
+				id: e.id && e.id + '.picker',
+				dropdown: e,
+				nav: e.nav,
+				col: e.col,
+				can_select_widget: false,
+			})
+			if (!e.picker)
+				return
+			e.picker.class('picker', true)
+			e.picker.on('val_picked', picker_val_picked)
+			e.picker.on('keydown'   , picker_keydown)
+			e.picker.bind(true)
+		} else if (e.picker) {
+			e.picker.popup(false)
+			e.picker.bind(false)
+			e.picker = null
+		}
+		document.on('pointerdown'     , document_pointerdown, on)
+		document.on('rightpointerdown', document_pointerdown, on)
+		document.on('stopped_event'   , document_stopped_event, on)
+	}
+
+	e.set_open = function(open) {
+		if (e.isopen != open) {
+			e.class('open', open)
+			if (open) {
+				e.cancel_val = e.input_val
+				e.picker.min_w = e.rect().w
+				if (e.picker_w)
+					e.picker.auto_w = false
+				e.picker.w = e.picker_w
+				e.picker.show()
+				e.picker.popup(e, 'bottom', e.align)
+			} else {
+				e.cancel_val = null
+				e.picker.hide()
+				e.fire('lost_focus') // grid editor protocol
+			}
+		}
+	}
+
+	e.open   = function() { e.set_open(true, focus) }
+	e.close  = function() { e.set_open(false, focus) }
+	e.toggle = function() { e.set_open(!e.isopen, focus) }
+	e.cancel = function(focus, ev) {
+		if (e.isopen)
+			e.set_val(e.cancel_val, ev)
+		e.close(focus)
+	}
+
+	e.property('isopen',
+		function() {
+			return e.hasclass('open')
+		},
+		function(open) {
+			e.set_open(open, true)
+		}
+	)
+
+	// clicking outside the picker closes the picker.
+	function document_pointerdown(ev) {
+		if (e.contains(ev.target)) // clicked inside the editbox.
+			return
+		if (e.picker.contains(ev.target)) // clicked inside the picker.
+			return
+		e.close()
+	}
+
+	// clicking outside the picker closes the picker, even if the click did something.
+	function document_stopped_event(ev) {
+		if (ev.type.ends('pointerdown'))
+			document_pointerdown(ev)
+	}
+
+	/*
+	e.on('focusout', function(ev) {
+		// prevent editbox's focusout from bubbling to the parent when opening the picker.
+		if (focusing_picker)
+			return false
+		e.fire('lost_focus') // grid editor protocol
+	})
+	*/
+
 	// grid editor protocol ---------------------------------------------------
 
 	e.input.on('blur', function() {
+		close_picker()
 		e.fire('lost_focus')
 	})
 
@@ -784,6 +883,193 @@ component('x-spinedit', function(e) {
 })
 
 // ---------------------------------------------------------------------------
+// tagsedit
+// ---------------------------------------------------------------------------
+
+component('x-tagsedit', function(e) {
+
+	e.class('x-editbox')
+
+	val_widget(e)
+	input_widget(e)
+
+	e.input = H.input({class: 'x-editbox-input x-tagsedit-input'})
+	e.label_div = div({class: 'x-editbox-label x-tagsedit-label'})
+	e.add(e.input, e.label_div)
+
+	function update_state(s) {
+		e.input.class('empty', s == '')
+		e.label_div.class('empty', s == '')
+	}
+
+	e.do_update_val = function(v, ev) {
+
+		if (v) {
+			let i = e.at.length - 3
+			while (i >= 0)
+				e.at[i--].remove()
+			i = 0
+			for (let tag of v) {
+				let xb = div({class: 'x-tagsedit-tag-xbutton fa fa-times'})
+				let tag_div = div({class: 'x-tagsedit-tag', title: S('remove', 'remove')}, tag, xb)
+				tag_div.onclick = tag_click
+				e.insert(i++, tag_div)
+			}
+		}
+
+		e.class('empty', !(v && v.length))
+
+		if (!(ev && ev.input == e)) {
+			e.input.value = null
+		}
+
+		let maxlen = e.field && e.field.maxlen
+		e.input.attr('maxlength', maxlen)
+	}
+
+	// controller
+
+	function tag_click() {
+		let v = e.input_val.slice()
+		v.remove(this.index)
+		e.set_val(v, {input: e})
+		return false
+	}
+
+	focusable_widget(e, e.input)
+
+	e.on('pointerdown', function(ev) {
+		if (ev.target == e.input)
+			return
+		e.focus()
+		return false
+	})
+
+	focus = e.focus
+	e.focus = function() {
+		if (e.widget_selected)
+			focus.call(e)
+		else
+			e.input.focus()
+	}
+
+	e.input.on('keydown', function(key, shift, ctrl) {
+		if (key == 'Enter' && e.input.value) {
+			let v = e.input_val && e.input_val.slice() || []
+			v.push(e.input.value)
+			e.input.value = null
+			e.set_val(v, {input: e})
+			return false
+		}
+		if (key == 'Backspace' && !e.input.value) {
+			e.set_val(e.input_val && e.input_val.slice(0, -1), {input: e})
+			return false
+		}
+	})
+
+	// grid editor protocol
+
+	e.input.on('blur', function() {
+		e.fire('lost_focus')
+	})
+
+	e.set_text_min_w = function(w) {
+		// TODO:
+	}
+
+})
+
+// ---------------------------------------------------------------------------
+// address widget with autocomplete via google places api
+// ---------------------------------------------------------------------------
+
+{
+	let autocomplete
+	let session_token, token_expire_time
+	let token_duration = 2 * 60  // google says it's "a few minutes"...
+
+	function suggest_address(s, callback) {
+
+		if (!autocomplete)
+			return
+
+		let now = time()
+		if (!session_token || token_expire_time < now) {
+			session_token = new google.maps.places.AutocompleteSessionToken()
+			token_expire_time = now + token_duration
+		}
+
+		autocomplete.getPlacePredictions({input: s, sessionToken: session_token}, callback)
+	}
+
+	function _google_places_api_loaded() {
+
+		function get_places(places, status) {
+			if (status != google.maps.places.PlacesServiceStatus.OK) {
+				notify(status)
+				return
+			}
+			print(places)
+		}
+
+		autocomplete = new google.maps.places.AutocompleteService()
+		document.fire('google_places_api_loaded')
+	}
+
+	function init_google_places_api(api_key) {
+		document.head.add(tag('script', {
+			defer: '',
+			src: 'https://maps.googleapis.com/maps/api/js?key='+api_key+'&libraries=places&callback=_google_places_api_loaded'
+		}))
+		init_google_places_api = noop // call-once
+	}
+
+}
+
+component('x-address', function(e) {
+
+	editbox.construct(e)
+
+	let lb = listbox({
+		id: e.id && e.id + '.picker',
+		nav: e.nav,
+		col: e.col,
+		val_col: 0,
+		display_col: 0,
+	})
+	e.add(lb)
+
+	e.on('bind_field', function(on) {
+		lb.begin_update()
+		lb.nav = e.nav
+		lb.col = e.col
+		lb.end_update()
+	})
+
+	function suggested_addresses_changed(addrs) {
+		lb.items = addrs
+	}
+
+	let timer_id
+
+	//e.from_text = function(s) { return {address: s} }
+	//e.to_text = function(v) { return v ? v.address : '' }
+
+	function val_changed() {
+		let v = e.input_val
+		if (v)
+			suggest_address(v, suggested_addresses_changed)
+		timer_id = null
+	}
+
+	e.on('val_changed', function(v, ev) {
+		if (ev && ev.input == e && ev.typing)
+			timer_id = timer_id || after(.5, val_changed)
+	})
+
+})
+
+// ---------------------------------------------------------------------------
 // slider
 // ---------------------------------------------------------------------------
 
@@ -925,7 +1211,7 @@ function dropdown_widget(e) {
 
 	e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
 
-	e.val_div = span({class: 'x-editbox-value x-dropdown-value'})
+	e.val_div = span({class: 'x-editbox-input x-dropdown-value'})
 	e.button = span({class: 'x-dropdown-button fa fa-caret-down'})
 	e.label_div = div({class: 'x-editbox-label x-dropdown-label'})
 	e.add(e.val_div, e.button, e.label_div)
@@ -966,7 +1252,7 @@ function dropdown_widget(e) {
 			return
 		if (on) {
 			e.picker = e.create_picker({
-				id: e.id && e.id + '_dropdown',
+				id: e.id && e.id + '.picker',
 				dropdown: e,
 				nav: e.nav,
 				col: e.col,
@@ -1800,100 +2086,6 @@ component('x-sql-editor', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// tagsedit
-// ---------------------------------------------------------------------------
-
-component('x-tagsedit', function(e) {
-
-	e.class('x-editbox')
-
-	val_widget(e)
-	input_widget(e)
-
-	e.input = H.input({class: 'x-editbox-value x-tagsedit-value'})
-	e.label_div = div({class: 'x-editbox-label x-tagsedit-label'})
-	e.add(e.input, e.label_div)
-
-	function update_state(s) {
-		e.input.class('empty', s == '')
-		e.label_div.class('empty', s == '')
-	}
-
-	function tag_click() {
-		let v = e.val.slice()
-		v.remove(this.index)
-		e.set_val(v, {input: e})
-	}
-
-	e.do_update_val = function(v, ev) {
-
-		if (v) {
-			let i = e.at.length - 3
-			while (i >= 0)
-				e.at[i--].remove()
-			i = 0
-			for (let tag of v) {
-				let xb = div({class: 'x-tagsedit-tag-xbutton fa fa-times'})
-				let tag_div = div({class: 'x-tagsedit-tag', title: S('remove', 'remove')}, tag, xb)
-				tag_div.onclick = tag_click
-				e.insert(i++, tag_div)
-			}
-		}
-
-		e.class('empty', !v.length)
-
-		if (!(ev && ev.input == e))
-			e.input.value = null
-
-		let maxlen = e.field && e.field.maxlen
-		e.input.attr('maxlength', maxlen)
-	}
-
-	e.input.on('input', function() {
-		//e.set_val(e.from_text(e.input.value), {input: e, typing: true})
-		//update_state(e.input.value)
-	})
-
-	// focusing
-
-	focusable_widget(e, e.input)
-
-	focus = e.focus
-	e.focus = function() {
-		if (e.widget_selected)
-			focus.call(e)
-		else
-			e.input.focus()
-	}
-
-	// grid editor protocol ---------------------------------------------------
-
-	e.input.on('blur', function() {
-		e.fire('lost_focus')
-	})
-
-	e.input.on('keydown', function(key, shift, ctrl) {
-		if (key == 'Enter' && e.input.value) {
-			let v = e.val && e.val.slice() || []
-			v.push(e.input.value)
-			e.input.value = null
-			e.set_val(v, {input: e})
-			return false
-		}
-		if (key == 'Backspace' && !e.input.value) {
-			e.set_val(e.val && e.val.slice(0, -1), {input: e})
-			return false
-		}
-	})
-
-	e.input.on('keyup', function(key, shift, ctrl) {
-
-	})
-
-
-})
-
-// ---------------------------------------------------------------------------
 // chart
 // ---------------------------------------------------------------------------
 
@@ -2211,5 +2403,6 @@ input.widget_types = {
 	enum     : ['enum_dropdown'],
 	image    : ['image'],
 	tags     : ['tagsedit'],
+	address  : ['address'],
 }
 

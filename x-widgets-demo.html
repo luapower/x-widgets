@@ -464,6 +464,24 @@ main.add(H.div({},
 
 <!--------------------------------------------------------------------------->
 
+<template id=tagsedit_demo>
+<script>
+
+main.add(
+	tagsedit({
+		field: {
+			validate: function(v) {
+				return v.includes('bananas') || 'Can\'t renounce bananas'
+			},
+		},
+		val: ['apples', 'bananas', 'mangos'],
+	}))
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
 <template id=slider_demo>
 <script>
 
@@ -487,6 +505,37 @@ main.add(H.div({},
 		},
 		val: 1500,
 	}))
+)
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=image_demo>
+<script>
+
+main.add(
+	image({nav: global_val_nav(), url_template: '/media/gif/porsche.gif', w: 300, h: 200})
+)
+
+</script>
+</template>
+
+<!--------------------------------------------------------------------------->
+
+<template id=address_demo>
+<script>
+
+let api = editbox({field: {}, val: 'AIzaSyAuM6W_Hh2IagBOi4zR6owafO5yNyJLGiM'})
+api.on('val_changed', function(v) {
+	if (v)
+		init_google_places_api(v)
+})
+
+main.add(
+	api,
+	address({field: {}})
 )
 
 </script>
@@ -1260,7 +1309,7 @@ demo_list = listbox({
 	item_typename: 'richtext',
 	field: {},
 	val_col: 0,
-	val: demos[29],
+	val: demos[15],
 })
 
 demo_list.create_item = function() {
