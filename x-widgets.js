@@ -1117,7 +1117,8 @@ function focusable_widget(e, fe) {
 	fe = fe || e
 
 	let focusable = true
-	fe.attr('tabindex', 0)
+	if (!fe.hasattr('tabindex'))
+		fe.attr('tabindex', 0)
 
 	e.set_tabindex = function(i) {
 		let can_be_focused = focusable && !e.disabled

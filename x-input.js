@@ -15,6 +15,7 @@
 		date_dropdown
 		richtext
 		image
+		tagsedit
 		sql_editor
 		chart
 		input
@@ -550,7 +551,7 @@ component('x-editbox', function(e) {
 		if (ev && ev.input == e && ev.typing)
 			return
 		let s = e.to_text(v)
-		let maxlen = or(e.maxlen, e.field && e.field.maxlen)
+		let maxlen = e.field && e.field.maxlen
 		e.input.value = s.slice(0, maxlen)
 		e.input.attr('maxlength', maxlen)
 		update_state(s)
@@ -1635,12 +1636,16 @@ component('x-image', function(e) {
 
 	e.img.on('load', function(ev) {
 		e.img.show()
+		e.overlay.class('transparent', true)
+		e.download_btn.attr('disabled', false)
 		if (e.error_div)
 			e.error_div.hide()
 	})
 
 	e.img.on('error', function(ev) {
 		e.img.hide()
+		e.overlay.class('transparent', false)
+		e.download_btn.attr('disabled', true)
 		if (!e.error_div) {
 			e.error_div = div({class: 'x-image-error fa fa-camera'})
 			e.add(e.error_div)
@@ -1791,6 +1796,100 @@ component('x-sql-editor', function(e) {
 			e.editor = null
 		}
 	})
+
+})
+
+// ---------------------------------------------------------------------------
+// tagsedit
+// ---------------------------------------------------------------------------
+
+component('x-tagsedit', function(e) {
+
+	e.class('x-editbox')
+
+	val_widget(e)
+	input_widget(e)
+
+	e.input = H.input({class: 'x-editbox-value x-tagsedit-value'})
+	e.label_div = div({class: 'x-editbox-label x-tagsedit-label'})
+	e.add(e.input, e.label_div)
+
+	function update_state(s) {
+		e.input.class('empty', s == '')
+		e.label_div.class('empty', s == '')
+	}
+
+	function tag_click() {
+		let v = e.val.slice()
+		v.remove(this.index)
+		e.set_val(v, {input: e})
+	}
+
+	e.do_update_val = function(v, ev) {
+
+		if (v) {
+			let i = e.at.length - 3
+			while (i >= 0)
+				e.at[i--].remove()
+			i = 0
+			for (let tag of v) {
+				let xb = div({class: 'x-tagsedit-tag-xbutton fa fa-times'})
+				let tag_div = div({class: 'x-tagsedit-tag', title: S('remove', 'remove')}, tag, xb)
+				tag_div.onclick = tag_click
+				e.insert(i++, tag_div)
+			}
+		}
+
+		e.class('empty', !v.length)
+
+		if (!(ev && ev.input == e))
+			e.input.value = null
+
+		let maxlen = e.field && e.field.maxlen
+		e.input.attr('maxlength', maxlen)
+	}
+
+	e.input.on('input', function() {
+		//e.set_val(e.from_text(e.input.value), {input: e, typing: true})
+		//update_state(e.input.value)
+	})
+
+	// focusing
+
+	focusable_widget(e, e.input)
+
+	focus = e.focus
+	e.focus = function() {
+		if (e.widget_selected)
+			focus.call(e)
+		else
+			e.input.focus()
+	}
+
+	// grid editor protocol ---------------------------------------------------
+
+	e.input.on('blur', function() {
+		e.fire('lost_focus')
+	})
+
+	e.input.on('keydown', function(key, shift, ctrl) {
+		if (key == 'Enter' && e.input.value) {
+			let v = e.val && e.val.slice() || []
+			v.push(e.input.value)
+			e.input.value = null
+			e.set_val(v, {input: e})
+			return false
+		}
+		if (key == 'Backspace' && !e.input.value) {
+			e.set_val(e.val && e.val.slice(0, -1), {input: e})
+			return false
+		}
+	})
+
+	e.input.on('keyup', function(key, shift, ctrl) {
+
+	})
+
 
 })
 
@@ -2111,5 +2210,6 @@ input.widget_types = {
 	date     : ['date_dropdown'],
 	enum     : ['enum_dropdown'],
 	image    : ['image'],
+	tags     : ['tagsedit'],
 }
 

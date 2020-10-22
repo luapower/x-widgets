@@ -15,6 +15,8 @@
 	--x-input-il-padding            : 1em .5em;
 	--x-input-il-padding-value      : 1.6em .5em .4em .5em;
 	--x-input-il-padding-value-top  : 1.6em;
+	--x-input-il-padding-value-bottom : .4em;
+	--x-input-il-padding-value-side : .5em;
 	--x-input-il-padding-top-label  : .2em;
 	--x-input-il-padding-top-label-animation-start : .6em;
 
@@ -974,6 +976,68 @@
 .x-dropdown[mode=inline]:focus,
 .x-dropdown[mode=inline].open {
 	box-shadow: none;
+}
+
+/* tagsedit --------------------------------------------------------------- */
+
+.x-tagsedit {
+	overflow: hidden;
+	align-items: start;
+	padding-left : var(--x-input-il-padding-value-side);
+	padding-right: var(--x-input-il-padding-value-side);
+	display: flex;
+	flex-flow: wrap;
+}
+
+/* TODO: fixed height mode: not finished */
+.x-tagsedit.with-label[mode=fixed] {
+	max-height: 3.4em;
+	overflow: auto;
+}
+
+/* avoiding !important because the web is a piece of shit. */
+.x-tagsedit-value.x-tagsedit-value.x-tagsedit-value.x-tagsedit-value {
+	min-width: 0;
+	width: 3em;
+	padding: 2px calc(.25em + 2px); /* reset */
+	height: auto;                   /* reset */
+	flex: 1 1 auto;
+}
+
+.x-tagsedit-label {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+.x-tagsedit.with-label {
+	padding-top   : var(--x-input-il-padding-value-top);
+	padding-bottom: var(--x-input-il-padding-value-bottom);
+}
+
+.x-tagsedit-tag {
+	display: inline;
+	border: 1px solid #ccc;
+	border-radius: .25em;
+	background-color: #eee;
+	padding: 0 .25em;
+	margin: 1px .1em;
+	line-height: initial;
+	cursor: default;
+}
+
+.x-tagsedit-tag-xbutton {
+	padding-left: .4em;
+	padding-right: .2em;
+	font-size: 70%;
+	color: #888;
+}
+
+.x-tagsedit-tag:hover {
+	cursor: pointer;
+}
+
+.x-tagsedit-tag:hover > .x-tagsedit-tag-xbutton {
+	color: var(--x-error-bg-color);
 }
 
 /* input ------------------------------------------------------------------ */
@@ -2228,6 +2292,10 @@
 	align-items: center;
 }
 
+.x-image-overlay.transparent {
+	opacity: .5;
+}
+
 .x-image-button {
 	margin: .25em .15em;
 	font-size: 200%;
@@ -2238,8 +2306,8 @@
 	padding-top: .2em;
 	text-align: center;
 	box-shadow: 0px 0px 3px #000;
-	opacity: .5;
 	cursor: pointer;
+	opacity: .8;
 }
 
 .x-image-overlay > * {
@@ -2250,8 +2318,16 @@
 	visibility: visible;
 }
 
-.x-image-overlay > * > .x-image-button:active {
-	opacity: .8;
+.x-image-overlay:hover::before {
+	visibility: hiddn;
+}
+
+.x-image-button[disabled] {
+	opacity: .2;
+}
+
+.x-image-overlay > * > .x-image-button:active:not([disabled]) {
+	opacity: 1;
 }
 
 /* charts ----------------------------------------------------------------- */
