@@ -1007,8 +1007,11 @@ component('x-tagsedit', function(e) {
 			return
 
 		function get_places(places, status) {
-			if (status != google.maps.places.PlacesServiceStatus.OK)
-				notify(status)
+			let pss = google.maps.places.PlacesServiceStatus
+			if (status == pss.ZERO_RESULTS)
+				notify(S('google_maps_address_not_found', 'Address not found on Google Maps'), 'search')
+			if (status != pss.OK && status != pss.ZERO_RESULTS)
+				notify(S('google_maps_error', 'Google maps error: {0}', status))
 			callback(places)
 		}
 
