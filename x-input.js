@@ -10,6 +10,8 @@
 		editbox
 		spinedit
 		tagsedit
+		placeedit
+		googlemaps
 		slider
 		dropdown
 		calendar
@@ -976,17 +978,32 @@ component('x-tagsedit', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// address widget with autocomplete via google places api
+// google maps APIs wrappers
 // ---------------------------------------------------------------------------
 
 {
-	let autocomplete
+	let api_key
+	let autocomplete_service
 	let session_token, token_expire_time
 	let token_duration = 2 * 60  // google says it's "a few minutes"...
 
+	function google_maps_iframe(place_id) {
+		let iframe_src = place_id => 'https://www.google.com/maps/embed/v1/place?key='+api_key+(place_id ? '&q=place_id:'+place_id : '')
+		let iframe = tag('iframe', {
+			frameborder: 0,
+			style: 'border: 0',
+			src: iframe_src(place_id),
+			allowfullscreen: '',
+		})
+		iframe.goto_place = function(place_id) {
+			iframe.src = iframe_src(place_id)
+		}
+		return iframe
+	}
+
 	function suggest_address(s, callback) {
 
-		if (!autocomplete)
+		if (!autocomplete_service)
 			return
 
 		let now = time()
@@ -995,7 +1012,7 @@ component('x-tagsedit', function(e) {
 			token_expire_time = now + token_duration
 		}
 
-		autocomplete.getPlacePredictions({input: s, sessionToken: session_token}, callback)
+		autocomplete_service.getPlacePredictions({input: s, sessionToken: session_token}, callback)
 	}
 
 	function _google_places_api_loaded() {
@@ -1008,11 +1025,12 @@ component('x-tagsedit', function(e) {
 			print(places)
 		}
 
-		autocomplete = new google.maps.places.AutocompleteService()
+		autocomplete_service = new google.maps.places.AutocompleteService()
 		document.fire('google_places_api_loaded')
 	}
 
-	init_google_places_api = function(api_key) {
+	init_google_places_api = function(_api_key) {
+		api_key = _api_key
 		document.head.add(tag('script', {
 			defer: '',
 			src: 'https://maps.googleapis.com/maps/api/js?key='+api_key+'&libraries=places&callback=_google_places_api_loaded'
@@ -1022,7 +1040,11 @@ component('x-tagsedit', function(e) {
 
 }
 
-component('x-address', function(e) {
+// ---------------------------------------------------------------------------
+// placeedit widget with autocomplete via google places api
+// ---------------------------------------------------------------------------
+
+component('x-placeedit', function(e) {
 
 	editbox.construct(e)
 
@@ -1068,6 +1090,28 @@ component('x-address', function(e) {
 			else
 				suggested_addresses_changed()
 		}
+	})
+
+})
+
+// ---------------------------------------------------------------------------
+// google maps widget
+// ---------------------------------------------------------------------------
+
+component('x-googlemaps', function(e) {
+
+	val_widget(e)
+
+	e.class('x-stretched')
+
+	e.field_type = 'place'
+
+	e.map = google_maps_iframe()
+	e.add(e.map)
+
+	e.override('do_update_val', function(inherited, v, ev) {
+		inherited(v, ev)
+		e.map.goto_place(isobject(v) && v.place_id || null)
 	})
 
 })
@@ -2406,6 +2450,6 @@ input.widget_types = {
 	enum     : ['enum_dropdown'],
 	image    : ['image'],
 	tags     : ['tagsedit'],
-	place    : ['address'],
+	place    : ['placeedit', 'googlemaps'],
 }
 

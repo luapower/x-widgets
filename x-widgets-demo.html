@@ -524,19 +524,20 @@ main.add(
 
 <!--------------------------------------------------------------------------->
 
-<template id=address_demo>
+<template id=placeedit_demo>
 <script>
 
 let api = editbox({field: {}, val: 'AIzaSyAuM6W_Hh2IagBOi4zR6owafO5yNyJLGiM'})
 api.on('val_changed', function(v) {
-	if (v)
-		init_google_places_api(v)
+	if (v) init_google_places_api(v)
 })
+main.add(api)
 
-main.add(
-	api,
-	address({field: {}})
-)
+let addr = placeedit({field: {}})
+main.add(addr)
+
+let gmap = googlemaps({nav: addr.nav, col: addr.col})
+main.add(gmap)
 
 </script>
 </template>

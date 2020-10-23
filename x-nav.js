@@ -3913,5 +3913,9 @@ component('x-lookup-dropdown', function(e) {
 		return span(0, pin, isobject(v) ? v.description : v || '')
 	}
 
+	place.editor = function(...opt) {
+		return placeedit(...opt)
+	}
+
 }
 
