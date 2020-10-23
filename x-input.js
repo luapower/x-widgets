@@ -649,7 +649,7 @@ component('x-editbox', function(e) {
 	}
 
 	function keydown_for_picker(key) {
-		if (key == 'ArrowDown' || key == 'ArrowUp') {
+		if ((key == 'ArrowDown' || key == 'ArrowUp') && (e.isopen || !e.hasclass('grid-editor'))) {
 			e.picker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
 			return false
 		}
@@ -659,7 +659,7 @@ component('x-editbox', function(e) {
 		}
 		if (key == 'Escape') {
 			e.close()
-			return false
+			// don't return false so that grid can exit edit mode.
 		}
 	}
 
@@ -1079,7 +1079,7 @@ component('x-placeedit', function(e) {
 	}
 
 	e.from_text = function(s) { return s ? {input_text: s} : null }
-	e.to_text = function(v) { return isobject(v) ? v.description : v || '' }
+	e.to_text = function(v) { return (isobject(v) ? v.description : v) || '' }
 
 	e.override('do_update_val', function(inherited, v, ev) {
 		inherited(v, ev)
