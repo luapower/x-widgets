@@ -188,6 +188,13 @@ function component(tag, cons) {
 			}
 		}
 
+		override(method, func) {
+			let inherited = this[method] || noop
+			this[method] = function(...args) {
+				return func(inherited, ...args)
+			}
+		}
+
 		debug_name(prefix) {
 			prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
 			let p = this; do { p = p.popup_target || p.parent } while (p && !p.debug_name)
@@ -324,15 +331,6 @@ calls:
 fires:
 	document.'prop_changed' (e, prop, v1, v0, slot)
 --------------------------------------------------------------------------- */
-
-/* TODO: use it or scrape it.
-method(HTMLElement, 'override', function(method, func) {
-	let inherited = this[method] || noop
-	this[method] = function(...args) {
-		return func(inherited, ...args)
-	}
-})
-*/
 
 let fire_prop_changed = function(e, prop, v1, v0, slot) {
 	// TODO: add this to simplify some things?

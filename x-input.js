@@ -565,7 +565,6 @@ component('x-editbox', function(e) {
 		let v = e.input.value
 		e.set_val(e.from_text(v), {input: e, typing: true})
 		update_state(v)
-		e.isopen = !!v
 	})
 
 	e.on('bind_field', function(on) {
@@ -649,7 +648,6 @@ component('x-editbox', function(e) {
 
 	function keydown_for_picker(key) {
 		if (key == 'ArrowDown' || key == 'ArrowUp') {
-			e.open()
 			e.picker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
 			return false
 		}
@@ -1055,31 +1053,21 @@ component('x-address', function(e) {
 				types: p.types,
 			}
 		})
-		e.picker.disabled = false
-		print(places)
+		e.isopen = !!places.length
 	}
-
-	let timer_id
 
 	e.from_text = function(s) { return s ? {input_text: s} : null }
 	e.to_text = function(v) { return isobject(v) ? v.description : v || '' }
 
-	let inh_do_update_val = e.do_update_val
-	e.do_update_val = function(v, ev) {
-		inh_do_update_val(v, ev)
+	e.override('do_update_val', function(inherited, v, ev) {
+		inherited(v, ev)
 		e.pin_ct.set(e.field.format_pin(v))
-	}
-
-	function delayed_update_val() {
-		let v = e.input_val
-		if (v)
-			suggest_address(v.input_text, suggested_addresses_changed)
-		timer_id = null
-	}
-
-	e.on('val_changed', function(v, ev) {
-		if (ev && ev.input == e && ev.typing)
-			timer_id = timer_id || after(.5, delayed_update_val)
+		if (ev && ev.input == e && ev.typing) {
+			if (v)
+				suggest_address(v.input_text, suggested_addresses_changed)
+			else
+				suggested_addresses_changed()
+		}
 	})
 
 })
