@@ -36,12 +36,6 @@ component('x-listbox', function(e) {
 
 	e.display_col = 0
 
-	let init = e.init
-	e.init = function() {
-		init()
-		init_as_picker()
-	}
-
 	// item-based rowset ------------------------------------------------------
 
 	e.prop('items', {store: 'var', private: true})
@@ -150,7 +144,7 @@ component('x-listbox', function(e) {
 			for (let i = 0; i < e.rows.length; i++)
 				e.do_update_item(e.at[i], e.rows[i])
 
-		if (!opt || opt.val)
+		if (opt.val)
 			update_val()
 
 		if (opt.rows || opt.state)
@@ -352,9 +346,7 @@ component('x-listbox', function(e) {
 
 	// picker protocol --------------------------------------------------------
 
-	function init_as_picker() {
-		if (!e.dropdown)
-			return
+	e.init_as_picker = function() {
 		e.xmodule_noupdate = true
 		e.auto_focus_first_cell = false
 		e.can_select_multiple = false

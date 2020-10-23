@@ -85,12 +85,6 @@ component('x-grid', function(e, is_val_widget) {
 		document.on('layout_changed', layout_changed, on)
 	})
 
-	let init = e.init
-	e.init = function() {
-		init()
-		init_as_picker()
-	}
-
 	// geometry ---------------------------------------------------------------
 
 	function set_cell_xw(cell, field, x, w) {
@@ -601,7 +595,7 @@ component('x-grid', function(e, is_val_widget) {
 		let cell = e.cells.at[cell_index(e.row_index(row), field.index)]
 		if (!cell)
 			return
-		if (typeof cell.qs_val != 'string')
+		if (!isstr(cell.qs_val))
 			return
 		if (!cell.qs_div) {
 			if (s) {
@@ -834,9 +828,7 @@ component('x-grid', function(e, is_val_widget) {
 		e.fire('val_picked', {input: e})
 	}
 
-	function init_as_picker() {
-		if (!e.dropdown)
-			return
+	e.init_as_picker = function() {
 		e.xmodule_noupdate = true
 		e.can_edit = false
 		e.can_focus_cells = false
@@ -1486,11 +1478,6 @@ component('x-grid', function(e, is_val_widget) {
 	})
 
 	function prevent_bubbling(ev) {
-		ev.stopPropagation()
-	}
-
-	function prevent_bubbling2(ev) {
-		print(ev.type)
 		ev.stopPropagation()
 	}
 

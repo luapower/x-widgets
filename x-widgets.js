@@ -153,7 +153,7 @@ function component(tag, cons) {
 		}
 
 		bind(on) {
-			assert(typeof on == 'boolean')
+			assert(isbool(on))
 			if (!bind_events)
 				return
 			if (on) {
@@ -174,7 +174,7 @@ function component(tag, cons) {
 					let t1 = time()
 					let dt = (t1 - t0) * 1000
 					if (dt > 10)
-						print((dt).toFixed(0).padStart(3, ' ')+'ms', this.debug_name())
+						debug((dt).toFixed(0).padStart(3, ' ')+'ms', this.debug_name())
 				}
 			} else {
 				if (!this.attached)
@@ -220,21 +220,21 @@ component.types = {} // {type -> create}
 component.create = function(e, e0) {
 	if (e instanceof Node || (isobject(e) && e.isinstance))
 		return e // instances pass through.
-	let id = typeof e == 'string' ? e : e.id
+	let id = isstr(e) ? e : e.id
 	if (e0 && e0.id == id)
 		return e0  // already created (called from a prop's `convert()`).
-	if (typeof e == 'string') // e is a id
+	if (isstr(e)) // e is a id
 		e = {id: e}
 	if (!e.type) {
 		e.type = xmodule.instance_type(id)
 		if (!e.type) {
-			print('id not found', id)
+			warn('id not found', id)
 			return
 		}
 	}
 	let create = component.types[e.type]
 	if (!create) {
-		print('component type not found', e.type, e.id)
+		warn('component type not found', e.type, e.id)
 		return
 	}
 	return create(e)
@@ -282,7 +282,7 @@ let component_deferred_updating = function(e) {
 		e.updating--
 		if (!e.updating)
 			if (opt)
-				e.update()
+				e.update(opt)
 	}
 
 	e.do_update = noop
@@ -1117,31 +1117,37 @@ function focusable_widget(e, fe) {
 	fe = fe || e
 
 	let focusable = true
+
 	if (!fe.hasattr('tabindex'))
 		fe.attr('tabindex', 0)
 
-	e.set_tabindex = function(i) {
+	function do_update() {
 		let can_be_focused = focusable && !e.disabled
-		fe.attr('tabindex', can_be_focused ? i : -1)
+		fe.attr('tabindex', can_be_focused ? e.tabindex : fe instanceof HTMLInputElement ? -1 : null)
 		if (!can_be_focused)
 			e.blur()
 	}
+
+	e.set_tabindex = do_update
 	e.prop('tabindex', {store: 'var', type: 'number', default: 0})
 
 	e.property('focusable', () => focusable, function(v) {
 		v = !!v
 		if (v == focusable) return
 		focusable = v
-		e.set_tabindex(e.tabindex)
+		do_update()
 	})
 
-	e.set_disabled = function(v) {
-		e.set_tabindex(e.tabindex)
-	}
-
+	e.set_disabled = do_update
 	e.prop('disabled', {store: 'var', type: 'bool', attr: true})
-	if (e.disabled)
-		e.set_disabled(true)
+
+	let inh_focus = e.focus
+	e.focus = function() {
+		if (fe == this || this.widget_selected)
+			inh_focus.call(this)
+		else
+			fe.focus()
+	}
 
 }
 
@@ -1275,7 +1281,7 @@ component('x-button', function(e) {
 	e.set_text(e.text)
 
 	e.set_icon = function(v) {
-		if (typeof v == 'string')
+		if (isstr(v))
 			e.icon_div.attr('class', 'x-button-icon fa '+v)
 		else
 			e.icon_div.set(v)
@@ -1375,7 +1381,7 @@ component('x-menu', function(e) {
 	function create_item(item) {
 		let check_div = div({class: 'x-menu-check-div fa fa-check'})
 		let icon_div  = div({class: 'x-menu-icon-div'})
-		if (typeof item.icon == 'string')
+		if (isstr(item.icon))
 			icon_div.classes = item.icon
 		else
 			icon_div.set(item.icon)
@@ -1719,7 +1725,7 @@ widget_items_widget = function(e) {
 			return false
 		for (let i = 0; i < t.length; i++) {
 			let id0 = items[i].id
-			let id1 = typeof t[i] == 'string' ? t[i] : t[i].id
+			let id1 = isstr(t[i]) ? t[i] : t[i].id
 			if (!id1 || !id0 || id1 != id0)
 				return false
 		}
@@ -1728,7 +1734,7 @@ widget_items_widget = function(e) {
 
 	function diff_items(t, cur_items) {
 
-		if (typeof t == 'string')
+		if (isstr(t))
 			t = t.split(/\s+/)
 
 		if (same_items(t, cur_items))

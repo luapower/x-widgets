@@ -317,6 +317,11 @@ function nav_widget(e) {
 
 	// init -------------------------------------------------------------------
 
+	e.init = function() {
+		if (e.dropdown)
+			e.init_as_picker()
+	}
+
 	function init_all() {
 		init_all_fields()
 	}
@@ -368,19 +373,19 @@ function nav_widget(e) {
 
 	// utils ------------------------------------------------------------------
 
-	let fld     = col => typeof col == 'string' ? e.all_fields[col] : col
-	let fldname = col => typeof col == 'string' ? col : col.name
+	let fld     = col => isstr(col) ? e.all_fields[col] : col
+	let fldname = col => isstr(col) ? col : col.name
 
 	let is_not_null = v => v != null
 	function flds(cols) {
-		let fields = typeof cols == 'string' ? cols.split(/\s+/).map(fld).filter(is_not_null) : cols
+		let fields = isstr(cols) ? cols.split(/\s+/).map(fld).filter(is_not_null) : cols
 		return fields.length ? fields : null
 	}
 
 	e.fldnames = function(cols) {
-		if (typeof cols == 'string') // 'col1 ...' (preferred)
+		if (isstr(cols)) // 'col1 ...' (preferred)
 			return cols
-		if (typeof cols == 'number') // fi
+		if (isnum(cols)) // fi
 			return e.all_fields[cols].name
 		else if (isobject(cols)) // field
 			return cols.name
@@ -646,7 +651,7 @@ function nav_widget(e) {
 			for (let col of cols_array()) {
 				let field = e.all_fields[col]
 				if (!field)
-					print('col not found', col)
+					warn('col not found', col)
 				else if (field.visible != false)
 					e.fields.push(field)
 			}
@@ -835,7 +840,7 @@ function nav_widget(e) {
 				for (let [col, param] of param_map(e.params)) {
 					let field = e.param_nav.all_fields[col]
 					if (!field)
-						print('param nav is missing col', col)
+						warn('param nav is missing col', col)
 					let v = field && row ? e.param_nav.cell_val(row, field) : null
 					vals[param] = v
 				}
@@ -1578,7 +1583,7 @@ function nav_widget(e) {
 				row.child_rows = null
 				row.parent_rows = null
 				row.parent_row = null
-				print('circular ref detected')
+				warn('circular ref detected')
 			}
 			e.child_rows = null
 			e.parent_field = null
@@ -2068,7 +2073,7 @@ function nav_widget(e) {
 		}
 
 		let err = field.validate && field.validate.call(e, val, field, row)
-		if (typeof err == 'string')
+		if (isstr(err))
 			return err
 
 		return e.fire('validate_'+field.name, val, row, ev)
@@ -2087,10 +2092,10 @@ function nav_widget(e) {
 	}
 
 	e.set_row_error = function(row, err, ev) {
-		err = typeof err == 'string' ? err : undefined
+		err = isstr(err) ? err : undefined
 		if (err != null) {
 			e.notify('error', err)
-			print(err)
+			warn(err)
 		}
 		e.set_row_state(row, 'error', err, undefined, true, ev)
 	}
@@ -2138,7 +2143,7 @@ function nav_widget(e) {
 			val = null
 		val = e.convert_val(field, val, row, ev)
 		let err = e.validate_val(field, val, row, ev)
-		err = typeof err == 'string' ? err : undefined
+		err = isstr(err) ? err : undefined
 		let invalid = err != null
 		let cur_val = row[field.val_index]
 		let val_changed = !invalid && val !== cur_val
@@ -2187,7 +2192,7 @@ function nav_widget(e) {
 		let err
 		if (ev && ev.validate) {
 			err = e.validate_val(field, val, row, ev)
-			err = typeof err == 'string' ? err : undefined
+			err = isstr(err) ? err : undefined
 		}
 		let invalid = err != null
 		let cur_val = row[field.val_index]
@@ -2444,7 +2449,7 @@ function nav_widget(e) {
 		let v = e.cell_display_val(row, field)
 		if (v instanceof Node)
 			return v.textContent
-		if (typeof v != 'string')
+		if (!isstr(v))
 			return ''
 		return v
 	}
@@ -2970,7 +2975,7 @@ function nav_widget(e) {
 		let changes = {rows: rows}
 
 		if (!e.pk)
-			print('pk missing for', e.id)
+			warn('pk missing for', e.id)
 
 		let pk_fields = e.pk ? flds(e.pk) : e.all_fields
 
@@ -3017,7 +3022,7 @@ function nav_widget(e) {
 			let rt = result.rows[i]
 			let row = changed_rows[i]
 
-			let err = typeof rt.error == 'string' ? rt.error : undefined
+			let err = isstr(rt.error) ? rt.error : undefined
 			let row_failed = rt.error != null
 			e.set_row_error(row, err)
 
@@ -3036,7 +3041,7 @@ function nav_widget(e) {
 					for (let k in rt.field_errors) {
 						let field = e.all_fields[k]
 						let err = rt.field_errors[k]
-						err = typeof err == 'string' ? err : undefined
+						err = isstr(err) ? err : undefined
 						e.set_cell_state(row, field, 'error', err)
 					}
 				}
@@ -3048,7 +3053,7 @@ function nav_widget(e) {
 		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
 
 		if (result.sql_trace && result.sql_trace.length)
-			print(result.sql_trace.join('\n'))
+			debug(result.sql_trace.join('\n'))
 	}
 
 	function set_save_state(rows, req) {
@@ -3703,7 +3708,7 @@ component('x-lookup-dropdown', function(e) {
 	number.validate = function(val, field) {
 		val = num(val)
 
-		if (typeof val != 'number' || val !== val)
+		if (!isnum(val) || val !== val)
 			return S('error_invalid_number', 'Invalid number')
 
 		if (field.multiple_of != null)
@@ -3755,7 +3760,7 @@ component('x-lookup-dropdown', function(e) {
 	field_types.date = date
 
 	date.validate = function(val, field) {
-		if (typeof val != 'number' || val !== val)
+		if (!isnum(val) || val !== val)
 			return S('error_date', 'Invalid date')
 	}
 
@@ -3815,7 +3820,7 @@ component('x-lookup-dropdown', function(e) {
 	bool.null_text = () => H('<div class="fa fa-square"></div>')
 
 	bool.validate = function(val, field) {
-		if (typeof val != 'boolean')
+		if (!isbool(val))
 			return S('error_boolean', 'Value not true or false')
 	}
 
@@ -3878,6 +3883,35 @@ component('x-lookup-dropdown', function(e) {
 	field_types.col = col
 
 	col.convert = v => or(num(v), v)
+
+	// google maps places
+
+	let place = {}
+	field_types.place = place
+
+	place.format_pin = function(v) {
+		let pin = span({
+			class: 'x-place-pin fa fa-map-marker-alt',
+			title: S('view_on_google_maps', 'View on Google Maps')
+		})
+		let place_id = isobject(v) && v.place_id
+		pin.class('disabled', !place_id)
+		if (place_id) {
+			pin.onpointerdown = function(ev) {
+				ev.preventDefault()
+				ev.stopPropagation()
+				ev.stopImmediatePropagation()
+				window.open('https://www.google.com/maps/place/?q=place_id:'+v.place_id, '_blank')
+				return false
+			}
+		}
+		return pin
+	}
+
+	place.format = function(v) {
+		let pin = this.format_pin(v)
+		return span(0, pin, isobject(v) ? v.description : v || '')
+	}
 
 }
 

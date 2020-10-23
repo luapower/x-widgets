@@ -172,7 +172,7 @@ function xmodule(opt) {
 		module = xm.selected_module || module
 		let layer = xm.active_layers[module+':'+slot]
 		if (!layer) {
-			print('prop-val-lost', '['+module+':'+slot+']', id, k, json(v))
+			warn('prop-val-lost', '['+module+':'+slot+']', id, k, json(v))
 			return
 		}
 		if (serialize)
@@ -184,7 +184,7 @@ function xmodule(opt) {
 		let pv0 = e && attr(e, '__pv0')
 		if (v === undefined) { // `undefined` signals removal.
 			if (k in t) {
-				print('prop-val-deleted', '['+module+':'+slot+'='+layer.name+']', id, k)
+				debug('prop-val-deleted', '['+module+':'+slot+'='+layer.name+']', id, k)
 				delete t[k]
 				if (pv0)
 					delete pv0[k] // no need to keep this anymore.
@@ -193,7 +193,7 @@ function xmodule(opt) {
 			if (pv0 && !(k in pv0)) // save current val if it wasn't saved before.
 				pv0[k] = v0
 			t[k] = v
-			print('prop-val-set', '['+module+':'+slot+'='+layer.name+']', id, k, json(v))
+			debug('prop-val-set', '['+module+':'+slot+'='+layer.name+']', id, k, json(v))
 		}
 
 		// synchronize other instances of this id.

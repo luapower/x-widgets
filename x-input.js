@@ -177,6 +177,7 @@ function val_widget(e, enabled_without_nav) {
 		if (on && e.field && !e.owns_field) {
 			// `field` option enables standalone mode.
 			field_opt = e.field
+			field_opt.type = or(field_opt.type, e.field_type)
 			e.owns_field = true
 		}
 		if (e.owns_field) {
@@ -465,7 +466,7 @@ component('x-radiogroup', function(e) {
 
 	e.set_items = function(items) {
 		for (let item of items) {
-			if (typeof item == 'string' || item instanceof Node)
+			if (isstr(item) || item instanceof Node)
 				item = {text: item}
 			let radio_div = span({class: 'x-markbox-icon x-radio-icon far fa-circle'})
 			let text_div = span({class: 'x-markbox-label x-radio-label'})
@@ -557,30 +558,29 @@ component('x-editbox', function(e) {
 		let s = e.to_text(v)
 		let maxlen = e.field && e.field.maxlen
 		e.input.value = s.slice(0, maxlen)
-		e.input.attr('maxlength', maxlen)
 		update_state(s)
 	}
 
 	e.input.on('input', function() {
-		e.set_val(e.from_text(e.input.value), {input: e, typing: true})
-		update_state(e.input.value)
+		let v = e.input.value
+		e.set_val(e.from_text(v), {input: e, typing: true})
+		update_state(v)
+		e.isopen = !!v
+	})
+
+	e.on('bind_field', function(on) {
+		let maxlen = on ? e.field.maxlen : null
+		e.input.attr('maxlength', maxlen)
+		bind_picker(on)
 	})
 
 	// focusing
 
 	focusable_widget(e, e.input)
 
-	focus = e.focus
-	e.focus = function() {
-		if (e.widget_selected)
-			focus.call(e)
-		else
-			e.input.focus()
-	}
-
 	// suggestion picker ------------------------------------------------------
 
-	e.on('bind_field', bind_picker)
+	e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
 
 	e.create_picker = noop // stub
 
@@ -594,13 +594,13 @@ component('x-editbox', function(e) {
 				nav: e.nav,
 				col: e.col,
 				can_select_widget: false,
+				focusable: false,
 			})
 			if (!e.picker)
 				return
 			e.picker.class('picker', true)
-			e.picker.on('val_picked', picker_val_picked)
-			e.picker.on('keydown'   , picker_keydown)
 			e.picker.bind(true)
+			e.picker.on('val_picked', picker_val_picked)
 		} else if (e.picker) {
 			e.picker.popup(false)
 			e.picker.bind(false)
@@ -609,44 +609,59 @@ component('x-editbox', function(e) {
 		document.on('pointerdown'     , document_pointerdown, on)
 		document.on('rightpointerdown', document_pointerdown, on)
 		document.on('stopped_event'   , document_stopped_event, on)
+		e.input.on('keydown', keydown_for_picker, on)
 	}
 
-	e.set_open = function(open) {
-		if (e.isopen != open) {
-			e.class('open', open)
-			if (open) {
-				e.cancel_val = e.input_val
-				e.picker.min_w = e.rect().w
-				if (e.picker_w)
-					e.picker.auto_w = false
-				e.picker.w = e.picker_w
-				e.picker.show()
-				e.picker.popup(e, 'bottom', e.align)
-			} else {
-				e.cancel_val = null
-				e.picker.hide()
-				e.fire('lost_focus') // grid editor protocol
-			}
+	e.set_isopen = function(open) {
+		if (e.isopen == open)
+			return
+		if (!e.picker)
+			return
+		e.class('open', open)
+		if (open) {
+			e.cancel_val = e.input_val
+			e.picker.min_w = e.rect().w
+			if (e.picker_w)
+				e.picker.auto_w = false
+			e.picker.w = e.picker_w
+			e.picker.show()
+			e.picker.popup(e, 'bottom', e.align)
+		} else {
+			e.cancel_val = null
+			e.picker.hide()
 		}
 	}
 
-	e.open   = function() { e.set_open(true, focus) }
-	e.close  = function() { e.set_open(false, focus) }
-	e.toggle = function() { e.set_open(!e.isopen, focus) }
-	e.cancel = function(focus, ev) {
+	e.open   = function() { e.set_isopen(true) }
+	e.close  = function() { e.set_isopen(false) }
+	e.cancel = function(ev) {
 		if (e.isopen)
 			e.set_val(e.cancel_val, ev)
-		e.close(focus)
+		e.close()
 	}
 
-	e.property('isopen',
-		function() {
-			return e.hasclass('open')
-		},
-		function(open) {
-			e.set_open(open, true)
+	e.property('isopen', () => e.hasclass('open'), e.set_isopen)
+
+	function picker_val_picked(ev) {
+		if (ev && ev.input == e.picker)
+			e.close()
+	}
+
+	function keydown_for_picker(key) {
+		if (key == 'ArrowDown' || key == 'ArrowUp') {
+			e.open()
+			e.picker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
+			return false
 		}
-	)
+		if (key == 'Enter') {
+			e.close()
+			return false
+		}
+		if (key == 'Escape') {
+			e.close()
+			return false
+		}
+	}
 
 	// clicking outside the picker closes the picker.
 	function document_pointerdown(ev) {
@@ -663,19 +678,10 @@ component('x-editbox', function(e) {
 			document_pointerdown(ev)
 	}
 
-	/*
-	e.on('focusout', function(ev) {
-		// prevent editbox's focusout from bubbling to the parent when opening the picker.
-		if (focusing_picker)
-			return false
-		e.fire('lost_focus') // grid editor protocol
-	})
-	*/
-
 	// grid editor protocol ---------------------------------------------------
 
 	e.input.on('blur', function() {
-		close_picker()
+		e.close()
 		e.fire('lost_focus')
 	})
 
@@ -945,14 +951,6 @@ component('x-tagsedit', function(e) {
 		return false
 	})
 
-	focus = e.focus
-	e.focus = function() {
-		if (e.widget_selected)
-			focus.call(e)
-		else
-			e.input.focus()
-	}
-
 	e.input.on('keydown', function(key, shift, ctrl) {
 		if (key == 'Enter' && e.input.value) {
 			let v = e.input_val && e.input_val.slice() || []
@@ -1016,7 +1014,7 @@ component('x-tagsedit', function(e) {
 		document.fire('google_places_api_loaded')
 	}
 
-	function init_google_places_api(api_key) {
+	init_google_places_api = function(api_key) {
 		document.head.add(tag('script', {
 			defer: '',
 			src: 'https://maps.googleapis.com/maps/api/js?key='+api_key+'&libraries=places&callback=_google_places_api_loaded'
@@ -1030,41 +1028,58 @@ component('x-address', function(e) {
 
 	editbox.construct(e)
 
-	let lb = listbox({
-		id: e.id && e.id + '.picker',
-		nav: e.nav,
-		col: e.col,
-		val_col: 0,
-		display_col: 0,
-	})
-	e.add(lb)
+	e.field_type = 'place'
 
-	e.on('bind_field', function(on) {
-		lb.begin_update()
-		lb.nav = e.nav
-		lb.col = e.col
-		lb.end_update()
-	})
+	e.pin_ct = span()
+	e.add(e.pin_ct)
 
-	function suggested_addresses_changed(addrs) {
-		lb.items = addrs
+	e.create_picker = function(opt) {
+		let lb = listbox(update({
+			val_col: 0,
+			display_col: 0,
+			format_item: format_item,
+		}, opt))
+		return lb
+	}
+
+	function format_item(addr) {
+		return addr.description
+	}
+
+	function suggested_addresses_changed(places) {
+		places = places || []
+		e.picker.items = places.map(function(p) {
+			return {
+				description: p.description,
+				place_id: p.place_id,
+				types: p.types,
+			}
+		})
+		e.picker.disabled = false
+		print(places)
 	}
 
 	let timer_id
 
-	//e.from_text = function(s) { return {address: s} }
-	//e.to_text = function(v) { return v ? v.address : '' }
+	e.from_text = function(s) { return s ? {input_text: s} : null }
+	e.to_text = function(v) { return isobject(v) ? v.description : v || '' }
 
-	function val_changed() {
+	let inh_do_update_val = e.do_update_val
+	e.do_update_val = function(v, ev) {
+		inh_do_update_val(v, ev)
+		e.pin_ct.set(e.field.format_pin(v))
+	}
+
+	function delayed_update_val() {
 		let v = e.input_val
 		if (v)
-			suggest_address(v, suggested_addresses_changed)
+			suggest_address(v.input_text, suggested_addresses_changed)
 		timer_id = null
 	}
 
 	e.on('val_changed', function(v, ev) {
 		if (ev && ev.input == e && ev.typing)
-			timer_id = timer_id || after(.5, val_changed)
+			timer_id = timer_id || after(.5, delayed_update_val)
 	})
 
 })
@@ -1217,18 +1232,18 @@ function dropdown_widget(e) {
 	e.add(e.val_div, e.button, e.label_div)
 
 	e.set_more_action = function(action) {
-		if (!e.more_button && action) {
-			e.more_button = div({class: 'x-editbox-more-button x-dropdown-more-button fa fa-ellipsis-h'})
-			e.add(e.more_button)
-			e.more_button.on('pointerdown', function(ev) {
+		if (!e.more_btn && action) {
+			e.more_btn = div({class: 'x-editbox-more-button x-dropdown-more-button fa fa-ellipsis-h'})
+			e.add(e.more_btn)
+			e.more_btn.on('pointerdown', function(ev) {
 				return this.capture_pointer(ev, null, function() {
 					e.more_action()
 					return false
 				})
 			})
-		} else if (e.more_button && !action) {
-			e.more_button.remove()
-			e.more_button = null
+		} else if (e.more_btn && !action) {
+			e.more_btn.remove()
+			e.more_btn = null
 		}
 	}
 	e.prop('more_action', {store: 'var', private: true})
@@ -1298,7 +1313,7 @@ function dropdown_widget(e) {
 
 	// focusing
 
-	let builtin_focus = e.focus
+	let inh_focus = e.focus
 	let focusing_picker
 	e.focus = function() {
 		if (e.isopen) {
@@ -1306,7 +1321,7 @@ function dropdown_widget(e) {
 			e.picker.focus()
 			focusing_picker = false
 		} else
-			builtin_focus.call(this)
+			inh_focus.call(this)
 	}
 
 	// opening & closing the picker
@@ -2403,6 +2418,6 @@ input.widget_types = {
 	enum     : ['enum_dropdown'],
 	image    : ['image'],
 	tags     : ['tagsedit'],
-	address  : ['address'],
+	place    : ['address'],
 }
 

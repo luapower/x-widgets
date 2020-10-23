@@ -1048,6 +1048,26 @@
 	color: var(--x-error-bg-color);
 }
 
+/* `place` type formatting (also used in the address widget) -------------- */
+
+.x-place-pin {
+	margin-right: .5em;
+	cursor: pointer;
+}
+
+.x-place-pin.disabled {
+	opacity: .3;
+	cursor: default;
+}
+
+/* address ---------------------------------------------------------------- */
+
+.x-address-picker-logo {
+	display: inline-block;
+	float: right;
+	background-color: #888;
+}
+
 /* input ------------------------------------------------------------------ */
 
 .x-input {
