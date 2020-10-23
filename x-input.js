@@ -655,7 +655,7 @@ component('x-editbox', function(e) {
 		}
 		if (key == 'Enter') {
 			e.close()
-			return false
+			// don't return false so that grid can exit edit mode.
 		}
 		if (key == 'Escape') {
 			e.close()
