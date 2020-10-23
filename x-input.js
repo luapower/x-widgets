@@ -988,7 +988,8 @@ component('x-tagsedit', function(e) {
 	let token_duration = 2 * 60  // google says it's "a few minutes"...
 
 	function google_maps_iframe(place_id) {
-		let iframe_src = place_id => 'https://www.google.com/maps/embed/v1/place?key='+api_key+(place_id ? '&q=place_id:'+place_id : '')
+		let iframe_src = place_id => place_id
+			? ('https://www.google.com/maps/embed/v1/place?key='+api_key+'&q=place_id:'+place_id) : ''
 		let iframe = tag('iframe', {
 			frameborder: 0,
 			style: 'border: 0',
