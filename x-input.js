@@ -649,7 +649,7 @@ component('x-editbox', function(e) {
 	}
 
 	function keydown_for_picker(key) {
-		if ((key == 'ArrowDown' || key == 'ArrowUp') && (e.isopen || !e.hasclass('grid-editor'))) {
+		if ((key == 'ArrowDown' || key == 'ArrowUp') && e.isopen) {
 			e.picker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
 			return false
 		}
@@ -1006,25 +1006,22 @@ component('x-tagsedit', function(e) {
 		if (!autocomplete_service)
 			return
 
+		function get_places(places, status) {
+			if (status != google.maps.places.PlacesServiceStatus.OK)
+				notify(status)
+			callback(places)
+		}
+
 		let now = time()
 		if (!session_token || token_expire_time < now) {
 			session_token = new google.maps.places.AutocompleteSessionToken()
 			token_expire_time = now + token_duration
 		}
 
-		autocomplete_service.getPlacePredictions({input: s, sessionToken: session_token}, callback)
+		autocomplete_service.getPlacePredictions({input: s, sessionToken: session_token}, get_places)
 	}
 
 	function _google_places_api_loaded() {
-
-		function get_places(places, status) {
-			if (status != google.maps.places.PlacesServiceStatus.OK) {
-				notify(status)
-				return
-			}
-			print(places)
-		}
-
 		autocomplete_service = new google.maps.places.AutocompleteService()
 		document.fire('google_places_api_loaded')
 	}
@@ -1054,11 +1051,13 @@ component('x-placeedit', function(e) {
 	e.add(e.pin_ct)
 
 	e.create_picker = function(opt) {
+
 		let lb = listbox(update({
 			val_col: 0,
 			display_col: 0,
 			format_item: format_item,
 		}, opt))
+
 		return lb
 	}
 
