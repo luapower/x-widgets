@@ -992,7 +992,7 @@ component('x-tagsedit', function(e) {
 			? ('https://www.google.com/maps/embed/v1/place?key='+api_key+'&q=place_id:'+place_id) : ''
 		let iframe = tag('iframe', {
 			frameborder: 0,
-			style: 'border: 0',
+			scrolling: 'no',
 			src: iframe_src(place_id),
 			allowfullscreen: '',
 		})
@@ -1110,11 +1110,14 @@ component('x-googlemaps', function(e) {
 	e.field_type = 'place'
 
 	e.map = google_maps_iframe()
+	e.map.class('x-googlemaps-map')
 	e.add(e.map)
 
 	e.override('do_update_val', function(inherited, v, ev) {
 		inherited(v, ev)
-		e.map.goto_place(isobject(v) && v.place_id || null)
+		let place_id = isobject(v) && v.place_id || null
+		e.map.goto_place(place_id)
+		e.map.class('empty', !place_id)
 	})
 
 })
@@ -2149,15 +2152,12 @@ component('x-chart', function(e) {
 
 	// view -------------------------------------------------------------------
 
-	function redraw() {
-		e.update()
-	}
-
-	function slice_color(i, n) {
-		return hsl_to_rgb(((i / (n-1)) * 360 - 120) % 180, .8, .7)
+	function slice_color(i, n, start_deg) {
+		return hsl_to_rgb(((i / (n-1)) * 360 - start_deg) % 180, .8, .7)
 	}
 
 	let render = {} // {shape->func}
+	let pointermove
 
 	render.stack = function() {
 
@@ -2293,6 +2293,10 @@ component('x-chart', function(e) {
 		return big_slices
 	}
 
+	function line_color(i, n) {
+		return hsl_to_rgb(((i / (n-1)) * 360) % 360, .8, .4)
+	}
+
 	render.line = function() {
 
 		let groups = e.nav
@@ -2302,19 +2306,184 @@ component('x-chart', function(e) {
 		if (!groups)
 			return
 
-		print(groups, range_defs())
+		let css = e.css()
+		let r = e.rect()
 
-		//for (let [k, group] of cat_groups)
+		let canvas = tag('canvas', {
+			class: 'x-chart-canvas',
+			width : r.w - num(css['padding-left']) - num(css['padding-right' ]),
+			height: r.h - num(css['padding-top' ]) - num(css['padding-bottom']),
+		})
+		e.set(canvas)
+		let cx = canvas.getContext('2d')
 
-		e.add('Hello')
+		let w = canvas.width
+		let h = canvas.height
+		cx.clearRect(0, 0, w, h)
+
+		let xgs = new Map() // {x_key -> xg}
+		let min_xv =  1/0
+		let max_xv = -1/0
+		let min_sum =  1/0
+		let max_sum = -1/0
+		let sum_fi = e.nav.fld(e.sum_col).val_index
+
+		for (let cg of groups) {
+			for (let xg of cg) {
+
+				let sum = 0
+				for (let row of xg) {
+					let v = row[sum_fi]
+					sum += v
+				}
+
+				xg.sum = sum
+
+				min_sum = min(min_sum, sum)
+				max_sum = max(max_sum, sum)
+
+				let xv = xg.key_vals[0]
+
+				min_xv = min(min_xv, xv)
+				max_xv = max(max_xv, xv)
+
+				xgs.set(xv, xg)
+			}
+		}
+
+		let max_n = 10 // max number of y-axis markers
+		let min_p = round((max_sum - min_sum) / max_n)
+		let y_step = ceil(min_p / 10) * 10
+		min_sum = floor(min_sum / y_step) * y_step
+		max_sum = ceil(max_sum / y_step) * y_step
+
+		cx.font = css['font-size'] + ' ' + css.font
+
+		let m = cx.measureText('M')
+		let line_h = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) * 2
+
+		// paddings to make room for axis markers.
+		let px1 = 40
+		let px2 = 30
+		let py2 = line_h
+		let py1 = 10
+
+		w -= px1 + px2
+		h -= py1 + py2
+		cx.translate(px1, py1)
+
+		// compute line stop-points.
+		for (let cg of groups) {
+			let xgi = 0
+			for (let xg of cg) {
+				let xv = xg.key_vals[0]
+				xg.x = lerp(xv, min_xv, max_xv, 0, w)
+				xg.y = lerp(xg.sum, min_sum, max_sum, h - py2, 0)
+				if (xg.y != xg.y)
+					xg.y = xg.sum
+				xgi++
+			}
+		}
+
+		// draw x-axis labels & markers.
+		cx.fillStyle   = '#666'
+		cx.strokeStyle = '#888'
+		for (let xg of xgs.values()) {
+			cx.fillText(xg.text, xg.x - cx.measureText(xg.text).width / 2, round(h))
+			// draw line marker.
+			cx.beginPath()
+			cx.moveTo(xg.x + .5, h - py2)
+			cx.lineTo(xg.x + .5, h - py2 + 4)
+			cx.stroke()
+		}
+
+		// draw y-axis labels.
+		for (let sum = min_sum; sum <= max_sum; sum += y_step) {
+			let y = lerp(sum, min_sum, max_sum, h - py2, 0)
+			let s = sum.toFixed(0)
+			let m = cx.measureText(s)
+			let text_h = m.actualBoundingBoxAscent - m.actualBoundingBoxDescent
+			cx.fillText(s, -m.width - 10, round(y + text_h / 2))
+		}
+
+		// draw the axis.
+		cx.strokeStyle = '#ccc'
+		cx.beginPath()
+		// y-axis
+		cx.moveTo(.5, lerp(min_sum, min_sum, max_sum, h - py2, 0))
+		cx.lineTo(.5, lerp(max_sum, min_sum, max_sum, h - py2, 0))
+		// x-axis
+		cx.moveTo(lerp(min_xv, min_xv, max_xv, 0, w), round(h - py2) + .5)
+		cx.lineTo(lerp(max_xv, min_xv, max_xv, 0, w), round(h - py2) + .5)
+		cx.stroke()
+
+		// draw the chart lines.
+		let cgi = 0
+		for (let cg of groups) {
+
+			// draw the line.
+			cx.beginPath()
+			let first
+			for (let xg of cg) {
+				if (!first) {
+					cx.moveTo(xg.x, xg.y)
+					first = true
+				} else
+					cx.lineTo(xg.x, xg.y)
+			}
+			cx.strokeStyle = line_color(cgi, groups.length)
+			cx.stroke()
+
+			// draw a dot on each line cusp.
+			cx.fillStyle = cx.strokeStyle
+			for (let xg of cg) {
+				cx.beginPath()
+				cx.arc(xg.x, xg.y, 3, 0, 2*PI)
+				cx.fill()
+			}
+
+			cgi++
+		}
+
+		let tt, tt_set
+
+		pointermove = function(mx, my) {
+			let r = e.rect()
+			mx -= r.x + px1 + num(css['padding-left'])
+			my -= r.y + py1 + num(css['padding-top' ])
+			tt_set = false
+			for (let cg of groups) {
+				for (let xg of cg) {
+					let x = xg.x
+					let y = xg.y
+					let d = 4
+					if (mx >= x - d && mx <= x + d && my >= y - d && my <= y + d) {
+						tt = tt || tooltip({target: e, text: 'hello ' + x + ' ' + y, kind: 'info'})
+						tt.px = x
+						tt.py = y
+						tt.show()
+						tt_set = true
+					}
+				}
+			}
+			if (tt && !tt_set)
+				tt.hide()
+		}
+
 	}
 
 	e.do_update = function() {
+		pointermove = null
 		e.clear()
 		render[e.shape]()
 	}
 
-	// controller -------------------------------------------------------------
+	e.on('pointermove', function(ev, mx, my) {
+		if (pointermove)
+			pointermove(mx, my)
+	})
+
+	// config -----------------------------------------------------------------
 
 	function range_defs() {
 		let defs
@@ -2332,6 +2501,10 @@ component('x-chart', function(e) {
 			}
 		}
 		return defs
+	}
+
+	function redraw() {
+		e.update()
 	}
 
 	function bind_nav(nav, on) {
