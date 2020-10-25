@@ -2419,6 +2419,10 @@
 	max-width: 7em;
 }
 
+.x-chart-tooltip {
+	//
+}
+
 /* countries listbox ------------------------------------------------------ */
 
 .x-countries-listbox-row {

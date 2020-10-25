@@ -1187,8 +1187,10 @@ component('x-tooltip', function(e) {
 	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top', attr: true})
 	e.prop('align'       , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center', attr: true})
 	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default', attr: true})
-	e.prop('px'          , {store: 'var', type: 'number', default: 0})
-	e.prop('py'          , {store: 'var', type: 'number', default: 0})
+	e.prop('px'          , {store: 'var', type: 'number'})
+	e.prop('py'          , {store: 'var', type: 'number'})
+	e.prop('pw'          , {store: 'var', type: 'number'})
+	e.prop('ph'          , {store: 'var', type: 'number'})
 	e.prop('timeout'     , {store: 'var'})
 	e.prop('close_button', {store: 'var', type: 'bool'})
 
@@ -1217,7 +1219,7 @@ component('x-tooltip', function(e) {
 		} else if (e.xbutton) {
 			e.xbutton.show(e.close_button)
 		}
-		e.popup(e.target, e.side, e.align, e.px, e.py)
+		e.popup(e.target, e.side, e.align, e.px, e.py, e.pw, e.ph)
 		if (opt && opt.reset_timer)
 			reset_timeout_timer()
 	}
@@ -1229,6 +1231,8 @@ component('x-tooltip', function(e) {
 	e.set_kind   = update
 	e.set_px     = update
 	e.set_py     = update
+	e.set_pw     = update
+	e.set_ph     = update
 	e.set_close_button = update
 
 	e.set_text = function(s) {
@@ -1248,9 +1252,11 @@ component('x-tooltip', function(e) {
 		remove_timer(t)
 	}
 
+	e.on('show', function() { e.update() })
+
 	e.property('visible',
-		function()  { return e.style.display != 'none' },
-		function(v) { e.show(v); e.update() }
+		function()  { return !e.hasattr('hidden') },
+		function(v) { e.show(v) }
 	)
 
 })

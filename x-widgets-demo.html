@@ -1142,7 +1142,6 @@ main.add(g)
 ct = div({style: 'border: 1px solid #ccc; width: 400px; height: 300px;'})
 main.add(ct)
 
-/*
 ct.add(chart({
 	nav: g,
 	sum_col: 'output',
@@ -1155,7 +1154,6 @@ ct.add(chart({
 	cat_cols: 'sector',
 	shape: 'stack',
 }))
-*/
 
 ct.add(chart({
 	nav: g,
@@ -1164,6 +1162,24 @@ ct.add(chart({
 	['cat_cols.date.range_freq']: 1,
 	['cat_cols.date.range_unit']: 'month',
 	shape: 'line',
+}))
+
+ct.add(chart({
+	nav: g,
+	sum_col: 'output',
+	cat_cols: 'country,date',
+	['cat_cols.date.range_freq']: 1,
+	['cat_cols.date.range_unit']: 'month',
+	shape: 'column',
+}))
+
+ct.add(chart({
+	nav: g,
+	sum_col: 'output',
+	cat_cols: 'country,date',
+	['cat_cols.date.range_freq']: 1,
+	['cat_cols.date.range_unit']: 'month',
+	shape: 'bar',
 }))
 
 </script>

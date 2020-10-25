@@ -2152,12 +2152,74 @@ component('x-chart', function(e) {
 
 	// view -------------------------------------------------------------------
 
-	function slice_color(i, n, start_deg) {
-		return hsl_to_rgb(((i / (n-1)) * 360 - start_deg) % 180, .8, .7)
-	}
-
 	let render = {} // {shape->func}
 	let pointermove
+
+	function slice_color(i, n) {
+		return hsl_to_rgb(((i / n) * 360 - 120) % 180, .8, .7)
+	}
+
+	function cat_sum_label(cls, cols, vals, row, sum) {
+		let label = div({class: cls})
+		let i = 0
+		for (let field of e.nav.flds(cols)) {
+			let v = vals[i]
+			let text = e.nav.cell_display_val_for(field, v, row)
+			if (i == 1)
+				label.add('/')
+			label.add(text)
+			i++
+		}
+		label.add(tag('br'))
+		label.add(e.nav.cell_display_val_for(e.nav.fld(e.sum_col), sum, row))
+		return label
+	}
+
+	function pie_slices() {
+
+		let cat_groups = e.nav
+			&& e.nav.flds(e.cat_cols) != null
+			&& e.nav.fld(e.sum_col) != null
+			&& e.nav.row_group(e.cat_cols, range_defs())
+
+		if (!cat_groups)
+			return
+
+		let slices = []
+		slices.total = 0
+		for (let group of cat_groups) {
+			let slice = {}
+			let sum = 0
+			for (let row of group)
+				sum += e.nav.cell_val(row, e.sum_col)
+			slice.sum = sum
+			slice.label = cat_sum_label('x-chart-label', e.cat_cols, group.key_vals, group[0], sum)
+			slices.push(slice)
+			slices.total += sum
+		}
+
+		// sum small slices into a single "other" slice.
+		let big_slices = []
+		let other_slice
+		for (let slice of slices) {
+			slice.size = slice.sum / slices.total
+			if (slice.size < e.other_threshold) {
+				other_slice = other_slice || {sum: 0}
+				other_slice.sum += slice.sum
+			} else
+				big_slices.push(slice)
+		}
+		if (other_slice) {
+			other_slice.size = other_slice.sum / slices.total
+			other_slice.label = div({class: 'x-chart-label'},
+				e.other_text,
+				tag('br'),
+				e.nav.cell_display_val_for(e.nav.fld(e.sum_col), other_slice.sum)
+			)
+			big_slices.push(other_slice)
+		}
+		return big_slices
+	}
 
 	render.stack = function() {
 
@@ -2231,73 +2293,11 @@ component('x-chart', function(e) {
 		pie.style['background-image'] = 'conic-gradient(' + s.join(',') + ')'
 	}
 
-	function slice_label(key_vals, row, sum) {
-		let label = div({class: 'x-chart-label'})
-		let i = 0
-		for (let field of e.nav.flds(e.cat_cols)) {
-			let v = key_vals[i]
-			let text = e.nav.cell_display_val_for(field, v, row)
-			if (i == 1)
-				label.add('/')
-			label.add(text)
-			i++
-		}
-		label.add(tag('br'))
-		label.add(e.nav.cell_display_val_for(e.nav.fld(e.sum_col), sum, row))
-		return label
-	}
-
-	function pie_slices() {
-
-		let cat_groups = e.nav
-			&& e.nav.flds(e.cat_cols) != null
-			&& e.nav.fld(e.sum_col) != null
-			&& e.nav.row_group(e.cat_cols, range_defs())
-
-		if (!cat_groups)
-			return
-
-		let slices = []
-		slices.total = 0
-		for (let group of cat_groups) {
-			let slice = {}
-			let sum = 0
-			for (let row of group)
-				sum += e.nav.cell_val(row, e.sum_col)
-			slice.sum = sum
-			slice.label = slice_label(group.key_vals, group[0], sum)
-			slices.push(slice)
-			slices.total += sum
-		}
-
-		// sum small slices into a single "other" slice.
-		let big_slices = []
-		let other_slice
-		for (let slice of slices) {
-			slice.size = slice.sum / slices.total
-			if (slice.size < e.other_threshold) {
-				other_slice = other_slice || {sum: 0}
-				other_slice.sum += slice.sum
-			} else
-				big_slices.push(slice)
-		}
-		if (other_slice) {
-			other_slice.size = other_slice.sum / slices.total
-			other_slice.label = div({class: 'x-chart-label'},
-				e.other_text,
-				tag('br'),
-				e.nav.cell_display_val_for(e.nav.fld(e.sum_col), other_slice.sum)
-			)
-			big_slices.push(other_slice)
-		}
-		return big_slices
-	}
-
 	function line_color(i, n) {
-		return hsl_to_rgb(((i / (n-1)) * 360) % 360, .8, .4)
+		return hsl_to_rgb(((i / n) * 180 - 210) % 360, .5, .6)
 	}
 
-	render.line = function() {
+	function render_line_or_columns(columns, rotate) {
 
 		let groups = e.nav
 			&& e.nav.fld(e.sum_col) != null
@@ -2309,17 +2309,21 @@ component('x-chart', function(e) {
 		let css = e.css()
 		let r = e.rect()
 
+		let pad_x1 = num(css['padding-left'  ])
+		let pad_x2 = num(css['padding-right' ])
+		let pad_y1 = num(css['padding-top'   ])
+		let pad_y2 = num(css['padding-bottom'])
+
 		let canvas = tag('canvas', {
 			class: 'x-chart-canvas',
-			width : r.w - num(css['padding-left']) - num(css['padding-right' ]),
-			height: r.h - num(css['padding-top' ]) - num(css['padding-bottom']),
+			width : r.w - pad_x1 - pad_x2,
+			height: r.h - pad_y1 - pad_y2,
 		})
 		e.set(canvas)
 		let cx = canvas.getContext('2d')
 
 		let w = canvas.width
 		let h = canvas.height
-		cx.clearRect(0, 0, w, h)
 
 		let xgs = new Map() // {x_key -> xg}
 		let min_xv =  1/0
@@ -2351,8 +2355,15 @@ component('x-chart', function(e) {
 			}
 		}
 
-		let max_n = 10 // max number of y-axis markers
+		if (columns) {
+			let w = (max_xv - min_xv) / xgs.size
+			min_xv -= w / 2
+			max_xv += w / 2
+		}
+
+		let max_n = rotate ? 5 : 10 // max number of y-axis markers
 		let min_p = round((max_sum - min_sum) / max_n)
+		let y_step_decimals = 0
 		let y_step = ceil(min_p / 10) * 10
 		min_sum = floor(min_sum / y_step) * y_step
 		max_sum = ceil(max_sum / y_step) * y_step
@@ -2360,25 +2371,31 @@ component('x-chart', function(e) {
 		cx.font = css['font-size'] + ' ' + css.font
 
 		let m = cx.measureText('M')
-		let line_h = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) * 2
+		let line_h = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) * 1.5
 
 		// paddings to make room for axis markers.
 		let px1 = 40
 		let px2 = 30
+		let py1 = round(rotate ? line_h + 5 : 10)
 		let py2 = line_h
-		let py1 = 10
 
 		w -= px1 + px2
 		h -= py1 + py2
 		cx.translate(px1, py1)
+
+		if (rotate) {
+			cx.translate(w, 0)
+			cx.rotate(rad(90))
+			;[w, h] = [h, w]
+		}
 
 		// compute line stop-points.
 		for (let cg of groups) {
 			let xgi = 0
 			for (let xg of cg) {
 				let xv = xg.key_vals[0]
-				xg.x = lerp(xv, min_xv, max_xv, 0, w)
-				xg.y = lerp(xg.sum, min_sum, max_sum, h - py2, 0)
+				xg.x = round(lerp(xv, min_xv, max_xv, 0, w))
+				xg.y = round(lerp(xg.sum, min_sum, max_sum, h - py2, 0))
 				if (xg.y != xg.y)
 					xg.y = xg.sum
 				xgi++
@@ -2389,99 +2406,201 @@ component('x-chart', function(e) {
 		cx.fillStyle   = '#666'
 		cx.strokeStyle = '#888'
 		for (let xg of xgs.values()) {
-			cx.fillText(xg.text, xg.x - cx.measureText(xg.text).width / 2, round(h))
-			// draw line marker.
+			// draw x-axis label.
+			let m = cx.measureText(xg.text)
+			cx.save()
+			if (rotate) {
+				let text_h = m.actualBoundingBoxAscent - m.actualBoundingBoxDescent
+				let x = round(xg.x + text_h / 2)
+				let y = h + m.width
+				cx.translate(x, y)
+				cx.rotate(rad(-90))
+			} else {
+				let x = xg.x - m.width / 2
+				let y = round(h)
+				cx.translate(x, y)
+			}
+			cx.fillText(xg.text, 0, 0)
+			cx.restore()
+			// draw x-axis center line marker.
 			cx.beginPath()
-			cx.moveTo(xg.x + .5, h - py2)
-			cx.lineTo(xg.x + .5, h - py2 + 4)
+			cx.moveTo(xg.x + .5, h - py2 + 0.5)
+			cx.lineTo(xg.x + .5, h - py2 + 4.5)
 			cx.stroke()
 		}
 
-		// draw y-axis labels.
+		// draw y-axis labels & markers.
 		for (let sum = min_sum; sum <= max_sum; sum += y_step) {
-			let y = lerp(sum, min_sum, max_sum, h - py2, 0)
-			let s = sum.toFixed(0)
+			// draw y-axis label.
+			let y = round(lerp(sum, min_sum, max_sum, h - py2, 0))
+			let s = sum.toFixed(y_step_decimals)
 			let m = cx.measureText(s)
 			let text_h = m.actualBoundingBoxAscent - m.actualBoundingBoxDescent
-			cx.fillText(s, -m.width - 10, round(y + text_h / 2))
+			cx.save()
+			if (rotate) {
+				let px = -5
+				let py = round(y + m.width / 2)
+				cx.translate(px, py)
+				cx.rotate(rad(-90))
+			} else {
+				let px = -m.width - 10
+				let py = round(y + text_h / 2)
+				cx.translate(px, py)
+			}
+			cx.fillText(s, 0, 0)
+			cx.restore()
+			// draw y-axis strike-through line marker.
+			cx.strokeStyle = rotate ? '#ccc' : '#eee'
+			cx.beginPath()
+			cx.moveTo(0 + .5, y - .5)
+			cx.lineTo(w + .5, y - .5)
+			cx.stroke()
 		}
 
 		// draw the axis.
 		cx.strokeStyle = '#ccc'
 		cx.beginPath()
 		// y-axis
-		cx.moveTo(.5, lerp(min_sum, min_sum, max_sum, h - py2, 0))
-		cx.lineTo(.5, lerp(max_sum, min_sum, max_sum, h - py2, 0))
+		cx.moveTo(.5, round(lerp(min_sum, min_sum, max_sum, h - py2, 0)) + .5)
+		cx.lineTo(.5, round(lerp(max_sum, min_sum, max_sum, h - py2, 0)) + .5)
 		// x-axis
-		cx.moveTo(lerp(min_xv, min_xv, max_xv, 0, w), round(h - py2) + .5)
-		cx.lineTo(lerp(max_xv, min_xv, max_xv, 0, w), round(h - py2) + .5)
+		cx.moveTo(round(lerp(min_xv, min_xv, max_xv, 0, w)) + .5, round(h - py2) - .5)
+		cx.lineTo(round(lerp(max_xv, min_xv, max_xv, 0, w)) + .5, round(h - py2) - .5)
 		cx.stroke()
 
-		// draw the chart lines.
+		if (columns) {
+
+			let cn = groups.length
+			let bar_w = round(w / (xgs.size - 1) / cn / 3)
+			let half_w = round((bar_w * cn + 2 * (cn - 1)) / 2)
+
+			function bar_rect(cgi, xg) {
+				let x = xg.x
+				let y = xg.y
+				return [
+					x + cgi * (bar_w + 2) - half_w,
+					y,
+					bar_w,
+					h - py2 - y
+				]
+			}
+		}
+
+		// draw the chart lines or columns.
 		let cgi = 0
 		for (let cg of groups) {
 
-			// draw the line.
-			cx.beginPath()
-			let first
-			for (let xg of cg) {
-				if (!first) {
-					cx.moveTo(xg.x, xg.y)
-					first = true
-				} else
-					cx.lineTo(xg.x, xg.y)
-			}
-			cx.strokeStyle = line_color(cgi, groups.length)
-			cx.stroke()
+			let color = line_color(cgi, groups.length)
 
-			// draw a dot on each line cusp.
-			cx.fillStyle = cx.strokeStyle
-			for (let xg of cg) {
+			if (columns) {
+
+				cx.fillStyle = color
+				for (let xg of cg) {
+					let [x, y, w, h] = bar_rect(cgi, xg)
+					cx.beginPath()
+					cx.rect(x, y, w, h)
+					cx.fill()
+				}
+
+			} else {
+
+				// draw the line.
 				cx.beginPath()
-				cx.arc(xg.x, xg.y, 3, 0, 2*PI)
-				cx.fill()
+				let first
+				for (let xg of cg) {
+					if (!first) {
+						cx.moveTo(xg.x, xg.y)
+						first = true
+					} else
+						cx.lineTo(xg.x, xg.y)
+				}
+				cx.strokeStyle = color
+				cx.stroke()
+
+				// draw a dot on each line cusp.
+				cx.fillStyle = cx.strokeStyle
+				for (let xg of cg) {
+					cx.beginPath()
+					cx.arc(xg.x, xg.y, 3, 0, 2*PI)
+					cx.fill()
+				}
+
 			}
 
 			cgi++
 		}
 
-		let tt, tt_set
+		let tt
 
-		pointermove = function(mx, my) {
-			let r = e.rect()
-			mx -= r.x + px1 + num(css['padding-left'])
-			my -= r.y + py1 + num(css['padding-top' ])
-			tt_set = false
+		pointermove = function(ev, mx, my) {
+			let r = canvas.rect()
+			mx -= r.x
+			my -= r.y
+			let mp = new DOMPoint(mx, my).matrixTransform(cx.getTransform().invertSelf())
+			mx = mp.x
+			my = mp.y
+			let cgi = 0
 			for (let cg of groups) {
 				for (let xg of cg) {
-					let x = xg.x
-					let y = xg.y
-					let d = 4
-					if (mx >= x - d && mx <= x + d && my >= y - d && my <= y + d) {
-						tt = tt || tooltip({target: e, text: 'hello ' + x + ' ' + y, kind: 'info'})
-						tt.px = x
-						tt.py = y
+					let tt_set, x, y, w, h
+					if (columns) {
+						[x, y, w, h] = bar_rect(cgi, xg)
+						tt_set = (mx >= x && mx <= x + w && my >= y && my <= y + h)
+					} else {
+						x = xg.x
+						y = xg.y
+						w = 0
+						h = 0
+						let d = 8
+						tt_set = (mx >= x - d && mx <= x + d && my >= y - d && my <= y + d)
+					}
+					if (tt_set) {
+						tt = tt || tooltip({
+							target: e,
+							side: rotate ? 'right' : 'top',
+							align: 'center',
+							kind: 'info',
+						})
+						tt.begin_update()
+						tt.text = cat_sum_label('x-chart-tooltip', cg.key_cols, cg.key_vals, xg, xg.sum)
+						let tm = cx.getTransform()
+						let p1 = new DOMPoint(x    , y    ).matrixTransform(tm)
+						let p2 = new DOMPoint(x + w, y + h).matrixTransform(tm)
+						let p3 = new DOMPoint(x + w, y    ).matrixTransform(tm)
+						let p4 = new DOMPoint(x    , y + h).matrixTransform(tm)
+						let x1 = min(p1.x, p2.x, p3.x, p4.x)
+						let y1 = min(p1.y, p2.y, p3.y, p4.y)
+						let x2 = max(p1.x, p2.x, p3.x, p4.x)
+						let y2 = max(p1.y, p2.y, p3.y, p4.y)
+						tt.px = x1 + pad_x1
+						tt.py = y1 + pad_y1
+						tt.pw = x2 - x1
+						tt.ph = y2 - y1
 						tt.show()
-						tt_set = true
+						tt.end_update()
+						return
 					}
 				}
+				cgi++
 			}
-			if (tt && !tt_set)
+			if (tt)
 				tt.hide()
 		}
 
 	}
 
+	render.line = render_line_or_columns
+	render.column = function() { render_line_or_columns(true) }
+	render.bar = function() { render_line_or_columns(true, true) }
+
 	e.do_update = function() {
-		pointermove = null
+		pointermove = noop
 		e.clear()
 		render[e.shape]()
 	}
 
-	e.on('pointermove', function(ev, mx, my) {
-		if (pointermove)
-			pointermove(mx, my)
-	})
+	e.on('pointermove' , function(...args) { pointermove(...args) })
+	e.on('pointerleave', function(...args) { pointermove(...args) })
 
 	// config -----------------------------------------------------------------
 

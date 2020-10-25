@@ -1474,6 +1474,7 @@ function nav_widget(e) {
 		let depth = col_groups[0].split(/\s+/).length-1
 		function add_group(t, path, parent_group, parent_group_level) {
 			let group = []
+			group.key_cols = col_groups[parent_group_level]
 			group.key_vals = path.slice()
 			group.text = t.text
 			parent_group.push(group)
