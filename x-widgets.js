@@ -317,7 +317,7 @@ let component_deferred_updating = function(e) {
 // component property system mixin
 // ---------------------------------------------------------------------------
 uses:
-	e.property(name, get[, set])
+	e.property(name, get, [set])
 	e.prop(name, attrs)
 publishes:
 	e.<prop>
@@ -332,20 +332,6 @@ fires:
 	document.'prop_changed' (e, prop, v1, v0, slot)
 --------------------------------------------------------------------------- */
 
-let fire_prop_changed = function(e, prop, v1, v0, slot) {
-	// TODO: add this to simplify some things?
-	// e.fire('prop_changed', e, prop, v1, v0, slot)
-	document.fire('prop_changed', e, prop, v1, v0, slot)
-}
-
-function resolve_widget_id(id) {
-	let e = window[id]
-	return isobject(e) && e.iswidget && e.attached && e.can_select_widget ? e : null
-}
-
-let from_attr_bool = v => repl(repl(v, '', true), 'false', false)
-let from_attr_number = num
-
 function props_mixin(e, iprops) {
 
 	/* TODO: use this or scrape it
@@ -353,6 +339,17 @@ function props_mixin(e, iprops) {
 		e.on('bind', function(on) { te.on(ev, f, on) })
 	}
 	*/
+
+	function fire_prop_changed(e, prop, v1, v0, slot) {
+		// TODO: add this to simplify some things?
+		// e.fire('prop_changed', e, prop, v1, v0, slot)
+		document.fire('prop_changed', e, prop, v1, v0, slot)
+	}
+
+	function resolve_widget_id(id) {
+		let e = window[id]
+		return isobject(e) && e.iswidget && e.attached && e.can_select_widget ? e : null
+	}
 
 	e.property = function(prop, getter, setter) {
 		property(this, prop, {get: getter, set: setter})
@@ -378,8 +375,8 @@ function props_mixin(e, iprops) {
 
 		let attr = opt.attr
 		opt.from_attr = attr && opt.from_attr
-			|| opt.type == 'bool' && from_attr_bool
-			|| opt.type == 'number' && from_attr_number
+			|| opt.type == 'bool' && (v => repl(repl(v, '', true), 'false', false))
+			|| opt.type == 'number' && num
 		let set_attr = attr && set_attr_func(e, prop, opt)
 
 		if (opt.store == 'var') {
@@ -1168,6 +1165,10 @@ function stylable_widget(e) {
 	}
 	e.prop('css_classes', {store: 'var'})
 
+	e.set_theme = function() {
+		e.update() // redraw canvas
+	}
+	e.prop('theme', {store: 'var', attr: true})
 }
 
 // ---------------------------------------------------------------------------
@@ -2527,7 +2528,6 @@ component('x-dialog', function(e) {
 		if (e.title != null) {
 			let title = div({class: 'x-dialog-title'})
 			title.set(e.title)
-			e.title = title
 			e.header = div({class: 'x-dialog-header'}, title)
 		}
 		if (!e.content)
@@ -2587,29 +2587,37 @@ component('x-toolbox', function(e) {
 	e.istoolbox = true
 	e.class('pinned')
 
-	e.pin_button = div({class: 'x-toolbox-button x-toolbox-pin-button fa fa-thumbtack'})
-	e.xbutton = div({class: 'x-toolbox-button x-toolbox-xbutton fa fa-times'})
+	e.pin_button = div({class: 'x-toolbox-button x-toolbox-button-pin fa fa-thumbtack'})
+	e.xbutton = div({class: 'x-toolbox-button x-toolbox-button-close fa fa-times'})
 	e.title_div = div({class: 'x-toolbox-title'})
 	e.titlebar = div({class: 'x-toolbox-titlebar'}, e.title_div, e.pin_button, e.xbutton)
-	e.add(e.titlebar)
+	e.content_div = div({class: 'x-toolbox-content'})
+	e.resize_overlay = div({class: 'x-toolbox-resize-overlay'})
+	e.add(e.titlebar, e.content_div, e.resize_overlay)
 
 	e.get_text = () => e.title_div.textContent
 	e.set_text = function(v) { e.title_div.set(v) }
 	e.prop('text', {slot: 'lang'})
 
-	e.set_popup_side   = e.update
-	e.set_popup_align  = e.update
-	e.set_popup_widget = e.update
-	e.set_popup_x      = e.update
-	e.set_popup_y      = e.update
-	e.set_pinned       = e.update
+	function refresh() {
+		e.w = e.pw
+		e.h = e.ph
+		e.update()
+	}
 
-	e.prop('popup_side'  , {store: 'var', type: 'enum', enum_values: ['inner-right', 'inner-left', 'inner-top', 'inner-bottom', 'left', 'right', 'top', 'bottom'], default: 'inner-right'})
-	e.prop('popup_align' , {store: 'var', type: 'enum', enum_values: ['start', 'center', 'end'], default: 'start'})
-	e.prop('popup_widget', {store: 'var', type: 'widget'})
-	e.prop('popup_x'     , {store: 'var', type: 'number', default: false, slot: 'user'})
-	e.prop('popup_y'     , {store: 'var', type: 'number', default: false, slot: 'user'})
-	e.prop('pinned'      , {store: 'var', type: 'bool', default: true, slot: 'user'})
+	e.set_side    = refresh
+	e.set_px      = refresh
+	e.set_py      = refresh
+	e.set_pw      = refresh
+	e.set_ph      = refresh
+	e.set_pinned  = refresh
+
+	e.prop('side'  , {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'right'})
+	e.prop('px'    , {store: 'var', type: 'number', slot: 'user'})
+	e.prop('py'    , {store: 'var', type: 'number', slot: 'user'})
+	e.prop('pw'    , {store: 'var', type: 'number', slot: 'user'})
+	e.prop('ph'    , {store: 'var', type: 'number', slot: 'user'})
+	e.prop('pinned', {store: 'var', type: 'bool'  , slot: 'user'})
 
 	function is_top() {
 		let last = document.body.last
@@ -2623,37 +2631,88 @@ component('x-toolbox', function(e) {
 	}
 
 	e.do_update = function(opt) {
-		e.popup(e.popup_widget || document.body, e.popup_side, e.popup_align, e.popup_x || 0, e.popup_y || 0)
+
+		let r = e.rect()
+		let br = document.body.rect()
+		let px = clamp(e.px, 0, window.innerWidth  - r.w) - br.x
+		let py = clamp(e.py, 0, window.innerHeight - r.h) - br.y
+
+		e.popup(document.body, 'inner-'+e.side, 'start', null, null, null, null, px, py)
 
 		// move to top if the update was user-triggered not layout-triggered.
-		if (opt && opt.input == e && !is_top()) {
-			let sx = e.scrollLeft
-			let sy = e.scrollTop
-			bind_events = false
-			document.body.add(e)
-			bind_events = true
-			e.scroll(sx, sy)
-		}
+		if (opt && opt.input == e && !is_top())
+			e.index = 1/0
 
 	}
 
 	e.init = function() {
-		e.content_div = div({class: 'x-toolbox-content'})
 		e.content_div.set(e.content)
-		e.add(e.content_div)
 		e.hide()
 		e.update()
 		e.bind(true)
 	}
 
 	e.on('focusin', function(ev) {
-		e.update()
+		e.update({input: e}) // move-to-top
 		ev.target.focus()
 	})
 
-	e.titlebar.on('pointerdown', function(ev, mx, my) {
+
+	let hit_side, down
+	e.resize_overlay.on('pointermove', function(ev, mx, my) {
+		if (down)
+			return
+		hit_side = e.resize_overlay.hit_test_sides(mx, my)
+		e.resize_overlay.attr('hit_side', hit_side)
+	})
+
+	let mx2px = (mx, w) => e.side == 'right'  ? window.innerWidth  - mx - w : mx
+	let my2py = (my, h) => e.side == 'bottom' ? window.innerHeight - my - h : my
+
+	e.resize_overlay.on('pointerdown', function(ev, mx, my) {
+
 		e.focus()
-		e.update({input: e})
+		e.update({input: e}) // move-to-top
+
+		if (!hit_side)
+			return
+
+		down = true
+
+		let r = e.rect()
+		let mx0 = mx
+		let my0 = my
+
+		return e.capture_pointer(ev, function(ev, mx, my) {
+			let dx = mx - mx0
+			let dy = my - my0
+			e.begin_update()
+			e.update({input: e})
+			let x1 = r.x1
+			let y1 = r.y1
+			let x2 = r.x2
+			let y2 = r.y2
+			if (hit_side.includes('top'   )) y1 += dy
+			if (hit_side.includes('bottom')) y2 += dy
+			if (hit_side.includes('right' )) x2 += dx
+			if (hit_side.includes('left'  )) x1 += dx
+			let w = x2 - x1
+			let h = y2 - y1
+			e.px = mx2px(x1, w)
+			e.py = my2py(y1, h)
+			e.pw = w
+			e.ph = h
+			e.end_update()
+		}, function() {
+			down = false
+		})
+
+	},)
+
+	e.titlebar.on('pointerdown', function(ev, mx, my) {
+
+		e.focus()
+		e.update({input: e}) // move-to-top
 
 		let first_focusable = e.content_div.focusables()[0]
 		if (first_focusable)
@@ -2662,24 +2721,32 @@ component('x-toolbox', function(e) {
 		if (ev.target != e.titlebar)
 			return
 
+		down = true
 		let r = e.rect()
-		let drag_x = mx - r.x
-		let drag_y = my - r.y
+		let mx0 = mx
+		let my0 = my
+		let dx = mx - r.x
+		let dy = my - r.y
+		let dragging
 
 		return this.capture_pointer(ev, function(ev, mx, my) {
-			let r = this.rect()
+			if (!dragging) {
+				if (max(abs(mx - mx0), abs(my - my0)) >= 20 || (ev.shiftKey || ev.ctrlKey))
+					dragging = true
+				else
+					return
+			}
+			mx -= dx
+			my -= dy
 			e.begin_update()
 			e.update({input: e})
-			let px = clamp(0, mx - drag_x, window.innerWidth  - r.w)
-			let py = clamp(0, my - drag_y, window.innerHeight - r.h)
-			if (e.popup_side == 'inner-right')
-				px = window.innerWidth  - px - r.w
-			else if (e.popup_side == 'inner-bottom')
-				py = window.innerHeight - py - r.h
-			e.popup_x = px
-			e.popup_y = py
+			e.px = mx2px(mx, r.w)
+			e.py = my2py(my, r.h)
 			e.end_update()
+		}, function() {
+			down = false
 		})
+
 	})
 
 	e.xbutton.on('pointerup', function() {

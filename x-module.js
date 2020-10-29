@@ -121,7 +121,7 @@ function xmodule(opt) {
 		e.xmodule_noupdate = true
 		e.begin_update()
 		let pv = prop_vals(e.id)
-		let pv0 = attr(e, '__pv0') // initial vals of overriden props.
+		let pv0 = attr(e, '__pv0') // initial vals of overridden props.
 		// restore prop vals that are not present in this override.
 		for (let k in pv0)
 			if (!(k in pv)) {
@@ -885,6 +885,7 @@ function prop_layers_toolbox(tb_opt, insp_opt) {
 		}, insp_opt))
 	let tb = toolbox(update({
 			id: 'dev_prop_layers_toolbox',
+			classes: 'x-dev-toolbox',
 			text: 'property layers',
 			props: dev_toolbox_props,
 			content: pg,
@@ -900,6 +901,7 @@ function props_toolbox(tb_opt, insp_opt) {
 		}, insp_opt))
 	let tb = toolbox(update({
 			id: 'dev_props_toolbox',
+			classes: 'x-dev-toolbox',
 			text: 'properties',
 			props: dev_toolbox_props,
 			content: pg,
@@ -918,6 +920,7 @@ function widget_tree_toolbox(tb_opt, wt_opt) {
 		}, wt_opt))
 	let tb = toolbox(update({
 			id: 'dev_widget_tree_toolbox',
+			classes: 'x-dev-toolbox',
 			text: 'widget tree',
 			props: dev_toolbox_props,
 			content: wt,

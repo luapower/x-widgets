@@ -10,6 +10,8 @@
 
 body {
 	padding: 1em;
+	font-family: x-widget, sans-serif;
+	font-size: 13px;
 }
 
 button {
@@ -17,7 +19,7 @@ button {
 }
 
 a > button {
-	font-family: widget, sans-serif;
+	font-family: x-widget, sans-serif;
 	font-size: 100%;
 	text-decoration: none;
 	color: black;
@@ -66,8 +68,6 @@ h2 {
 	overflow: auto;
 }
 
-.x-dark #layout, .x-dark #code, .x-dark .lb { border-color: #333; }
-
 </style>
 
 <script src="ace/ace.js"></script>
@@ -86,7 +86,7 @@ h2 {
 
 </head>
 
-<body class=x-widget>
+<body>
 
 <h2>X-WIDGETS DEMO</h2>
 <table id=layout width=100% height=600 cellspacing=0>
@@ -233,24 +233,26 @@ main.add(H.div({style: 'text-align: center'}, H.div({}, b1), H.div({}, b2), H.di
 b1.style['margin-bottom'] = '10em'
 b2.style['margin-bottom'] = '10em'
 
-let s = 'aaa v aaa<br>aaa aaa v aaa aaa'
+let s1 = 'aaa v aaa'
+let s2 = 'aaa v aaa<br>aaa aaa v aaa aaa'
+let s3 = 'aaa v aaa<br>aaa aaa v aaa aaa<br>aaa aaa aaa v aaa aaa aaa'
 
 function check(e) { return e.hovered }
 
-tooltip({text: H(s), side: 'right' , align: 'center', target: b1, kind: 'info', check: check})
-tooltip({text: H(s), side: 'top'   , align: 'center', target: b1, kind: 'info', check: check})
-tooltip({text: H(s), side: 'bottom', align: 'center', target: b1, kind: 'info', check: check})
-tooltip({text: H(s), side: 'left'  , align: 'center', target: b1, kind: 'info', check: check})
+tooltip({text: H(s1), side: 'right' , align: 'center', target: b1, kind: 'info', check: check, close_button: true })
+tooltip({text: H(s2), side: 'top'   , align: 'center', target: b1, kind: 'info', check: check, close_button: true })
+tooltip({text: H(s3), side: 'bottom', align: 'center', target: b1, kind: 'info', check: check, close_button: true })
+tooltip({text: H(s3), side: 'left'  , align: 'center', target: b1, kind: 'info', check: check, close_button: false})
 
-tooltip({text: H(s), side: 'right' , align: 'start', target: b2})
-tooltip({text: H(s), side: 'top'   , align: 'start', target: b2})
-tooltip({text: H(s), side: 'bottom', align: 'start', target: b2})
-tooltip({text: H(s), side: 'left'  , align: 'start', target: b2})
+tooltip({text: H(s1), side: 'right' , align: 'start', target: b2, close_button: true })
+tooltip({text: H(s2), side: 'top'   , align: 'start', target: b2, close_button: false})
+tooltip({text: H(s3), side: 'bottom', align: 'start', target: b2, close_button: true })
+tooltip({text: H(s3), side: 'left'  , align: 'start', target: b2, close_button: false})
 
-tooltip({text: H(s), side: 'right' , align: 'end', target: b3, kind: 'error'})
-tooltip({text: H(s), side: 'top'   , align: 'end', target: b3, kind: 'error'})
-tooltip({text: H(s), side: 'bottom', align: 'end', target: b3, kind: 'error'})
-tooltip({text: H(s), side: 'left'  , align: 'end', target: b3, kind: 'error'})
+tooltip({text: H(s1), side: 'right' , align: 'end', target: b3, kind: 'error', close_button: true })
+tooltip({text: H(s2), side: 'top'   , align: 'end', target: b3, kind: 'error', close_button: false})
+tooltip({text: H(s3), side: 'bottom', align: 'end', target: b3, kind: 'error', close_button: true })
+tooltip({text: H(s3), side: 'left'  , align: 'end', target: b3, kind: 'error', close_button: false})
 
 </script>
 </template>
@@ -292,7 +294,7 @@ notify('There!', 'error', 2)
 <script>
 
 win = dialog({
-	text: 'I\'m playing the title',
+	title: 'I\'m playing the title',
 	content: div({}, 'I\'m just here for the demo.'),
 	footer: 'some-button < yes no > apply:ok cancel',
 	buttons: {
@@ -320,8 +322,8 @@ tb = toolbox({
 	text: 'Imma toolbox',
 	xxx: 'yyy',
 	content: div({}, 'I\'m just here for the demo.'),
-	x: 400,
-	y: 100,
+	px: 400,
+	py: 100,
 	w: 150,
 	h: 300,
 })
@@ -533,7 +535,7 @@ api.on('val_changed', function(v) {
 })
 main.add(api)
 
-let addr = placeedit({field: {}})
+let addr = placeedit({field: {}, val: 'Somewhere'})
 main.add(addr)
 
 let gmap = googlemaps({nav: addr.nav, col: addr.col})
@@ -1139,7 +1141,7 @@ g = grid({
 
 main.add(g)
 
-ct = div({style: 'border: 1px solid #ccc; width: 400px; height: 300px;'})
+ct = div({style: 'width: 400px; height: 300px;'})
 main.add(ct)
 
 ct.add(chart({
@@ -1332,7 +1334,7 @@ demo_list = listbox({
 	item_typename: 'richtext',
 	field: {},
 	val_col: 0,
-	val: demos[32],
+	val: demos[localStorage.getItem('selected_demo_index')],
 })
 
 demo_list.create_item = function() {
@@ -1349,6 +1351,7 @@ demo_list.on('focused_row_changed', function() {
 	ace_editor.getSession().setValue(code)
 	ace_editor.initial_script = code
 	run_script()
+	localStorage.setItem('selected_demo_index', this.focused_row_index)
 })
 
 run_button.on('click', function() {
@@ -1363,10 +1366,15 @@ reload_button.on('click', function() {
 demo_list_ct.add(demo_list)
 
 lights_button.on('click', function() {
-	let dark = !document.body.hasclass('x-dark')
-	document.body.class('x-dark', dark)
+	let dark = document.body.attrval('theme') != 'dark'
+	document.body.attr('theme', dark ? 'dark' : null)
 	ace_editor.setTheme(dark ? 'ace/theme/tomorrow_night' : null)
+	localStorage.setItem('dark_mode', dark)
+	document.fire('layout_changed')
 })
+
+if (localStorage.getItem('dark_mode') == 'true')
+	lights_button.click()
 
 </script>
 </body>

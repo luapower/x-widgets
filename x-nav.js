@@ -1372,7 +1372,10 @@ function nav_widget(e) {
 		}
 
 		idx.row_added = function(row) {
-			add_row(row)
+			if (!tree)
+				idx.rebuild()
+			else
+				add_row(row)
 		}
 
 		idx.row_removed = function(row) {
@@ -2728,13 +2731,13 @@ function nav_widget(e) {
 		}
 	}
 
-	function update_index_field() {
+	function update_index_field(old_parent_row, parent_row) {
 		if (!e.index_field)
 			return
 		if (e.parent_field) {
-			reset_indices_for_children_of(old_parent_row)
+			update_index_field_for_children_of(old_parent_row)
 			if (parent_row != old_parent_row)
-				reset_indices_for_children_of(parent_row)
+				update_index_field_for_children_of(parent_row)
 		} else {
 			let index = 1
 			for (let ri = 0; ri < e.rows.length; ri++)
@@ -2819,7 +2822,7 @@ function nav_widget(e) {
 
 			e.begin_update()
 
-			update_index_field()
+			update_index_field(old_parent_row, parent_row)
 
 			e.rows_moved = true
 			if (e.save_row_move_on == 'input')
@@ -3398,6 +3401,7 @@ function nav_widget(e) {
 			return
 		if (on && !e.action_band) {
 			e.action_band = action_band({
+				classes: 'x-grid-action-band',
 				layout: 'save:ok',
 				buttons: {
 					'save': function() {

@@ -33,6 +33,7 @@ component('x-grid', function(e, is_val_widget) {
 	nav_widget(e, is_val_widget)
 	editable_widget(e)
 	focusable_widget(e)
+	stylable_widget(e)
 
 	// geometry
 	e.cell_h = 26
@@ -201,7 +202,7 @@ component('x-grid', function(e, is_val_widget) {
 		} else {
 
 			e.header.w = e.header_w
-			e.header.h = e.cell_h * e.fields.length
+			e.header.max_h = e.cell_h * e.fields.length
 
 			cells_w = e.cell_w * e.rows.length
 			cells_h = e.cell_h * e.fields.length
@@ -868,8 +869,8 @@ component('x-grid', function(e, is_val_widget) {
 		}
 	}
 
-	function ht_col_resize_vert(mx, my, hit) {
-		if (my >= e.header.offsetHeight)
+	function ht_col_resize_vert(mx, my, max_h, hit) {
+		if (my >= max_h)
 			return
 		let x = ((mx + 5) % e.cell_w) - 5
 		if (!(x >= -5 && x <= 5))
@@ -893,7 +894,7 @@ component('x-grid', function(e, is_val_widget) {
 		if (horiz)
 			return ht_col_resize_horiz(mx, my, hit)
 		else
-			return ht_col_resize_vert(mx, my, hit)
+			return ht_col_resize_vert(mx, my, r.h, hit)
 	}
 
 	let mm_col_resize, mu_col_resize

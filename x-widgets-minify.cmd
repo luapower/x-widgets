@@ -13,3 +13,6 @@ echo.
 
 wc -l x-*.js divs.js glue.js
 echo.
+
+rm x-widgets.js.gz
+rm x-widgets.min.js.gz

@@ -626,7 +626,7 @@ component('x-editbox', function(e) {
 				e.picker.auto_w = false
 			e.picker.w = e.picker_w
 			e.picker.show()
-			e.picker.popup(e, 'bottom', e.align)
+			e.picker.popup(e, 'bottom', e.align, 0, 2)
 		} else {
 			e.cancel_val = null
 			e.picker.hide()
@@ -871,17 +871,14 @@ component('x-spinedit', function(e) {
 			increment = or(e.field.multiple_of, 1) * sign
 			increment_val()
 			start_incrementing_timer = after(.5, start_incrementing)
-			return false
+			return this.capture_pointer(ev, null, function() {
+				clearTimeout(start_incrementing_timer)
+				clearInterval(increment_timer)
+				start_incrementing_timer = null
+				increment_timer = null
+				increment = 0
+			})
 		})
-		function pointerup() {
-			clearTimeout(start_incrementing_timer)
-			clearInterval(increment_timer)
-			start_incrementing_timer = null
-			increment_timer = null
-			increment = 0
-		}
-		button.on('pointerup', pointerup)
-		button.on('pointerleave', pointerup)
 	}
 	add_events(e.up  , 1)
 	add_events(e.down, -1)
@@ -1081,7 +1078,11 @@ component('x-placeedit', function(e) {
 		e.isopen = !!places.length
 	}
 
-	e.from_text = function(s) { return s ? {input_text: s} : null }
+	e.property('place_id', function() {
+		return isobject(e.val) && e.val.place_id || null
+	})
+
+	e.from_text = function(s) { return s ? s : null }
 	e.to_text = function(v) { return (isobject(v) ? v.description : v) || '' }
 
 	e.override('do_update_val', function(inherited, v, ev) {
@@ -1089,9 +1090,16 @@ component('x-placeedit', function(e) {
 		e.pin_ct.set(e.field.format_pin(v))
 		if (ev && ev.input == e && ev.typing) {
 			if (v)
-				suggest_address(v.input_text, suggested_addresses_changed)
+				suggest_address(v, suggested_addresses_changed)
 			else
 				suggested_addresses_changed()
+		}
+	})
+
+	e.pin_ct.on('pointerdown', function() {
+		if (e.val && !e.place_id) {
+			suggest_address(e.val, suggested_addresses_changed)
+			return false
 		}
 	})
 
@@ -1375,7 +1383,7 @@ function dropdown_widget(e) {
 					e.picker.auto_w = false
 				e.picker.w = e.picker_w
 				e.picker.show(!hidden)
-				e.picker.popup(e, 'bottom', e.align)
+				e.picker.popup(e, 'bottom', e.align == 'right' ? 'end' : 'start', 0, 2)
 				e.fire('opened')
 			} else {
 				e.cancel_val = null
@@ -1877,20 +1885,22 @@ function richtext_widget_editing(e) {
 		button.html = action.icon || ''
 		button.classes = action.icon_class
 		button.on('pointerdown', press_button)
+		let update_button
+		if (action.state) {
+			update_button = function() {
+				button.class('selected', action.state())
+			}
+			e.content_div.on('keyup', update_button)
+			e.content_div.on('pointerup', update_button)
+		}
 		button.on('click', function() {
 			button_pressed = false
 			if (action.result())
 				e.content_div.focus()
+			if (update_button)
+				update_button()
 			return false
 		})
-		if (action.state) {
-			let update_button = function() {
-				button.class('x-richtext-button-selected', action.state())
-			}
-			e.content_div.on('keyup', update_button)
-			e.content_div.on('pointerup', update_button)
-			button.on('click', update_button)
-		}
 		e.actionbar.add(button)
 	}
 	e.actionbar.popup(e, 'top', 'left')
@@ -2402,9 +2412,11 @@ component('x-chart', function(e) {
 			}
 		}
 
-		// draw x-axis labels & markers.
-		cx.fillStyle   = '#666'
-		cx.strokeStyle = '#888'
+		// draw x-axis labels & reference lines.
+		let ref_line_color = css.getPropertyValue('--x-border-light')
+		let label_color    = css.getPropertyValue('--x-fg-label')
+		cx.fillStyle   = label_color
+		cx.strokeStyle = ref_line_color
 		for (let xg of xgs.values()) {
 			// draw x-axis label.
 			let m = cx.measureText(xg.text)
@@ -2429,7 +2441,7 @@ component('x-chart', function(e) {
 			cx.stroke()
 		}
 
-		// draw y-axis labels & markers.
+		// draw y-axis labels & reference lines.
 		for (let sum = min_sum; sum <= max_sum; sum += y_step) {
 			// draw y-axis label.
 			let y = round(lerp(sum, min_sum, max_sum, h - py2, 0))
@@ -2450,7 +2462,7 @@ component('x-chart', function(e) {
 			cx.fillText(s, 0, 0)
 			cx.restore()
 			// draw y-axis strike-through line marker.
-			cx.strokeStyle = rotate ? '#ccc' : '#eee'
+			cx.strokeStyle = ref_line_color
 			cx.beginPath()
 			cx.moveTo(0 + .5, y - .5)
 			cx.lineTo(w + .5, y - .5)
@@ -2458,7 +2470,7 @@ component('x-chart', function(e) {
 		}
 
 		// draw the axis.
-		cx.strokeStyle = '#ccc'
+		cx.strokeStyle = ref_line_color
 		cx.beginPath()
 		// y-axis
 		cx.moveTo(.5, round(lerp(min_sum, min_sum, max_sum, h - py2, 0)) + .5)
@@ -2530,6 +2542,38 @@ component('x-chart', function(e) {
 			cgi++
 		}
 
+		function hit_test_columns(mx, my) {
+			let cgi = 0
+			for (let cg of groups) {
+				for (let xg of cg) {
+					let [x, y, w, h] = bar_rect(cgi, xg)
+					if (mx >= x && mx <= x + w && my >= y && my <= y + h)
+						return [cg, xg, x, y, w, h]
+				}
+				cgi++
+			}
+		}
+
+		function hit_test_dots(mx, my) {
+			let max_d = 16**2
+			let min_d = 1/0
+			let hit_cg, hit_xg
+			for (let cg of groups) {
+				for (let xg of cg) {
+					let dx = abs(mx - xg.x)
+					let dy = abs(my - xg.y)
+					let d = dx**2 + dy**2
+					if (d <= min(min_d, max_d)) {
+						min_d = d
+						hit_cg = cg
+						hit_xg = xg
+					}
+				}
+			}
+			if (hit_cg)
+				return [hit_cg, hit_xg, hit_xg.x, hit_xg.y, 0, 0]
+		}
+
 		let tt
 
 		pointermove = function(ev, mx, my) {
@@ -2539,49 +2583,34 @@ component('x-chart', function(e) {
 			let mp = new DOMPoint(mx, my).matrixTransform(cx.getTransform().invertSelf())
 			mx = mp.x
 			my = mp.y
-			let cgi = 0
-			for (let cg of groups) {
-				for (let xg of cg) {
-					let tt_set, x, y, w, h
-					if (columns) {
-						[x, y, w, h] = bar_rect(cgi, xg)
-						tt_set = (mx >= x && mx <= x + w && my >= y && my <= y + h)
-					} else {
-						x = xg.x
-						y = xg.y
-						w = 0
-						h = 0
-						let d = 8
-						tt_set = (mx >= x - d && mx <= x + d && my >= y - d && my <= y + d)
-					}
-					if (tt_set) {
-						tt = tt || tooltip({
-							target: e,
-							side: rotate ? 'right' : 'top',
-							align: 'center',
-							kind: 'info',
-						})
-						tt.begin_update()
-						tt.text = cat_sum_label('x-chart-tooltip', cg.key_cols, cg.key_vals, xg, xg.sum)
-						let tm = cx.getTransform()
-						let p1 = new DOMPoint(x    , y    ).matrixTransform(tm)
-						let p2 = new DOMPoint(x + w, y + h).matrixTransform(tm)
-						let p3 = new DOMPoint(x + w, y    ).matrixTransform(tm)
-						let p4 = new DOMPoint(x    , y + h).matrixTransform(tm)
-						let x1 = min(p1.x, p2.x, p3.x, p4.x)
-						let y1 = min(p1.y, p2.y, p3.y, p4.y)
-						let x2 = max(p1.x, p2.x, p3.x, p4.x)
-						let y2 = max(p1.y, p2.y, p3.y, p4.y)
-						tt.px = x1 + pad_x1
-						tt.py = y1 + pad_y1
-						tt.pw = x2 - x1
-						tt.ph = y2 - y1
-						tt.show()
-						tt.end_update()
-						return
-					}
-				}
-				cgi++
+			let hit = columns ? hit_test_columns(mx, my) : hit_test_dots(mx, my)
+			if (hit) {
+				let [cg, xg, x, y, w, h] = hit
+				tt = tt || tooltip({
+					target: e,
+					side: rotate ? 'right' : 'top',
+					align: 'center',
+					kind: 'info',
+					classes: 'x-chart-tooltip',
+				})
+				tt.begin_update()
+				tt.text = cat_sum_label('x-chart-tooltip-label', cg.key_cols, cg.key_vals, xg, xg.sum)
+				let tm = cx.getTransform()
+				let p1 = new DOMPoint(x    , y    ).matrixTransform(tm)
+				let p2 = new DOMPoint(x + w, y + h).matrixTransform(tm)
+				let p3 = new DOMPoint(x + w, y    ).matrixTransform(tm)
+				let p4 = new DOMPoint(x    , y + h).matrixTransform(tm)
+				let x1 = min(p1.x, p2.x, p3.x, p4.x)
+				let y1 = min(p1.y, p2.y, p3.y, p4.y)
+				let x2 = max(p1.x, p2.x, p3.x, p4.x)
+				let y2 = max(p1.y, p2.y, p3.y, p4.y)
+				tt.px = x1 + pad_x1
+				tt.py = y1 + pad_y1
+				tt.pw = x2 - x1
+				tt.ph = y2 - y1
+				tt.show()
+				tt.end_update()
+				return
 			}
 			if (tt)
 				tt.hide()

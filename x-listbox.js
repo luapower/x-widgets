@@ -27,6 +27,7 @@ component('x-listbox', function(e) {
 	val_widget(e, true)
 	nav_widget(e)
 	focusable_widget(e)
+	stylable_widget(e)
 
 	e.can_focus_cells = false
 
