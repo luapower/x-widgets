@@ -1178,13 +1178,15 @@ function stylable_widget(e) {
 component('x-tooltip', function(e) {
 
 	e.content = div({class: 'x-tooltip-content'})
-	e.body = div({class: 'x-tooltip-body'}, e.content)
+	e.icon_div = div()
+	e.body = div({class: 'x-tooltip-body'}, e.icon_div, e.content)
 	e.pin = div({class: 'x-tooltip-tip'})
 	e.add(e.body, e.pin)
 
 	e.prop('target'      , {store: 'var', private: true})
 	e.prop('target_name' , {store: 'var', type: 'element', bind: 'target'})
 	e.prop('text'        , {store: 'var', slot: 'lang'})
+	e.prop('icon_visible', {store: 'var', type: 'bool'})
 	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top', attr: true})
 	e.prop('align'       , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center', attr: true})
 	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default', attr: true})
@@ -1220,21 +1222,24 @@ component('x-tooltip', function(e) {
 		} else if (e.xbutton) {
 			e.xbutton.show(e.close_button)
 		}
+		let icon_classes = e.icon_visible && tooltip.icon_classes[e.kind]
+		e.icon_div.attr('class', icon_classes ? ('x-tooltip-icon ' + icon_classes) : null)
 		e.popup(e.target, e.side, e.align, e.px, e.py, e.pw, e.ph)
 		if (opt && opt.reset_timer)
 			reset_timeout_timer()
 	}
 
-	function update() { e.update() }
+	function call_update() { e.update() }
 	e.set_target = function() { e.update({reset_timer: true}) }
-	e.set_side   = update
-	e.set_align  = update
-	e.set_kind   = update
-	e.set_px     = update
-	e.set_py     = update
-	e.set_pw     = update
-	e.set_ph     = update
-	e.set_close_button = update
+	e.set_icon_visible = call_update
+	e.set_side   = call_update
+	e.set_align  = call_update
+	e.set_kind   = call_update
+	e.set_px     = call_update
+	e.set_py     = call_update
+	e.set_pw     = call_update
+	e.set_ph     = call_update
+	e.set_close_button = call_update
 
 	e.set_text = function(s) {
 		e.content.set(s, 'pre-wrap')
@@ -1263,6 +1268,11 @@ component('x-tooltip', function(e) {
 })
 
 tooltip.reading_speed = 800 // letters-per-minute.
+
+tooltip.icon_classes = {
+	info   : 'fa fa-info-circle',
+	error  : 'fa fa-exclamation-triangle',
+}
 
 // ---------------------------------------------------------------------------
 // button
@@ -2409,6 +2419,7 @@ component('x-toaster', function(e) {
 		let t = tooltip({
 			classes: 'x-toaster-message',
 			kind: kind,
+			icon_visible: true,
 			target: e.target,
 			text: text,
 			side: e.side,

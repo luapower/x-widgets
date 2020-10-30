@@ -239,20 +239,20 @@ let s3 = 'aaa v aaa<br>aaa aaa v aaa aaa<br>aaa aaa aaa v aaa aaa aaa'
 
 function check(e) { return e.hovered }
 
-tooltip({text: H(s1), side: 'right' , align: 'center', target: b1, kind: 'info', check: check, close_button: true })
-tooltip({text: H(s2), side: 'top'   , align: 'center', target: b1, kind: 'info', check: check, close_button: true })
-tooltip({text: H(s3), side: 'bottom', align: 'center', target: b1, kind: 'info', check: check, close_button: true })
-tooltip({text: H(s3), side: 'left'  , align: 'center', target: b1, kind: 'info', check: check, close_button: false})
+tooltip({text: H(s1), side: 'right' , align: 'center', target: b1, kind: 'info', check: check, close_button: true , icon_visible: true})
+tooltip({text: H(s2), side: 'top'   , align: 'center', target: b1, kind: 'info', check: check, close_button: true , icon_visible: true})
+tooltip({text: H(s3), side: 'bottom', align: 'center', target: b1, kind: 'info', check: check, close_button: true , icon_visible: true})
+tooltip({text: H(s3), side: 'left'  , align: 'center', target: b1, kind: 'info', check: check, close_button: false, icon_visible: true})
 
-tooltip({text: H(s1), side: 'right' , align: 'start', target: b2, close_button: true })
-tooltip({text: H(s2), side: 'top'   , align: 'start', target: b2, close_button: false})
-tooltip({text: H(s3), side: 'bottom', align: 'start', target: b2, close_button: true })
-tooltip({text: H(s3), side: 'left'  , align: 'start', target: b2, close_button: false})
+tooltip({text: H(s1), side: 'right' , align: 'start', target: b2, close_button: true , icon_visible: true})
+tooltip({text: H(s2), side: 'top'   , align: 'start', target: b2, close_button: false, icon_visible: true})
+tooltip({text: H(s3), side: 'bottom', align: 'start', target: b2, close_button: true , icon_visible: true})
+tooltip({text: H(s3), side: 'left'  , align: 'start', target: b2, close_button: false, icon_visible: true})
 
-tooltip({text: H(s1), side: 'right' , align: 'end', target: b3, kind: 'error', close_button: true })
-tooltip({text: H(s2), side: 'top'   , align: 'end', target: b3, kind: 'error', close_button: false})
-tooltip({text: H(s3), side: 'bottom', align: 'end', target: b3, kind: 'error', close_button: true })
-tooltip({text: H(s3), side: 'left'  , align: 'end', target: b3, kind: 'error', close_button: false})
+tooltip({text: H(s1), side: 'right' , align: 'end', target: b3, kind: 'error', close_button: true , icon_visible: true})
+tooltip({text: H(s2), side: 'top'   , align: 'end', target: b3, kind: 'error', close_button: false, icon_visible: true})
+tooltip({text: H(s3), side: 'bottom', align: 'end', target: b3, kind: 'error', close_button: true , icon_visible: true})
+tooltip({text: H(s3), side: 'left'  , align: 'end', target: b3, kind: 'error', close_button: false, icon_visible: true})
 
 </script>
 </template>

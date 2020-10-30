@@ -421,7 +421,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-tooltip-body {
-	display: inline;
+	display: inline-flex;
 	padding: .5em 0;
 
 	/* styling */
@@ -453,13 +453,15 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-tooltip-xbutton {
+	vertical-align: top;
+	align-self: stretch;
 	font-size: 80%;
 	color: var(--x-fg-disabled);
 	padding: .25em 1em;
 	border-width: 0px;
 	border-left-width: 1px;
 	border-style: solid;
-	border-color: var(--x-fg-disabled);
+	border-color: var(--x-faint);
 	pointer-events: all;
 }
 
@@ -518,7 +520,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* styling based on kind attr */
 
-.x-tooltip[kind=search] > .x-tooltip-body { background-color: var(--x-bg-search); }
+.x-tooltip[kind=search] > .x-tooltip-body { background-color: var(--x-bg-search); color: #000; }
 .x-tooltip[kind=search] > .x-tooltip-tip { color: var(--x-bg-search); }
 
 .x-tooltip[kind=info] > .x-tooltip-body { background-color: var(--x-bg-info); color: var(--x-fg-inverted); }
@@ -530,6 +532,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-tooltip[kind=error] > .x-tooltip-tip { color: var(--x-bg-error); }
 .x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
 .x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton:hover { color: var(--x-fg-inverted); }
+
+.x-tooltip-icon {
+	vertical-align: top;
+	margin: .2em 0 0 1em;
+	font-size: 1em;
+	line-height: inherit !important;
+}
 
 /* checkbox --------------------------------------------------------------- */
 
