@@ -2062,8 +2062,8 @@ component('x-image', function(e) {
 
 	e.overlay = div({class: 'x-image-overlay'})
 
-	e.upload_btn = div({class: 'x-image-button x-image-upload-button fa fa-cloud-upload-alt'})
-	e.download_btn = div({class: 'x-image-button x-image-download-button fa fa-file-download'})
+	e.upload_btn = div({class: 'x-image-button x-image-upload-button fa fa-cloud-upload-alt', title: S('upload_image', 'Upload Image')})
+	e.download_btn = div({class: 'x-image-button x-image-download-button fa fa-file-download', title: S('download_image', 'Download Image')})
 	e.buttons = span(0, e.upload_btn, e.download_btn)
 	e.file_input = tag('input', {type: 'file', style: 'display: none'})
 	e.overlay.add(e.buttons, e.file_input)

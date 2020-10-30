@@ -2420,21 +2420,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	position: absolute;
 	left: 0; top: 0; right: 0; bottom: 0;
 	display: grid;
-	justify-items: center;
-	align-items: center;
-}
-
-.x-image-overlay:hover {
-	background-color: var(--x-bg);
-}
-
-.x-image-overlay.transparent {
-	opacity: .5;
-	background: none;
+	justify-items: end;
+	align-items: end;
+	opacity: .6;
 }
 
 .x-image-button {
-	margin: .25em .15em;
+	margin: .5em .15em;
 	font-size: 200%;
 	border-radius: 100%;
 	color: black;
@@ -2445,7 +2437,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	text-align: center;
 	box-shadow: 0px 0px 3px black;
 	cursor: pointer;
-	opacity: .8;
+	opacity: .7;
+}
+
+.x-image-download-button {
+	margin-right: .5em;
 }
 
 .x-image-overlay > * {
@@ -2461,7 +2457,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-image-button[disabled] {
-	opacity: .2;
+	opacity: .4;
 }
 
 .x-image-button:not([disabled]):hover {
