@@ -73,7 +73,7 @@ function attr_val_opt(e) {
 	for (let attr of e.attrs) {
 		let k = attr.name
 		let v = attr.value
-		let popt = e.props[k]
+		let popt = e.get_prop_attrs(k)
 		if (popt) {
 			if (popt.from_attr)
 				v = popt.from_attr(v)
@@ -1177,10 +1177,10 @@ function stylable_widget(e) {
 
 component('x-tooltip', function(e) {
 
-	e.text_div = div({class: 'x-tooltip-text'})
-	e.content = div({class: 'x-tooltip-content'}, e.text_div)
+	e.content = div({class: 'x-tooltip-content'})
+	e.body = div({class: 'x-tooltip-body'}, e.content)
 	e.pin = div({class: 'x-tooltip-tip'})
-	e.add(e.content, e.pin)
+	e.add(e.body, e.pin)
 
 	e.prop('target'      , {store: 'var', private: true})
 	e.prop('target_name' , {store: 'var', type: 'element', bind: 'target'})
@@ -1216,7 +1216,7 @@ component('x-tooltip', function(e) {
 		if (e.close_button && !e.xbutton) {
 			e.xbutton = div({class: 'x-tooltip-xbutton fa fa-times'})
 			e.xbutton.on('pointerup', close)
-			e.content.add(e.xbutton)
+			e.body.add(e.xbutton)
 		} else if (e.xbutton) {
 			e.xbutton.show(e.close_button)
 		}
@@ -1237,7 +1237,7 @@ component('x-tooltip', function(e) {
 	e.set_close_button = update
 
 	e.set_text = function(s) {
-		e.text_div.set(s, 'pre-wrap')
+		e.content.set(s, 'pre-wrap')
 		e.update({reset_timer: true})
 	}
 

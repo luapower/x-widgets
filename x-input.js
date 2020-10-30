@@ -761,7 +761,7 @@ component('x-editbox', function(e) {
 		let imax = e.input.value.length
 		if (i0 < 0) i0 = imax + i0 + 1
 		if (i1 < 0) i1 = imax + i1 + 1
-		e.input.select(i0, i1)
+		e.input.select_range(i0, i1)
 	}
 
 	e.set_text_min_w = function(w) {
@@ -843,7 +843,7 @@ component('x-spinedit', function(e) {
 
 	e.input.on('wheel', function(ev, dy) {
 		e.set_val(e.input_val + (dy / 100), {input: e})
-		e.input.select(0, -1)
+		e.input.select_range(0, -1)
 		return false
 	})
 
@@ -855,7 +855,7 @@ component('x-spinedit', function(e) {
 		let v = e.input_val + increment
 		let r = v % or(e.field.multiple_of, 1)
 		e.set_val(v - r, {input: e})
-		e.input.select(0, -1)
+		e.input.select_range(0, -1)
 	}
 	let increment_timer
 	function start_incrementing() {
@@ -893,53 +893,131 @@ component('x-tagsedit', function(e) {
 
 	e.class('x-editbox')
 
+	e.field_type = 'tags'
+
 	val_widget(e)
 	input_widget(e)
 
+	let S_expand = S('expand', 'expand') + ' (Enter)'
+	let S_condense = S('condense', 'condense') + ' (Enter)'
+
 	e.input = H.input({class: 'x-editbox-input x-tagsedit-input'})
 	e.label_div = div({class: 'x-editbox-label x-tagsedit-label'})
-	e.add(e.input, e.label_div)
+	e.expand_button = div({class: 'x-tagsedit-button-expand fa fa-caret-up',
+		title: S_expand,
+	})
+	e.add(e.expand_button, e.input, e.label_div)
 
-	function update_state(s) {
-		e.input.class('empty', s == '')
-		e.label_div.class('empty', s == '')
-	}
+	function update_tags() {
 
-	e.do_update_val = function(v, ev) {
+		let v = e.input_val
+		let empty = !(v && v.length)
+
+		if (empty && e.expanded) {
+			e.expanded = false
+			return
+		}
+
+		let i = e.at.length - 3
+		while (i >= 1)
+			e.at[i--].remove()
+
+		if (e.bubble)
+			e.bubble.content.clear()
 
 		if (v) {
-			let i = e.at.length - 3
-			while (i >= 0)
-				e.at[i--].remove()
-			i = 0
+			let i = 1
 			for (let tag of v) {
-				let xb = div({class: 'x-tagsedit-tag-xbutton fa fa-times'})
-				let tag_div = div({class: 'x-tagsedit-tag', title: S('remove', 'remove')}, tag, xb)
-				tag_div.onclick = tag_click
-				e.insert(i++, tag_div)
+				let s = T(tag).textContent
+				let xb = div({
+					class: 'x-tagsedit-tag-xbutton fa fa-times',
+					title: S('remove', 'remove {0}'.subst(s)),
+				})
+				let tag_e = div({
+					class: 'x-tagsedit-tag',
+					title: S('edit', 'edit {0}'.subst(s)),
+				}, tag, xb)
+				xb.on('pointerdown', tag_xbutton_pointerdown)
+				tag_e.on('pointerdown', tag_pointerdown)
+				if (e.expanded)
+					e.bubble.content.add(tag_e)
+				else
+					e.insert(i++, tag_e)
 			}
 		}
 
-		e.class('empty', !(v && v.length))
+		if (e.expanded)
+			e.bubble.popup()
 
-		if (!(ev && ev.input == e)) {
+		e.class('empty', empty)
+	}
+
+	e.do_update_val = function(v, ev) {
+		let by_user = ev && ev.input == e
+		if (by_user)
+			was_expanded = false
+		update_tags()
+		if (empty && by_user)
+			e.input.focus()
+		else
 			e.input.value = null
-		}
 
 		let maxlen = e.field && e.field.maxlen
 		e.input.attr('maxlength', maxlen)
 	}
 
+	// expanded bubble.
+
+	e.set_expanded = function(expanded) {
+		if (!(e.input_val && e.input_val.length))
+			expanded = false
+		e.class('expanded', expanded)
+		e.expand_button.switch_class('fa-caret-up', 'fa-caret-down', expanded)
+		if (expanded && !e.bubble)
+			e.bubble = tooltip({classes: 'x-tagsedit-bubble', target: e, side: 'top', align: 'left'})
+		update_tags()
+		if (e.bubble)
+			e.bubble.show(expanded)
+		e.expand_button.title = expanded ? S_condense : S_expand
+	}
+	e.prop('expanded', {store: 'var', private: true})
+
+	e.expand_button.on('pointerdown', function(ev) {
+		e.expanded = !e.expanded
+	})
+
 	// controller
 
-	function tag_click() {
+	function tag_pointerdown() {
 		let v = e.input_val.slice()
-		v.remove(this.index)
+		let tag = v.remove(this.index - (e.expanded ? 0 : 1))
+		e.set_val(v, {input: e})
+		e.input.value = tag
+		e.focus()
+		e.input.select()
+		return false
+	}
+
+	function tag_xbutton_pointerdown() {
+		let v = e.input_val.slice()
+		v.remove(this.parent.index - (e.expanded ? 0 : 1))
 		e.set_val(v, {input: e})
 		return false
 	}
 
 	focusable_widget(e, e.input)
+
+	let was_expanded
+
+	e.input.on('blur', function() {
+		was_expanded = e.expanded
+		e.expanded = false
+	})
+
+	e.input.on('focus', function() {
+		if (was_expanded)
+			e.expanded = true
+	})
 
 	e.on('pointerdown', function(ev) {
 		if (ev.target == e.input)
@@ -949,11 +1027,20 @@ component('x-tagsedit', function(e) {
 	})
 
 	e.input.on('keydown', function(key, shift, ctrl) {
-		if (key == 'Enter' && e.input.value) {
-			let v = e.input_val && e.input_val.slice() || []
-			v.push(e.input.value)
-			e.input.value = null
-			e.set_val(v, {input: e})
+		if (key == 'Enter') {
+			let s = e.input.value
+			if (s) {
+				s = s.trim()
+				if (s) {
+					let v = e.input_val && e.input_val.slice() || []
+					v.push(s)
+					e.set_val(v, {input: e})
+				}
+				e.input.value = null
+			} else {
+				was_expanded = false
+				e.expanded = !e.expanded
+			}
 			return false
 		}
 		if (key == 'Backspace' && !e.input.value) {
@@ -2730,7 +2817,7 @@ component('x-input', function(e) {
 
 	val_widget(e)
 
-	e.prop('widget', {store: 'var', type: 'enum', enum_values: []})
+	e.prop('widget_type', {store: 'var', type: 'enum', enum_values: []})
 
 	function widget_type(type) {
 		if (type) return type
@@ -2740,29 +2827,67 @@ component('x-input', function(e) {
 
 	function bind_field(on) {
 		if (on) {
-			e.input = component.create({
-				type: widget_type(e.widget),
+			let type = widget_type(e.widget_type)
+			let opt = update({
+				type: type,
 				nav: e.nav,
 				col: e.col,
 				classes: 'x-stretched',
-			})
-			e.set(e.input)
+			}, input.widget_type_options[type])
+			each_widget_prop(function(k, v) { opt[k] = v })
+			e.widget = component.create(opt)
+			e.set(e.widget)
 		} else {
-			if (e.input) {
-				e.input.remove()
-				e.input = null
+			if (e.widget) {
+				e.widget.remove()
+				e.widget = null
 			}
 		}
 	}
 
 	e.on('bind_field', bind_field)
 
-	e.set_widget = function(v) {
-		if (widget_type(v) == widget_type(e.widget))
+	e.set_widget_type = function(v) {
+		if (!e.initialized)
+			return
+		if (!e.field)
+			return
+		if (widget_type(v) == widget_type(e.widget_type))
 			return
 		bind_field(false)
 		bind_field(true)
 	}
+
+	// proxy out widget.* properties to the widget.
+
+	function each_widget_prop(f) {
+		for (let k in e) {
+			if (k.starts('widget.')) {
+				let v = e.get_prop(k)
+				k = k.replace(/^widget\./, '')
+				f(k, v)
+			}
+		}
+	}
+
+	e.set_prop = function(k, v) {
+		let v0 = e[k]
+		e[k] = v
+		if (v !== v0 && e.widget && k.starts('widget.')) {
+			k = k.replace(/^widget\./, '')
+			e.widget[k] = v
+			document.fire('prop_changed', e, k, v, v0, null)
+		}
+	}
+
+	e.get_prop_attrs = function(k) {  // enable proxying from html tag attrs.
+		return e.props[k] || (k.starts('widget.') && empty || undefined)
+	}
+
+	e.override('init', function(inherited) {
+		inherited()
+		e.set_widget_type(e.widget_type)
+	})
 
 })
 
@@ -2777,3 +2902,6 @@ input.widget_types = {
 	place    : ['placeedit', 'googlemaps'],
 }
 
+input.widget_type_options = {
+	tagsedit: {mode: 'fixed'},
+}

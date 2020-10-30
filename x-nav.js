@@ -3852,6 +3852,23 @@ component('x-lookup-dropdown', function(e) {
 		}, ...opt))
 	}
 
+	// tag lists
+
+	let tags = {}
+	field_types.tags = tags
+
+	tags.editor = function(...opt) {
+		return tagsedit(update({
+			mode: 'fixed',
+		}, ...opt))
+	}
+
+	tags.convert = function(v) {
+		if (!(v && v.length))
+			return null
+		return [...new Set(v)]
+	}
+
 	// colors
 
 	let color = {}

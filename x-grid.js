@@ -576,6 +576,12 @@ component('x-grid', function(e, is_val_widget) {
 			update_cells_not_moving()
 	}
 
+	e.header.on('wheel', function(ev) {
+		if (horiz)
+			return
+		e.cells_view.scrollBy(0, ev.deltaY)
+	})
+
 	e.cells_view.on('scroll', function() {
 		let last_vri1 = vri1
 		update_scroll()
@@ -1380,6 +1386,7 @@ component('x-grid', function(e, is_val_widget) {
 			? mx - hit.mx
 			: my - hit.my
 		e.move_element_update(x)
+		e.cells_view.scroll_to_view_rect(null, null, horiz ? mx : 0, horiz ? 0 : my, 0, 0)
 	}
 
 	function mu_col_move() {

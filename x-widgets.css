@@ -141,14 +141,16 @@
 	border-width: 0;
 }
 
-/* widget disabled state -------------------------------------------------- */
+/* element disabled state ------------------------------------------------- */
 
-.x-widget[disabled] {
+[disabled] {
 	opacity: .5;
 }
 
-.x-widget[disabled] * {
-	cursor: default;
+[disabled],
+[disabled] *
+{
+	cursor: default !important;
 }
 
 /* widget editing --------------------------------------------------------- */
@@ -330,7 +332,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	user-select: none;
 }
 
-.x-button:not([disabled]) {
+.x-button {
 	cursor: pointer;
 }
 
@@ -418,7 +420,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	animation-fill-mode: forwards;
 }
 
-.x-tooltip-content {
+.x-tooltip-body {
 	display: inline;
 	padding: .5em 0;
 
@@ -444,7 +446,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-tooltip.visible[side=top]    { animation-name: x-tooltip-top; }
 .x-tooltip.visible[side=bottom] { animation-name: x-tooltip-bottom; }
 
-.x-tooltip-text {
+.x-tooltip-content {
 	/* layouting */
 	display: inline-block; /* shrink-wrap and also word-wrap when reaching container width */
 	padding: 0 1em;
@@ -494,14 +496,14 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-tooltip[align=end]    { align-items: flex-end; }
 .x-tooltip[align=center] { align-items: center; }
 
-.x-tooltip[side=right]  > .x-tooltip-content,
-.x-tooltip[side=bottom] > .x-tooltip-content { order: 2; }
+.x-tooltip[side=right]  > .x-tooltip-body,
+.x-tooltip[side=bottom] > .x-tooltip-body { order: 2; }
 
-.x-tooltip[side=top][align=center] > .x-tooltip-text,
-.x-tooltip[side=bottom][align=center] > .x-tooltip-text { text-align: center; }
+.x-tooltip[side=top][align=center] > .x-tooltip-content,
+.x-tooltip[side=bottom][align=center] > .x-tooltip-content { text-align: center; }
 
-.x-tooltip[side=top][align=end] > .x-tooltip-text,
-.x-tooltip[side=bottom][align=end] > .x-tooltip-text { text-align: right; }
+.x-tooltip[side=top][align=end] > .x-tooltip-content,
+.x-tooltip[side=bottom][align=end] > .x-tooltip-content { text-align: right; }
 
 .x-tooltip[side=top] > .x-tooltip-tip,
 .x-tooltip[side=bottom] > .x-tooltip-tip { margin: 0 .5em; }
@@ -516,18 +518,18 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* styling based on kind attr */
 
-.x-tooltip[kind=search] > .x-tooltip-content { background-color: var(--x-bg-search); }
+.x-tooltip[kind=search] > .x-tooltip-body { background-color: var(--x-bg-search); }
 .x-tooltip[kind=search] > .x-tooltip-tip { color: var(--x-bg-search); }
 
-.x-tooltip[kind=info] > .x-tooltip-content { background-color: var(--x-bg-info); color: var(--x-fg-inverted); }
+.x-tooltip[kind=info] > .x-tooltip-body { background-color: var(--x-bg-info); color: var(--x-fg-inverted); }
 .x-tooltip[kind=info] > .x-tooltip-tip { color: var(--x-bg-info); }
-.x-tooltip[kind=info] > .x-tooltip-content > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
-.x-tooltip[kind=info] > .x-tooltip-content > .x-tooltip-xbutton:hover { color: var(--x-fg-inverted); }
+.x-tooltip[kind=info] > .x-tooltip-body > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
+.x-tooltip[kind=info] > .x-tooltip-body > .x-tooltip-xbutton:hover { color: var(--x-fg-inverted); }
 
-.x-tooltip[kind=error] > .x-tooltip-content { background-color: var(--x-bg-error); color: var(--x-fg-inverted); }
+.x-tooltip[kind=error] > .x-tooltip-body { background-color: var(--x-bg-error); color: var(--x-fg-inverted); }
 .x-tooltip[kind=error] > .x-tooltip-tip { color: var(--x-bg-error); }
-.x-tooltip[kind=error] > .x-tooltip-content > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
-.x-tooltip[kind=error] > .x-tooltip-content > .x-tooltip-xbutton:hover { color: var(--x-fg-inverted); }
+.x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
+.x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton:hover { color: var(--x-fg-inverted); }
 
 /* checkbox --------------------------------------------------------------- */
 
@@ -1036,12 +1038,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	flex-flow: wrap;
 }
 
-/* TODO: fixed height mode: not finished */
-.x-tagsedit.with-label[mode=fixed] {
-	max-height: 3.4em;
-	overflow: auto;
-}
-
 /* avoiding !important because the web is a piece of shit. */
 .x-tagsedit-input.x-tagsedit-input.x-tagsedit-input.x-tagsedit-input {
 	min-width: 0;
@@ -1061,16 +1057,27 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	padding-bottom: calc(var(--x-input-il-padding-value-bottom) - 2px);
 }
 
+.x-tagsedit-button-expand {
+	align-self: center;
+	padding: 0 .25em;
+}
+
+.x-tagsedit-bubble {
+	pointer-events: all;
+}
+
 .x-tagsedit-tag {
 	display: inline;
 	border: 1px solid var(--x-border-light);
 	border-radius: .25em;
-	background-color: var(--x-smoke);
+	background-color: var(--x-faint);
 	padding: 2px .25em;
 	padding-top: 3px;
 	margin: 1px .1em;
 	line-height: 1;
 	cursor: default;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .x-tagsedit-tag-xbutton {
@@ -1091,6 +1098,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-tagsedit-tag:hover {
 	cursor: pointer;
+	background-color: var(--x-smoke);
 }
 
 .x-tagsedit-tag:hover > .x-tagsedit-tag-xbutton {
@@ -1099,6 +1107,23 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-tagsedit.invalid > .x-tagsedit-tag:hover > .x-tagsedit-tag-xbutton {
 	color: var(--x-fg-inverted);
+}
+
+/* fixed height mode */
+
+.x-tagsedit.with-label[mode=fixed] {
+	//max-height: 3.4em;
+}
+
+.x-tagsedit[mode=fixed] {
+	flex-flow: nowrap;
+}
+
+.x-tagsedit[mode=fixed] > .x-tagsedit-tag,
+.x-tagsedit-bubble .x-tagsedit-tag
+{
+	flex-flow: nowrap;
+	white-space: nowrap;
 }
 
 /* `place` type formatting (also used in the address widget) -------------- */
@@ -2387,6 +2412,10 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	color: #ccc;
 }
 
+.x-image-error::before {
+	content: '';
+}
+
 .x-image-overlay {
 	position: absolute;
 	left: 0; top: 0; right: 0; bottom: 0;
@@ -2395,8 +2424,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	align-items: center;
 }
 
+.x-image-overlay:hover {
+	background-color: var(--x-bg);
+}
+
 .x-image-overlay.transparent {
 	opacity: .5;
+	background: none;
 }
 
 .x-image-button {
@@ -2423,7 +2457,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-image-overlay:hover::before {
-	visibility: hiddn;
+	visibility: hidden;
 }
 
 .x-image-button[disabled] {
@@ -2589,8 +2623,8 @@ body[theme=dark] {
 
 	--x-row-bg-focused: var(--x-faint);
 
-	--x-toolbox-titlebar-bg         : #636363;
-	--x-toolbox-titlebar-bg-focused : #6782d6;
+	--x-toolbox-titlebar-bg         : #303030;
+	--x-toolbox-titlebar-bg-focused : #636363;
 
 	--x-stroke-dialog-xbutton       : #000000cc;
 
