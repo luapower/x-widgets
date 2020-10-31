@@ -94,6 +94,7 @@
 	--x-selected-widget-outline-color         : #666;
 	--x-selected-widget-outline-color-focused : blue;
 
+	/* these need to be opaque! */
 	--x-item-bg-unfocused          : #999;
 	--x-item-bg-focused            : #ddd;
 	--x-item-bg-unfocused-selected : #333;
@@ -2717,8 +2718,9 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-selected-widget-outline-color         : #aaa;
 	--x-selected-widget-outline-color-focused : var(--x-markbox-icon-color);
 
+	/* these need to be opaque! */
 	--x-item-bg-unfocused-selected : #3a3f42;
-	--x-item-bg-unselected         : #3a3f4288;
+	--x-item-bg-unselected         : #1d2021;
 	--x-item-bg-selected           : #15385c;
 	--x-row-bg-focused             : #222;
 
