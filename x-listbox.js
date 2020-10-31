@@ -21,12 +21,11 @@
 
 component('x-listbox', function(e) {
 
-	e.class('x-focusable-within')
 	e.class('x-stretched')
 
 	val_widget(e, true)
 	nav_widget(e)
-	focusable_widget(e)
+	focusable_widget(e, null, 'x-focusable-items')
 	stylable_widget(e)
 
 	e.can_focus_cells = false

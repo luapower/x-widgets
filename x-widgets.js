@@ -49,7 +49,10 @@ and we use those events to solve the so-called "lapsed listener problem"
 alas, the web people could't get that one right either).
 --------------------------------------------------------------------------- */
 
-let repl_empty_str = v => repl(v, '', undefined)
+let resize_observer = new ResizeObserver(function(entries) {
+	for (let entry of entries)
+		entry.target.fire('resize', entry.contentRect, entry)
+})
 
 xmodule = null
 bind_events = true
@@ -72,13 +75,11 @@ function attr_val_opt(e) {
 	let opt = {}
 	for (let attr of e.attrs) {
 		let k = attr.name
-		let v = attr.value
-		let popt = e.get_prop_attrs(k)
-		if (popt) {
-			if (popt.from_attr)
+		if (k != 'id' && k != 'class' && k != 'style') {
+			let v = attr.value
+			let popt = e.get_prop_attrs(k)
+			if (popt && popt.from_attr)
 				v = popt.from_attr(v)
-			else if (isobject(v) && v.from_attr)
-				v = v.from_attr()
 			if (!(k in opt))
 				opt[k] = v
 		}
@@ -152,6 +153,11 @@ function component(tag, cons) {
 			this.bind(false)
 		}
 
+		detect_resize() {
+			resize_observer.observe(this)
+			this.detect_resize = noop
+		}
+
 		bind(on) {
 			assert(isbool(on))
 			if (!bind_events)
@@ -180,6 +186,8 @@ function component(tag, cons) {
 				if (!this.attached)
 					return
 				this.attached = false
+				if (this.detect_resize == noop)
+					resize_observer.unobserve(this)
 				this.fire('bind', false)
 				if (this.id) {
 					document.fire('widget_bind', this, false)
@@ -401,7 +409,7 @@ function props_mixin(e, iprops) {
 		} else if (opt.style) {
 			let style = opt.style
 			let format = opt.style_format || return_arg
-			let parse  = opt.style_parse  || type == 'number' && num || repl_empty_str
+			let parse  = opt.style_parse  || type == 'number' && num || (v => repl(v, '', undefined))
 			if (dv != null && parse(e.style[style]) == null)
 				e.style[style] = format(dv)
 			function get() {
@@ -1108,10 +1116,12 @@ publishes:
 	e.focusable
 --------------------------------------------------------------------------- */
 
-function focusable_widget(e, fe) {
+function focusable_widget(e, fe, css_class) {
 	fe = fe || e
 
 	let focusable = true
+	if (css_class !== false)
+		e.class(css_class || 'x-focusable')
 
 	if (!fe.hasattr('tabindex'))
 		fe.attr('tabindex', 0)
@@ -1282,7 +1292,7 @@ component('x-button', function(e) {
 
 	serializable_widget(e)
 	selectable_widget(e)
-	focusable_widget(e)
+	focusable_widget(e, null, false)
 	editable_widget(e)
 	contained_widget(e)
 
@@ -1390,6 +1400,8 @@ component('x-button', function(e) {
 // ---------------------------------------------------------------------------
 
 component('x-menu', function(e) {
+
+	focusable_widget(e, null, 'x-focusable-items')
 
 	// view
 
@@ -1852,7 +1864,7 @@ component('x-pagelist', function(e) {
 	e.selection_bar = div({class: 'x-pagelist-selection-bar'})
 	e.add_button = div({class: 'x-pagelist-tab x-pagelist-add-button fa fa-plus', tabindex: 0})
 	e.header = div({class: 'x-pagelist-header'}, e.selection_bar, e.add_button)
-	e.content = div({class: 'x-pagelist-content'})
+	e.content = div({class: 'x-pagelist-content x-container'})
 	e.add(e.header, e.content)
 
 	function add_item(item) {
@@ -2054,9 +2066,34 @@ component('x-pagelist', function(e) {
 			let item = e.items.find(item => item.id == e.selected_item_id)
 			if (item)
 				select_tab(item._tab)
-		} else {
-			if (e.items.length)
-				select_tab(e.header.at[0])
+		} else if (e.items.length) {
+			select_tab(url_path_tab() || e.header.at[0])
+		}
+	}
+
+	// url --------------------------------------------------------------------
+
+	function url_path_level() {
+		let parent = e.parent
+		let i = 0
+		while (parent && parent.iswidget) {
+			i += parent.hasclass('x-pagelist')
+			parent = parent.parent
+		}
+		return i
+	}
+
+	function item_slug(item) {
+		let s = item.slug || item.title
+		return s.replace(/[\- ]/g, '-').lower()
+	}
+
+	function url_path_tab() {
+		let p = url(location.pathname).path.splice(2)
+		let slug = p[url_path_level()]
+		for (let item of e.items) {
+			if (slug == item_slug(item))
+				return item._tab
 		}
 	}
 
@@ -2218,8 +2255,8 @@ component('x-split', function(e) {
 	selectable_widget(e)
 	contained_widget(e)
 
-	e.pane1 = div({class: 'x-split-pane'})
-	e.pane2 = div({class: 'x-split-pane'})
+	e.pane1 = div({class: 'x-split-pane x-container'})
+	e.pane2 = div({class: 'x-split-pane x-container'})
 	e.sizer = div({class: 'x-split-sizer'})
 	e.add(e.pane1, e.sizer, e.pane2)
 
@@ -2531,7 +2568,7 @@ component('x-action-band', function(e) {
 
 component('x-dialog', function(e) {
 
-	focusable_widget(e)
+	focusable_widget(e, null, false)
 
 	e.x_button = true
 
@@ -2593,7 +2630,7 @@ component('x-dialog', function(e) {
 
 component('x-toolbox', function(e) {
 
-	focusable_widget(e)
+	focusable_widget(e, null, false)
 
 	e.istoolbox = true
 	e.class('pinned')
@@ -2602,7 +2639,7 @@ component('x-toolbox', function(e) {
 	e.xbutton = div({class: 'x-toolbox-button x-toolbox-button-close fa fa-times'})
 	e.title_div = div({class: 'x-toolbox-title'})
 	e.titlebar = div({class: 'x-toolbox-titlebar'}, e.title_div, e.pin_button, e.xbutton)
-	e.content_div = div({class: 'x-toolbox-content'})
+	e.content_div = div({class: 'x-toolbox-content x-container'})
 	e.resize_overlay = div({class: 'x-toolbox-resize-overlay'})
 	e.add(e.titlebar, e.content_div, e.resize_overlay)
 
@@ -2770,9 +2807,9 @@ component('x-toolbox', function(e) {
 		return false
 	})
 
-	e.detect_style_size_changes()
-	e.on('style_size_changed', function() {
-		document.fire('layout_changed')
+	e.detect_resize()
+	e.on('resize', function() {
+		document.fire('layout_changed', e)
 	})
 
 })
@@ -2866,15 +2903,26 @@ component('x-slides', function(e) {
 			e.add(ce)
 		}
 		e.set_selected_index(e.selected_index)
+		update_height()
 	}
+
+	function update_height() {
+		e.h = null
+		let h = 0
+		for (let ce of e.at)
+			h = max(h, ce.rect().h)
+		e.h = h
+	}
+
+	e.detect_resize()
+	e.on('resize', update_height)
 
 	e.set_selected_index = function(i1, i0) {
 		let e0 = e.items[i0]
 		let e1 = e.items[i1]
 		if (e0) e0.class('x-slide-selected', false)
 		if (e1) e1.class('x-slide-selected', true)
-		if (e1)
-			e.fire('slide_changed', i1)
+		if (e1) e.fire('slide_changed', i1)
 	}
 
 	e.prop('selected_index', {store: 'var', default: 0})

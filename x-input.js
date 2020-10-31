@@ -352,7 +352,7 @@ function input_widget(e) {
 
 component('x-checkbox', function(e) {
 
-	focusable_widget(e)
+	focusable_widget(e, null, false)
 	editable_widget(e)
 	val_widget(e)
 	input_widget(e)
@@ -626,7 +626,7 @@ component('x-editbox', function(e) {
 				e.picker.auto_w = false
 			e.picker.w = e.picker_w
 			e.picker.show()
-			e.picker.popup(e, 'bottom', e.align, 0, 2)
+			e.picker.popup(e, 'bottom', e.align)
 		} else {
 			e.cancel_val = null
 			e.picker.hide()
@@ -1086,6 +1086,40 @@ component('x-tagsedit', function(e) {
 		return iframe
 	}
 
+	/* TODO: finish this...
+	function google_maps_wrap_map(e) {
+		let map = new google.maps.Map(e, {
+			center: { lat: -34.397, lng: 150.644 },
+			zoom: 8,
+		})
+
+		map.goto_place = function(place_id) {
+			if (!place.geometry) {
+				return;
+			}
+			if (place.geometry.viewport) {
+				map.fitBounds(place.geometry.viewport);
+			} else {
+				map.setCenter(place.geometry.location);
+				map.setZoom(17)
+			}
+			// Set the position of the marker using the place ID and location.
+			marker.setPlace({
+			placeId: place.place_id,
+			location: place.geometry.location,
+			});
+			marker.setVisible(true);
+			infowindowContent.children.namedItem("place-name").textContent = place.name;
+			infowindowContent.children.namedItem("place-id").textContent =
+			place.place_id;
+			infowindowContent.children.namedItem("place-address").textContent =
+			place.formatted_address;
+			infowindow.open(map, marker);
+
+		}
+	}
+	*/
+
 	function suggest_address(s, callback) {
 
 		if (!autocomplete_service)
@@ -1156,6 +1190,7 @@ component('x-placeedit', function(e) {
 	function suggested_addresses_changed(places) {
 		places = places || []
 		e.picker.items = places.map(function(p) {
+			print(p)
 			return {
 				description: p.description,
 				place_id: p.place_id,
@@ -1174,7 +1209,10 @@ component('x-placeedit', function(e) {
 
 	e.override('do_update_val', function(inherited, v, ev) {
 		inherited(v, ev)
-		e.pin_ct.set(e.field.format_pin(v))
+		let pin = e.field.format_pin(v)
+		e.pin_ct.set(pin)
+		if (e.val && !e.place_id)
+			pin.title = S('find_place', 'Find this place on Google Maps')
 		if (ev && ev.input == e && ev.typing) {
 			if (v)
 				suggest_address(v, suggested_addresses_changed)
@@ -1201,11 +1239,12 @@ component('x-googlemaps', function(e) {
 	val_widget(e)
 
 	e.class('x-stretched')
+	e.classes = 'fa fa-map-marked-alt'
 
 	e.field_type = 'place'
 
 	e.map = google_maps_iframe()
-	e.map.class('x-googlemaps-map')
+	e.map.class('x-googlemaps-iframe')
 	e.add(e.map)
 
 	e.override('do_update_val', function(inherited, v, ev) {
@@ -1223,7 +1262,7 @@ component('x-googlemaps', function(e) {
 
 component('x-slider', function(e) {
 
-	focusable_widget(e)
+	focusable_widget(e, null, false)
 
 	e.prop('from', {store: 'var', default: 0})
 	e.prop('to', {store: 'var', default: 1})
@@ -1470,7 +1509,7 @@ function dropdown_widget(e) {
 					e.picker.auto_w = false
 				e.picker.w = e.picker_w
 				e.picker.show(!hidden)
-				e.picker.popup(e, 'bottom', e.align == 'right' ? 'end' : 'start', 0, 2)
+				e.picker.popup(e, 'bottom', e.align == 'right' ? 'end' : 'start')
 				e.fire('opened')
 			} else {
 				e.cancel_val = null
@@ -1593,9 +1632,7 @@ function dropdown_widget(e) {
 
 component('x-calendar', function(e) {
 
-	e.class('x-focusable-within')
-
-	focusable_widget(e)
+	focusable_widget(e, null, 'x-focusable-items')
 	val_widget(e)
 
 	function format_month(i) {
@@ -2055,6 +2092,9 @@ function richtext_widget_editing(e) {
 component('x-image', function(e) {
 
 	e.class('x-stretched')
+	e.classes = 'fa fa-camera'
+	e.title = ''
+	e.class('empty')
 
 	row_widget(e)
 
@@ -2062,8 +2102,8 @@ component('x-image', function(e) {
 
 	e.overlay = div({class: 'x-image-overlay'})
 
-	e.upload_btn = div({class: 'x-image-button x-image-upload-button fa fa-cloud-upload-alt', title: S('upload_image', 'Upload Image')})
-	e.download_btn = div({class: 'x-image-button x-image-download-button fa fa-file-download', title: S('download_image', 'Download Image')})
+	e.upload_btn = div({class: 'x-image-button x-image-upload-button fa fa-cloud-upload-alt', title: S('upload_image', 'Upload image')})
+	e.download_btn = div({class: 'x-image-button x-image-download-button fa fa-file-download', title: S('download_image', 'Download image')})
 	e.buttons = span(0, e.upload_btn, e.download_btn)
 	e.file_input = tag('input', {type: 'file', style: 'display: none'})
 	e.overlay.add(e.buttons, e.file_input)
@@ -2072,21 +2112,18 @@ component('x-image', function(e) {
 
 	e.img.on('load', function(ev) {
 		e.img.show()
+		e.class('empty', false)
 		e.overlay.class('transparent', true)
 		e.download_btn.attr('disabled', false)
-		if (e.error_div)
-			e.error_div.hide()
+		e.title = S('image', 'Image')
 	})
 
 	e.img.on('error', function(ev) {
 		e.img.hide()
+		e.class('empty')
 		e.overlay.class('transparent', false)
 		e.download_btn.attr('disabled', true)
-		if (!e.error_div) {
-			e.error_div = div({class: 'x-image-error fa fa-camera'})
-			e.add(e.error_div)
-		}
-		e.error_div.show()
+		e.title = S('no_image', 'No image')
 	})
 
 	e.format_url = function(vals, purpose) {
@@ -2104,6 +2141,7 @@ component('x-image', function(e) {
 
 		e.upload_btn.show(e.allow_upload)
 		e.download_btn.show(e.allow_download)
+		S('loading', 'Loading...')
 	}
 
 	function refresh() {
@@ -2880,10 +2918,6 @@ component('x-input', function(e) {
 		}
 	}
 
-	e.get_prop_attrs = function(k) {  // enable proxying from html tag attrs.
-		return e.props[k] || (k.starts('widget.') && empty || undefined)
-	}
-
 	e.override('init', function(inherited) {
 		inherited()
 		e.set_widget_type(e.widget_type)
@@ -2905,3 +2939,55 @@ input.widget_types = {
 input.widget_type_options = {
 	tagsedit: {mode: 'fixed'},
 }
+
+// ---------------------------------------------------------------------------
+// form
+// ---------------------------------------------------------------------------
+
+component('x-form', function(e) {
+
+	e.class('x-stretched')
+	e.class('x-flex')
+
+	serializable_widget(e)
+	selectable_widget(e)
+	editable_widget(e)
+	contained_widget(e)
+	widget_items_widget(e)
+
+	// generate a 3-letter value for `grid-area` based on item's `col` attr or `id`.
+	let names = {}
+	function area_name(item) {
+		let s = item.attrval('area') || item.col || item.attrval('col') || item.id
+		if (!s) return
+		s = s.slice(0, 3)
+		if (names[s]) {
+			let x = num(names[s][2]) || 1
+			do { s = s.slice(0, 2) + (x + 1) } while (names[s])
+		}
+		names[s] = true
+		return s
+	}
+
+	// widget-items widget protocol.
+	e.do_init_items = function() {
+		for (let item of e.items) {
+			if (!item.style['grid-area'])
+				item.style['grid-area'] = area_name(item)
+			e.add(item)
+		}
+	}
+
+	e.detect_resize()
+
+	e.on('resize', function(r) {
+		let n = clamp(floor(r.w / 150), 1, 12)
+		for (let i = 1; i <= 12; i++)
+			e.class('maxcols'+i, i <= n)
+		e.class('compact', n < 2)
+	})
+
+	e.items = [...e.at]
+
+})
+

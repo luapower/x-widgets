@@ -3176,6 +3176,27 @@ function nav_widget(e) {
 
 	e.save_row = return_true // stub
 
+	e.serialize_row = function(row) {
+		let drow = []
+		for (let fi = 0; fi < e.all_fields.length; fi++) {
+			let field = e.all_fields[fi]
+			let v = e.cell_val(row, field)
+			if (v !== field.default && !field.nosave)
+				drow[fi] = v
+		}
+		return drow
+	}
+
+	e.serialize_all_rows = function(row) {
+		let rows = []
+		for (let row of e.all_rows)
+			if (!row.removed && !row.nosave) {
+				let drow = e.serialize_row(row)
+				rows.push(drow)
+			}
+		return rows
+	}
+
 	e.serialize_row_vals = function(row) {
 		let vals = {}
 		for (let field of e.all_fields) {

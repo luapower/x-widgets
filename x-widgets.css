@@ -5,6 +5,18 @@
 
 .popup { position: absolute !important; }
 
+/* element disabled state ------------------------------------------------- */
+
+[disabled] {
+	opacity: .5;
+}
+
+[disabled],
+[disabled] *
+{
+	cursor: default !important;
+}
+
 /* variables -------------------------------------------------------------- */
 
 :root {
@@ -16,14 +28,20 @@
 	--x-shadow-focused                :  0    0    0   1px var(--x-outline-focused);
 	--x-shadow-focused-button         :  0    0    0px 1px var(--x-outline-focused-button);
 	--x-shadow-focused-button-primary :  0    0    0px 1px var(--x-outline-focused-button-primary);
-	--x-shadow-button                 :  0px  0px  8px 0px #0000000c;
-	--x-shadow-tooltip                :  2px  2px  9px     #00000044;
-	--x-shadow-slider-thumb           :  1px  1px  2px     #000000aa;
 	--x-shadow-popup                  :  2px  2px  2px     #000000aa;
+	--x-shadow-button                 :  0px  0px  8px 0px #00000011;
+	--x-shadow-tooltip                :  2px  2px  9px     #00000044;
+	--x-shadow-dialog                 :  2px  2px 10px     #00000088;
+	--x-shadow-toolbox                :  1px  1px  4px     #000000aa;
+	--x-shadow-slider-thumb           :  1px  1px  2px     #000000aa;
 	--x-shadow-button-pressed         : inset 0 0.15em 0.3em #1b1f2333;
 
+
+	--x-margin                      : .25em;
+	--x-border-radius               : .25em;
 	--x-padding-button              : .4em 1.2em;
 
+	--x-input-min-height            : 3.4em;
 	--x-input-width                 : 12em;
 	--x-input-padding               : .25em .5em; /* padding for inputs and grid cells */
 	--x-input-padding-x             : .5em;     /* x-padding for inputs and grid cells */
@@ -36,6 +54,7 @@
 	--x-input-il-padding-top-label-animation-start : .6em;
 
 	--x-fg              : #000;  /* text on normal backgrounds */
+	--x-p               : #444;  /* multiline text on normal backgrounds */
 	--x-fg-inverted     : #fff;  /* text on inverted backgrounds */
 	--x-bg              : #fff;  /* bg for regions that need to be opaque */
 	--x-bg-popup        : #fff;  /* bg for popups and inline grid editors */
@@ -48,6 +67,7 @@
 	--x-bg-new          : #eeeeff;
 	--x-bg-modified     : #ddffdd;
 	--x-bg-new-modified : #ccf0f0;
+	--x-fg-search       : #000;  /* fg for quicksearch text */
 	--x-bg-search       : #ff9;  /* bg for quicksearch text */
 	--x-bg-info         : #069;  /* bg for info bubbles */
 	--x-fg-error        : #a33;  /* bg for invalid inputs and error bubbles */
@@ -55,9 +75,9 @@
 	--x-bg-today        : #f33;
 
 	--x-bg-button                 : #eff3f6;
-	--x-bg-button-pressed         : #e9ecef;
 	--x-bg-button-primary         : #28a745;
-	--x-bg-button-primary-pressed : #279f43;
+	--x-bg-button-primary-hover   : #199134;
+	--x-bg-button-primary-pressed : #147a2b;
 
 	--x-bg-select-button: var(--x-bg-button);
 
@@ -69,11 +89,11 @@
 
 	--x-stroke-dialog-xbutton       : #00000066;
 
+	--x-bg-pagelist-bar: #66f;
+
 	--x-selected-widget-outline-color         : #666;
 	--x-selected-widget-outline-color-focused : blue;
 
-	--x-item-fg-disabled           : var(--x-fg-disabled);
-	--x-item-fg-disabled-focused   : #ccc;
 	--x-item-bg-unfocused          : #999;
 	--x-item-bg-focused            : #ddd;
 	--x-item-bg-unfocused-selected : #333;
@@ -111,6 +131,12 @@
 	src: url("/OpenSansCondensed-Bold.ttf");
 }
 
+body[opensans] {
+	font-family: x-widget, Arial, sans-serif;
+	font-size: 13px;
+	line-height: 2;
+}
+
 /* widget defaults -------------------------------------------------------- */
 
 .x-widget, .x-widget * {
@@ -118,39 +144,37 @@
 }
 
 .x-widget {
-	font-size: 13px;
-	font-family: x-widget, Arial, sans-serif;
 	z-index: 0; /* make `z-index` of children context-free */
 	position: relative; /* make `position: absolute` of children context-free */
+	margin: var(--x-margin);
+	border: 1px solid var(--x-border-light);
+	border-radius: var(--x-border-radius);
 }
 
 .x-widget:focus {
 	outline: none;
 }
 
-.x-stretched { /* */
+.x-focusable:focus-within {
+	border-color: var(--x-outline-focused);
+	box-shadow  : var(--x-shadow-focused);
+}
+
+.x-widget.popup {
+	margin: 0;
+}
+
+.x-stretched {
 	place-self: stretch;
 	flex: 1;
 }
 
-.x-split-pane > .x-stretched,
-.x-pagelist-content > .x-stretched,
-.x-toolbox-content > .x-stretched
+.x-container > .x-stretched,
+body > .x-stretched:not(.popup)
 {
 	margin: 0;
 	border-width: 0;
-}
-
-/* element disabled state ------------------------------------------------- */
-
-[disabled] {
-	opacity: .5;
-}
-
-[disabled],
-[disabled] *
-{
-	cursor: default !important;
+	border-radius: 0;
 }
 
 /* widget editing --------------------------------------------------------- */
@@ -187,10 +211,10 @@
 
 /* item states ------------------------------------------------------------ */
 
-.x-item.disabled { color: var(--x-item-fg-disabled); }
-.x-item.disabled.focused { color: var(--x-item-fg-disabled-focused); }
-.x-item.null      { color: var(--x-item-fg-disabled); }
-.x-item.empty     { color: var(--x-item-fg-disabled); }
+.x-item.disabled { color: var(--x-fg-disabled); }
+.x-item.disabled.focused { color: var(--x-fg-disabled-focused); }
+.x-item.null      { color: var(--x-fg-disabled); }
+.x-item.empty     { color: var(--x-fg-disabled); }
 .x-item.removed   { text-decoration: line-through; }
 
 .x-item.invalid {
@@ -210,12 +234,12 @@
 	background-color: var(--x-bg-new-modified);
 }
 
-.x-focusable-within .x-item:not(.focused).selected:not(.invalid) {
+.x-focusable-items .x-item:not(.focused).selected:not(.invalid) {
 	background-color: var(--x-item-bg-unselected);
 	color: var(--x-fg-inverted);
 }
 
-.x-focusable-within:focus-within .x-item.selected:not(.invalid) {
+.x-focusable-items:focus-within .x-item.selected:not(.invalid) {
 	background-color: var(--x-item-bg-selected);
 	color: var(--x-fg-inverted);
 }
@@ -224,29 +248,29 @@
 	background-color: var(--x-row-bg-focused);
 }
 
-.x-focusable-within .x-item.focused:not(.invalid) {
+.x-focusable-items .x-item.focused:not(.invalid) {
 	background-color: var(--x-item-bg-unfocused);
 }
 
-.x-focusable-within:focus-within .x-item.focused:not(.invalid):not(.disabled):active {
+.x-focusable-items:focus-within .x-item.focused:not(.invalid):not(.disabled):active {
 	background-color: var(--x-item-bg-focused-selected);
 	color: var(--x-fg-inverted);
 }
 
-.x-focusable-within:focus-within .x-item.focused:not(.invalid) {
+.x-focusable-items:focus-within .x-item.focused:not(.invalid) {
 	background-color: var(--x-item-bg-focused);
 }
 
-.x-focusable-within .x-item.focused.selected:not(.invalid) {
+.x-focusable-items .x-item.focused.selected:not(.invalid) {
 	background-color: var(--x-item-bg-unfocused-selected);
 	color: var(--x-fg-inverted);
 }
 
-.x-focusable-within:focus-within .x-item.focused.selected:not(.invalid) {
+.x-focusable-items:focus-within .x-item.focused.selected:not(.invalid) {
 	background-color: var(--x-item-bg-focused-selected);
 }
 
-.x-focusable-within:focus-within .x-item.focused.invalid {
+.x-focusable-items:focus-within .x-item.focused.invalid {
 	background-color: var(--x-item-bg-focused-invalid);
 }
 
@@ -259,14 +283,14 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-widget::-webkit-scrollbar-track,
 .x-widget ::-webkit-scrollbar-track
 {
-	background-color: var(--x-smoke);
+	background-color: var(--x-faint);
 }
 
 .x-widget::-webkit-scrollbar-thumb,
 .x-widget ::-webkit-scrollbar-thumb
 {
-	background-color: var(--x-fg-disabled);
-	border-color: var(--x-fg-disabled);
+	background-color: var(--x-smoke);
+	border-color: var(--x-smoke);
 }
 
 /* border-based triangle shapes ------------------------------------------- */
@@ -315,16 +339,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	/* positioning for inline use */
 	display: inline-flex;    /* more options than inline, but no collapsible margins! */
 
-	/* content layout */
+	/* layout content */
 	align-items: baseline;   /* required */
 	justify-content: center;
 
 	/* sizing for inline use */
 	padding: var(--x-padding-button);
-	margin: .25em;
-	border-width: 1px;
-	border-style: solid;
-	border-radius: .25em;
 	font-weight: bold;
 	line-height: normal;
 
@@ -354,18 +374,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* styling (from github) */
 
 .x-button {
-	border-color: var(--x-border-light);
 	background-color: var(--x-bg-button);
 }
 
-.x-button:not(:focus) {
+.x-button {
 	box-shadow: var(--x-shadow-button);
-}
-
-.x-button:not([disabled]):not(.widget-editing):not(.widget-selected):active,
-.x-button:not([disabled]):not(.widget-editing):not(.widget-selected).active {
-	background-color: var(--x-bg-button-pressed);
-	box-shadow: var(--x-shadow-button-pressed);
 }
 
 .x-button[primary] {
@@ -375,22 +388,30 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-button:focus {
 	border-color: var(--x-outline-focused-button);
-	box-shadow  : var(--x-shadow-focused-button);
-}
-.x-button[primary]:focus {
-	border-color: var(--x-outline-focused-button-primary);
-	box-shadow  : var(--x-shadow-focused-button-primary);
+	box-shadow  : var(--x-shadow-focused-button), var(--x-shadow-button);
 }
 
-.x-button[primary]:not([disabled]):not(.widget-editing):not(.widget-selected):active,
-.x-button[primary]:not([disabled]):not(.widget-editing):not(.widget-selected).active {
-	background-color : var(--x-bg-button-primary-pressed);
-	box-shadow       : var(--x-shadow-button-pressed);
+.x-button[primary]:focus {
+	border-color: var(--x-outline-focused-button-primary);
+	box-shadow  : var(--x-shadow-focused-button-primary), var(--x-shadow-button);
+}
+
+.x-button:not([disabled]):not(.widget-editing):not(.widget-selected):hover {
+	filter: brightness(95%);
+}
+
+.x-button:not([disabled]):not(.widget-editing):not(.widget-selected):active,
+.x-button:not([disabled]):not(.widget-editing):not(.widget-selected).active {
+	filter: brightness(90%);
+	box-shadow: var(--x-shadow-button-pressed);
 }
 
 /* action band ------------------------------------------------------------ */
 
 .x-action-band {
+	margin: 0;
+	border: 0;
+	border-radius: 0;
 	display: flex;
 	justify-content: flex-end;
 }
@@ -399,25 +420,29 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-tooltip {
 
-	/* content layout */
-	display: flex;
-	align-items: flex-start;
-	justify-content: flex-start;
-	overflow: visible; /* for the tip */
-	pointer-events: none;
-
 	/* positioning */
 	z-index: 2; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
 
 	/* sizing */
 	max-width: 400px;  /* max. width of the message bubble before wrapping */
 
+	/* layout content */
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	overflow: visible; /* for the tip */
+	pointer-events: none;
+
+	/* styling */
+	border: 0; /* container */
+	border-radius: 0;
+
 	/* animation */
 	opacity: 0;
-
 	animation-duration: .2s;
 	animation-timing-function: ease-out;
 	animation-fill-mode: forwards;
+
 }
 
 .x-tooltip-body {
@@ -425,7 +450,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	padding: .5em 0;
 
 	/* styling */
-	border-radius: .25em;
+	border-radius: var(--x-border-radius);
 	background-color: var(--x-bg-popup);
 	box-shadow: var(--x-shadow-tooltip);
 }
@@ -458,9 +483,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	font-size: 80%;
 	color: var(--x-fg-disabled);
 	padding: .25em 1em;
-	border-width: 0px;
+	border: 0 solid transparent;
 	border-left-width: 1px;
-	border-style: solid;
 	border-color: var(--x-faint);
 	pointer-events: all;
 }
@@ -474,9 +498,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	/* border-based triangle shape */
 	display: block;
 	box-sizing: content-box;
-	border-width: .5em;
-	border-color: transparent;
-	border-style: solid;
+	border: .5em solid transparent;
 	z-index: 1; /* draw over the parent's box shadow */
 
 	/* styling */
@@ -544,24 +566,24 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-markbox {
 
-	/* baseline-align in an inline context */
+	/* layout self: baseline-align in an inline context */
 	display: inline-flex;
 
-	/* layouting of children */
+	/* layout content */
 	align-items: center;
 	flex-flow: row nowrap;
+	overflow: hidden;
 
-	/* sizing for inline use */
-	margin: .25em;
-
+	/* styling */
+	border: 1px dashed transparent;
+	border-radius: 0;
 	cursor: default;
 }
 
 .x-markbox.with-label {
 	padding: var(--x-input-il-padding-value);
-	max-width: 100%;
 	line-height: initial;
-	min-height: 3.4em;    /* for alignment with x-editbox */
+	min-height: var(--x-input-min-height);    /* for alignment with x-editbox */
 	align-items: baseline;
 }
 
@@ -572,13 +594,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	text-overflow: ellipsis;
 }
 
-.x-markbox:focus {
-	box-shadow: none;
-	outline: 1px dashed var(--x-markbox-outline-color-focus);
+.x-markbox:focus-within {
+	border-color: var(--x-markbox-outline-color-focus);
 }
 
 .x-markbox:focus.invalid {
-	outline-color: var(--x-fg-error);
+	border-color: var(--x-fg-error);
 }
 
 .x-markbox-icon {
@@ -613,18 +634,27 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-radiogroup {
 	display: inline-flex;
 	flex-flow: column wrap;
-	margin: .25em;
-	padding: 0;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
 }
 
 .x-radio-item {
+	align-items: baseline;
+	margin-left: 0;
+	margin-right: 0;
 	margin: 0;
-	padding: .25em .5em;
+	padding: 0 var(--x-input-il-padding-value-side);
 }
 
 .x-radiogroup.invalid > .x-markbox,
-.x-radiogroup.invalid > .x-markbox > .x-radio-icon {
+.x-radiogroup.invalid > .x-markbox > .x-radio-icon
+{
 	color: var(--x-fg-error);
+}
+
+.x-radiogroup.invalid > .x-markbox:focus {
+	border-color: var(--x-fg-error);
 }
 
 .x-radiogroup[align=right] > .x-markbox {
@@ -634,33 +664,21 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* editbox ---------------------------------------------------------------- */
 
 .x-editbox {
-	/* layouting */
-	display: inline-flex;    /* the only way to get variable-width inputs */
-	align-items: baseline;   /* ...that are baseline-aligned */
 
-	/* sizing */
+	/* self sizing */
 	width: var(--x-input-width);
 
-	/* sizing for inline use */
-	margin: .25em;
-	padding: 0;              /* set from code */
-	border-width: 1px;
-	border-radius: .2em;
-
+	/* layout content */
+	display: inline-flex;    /* the only way to get variable-width inputs */
+	align-items: baseline;   /* ...that are baseline-aligned */
 	overflow: hidden;        /* label can overflow */
 
-	/* styling */
-	border-color: var(--x-border-light);
-	border-style: solid;
+	/* sizing for inline use */
+	padding: 0;              /* set from code */
 }
 
-.x-editbox:focus-within {
-	border-color: var(--x-outline-focused);
-	box-shadow  : var(--x-shadow-focused);
-}
-
-.x-cssgrid > .x-editbox,
-.x-cssgrid > .x-input > .x-editbox
+.x-flex > .x-editbox,
+.x-flex > .x-input > .x-editbox
 {
 	width: auto;
 	min-width: 0;
@@ -700,9 +718,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* editbox with animated inner label/placeholder -------------------------- */
 
 .x-editbox.with-label {
-	border-radius: .3em;
 	line-height: initial;    /* prevent inheriting it */
-	min-height: 3.4em;       /* because line-height doesn't work on <input> */
+	min-height: var(--x-input-min-height);  /* because line-height doesn't work on <input> */
 }
 
 .x-editbox.with-label[mode=inline] {
@@ -784,12 +801,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* spinedit --------------------------------------------------------------- */
 
-.x-cssgrid > .x-spinedit,
-.x-cssgrid > .x-input > .x-spinedit
-{
-	width: auto;
-}
-
 .x-spinedit-button {
 	border-style: solid;
 	border-color: var(--x-border-light);
@@ -843,14 +854,15 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 	/* styling */
 	background-color: var(--x-smoke);
+	border: 0;
 	border-radius: 10em;
 
 	/* layouting content */
 	overflow: visible;
 }
 
-.x-cssgrid > .x-slider,
-.x-cssgrid > .x-input > .x-slider,
+.x-flex > .x-slider,
+.x-flex > .x-input > .x-slider,
 {
 	width: auto;
 	min-width: 1em;
@@ -882,17 +894,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	background-color: var(--x-smoke);
 	border: 1px solid var(--x-border-light);
 	box-shadow: var(--x-shadow-slider-thumb);
-
 	border-radius: 10em;
 
 }
 
 .x-slider-value-thumb.different {
 	opacity: .5;
-}
-
-.x-slider:focus {
-	box-shadow: none;
 }
 
 .x-slider:focus > .x-slider-value-fill {
@@ -922,7 +929,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-dropdown {
 
-	/* content layouting */
+	/* layout content */
 	align-items: center;
 	line-height: initial;       /* prevent y-stretching to surrounding text's line height */
 
@@ -935,6 +942,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	white-space: nowrap;
 }
 
+/* look focused even though it's the picker that's focused. */
 .x-dropdown.open {
 	border-color: var(--x-outline-focused);
 	box-shadow  : var(--x-shadow-focused);
@@ -942,14 +950,14 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-dropdown-value {
 
-	/* self positioning & alignment */
+	/* layout self */
 	flex: 1;                 /* stretch horizontally */
 	width: auto;
 	padding: var(--x-input-padding);
 	padding-right : .25em;
 	padding-left  : var(--x-input-padding-x);
 
-	/* content layouting */
+	/* layout content */
 	display: flex;
 	align-items: center;
 }
@@ -1012,15 +1020,15 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* fixed mode: fixed-width, no-wrap, hide-overflow */
 .x-dropdown[mode=fixed],
-.x-cssgrid > .x-dropdown,
-.x-cssgrid > .x-input > .x-dropdown
+.x-flex > .x-dropdown,
+.x-flex > .x-input > .x-dropdown
 {
 	width: 0;                /* fixed width, constrained by x-input's min-width */
 }
 
 .x-dropdown[mode=fixed] > .x-dropdown-value,
-.x-cssgrid > .x-dropdown > .x-dropdown-value,
-.x-cssgrid > .x-input > .x-dropdown > .x-dropdown-value
+.x-flex > .x-dropdown > .x-dropdown-value,
+.x-flex > .x-input > .x-dropdown > .x-dropdown-value
 {
 	white-space: nowrap;
 	overflow: hidden;
@@ -1028,12 +1036,9 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* override with more specificity: .x-widget.x-<foo>.picker */
 .x-widget.picker {
-	margin: 0;
-	border: 1px solid var(--x-border-light);
 	background-color: var(--x-bg-popup);
 	box-shadow: var(--x-shadow-popup);
 	z-index: 3; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
-	border-radius: .25em;
 }
 
 /* tagsedit --------------------------------------------------------------- */
@@ -1086,7 +1091,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	line-height: 1;
 	cursor: default;
 	overflow: hidden;
-	text-overflow: ellipsis;
 }
 
 .x-tagsedit-tag-xbutton {
@@ -1121,7 +1125,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* fixed height mode */
 
 .x-tagsedit.with-label[mode=fixed] {
-	//max-height: 3.4em;
+	//min-height: var(--x-input-min-height);
 }
 
 .x-tagsedit[mode=fixed] {
@@ -1150,35 +1154,42 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* google maps ------------------------------------------------------------ */
 
 .x-googlemaps {
-	display: flex;
 
-	/* sizing & styling to match inputs */
-	width: var(--x-input-width);
-	height: 3.4em;
-	margin: .25em;
-	border: 1px solid var(--x-border-light);
-	border-radius: .3em;
-	background-color: var(--x-smoke);
+	/* layout self */
+	min-height: calc(var(--x-input-min-height) * 2 + var(--x-margin));
+
+	/* layout map icon */
+	display: flex !important;
+	justify-content: center;
+	align-items: center;
+	color: var(--x-smoke);
+
+	/* styling */
+	background-color: var(--x-faint);
 }
 
-.x-googlemaps-map {
+.x-googlemaps::before {
+	font-size: 2em !important;
+}
+
+.x-googlemaps-iframe {
+	position: absolute;
 	min-width: 0;
 	min-height: 0;
-	flex: 1;
-	background-color: var(--x-smoke);
-}
-
-.x-googlemaps-map.empty {
-	//
+	width: 100%;
+	height: 100%;
 }
 
 /* input ------------------------------------------------------------------ */
 
 .x-input {
+	margin: 0;
+	border: 0;
 	display: flex;
+	align-self: stretch;
 }
 
-.x-cssgrid > .x-input {
+.x-flex > .x-input {
 	min-width: 0;
 	width: auto;
 }
@@ -1186,11 +1197,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* listbox ---------------------------------------------------------------- */
 
 .x-listbox {
-	/* layout */
+	/* layout content */
 	display: inline-flex;        /* the only way for it to shrink-wrap */
 	flex-wrap: nowrap;
-	margin: .25em;
 	line-height: initial;  /* prevent inheriting it */
+	border: 0;
+	border-radius: 0;
 }
 
 .x-listbox[orientation=vertical]   { flex-direction: column; }
@@ -1225,8 +1237,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* select-button ---------------------------------------------------------- */
 
+.x-select-button {
+	border: 0;
+}
+
 .x-select-button > .x-item {
-	margin: 0;
 
 	/* styling */
 	background-color: var(--x-bg-select-button);
@@ -1245,13 +1260,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-select-button > .x-item:first-child {
-	border-top-left-radius    : .25em;
-	border-bottom-left-radius : .25em;
+	border-top-left-radius    : var(--x-border-radius);
+	border-bottom-left-radius : var(--x-border-radius);
 }
 
 .x-select-button > .x-item:last-child {
-	border-top-right-radius    : .25em;
-	border-bottom-right-radius : .25em;
+	border-top-right-radius    : var(--x-border-radius);
+	border-bottom-right-radius : var(--x-border-radius);
 }
 
 .x-select-button > .x-item:not(:first-child) {
@@ -1325,7 +1340,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-calendar-sel-month.x-editbox {
 	min-width: 4.5em;        /* limit shrinking */
-	margin: .25em;           /* separate from day suffix */
 }
 
 .x-editbox.x-calendar-sel-month .x-listbox {
@@ -1353,14 +1367,17 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* menu ------------------------------------------------------------------- */
 
-.x-menu:focus-within {
-	box-shadow: none;
+.x-menu {
+	border: 0;
 }
 
 .x-menu-table,
 .x-menu-table:focus-within
 {
-	/* layouting */
+	/* layout self */
+	margin: 0;
+
+	/* layout content */
 	display: inline-block;     /* don't expand to fit parent width */
 	position: absolute;        /* submenus are positioned manually */
 	overflow: visible;         /* submenus are outside clipping area */
@@ -1375,6 +1392,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	line-height: 1.5;
 	color: inherit;
 	min-width: 200px;
+	border: 0;
 	outline: 1px solid var(--x-border-light);
 	outline-offset: -1px;
 	box-shadow: var(--x-shadow-popup);
@@ -1393,7 +1411,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-menu:focus-within .x-menu-tr.focused > :not(.x-menu-table) {
 	background-color: var(--x-item-bg-focused-selected);
 }
-
 
 .x-menu-tr > td {
 	padding: .4em;
@@ -1456,7 +1473,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-pagelist {
 	display: flex;
 	flex-flow: column;
-	flex: 1;                   /* grow to fit container */
 	min-height: 0;  /* don't let the content make the pagelist itself overflow */
 }
 
@@ -1541,7 +1557,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-pagelist-selection-bar {
 	position: absolute;
-	background-color: #66f;
+	background-color: var(--x-bg-pagelist-bar);
 	z-index: 2;  /* selection-bar = 2, moving-tab = 1 */
 	width: 2px;
 	height: 2px;
@@ -1623,15 +1639,16 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	min-height: 6px;
 
 	/* styling */
-	background-color: var(--x-faint);
+	opacity: .8;
+	background-color: var(--x-smoke);
 
 }
 .x-split[orientation=vertical] > .x-split-sizer { flex-direction: row; }
 .x-split[orientation=horizontal] > .x-split-sizer { flex-direction: row; }
 
 .x-split.resize > .x-split-sizer {
-	background-color: var(--x-smoke);
-	transition: background-color .2s;
+	opacity: 1;
+	transition: opacity .2s;
 }
 
 /* grip */
@@ -1656,10 +1673,15 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* cssgrid ---------------------------------------------------------------- */
 
 .x-cssgrid {
+
+	/* layout self */
+	margin: 0;
+	border: 0;
+
 	/* layout items */
 	display: grid;
-	justify-items: center;
-	align-items: center;
+	align-content: start;
+	align-items: start;
 	overflow: hidden;
 }
 
@@ -1719,7 +1741,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-cssgrid-span {
 	justify-self: stretch;
 	align-self: stretch;
-	border: 1px dotted #888;
+	border: 1px dotted var(--x-fg-disabled);
 	pointer-events: none;
 	position: relative;
 	z-index: 3; /* span = 3, overlay = 2, guide = 1 */
@@ -1768,6 +1790,49 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	color: var(--x-fg-disabled);
 }
 
+/* form ------------------------------------------------------------------- */
+
+.x-form {
+
+	/* layout self */
+	margin: 0;
+	border: 0;
+
+	/* layout items */
+	display: grid;
+	align-content: start;
+	align-items: start;
+	overflow: hidden;
+	overflow-y: auto;
+
+	grid-template-columns : repeat(auto-fit, minmax(0, 1fr));
+
+}
+
+.x-form.compact {
+	outline: 1px solid var(--x-border-light);
+	outline-offset: -1px;
+	margin: var(--x-margin);
+	font-size: 90%;
+}
+
+.x-form.compact > h1,
+.x-form.compact > h2,
+.x-form.compact > h3
+{
+	display: none;
+}
+
+.x-form.compact > .x-widget:not(.x-input),
+.x-form.compact > .x-input > .x-widget
+{
+	margin: 0;
+	border-radius: 0;
+	border: 1px solid var(--x-border-light);
+	margin-top  : -1px;
+	margin-left : -1px;
+}
+
 /* toaster ---------------------------------------------------------------- */
 
 .x-toaster {
@@ -1795,22 +1860,20 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	margin: .25em 0;
 }
 
-.x-dialog,
-.x-dialog:focus-within
-{
+.x-dialog {
 	background-color: var(--x-bg-popup);
-	border: 1px solid var(--x-border-light);
-	border-radius: .5em;
+	border-radius: calc(var(--x-border-radius) * 2);
 	margin: 20px;
-	box-shadow: 2px 2px 10px #00000088;
+	border: 0;
+	box-shadow: var(--x-shadow-dialog);
 }
 
 .x-dialog-xbutton {
 	position: absolute;
 	right: 8px;
 	top: 0px;
-	border-bottom-right-radius: .25em;
-	border-bottom-left-radius : .25em;
+	border-bottom-right-radius: var(--x-border-radius);
+	border-bottom-left-radius : var(--x-border-radius);
 	border: 1px solid var(--x-border-light);
 	border-top: 0;
 	width: 52px;
@@ -1850,24 +1913,34 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* toolbox ---------------------------------------------------------------- */
 
 .x-toolbox {
+
+	/* layout self */
+	z-index: 1; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
+
+	/* layout content */
 	display: flex;
 	flex-flow: column;
+	overflow: auto;
+
+	/* styling */
 	background-color: var(--x-bg-popup);
-	overflow: auto;                /* make resize work */
-	z-index: 1; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
+
+	/* pinning */
 	opacity: .2;
 	transition: opacity .5s;
-	border-radius: .25em;
+
+	border-radius: var(--x-border-radius);
+}
+
+.x-toolbox {
+	border: 0;
+	box-shadow: var(--x-shadow-toolbox);
 }
 
 .x-toolbox.pinned,
 .x-toolbox:hover {
 	opacity: 1;
 	transition: opacity 0s;
-}
-
-.x-toolbox, .x-toolbox:focus-within {
-	box-shadow: 1px 1px 4px #000000aa;
 }
 
 .x-toolbox-titlebar {
@@ -1944,16 +2017,22 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* slides ----------------------------------------------------------------- */
 
+.x-slides {
+	margin: 0;
+	border: 0;
+}
+
 .x-slide {
 	position: absolute;
 	top: 0;
 	left: 0;
-	right: 0;
-	bottom: 0;
 
 	opacity: 0;
-	pointer-events: none;
 	transition: opacity .2s;
+}
+
+.x-slide, .x-slide * {
+	pointer-events: none !important;
 }
 
 .x-slide-selected {
@@ -1975,7 +2054,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-loading-overlay-message {
 	padding: 1em 1em;
 	background-color: var(--x-bg-popup);
-	box-shadow: 2px 2px 10px #00000044;
+	box-shadow: var(--x-shadow-tooltip);
 }
 
 .x-loading-overlay-message .x-button {
@@ -1999,8 +2078,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	flex-flow: column;
 	overflow: hidden;          /* hide header overflow */
 	cursor: default;           /* don't show caret over text */
-	margin: .25em;
-	border: 1px solid var(--x-border-light);
 	--header-height: 3.4em;
 }
 
@@ -2167,8 +2244,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-grid-qs-text { /* child of x-grid-cell */
 	position: absolute;
 	top: 0;
+	color: var(--x-fg-search);
 	background-color: var(--x-bg-search) !important;
-	color: var(--x-fg);
 	z-index: 1; /* qs-text = 1 */
 }
 
@@ -2233,16 +2310,17 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-widget.grid-editor {
 
+	/* layout self */
 	position: absolute;
 	width: min-content;
-	border: 0;
 	margin: 0;
 	border-radius: 0;
 	z-index: 1; /* editor = 1, cells = default */
 
+	/* style self */
 	font-size: inherit;
 	font-family: inherit;
-
+	border: 0;
 	background-color: var(--x-bg-grid-editor);
 }
 
@@ -2284,15 +2362,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-grid-action-band {
 	border-top: 1px solid var(--x-border-light);
-	//flex-basis: 100%;
-	//height: auto;
 	background-color: var(--x-bg);
 }
 
 /* grid as picker */
 
 .x-widget.x-grid.picker {
-	margin: 0;
 	min-height: 40px;
 	max-height: 300px;
 	max-width: 800px;
@@ -2303,7 +2378,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	overflow-y: scroll;        /* show vert-scrollbars always when a picker */
 }
 
-/* grid filter dropdowns */
+/* TODO: grid filter dropdowns
 
 .x-widget.x-grid-filter-dropdown {
 	font-size: 85%;
@@ -2327,6 +2402,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	font-size: 90%;
 }
 
+*/
+
 /* grid widget editing */
 
 .x-widget.x-grid.widget-editing {
@@ -2346,6 +2423,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* editable richtext ------------------------------------------------------ */
 
 .x-richtext {
+	margin: 0;
+	border: 0;
 	display: block;
 	overflow: auto;
 }
@@ -2398,31 +2477,38 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* image ------------------------------------------------------------------ */
 
 .x-image {
-	margin: .25em;
-	border: 1px solid var(--x-border-light);
-	border-radius: .3em;   /* TODO: match radius of inputs with or without label */
-	overflow: hidden;
-	line-height: initial;  /* prevent inheriting it */
-	display: grid;
+
+	/* layout self */
+	min-height: calc(var(--x-input-min-height) * 2 + var(--x-margin));
+
+	/* styling */
+	border-radius: var(--x-border-radius);
+	background-color: #000;
+
+	/* layout missing icon */
+	display: flex !important;
+	justify-content: center;
+	align-items: center;
+	color: #888;
+
+}
+
+.x-image::before {
+	font-size: 2em !important;
+}
+
+.x-image.empty {
+	background-color: var(--x-faint);
+	color: var(--x-smoke);
 }
 
 .x-image-img {
+	position: absolute;
 	min-width: 0;
 	min-height: 0;
 	width: 100%;
-	height: auto;
+	height: 100%;
 	object-fit: contain;
-}
-
-.x-image-error {
-	justify-self: center;
-	align-self: center;
-	font-size: 200%;
-	color: #ccc;
-}
-
-.x-image-error::before {
-	content: '';
 }
 
 .x-image-overlay {
@@ -2436,6 +2522,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-image-button {
 	margin: .5em .15em;
+	margin-top: 0;
 	font-size: 200%;
 	border-radius: 100%;
 	color: black;
@@ -2574,55 +2661,39 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 /* dark theme                                                               */
 /* ------------------------------------------------------------------------ */
 
-body[theme=dark] {
-	color: white;
-	--x-bg: #151519;
-	background-color: var(--x-bg);
-}
-
-[theme=dark]::-webkit-scrollbar,
-[theme=dark] ::-webkit-scrollbar
-{
-	width : initial;
-	height: initial;
-}
-
-[theme=dark]::selection,
-[theme=dark] ::selection
-{
-	color: #000;
-	background-color: #ff0;
-}
-
 [theme=dark] {
+
+	color: white;
 
 	--x-outline-focused                :  #66a;
 	--x-outline-focused-button         :  #999;
 	--x-outline-focused-button-primary :  #5bde5b;
 
+	--x-shadow-focused                :  0    0    0   1px var(--x-outline-focused);
+	--x-shadow-focused-button         :  0    0    0px 1px var(--x-outline-focused-button);
+	--x-shadow-focused-button-primary :  0    0    0px 1px var(--x-outline-focused-button-primary);
+
 	--x-shadow-button-pressed         : inset 0 0.15em 0.5em #1b1f2377;
 
 	--x-fg                   : #fff;
-	--x-fg-inverted          : var(--x-fg);
+	--x-p                    : #bbb;
+	--x-fg-inverted          : #fff;
+	--x-bg                   : #151519;
 	--x-bg-popup             : #26262c;
 	--x-fg-disabled          : #ffffff66;
 	--x-fg-disabled-inverted : var(--x-fg-disabled);
-	--x-border-light         : #ffffff33;
+	--x-border-light         : #ffffff22;
 	--x-smoke                : #ffffff22;
 	--x-faint                : #ffffff11;
 	--x-fg-label        : #aaa;
 	--x-bg-new          : #2c2c5c;
 	--x-bg-modified     : #196119;
 	--x-bg-new-modified : #293b34;
-	//--x-bg-search       : #ff9;  /* bg for quicksearch text */
 	--x-fg-error        : #f66;
-
-	--x-border-light    : #ffffff22;
 
 	--x-markbox-icon-color: #75b7fa;
 
-	--x-bg-button                 : #565e62;
-	--x-bg-button-pressed         : #474e52;
+	--x-bg-button: #565e62;
 
 	--x-bg-select-button: var(--x-faint);
 
@@ -2633,15 +2704,41 @@ body[theme=dark] {
 
 	--x-stroke-dialog-xbutton       : #000000cc;
 
+	--x-bg-pagelist-bar: var(--x-fg);
+
 	--x-selected-widget-outline-color         : #aaa;
 	--x-selected-widget-outline-color-focused : var(--x-markbox-icon-color);
 
 	--x-item-bg-unfocused-selected : #3a3f42;
+	--x-item-bg-unselected         : #3a3f4288;
+	--x-item-bg-selected           : #15385c;
 
 	--x-bg-grid-editor: #495560;
 
 }
 
-[theme=dark] .x-grid .x-grid-qs-text {
+body[theme=dark] {
+	background-color: var(--x-bg);
+}
+
+[theme=dark]::-webkit-scrollbar,
+[theme=dark] ::-webkit-scrollbar
+{
+	/* enable the lazy-work of custom-drawn scrollbars */
+	width : initial;
+	height: initial;
+}
+
+[theme=dark]::-webkit-scrollbar-corner,
+[theme=dark] ::-webkit-scrollbar-corner
+{
+	background: var(--x-bg);
+}
+
+
+[theme=dark]::selection,
+[theme=dark] ::selection
+{
 	color: #000;
+	background-color: #ff0;
 }

@@ -25,14 +25,13 @@ calls:
 
 component('x-grid', function(e, is_val_widget) {
 
-	e.class('x-focusable-within')
 	e.class('x-stretched')
 
 	if (is_val_widget !== false)
 		val_widget(e, true)
 	nav_widget(e, is_val_widget)
 	editable_widget(e)
-	focusable_widget(e)
+	focusable_widget(e, null, 'x-focusable-items')
 	stylable_widget(e)
 
 	// geometry
@@ -367,8 +366,8 @@ component('x-grid', function(e, is_val_widget) {
 		}
 
 		// detect w/h changes from resizing made with css 'resize: both'.
-		e.detect_style_size_changes()
-		e.on('style_size_changed', layout_changed)
+		e.detect_resize()
+		e.on('resize', layout_changed)
 	}
 
 	// rendering --------------------------------------------------------------
