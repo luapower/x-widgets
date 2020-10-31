@@ -101,7 +101,7 @@
 	--x-item-bg-focused-invalid    : #f33;
 	--x-item-bg-unselected         : #888;
 	--x-item-bg-selected           : #69c;
-	--x-row-bg-focused             : var(--x-faint);
+	--x-row-bg-focused             : #eee;
 
 	--x-bg-grid-editor             : var(--x-bg-popup);
 
@@ -604,6 +604,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-markbox-icon {
 	color: var(--x-markbox-icon-color);
+	font-size: 120%;
 }
 
 .x-markbox.invalid > .x-markbox-label,
@@ -1036,6 +1037,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* override with more specificity: .x-widget.x-<foo>.picker */
 .x-widget.picker {
+	border: ;
 	background-color: var(--x-bg-popup);
 	box-shadow: var(--x-shadow-popup);
 	z-index: 3; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
@@ -1044,12 +1046,16 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* tagsedit --------------------------------------------------------------- */
 
 .x-tagsedit {
-	overflow: hidden;
-	align-items: start;
-	padding-left : var(--x-input-il-padding-value-side);
-	padding-right: var(--x-input-il-padding-value-side);
+
+	/* layout content */
 	display: flex;
 	flex-flow: wrap;
+	align-items: baseline;
+	align-content: flex-start;
+	overflow: hidden;
+
+	padding-left : var(--x-input-il-padding-value-side);
+	padding-right: var(--x-input-il-padding-value-side);
 }
 
 /* avoiding !important because the web is a piece of shit. */
@@ -1072,7 +1078,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-tagsedit-button-expand {
-	align-self: center;
 	padding: 0 .25em;
 }
 
@@ -1201,8 +1206,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	display: inline-flex;        /* the only way for it to shrink-wrap */
 	flex-wrap: nowrap;
 	line-height: initial;  /* prevent inheriting it */
-	border: 0;
 	border-radius: 0;
+}
+
+.x-listbox:not(.picker) {
+	border: 0;
 }
 
 .x-listbox[orientation=vertical]   { flex-direction: column; }
@@ -2031,7 +2039,9 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	transition: opacity .2s;
 }
 
-.x-slide, .x-slide * {
+.x-slide:not(.x-slide-selected),
+.x-slide:not(.x-slide-selected) *
+{
 	pointer-events: none !important;
 }
 
@@ -2697,8 +2707,6 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 
 	--x-bg-select-button: var(--x-faint);
 
-	--x-row-bg-focused: var(--x-faint);
-
 	--x-toolbox-titlebar-bg         : #303030;
 	--x-toolbox-titlebar-bg-focused : #636363;
 
@@ -2712,6 +2720,7 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-item-bg-unfocused-selected : #3a3f42;
 	--x-item-bg-unselected         : #3a3f4288;
 	--x-item-bg-selected           : #15385c;
+	--x-row-bg-focused             : #222;
 
 	--x-bg-grid-editor: #495560;
 

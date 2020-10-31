@@ -366,6 +366,18 @@ component('x-checkbox', function(e) {
 	e.label_div = span({class: 'x-markbox-label x-checkbox-label'})
 	e.add(e.icon_div, e.label_div)
 
+	function update_icon() {
+		let ie = e.icon_div
+		ie.class('fa far fa-square fa-check-square fa-toggle-on fa-toggle-off', false)
+		if (e.icon_style == 'checkbox')
+			ie.classes = e.checked ? 'fa fa-check-square' : 'far fa-square'
+		else if (e.icon_style == 'toggle')
+			ie.classes = 'fa fa-toggle-'+(e.checked ? 'on' : 'off')
+	}
+
+	e.set_icon_style = update_icon
+	e.prop('icon_style', {store: 'var', type: 'enum', enum_values: ['checkbox', 'toggle'], default: 'checkbox'})
+
 	// model
 
 	e.get_checked = function() {
@@ -381,10 +393,7 @@ component('x-checkbox', function(e) {
 	e.do_update_val = function(v) {
 		let c = e.checked
 		e.class('checked', c)
-		e.icon_div.class('fa', c)
-		e.icon_div.class('fa-check-square', c)
-		e.icon_div.class('far', !c)
-		e.icon_div.class('fa-square', !c)
+		update_icon()
 		e.label_div.class('empty', v === '')
 	}
 
@@ -1190,7 +1199,6 @@ component('x-placeedit', function(e) {
 	function suggested_addresses_changed(places) {
 		places = places || []
 		e.picker.items = places.map(function(p) {
-			print(p)
 			return {
 				description: p.description,
 				place_id: p.place_id,
