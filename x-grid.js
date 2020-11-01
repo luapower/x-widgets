@@ -2024,35 +2024,31 @@ component('x-grid', function(e, is_val_widget) {
 				})
 			}
 
-			items.push({
-				heading: S('show_more_fields', 'Show more fields'),
-			})
-
+			let field_items = []
 			function show_field(item) {
-				e.show_field(item.field, true, fi)
+				e.show_field(item.field, !item.checked, fi)
+				return false
 			}
-			let items_added
 			for (let field of e.all_fields) {
-				if (field.visible !== false && !e.fields.includes(field)) {
-					items_added = true
-					items.push({
-						field: field,
-						text: field.text,
-						action: show_field,
-					})
-				}
-			}
-			if (!items_added)
-				items.push({
-					text: S('all_fields_shown', 'All fields are shown'),
-					enabled: false,
+				field_items.push({
+					field: field,
+					text: field.text,
+					action: show_field,
+					checked: e.field_index(field) != null,
 				})
+			}
 
-			items.last.separator = true
+			items.push({
+				text: S('show_more_fields', 'Show more fields'),
+				items: field_items,
+			})
 
 		}
 
 		if (e.parent_field) {
+
+			items.last.separator = true
+
 			items.push({
 				text: S('expand_all', 'Expand all'),
 				enabled: horiz && e.tree_field,
@@ -2069,7 +2065,7 @@ component('x-grid', function(e, is_val_widget) {
 		let r = e.rect()
 		let px = mx - r.x
 		let py = my - r.y
-		context_menu.popup(e, 'inner-top', null, px, py)
+		context_menu.popup(e, 'inner-top', null, null, null, null, null, px, py)
 	}
 
 })

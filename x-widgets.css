@@ -132,6 +132,7 @@
 	src: url("/OpenSansCondensed-Bold.ttf");
 }
 
+/* body option: opensans */
 body[opensans] {
 	font-family: x-widget, Arial, sans-serif;
 	font-size: 13px;
@@ -251,11 +252,6 @@ body > .x-stretched:not(.popup)
 
 .x-focusable-items .x-item.focused:not(.invalid) {
 	background-color: var(--x-item-bg-unfocused);
-}
-
-.x-focusable-items:focus-within .x-item.focused:not(.invalid):not(.disabled):active {
-	background-color: var(--x-item-bg-focused-selected);
-	color: var(--x-fg-inverted);
 }
 
 .x-focusable-items:focus-within .x-item.focused:not(.invalid) {
@@ -560,7 +556,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	vertical-align: top;
 	margin: .2em 0 0 1em;
 	font-size: 1em;
-	line-height: inherit !important;
+	line-height: inherit !important; /* override fontawesome's !important */
 }
 
 /* checkbox --------------------------------------------------------------- */
@@ -695,6 +691,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	font-family: inherit;
 	height: 100%;            /* stretch vertically */
 	width: 100%;             /* stretch horizontally */
+	min-width: 0;            /* Firefox fix */
 	color: inherit;
 	background: none;
 	text-align: left;
@@ -1165,7 +1162,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	min-height: calc(var(--x-input-min-height) * 2 + var(--x-margin));
 
 	/* layout map icon */
-	display: flex !important;
+	display: flex !important; /* override fontawesome !important */
 	justify-content: center;
 	align-items: center;
 	color: var(--x-smoke);
@@ -1175,7 +1172,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-googlemaps::before {
-	font-size: 2em !important;
+	font-size: 2em !important; /* override fontawesome !important */
 }
 
 .x-googlemaps-iframe {
@@ -1378,17 +1375,32 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-menu {
 	border: 0;
+	display: table;
+	--font-family: arial, x-widget, sans-serif;
+	--font-size: 12px;
+	--line-height: 1.5;
+	font-family : var(--font-family );
+	font-size   : var(--font-size   );
+	line-height : var(--line-height );
+}
+
+.x-menu.popup {
+	font-family : var(--font-family ) !important;
+	font-size   : var(--font-size   ) !important;
+	line-height : var(--line-height ) !important;
 }
 
 .x-menu-table,
 .x-menu-table:focus-within
 {
 	/* layout self */
+	top: 0;
+	left: 0;
 	margin: 0;
+	width: min-content; /* why the fuck is `width: 0` not working here? */
 
 	/* layout content */
-	display: inline-block;     /* don't expand to fit parent width */
-	position: absolute;        /* submenus are positioned manually */
+	position: absolute;
 	overflow: visible;         /* submenus are outside clipping area */
 	border-collapse: collapse; /* separators are done with borders */
 	background-color: var(--x-bg-popup); /* submenus overlap their parent */
@@ -1396,22 +1408,21 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	z-index: 4; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
 
 	/* styling */
-	font-family: arial, x-widget, sans-serif;
-	font-size: 12px;
-	line-height: 1.5;
 	color: inherit;
 	min-width: 200px;
 	border: 0;
+	border-radius: 0;
 	outline: 1px solid var(--x-border-light);
 	outline-offset: -1px;
 	box-shadow: var(--x-shadow-popup);
+	color: var(--x-fg); /* prevent inheritance by the .focused rule below */
 }
 
-.x-menu-tr {
-	position: relative;        /* submenus are anchored to item trs */
+.x-menu-sub-td {
+	position: relative;
 }
 
-.x-menu .x-menu-tr.focused > :not(.x-menu-table) {
+.x-menu-tr.focused > :not(.x-menu-table) {
 	// alternative (sleeker but less accessible): background-color: var(--x-faint);
 	background-color: var(--x-item-bg-unfocused-selected);
 	color: var(--x-fg-inverted);
@@ -2182,7 +2193,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* grid cells: grid > view > ct > (cells, editor) > cell */
 
 .x-grid-cells-view {
-	overflow-x: auto;          /* show scrollbars as needed */
+	overflow-x: overlay;       /* show scrollbars as needed */
 	overflow-y: scroll;        /* show scrollbars always */
 	position: relative;        /* anchor rows div */
 	flex: 1 0 0;               /* grow to fill container but ignore overflow */
@@ -2497,7 +2508,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	background-color: #000;
 
 	/* layout missing icon */
-	display: flex !important;
+	display: flex !important; /* override fontawesome !important */
 	justify-content: center;
 	align-items: center;
 	color: #888;
@@ -2505,7 +2516,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-image::before {
-	font-size: 2em !important;
+	font-size: 2em !important; /* override fontawesome !important */
 }
 
 .x-image.empty {
@@ -2746,10 +2757,32 @@ body[theme=dark] {
 	background: var(--x-bg);
 }
 
-
 [theme=dark]::selection,
 [theme=dark] ::selection
 {
 	color: #000;
 	background-color: #ff0;
 }
+
+/* thin scrollbars option ------------------------------------------------- */
+
+[thin-scrollbars]::-webkit-scrollbar,
+[thin-scrollbars] ::-webkit-scrollbar
+{
+	/* enable the lazy-work of custom-drawn scrollbars */
+	width : 8px;
+	height: 8px;
+}
+
+[thin-scrollbars]::-webkit-scrollbar-thumb,
+[thin-scrollbars] ::-webkit-scrollbar-thumb
+{
+	border-radius: 50px;
+}
+
+[thin-scrollbars]::-webkit-scrollbar-thumb:hover,
+[thin-scrollbars] ::-webkit-scrollbar-thumb:hover
+{
+	background-color: var(--x-fg-disabled);
+}
+

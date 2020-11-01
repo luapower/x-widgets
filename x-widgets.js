@@ -1446,8 +1446,10 @@ component('x-menu', function(e) {
 		return tr
 	}
 
-	function create_menu(items) {
-		let table = H.table({class: 'x-widget x-focusable x-menu-table', tabindex: 0})
+	function create_menu(table, items, submenu) {
+		table = table || H.table()
+		table.classes = 'x-widget x-focusable x-menu-table'+(submenu ? ' x-menu-submenu' : '')
+		table.attr('tabindex', 0)
 		for (let i = 0; i < items.length; i++) {
 			let item = items[i]
 			let tr = item.heading ? create_heading(item) : create_item(item)
@@ -1460,8 +1462,7 @@ component('x-menu', function(e) {
 	}
 
 	e.init = function() {
-		e.table = create_menu(e.items)
-		e.add(e.table)
+		e.table = create_menu(e, e.items)
 	}
 
 	function show_submenu(tr) {
@@ -1470,11 +1471,22 @@ component('x-menu', function(e) {
 		let items = tr.item.items
 		if (!items)
 			return
-		let table = create_menu(items)
-		table.x = tr.clientWidth - 2
+
+		let table = create_menu(null, items, true)
 		table.parent_menu = tr.parent
 		tr.submenu_table = table
-		tr.add(table)
+		tr.last.add(table)
+
+		// adjust submenu to fit the screen.
+		let r = table.rect()
+		let br = document.body.rect()
+		table.y = -max(0, r.y2 - br.y2 + 10)
+		if (r.x2 - br.x2 > 10) {
+			table.x = -r.w - tr.clientWidth + tr.last.clientWidth + 2
+		} else {
+			table.x = tr.last.clientWidth - 2
+		}
+
 		return table
 	}
 
@@ -1538,9 +1550,9 @@ component('x-menu', function(e) {
 			target.focus()
 	}
 
-	override(e, 'popup', function(inherited, target, side, align, x, y, select_first_item) {
+	override(e, 'popup', function(inherited, target, side, align, px, py, pw, ph, ox, oy, select_first_item) {
 		popup_target = target
-		inherited.call(this, target, side, align, x, y)
+		inherited.call(this, target, side, align, px, py, pw, ph, ox, oy)
 		if (select_first_item)
 			select_next_item(e.table)
 		e.table.focus()
