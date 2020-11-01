@@ -1937,7 +1937,6 @@ component('x-grid', function(e, is_val_widget) {
 			action: function() {
 				e.reload()
 			},
-			separator: true,
 		})
 
 		items.push({
@@ -1947,7 +1946,6 @@ component('x-grid', function(e, is_val_widget) {
 			action: function() {
 				e.save()
 			},
-			separator: true,
 		})
 
 		items.push({
@@ -1986,16 +1984,14 @@ component('x-grid', function(e, is_val_widget) {
 				action: function(item) {
 					e.filters_visible = item.checked
 				},
-				separator: true,
 			})
 
 		items.push({
-			text: S('vertical_grid', 'Show as Vertical Grid'),
+			text: S('vertical_grid', 'Show as vertical grid'),
 			checked: e.vertical,
 			action: function(item) {
 				e.vertical = item.checked
 			},
-			separator: true,
 		})
 
 		if (e.can_change_header_visibility)
@@ -2005,7 +2001,6 @@ component('x-grid', function(e, is_val_widget) {
 				action: function(item) {
 					e.header_visible = item.checked
 				},
-				separator: true,
 			})
 
 		if (e.can_change_fields_visibility) {
@@ -2015,8 +2010,7 @@ component('x-grid', function(e, is_val_widget) {
 					e.show_field(item.field, false)
 				}
 				let field = e.fields[fi]
-				let hide_field_text = span(); hide_field_text.set(field.text)
-				let hide_text = span({}, S('hide_field', 'Hide '), hide_field_text)
+				let hide_text = span({}, S('hide_field', 'Hide field'), ' "', field.text, '"')
 				items.push({
 					field: field,
 					text: hide_text,
@@ -2026,7 +2020,7 @@ component('x-grid', function(e, is_val_widget) {
 
 			let field_items = []
 			function show_field(item) {
-				e.show_field(item.field, !item.checked, fi)
+				e.show_field(item.field, item.checked, fi)
 				return false
 			}
 			for (let field of e.all_fields) {
@@ -2039,7 +2033,7 @@ component('x-grid', function(e, is_val_widget) {
 			}
 
 			items.push({
-				text: S('show_more_fields', 'Show more fields'),
+				text: S('show_fields', 'Show fields'),
 				items: field_items,
 			})
 

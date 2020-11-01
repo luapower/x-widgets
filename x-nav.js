@@ -705,7 +705,7 @@ function nav_widget(e) {
 
 	let all_cols = () => e.all_fields.map(f => f.name).filter(visible_col)
 
-	let cols_array = () => e.cols ? e.cols.split(/\s+/).filter(visible_col) : all_cols()
+	let cols_array = () => e.cols != null ? e.cols.split(/\s+/).filter(visible_col) : all_cols()
 
 	function cols_from_array(cols) {
 		cols = cols.join(' ')
@@ -715,10 +715,7 @@ function nav_widget(e) {
 	e.show_field = function(field, on, at_fi) {
 		let cols = cols_array()
 		if (on)
-			if (at_fi != null)
-				cols.insert(at_fi, field.name)
-			else
-				cols.push(field)
+			cols.insert(min(at_fi || 1/0, e.fields.length), field.name)
 		else
 			cols.remove_value(field.name)
 		e.cols = cols_from_array(cols)

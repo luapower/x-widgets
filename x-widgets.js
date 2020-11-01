@@ -1448,7 +1448,7 @@ component('x-menu', function(e) {
 
 	function create_menu(table, items, submenu) {
 		table = table || H.table()
-		table.classes = 'x-widget x-focusable x-menu-table'+(submenu ? ' x-menu-submenu' : '')
+		table.classes = 'x-widget x-focusable x-menu'+(submenu ? ' x-menu-submenu' : '')
 		table.attr('tabindex', 0)
 		for (let i = 0; i < items.length; i++) {
 			let item = items[i]
@@ -1466,16 +1466,24 @@ component('x-menu', function(e) {
 	}
 
 	function show_submenu(tr) {
-		if (tr.submenu_table)
-			return tr.submenu_table
-		let items = tr.item.items
-		if (!items)
-			return
+		let table = tr.submenu_table
+		if (!table) {
 
-		let table = create_menu(null, items, true)
-		table.parent_menu = tr.parent
-		tr.submenu_table = table
-		tr.last.add(table)
+			let items = tr.item.items
+			if (!items)
+				return
+
+			table = create_menu(null, items, true)
+			table.parent_menu = tr.parent
+			tr.submenu_table = table
+			tr.last.add(table)
+
+		} else {
+
+			table.x = null
+			table.y = null
+
+		}
 
 		// adjust submenu to fit the screen.
 		let r = table.rect()

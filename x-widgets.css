@@ -1374,52 +1374,52 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* menu ------------------------------------------------------------------- */
 
 .x-menu {
-	border: 0;
-	display: table;
+
 	--font-family: arial, x-widget, sans-serif;
 	--font-size: 12px;
 	--line-height: 1.5;
 	font-family : var(--font-family );
 	font-size   : var(--font-size   );
 	line-height : var(--line-height );
+
+	/* layout self */
+	position: absolute; /* submenus are positioned in code */
+	top: 0;
+	left: 0;
+	margin: 0;
+	min-width: 200px;
+	width: min-content; /* why the fuck is `width: 0` not working here? */
+	z-index: 4; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
+
+	/* layout content */
+	display: table;
+	overflow: visible;  /* submenus are outside clipping area */
+	border-collapse: collapse; /* separators are done with borders */
+	background-color: var(--x-bg-popup);
+
+	/* styling */
+	border: 0;
+	border-radius: 0;
+	color: inherit;
+	color: var(--x-fg); /* prevent inheritance by the .focused rule below */
+
 }
 
 .x-menu.popup {
+	/* avoid using !important unless it's displayed as a popup */
 	font-family : var(--font-family ) !important;
 	font-size   : var(--font-size   ) !important;
 	line-height : var(--line-height ) !important;
 }
 
-.x-menu-table,
-.x-menu-table:focus-within
-{
-	/* layout self */
-	top: 0;
-	left: 0;
-	margin: 0;
-	width: min-content; /* why the fuck is `width: 0` not working here? */
-
-	/* layout content */
-	position: absolute;
-	overflow: visible;         /* submenus are outside clipping area */
-	border-collapse: collapse; /* separators are done with borders */
-	background-color: var(--x-bg-popup); /* submenus overlap their parent */
-
-	z-index: 4; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
-
-	/* styling */
-	color: inherit;
-	min-width: 200px;
-	border: 0;
-	border-radius: 0;
+.x-menu, .x-menu:focus-within {
 	outline: 1px solid var(--x-border-light);
 	outline-offset: -1px;
 	box-shadow: var(--x-shadow-popup);
-	color: var(--x-fg); /* prevent inheritance by the .focused rule below */
 }
 
 .x-menu-sub-td {
-	position: relative;
+	position: relative; /* submenus are anchored to this td */
 }
 
 .x-menu-tr.focused > :not(.x-menu-table) {
