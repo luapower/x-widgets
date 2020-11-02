@@ -2963,6 +2963,9 @@ component('x-form', function(e) {
 	contained_widget(e)
 	widget_items_widget(e)
 
+	let dom_items = [...e.at]
+	e.clear()
+
 	// generate a 3-letter value for `grid-area` based on item's `col` attr or `id`.
 	let names = {}
 	function area_name(item) {
@@ -2995,7 +2998,7 @@ component('x-form', function(e) {
 		e.class('compact', n < 2)
 	})
 
-	e.items = [...e.at]
+	return {items: dom_items}
 
 })
 

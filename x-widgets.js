@@ -96,7 +96,7 @@ function component(tag, cons) {
 	// sets the css class for parent_widget.
 	function construct(e, ...args) {
 		e.class(tag)
-		cons(e, ...args)
+		return cons(e, ...args)
 	}
 
 	let cls = class extends HTMLElement {
@@ -119,11 +119,16 @@ function component(tag, cons) {
 			e.isinstance = true   // because you can have non-widget instances.
 			e.iswidget = true     // to diff from normal html elements.
 			e.type = type         // for serialization.
-			e.init = noop         // init point when all props are set.
+			e.init = noop         // init point after all props are set.
 			e.class('x-widget')
-			construct(e)
 			opt = update(attr_val_opt(e), opt)
+			update(opt, construct(e))
 			e.initialized = false // setter barrier to delay init to e.init().
+			if (opt.on) {
+				for (let k in opt.on)
+					e.on(k, opt.on[k])
+				delete opt.on
+			}
 			if (xmodule) {
 				xmodule.init_instance(e, opt)
 			} else {
@@ -1268,12 +1273,60 @@ component('x-tooltip', function(e) {
 		remove_timer(t)
 	}
 
-	e.on('show', function() { e.update() })
+	e.on('show', function() {
+		e.update()
+	})
 
 	e.property('visible',
 		function()  { return !e.hasattr('hidden') },
 		function(v) { e.show(v) }
 	)
+
+	// keyboard, mouse & focusing behavior ------------------------------------
+
+	e.on('keydown', function(key) {
+		if (key == 'Escape') {
+			e.close()
+			return false
+		}
+	})
+
+	e.on('popup_bind', function(on) {
+		document.on('pointerdown', document_pointerdown, on)
+		document.on('stopped_event', document_stopped_event, on)
+		document.on('focusin', document_focusin, on)
+		document.on('focusout', document_focusout, on)
+	})
+
+	// clicking outside the tooltip or its anchor closes the tooltip.
+	function document_pointerdown(ev) {
+		if (!e.close_button)
+			return
+		if (e.target && e.target.contains(ev.target)) // clicked inside the anchor.
+			return
+		if (e.contains(ev.target)) // clicked inside the picker.
+			return
+		e.close()
+	}
+
+	// clicking outside the tooltip closes the tooltip, even if the click did something.
+	function document_stopped_event(ev) {
+		if (ev.type.ends('pointerdown'))
+			document_pointerdown(ev)
+	}
+
+	// focusing an element outside the tooltip or its anchor closes the tooltip.
+	function document_focusin(ev) {
+		document_pointerdown(ev)
+	}
+
+	// focusing out of the document (to the titlebar etc.) closes the tooltip.
+	function document_focusout(ev) {
+		if (!e.close_button)
+			return
+		if (!ev.relatedTarget)
+			e.close()
+	}
 
 })
 
@@ -1296,11 +1349,15 @@ component('x-button', function(e) {
 	editable_widget(e)
 	contained_widget(e)
 
-	e.icon_div = span({class: 'x-button-icon', style: 'display: none'})
+	e.icon_div = span({class: 'x-button-icon'})
 	e.text_div = span({class: 'x-button-text'})
+	e.icon_div.hide()
 	e.add(e.icon_div, e.text_div)
 
-	e.set_text = function(s) { e.text_div.set(s, 'pre-wrap') }
+	e.set_text = function(s) {
+		e.text_div.set(s, 'pre-wrap')
+		e.class('empty', !s)
+	}
 	e.prop('text', {store: 'var', default: 'OK', slot: 'lang'})
 
 	e.set_text(e.text)
@@ -1315,6 +1372,7 @@ component('x-button', function(e) {
 	e.prop('icon', {store: 'var', type: 'icon'})
 
 	e.prop('primary', {store: 'var', type: 'bool', attr: true})
+	e.prop('bare'   , {store: 'var', type: 'bool', attr: true})
 
 	e.activate = function() {
 		if (e.disabled)
@@ -1528,11 +1586,11 @@ component('x-menu', function(e) {
 
 	// popup protocol
 
-	e.popup_target_bind = function(target, on) {
+	e.on('popup_bind', function(on, target) {
 		document.on('pointerdown', document_pointerdown, on)
 		document.on('rightpointerdown', document_pointerdown, on)
 		document.on('stopped_event', document_stopped_event, on)
-	}
+	})
 
 	function document_pointerdown(ev) {
 		if (e.contains(ev.target)) // clicked inside the menu.
@@ -1871,7 +1929,7 @@ component('x-pagelist', function(e) {
 	serializable_widget(e)
 	widget_items_widget(e)
 
-	let dom_children = [...e.at]
+	let dom_items = [...e.at]
 	e.clear()
 
 	e.prop('tabs_side', {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right'], default: 'top', attr: true})
@@ -2259,7 +2317,7 @@ component('x-pagelist', function(e) {
 		return false
 	}
 
-	e.items = dom_children
+	return {items: dom_items}
 
 })
 
@@ -2460,13 +2518,6 @@ component('x-toaster', function(e) {
 		}
 	}
 
-	function popup_target_bind(target, on) {
-		if (!on) {
-			e.tooltips.delete(this)
-			update_stack()
-		}
-	}
-
 	function popup_check() {
 		this.style.position = 'fixed'
 		return true
@@ -2483,7 +2534,12 @@ component('x-toaster', function(e) {
 			align: e.align,
 			timeout: strict_or(timeout, e.timeout),
 			check: popup_check,
-			popup_target_bind: popup_target_bind,
+		})
+		t.on('popup_bind', function(on) {
+			if (!on) {
+				e.tooltips.delete(this)
+				update_stack()
+			}
 		})
 		t.on('close', close)
 		e.tooltips.add(t)
@@ -2916,6 +2972,9 @@ component('x-slides', function(e) {
 	contained_widget(e)
 	widget_items_widget(e)
 
+	let dom_items = [...e.at]
+	e.clear()
+
 	e.do_init_items = function() {
 		e.clear()
 		for (let ce of e.items) {
@@ -2947,7 +3006,99 @@ component('x-slides', function(e) {
 
 	e.prop('selected_index', {store: 'var', default: 0})
 
-	e.items = [...e.at]
+	return {items: dom_items}
 
 })
 
+// ---------------------------------------------------------------------------
+// user settings button & dialog
+// ---------------------------------------------------------------------------
+
+function init_user_settings() {
+
+	let set = {}
+
+	set.night_mode = function(v) {
+		document.body.attr('theme', v ? 'dark' : null)
+	}
+
+	let nav = bare_nav({
+		id: 'xwidgets_user_settings_nav',
+		static_rowset: {
+			fields: [
+				{
+					name: 'night_mode', type: 'bool', default: false,
+					text: S('night_mode', 'Night Mode'),
+				},
+			],
+		},
+		row_vals: [{
+			night_mode: false,
+		}],
+		props: {row_vals: {slot: 'user'}},
+		save_row_on: 'input',
+	})
+
+	function set_all() {
+		for (let field of nav.all_fields)
+			set[field.name](nav.cell_val(nav.focused_row, field))
+	}
+
+	nav.on('reset', set_all)
+
+	nav.on('focused_row_cell_val_changed', function(field, v) {
+		set[field.name](v)
+	})
+
+	nav.on('saved', function() {
+		xmodule.save()
+	})
+
+	on_dom_load(function() {
+		set_all()
+	})
+
+}
+
+component('x-settings-button', function(e) {
+
+	button.construct(e)
+
+	e.bare = true
+	e.text = ''
+	e.icon = 'fa-cog'
+
+	let tt
+
+	e.on('activate', function() {
+
+		if (tt && tt.target) {
+
+			tt.close()
+
+		} else {
+
+			let night_mode = checkbox({
+				icon_style: 'toggle',
+				nav: xwidgets_user_settings_nav,
+				col: 'night_mode',
+			})
+
+			night_mode.on('val_changed', function(v) {
+				document.body.attr('theme', v ? 'dark' : null)
+			})
+
+			let settings_form = div({}, night_mode)
+
+			tt = tooltip({
+				classes: 'x-settings-tooltip',
+				target: e, side: 'bottom', align: 'end',
+				text: settings_form,
+				close_button: true,
+			})
+			//tt.focusables()[0].focus()
+		}
+
+	})
+
+})

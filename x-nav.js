@@ -2184,6 +2184,9 @@ function nav_widget(e) {
 		if (row_err_changed)
 			row_state_changed(row, 'error', undefined, ev)
 
+		if (e.save_row_on == 'input' && (!row.is_new || e.save_new_row_on == 'input'))
+			e.save()
+
 		return !invalid
 	}
 
@@ -2878,7 +2881,7 @@ function nav_widget(e) {
 		e.update({fields: true, rows: true})
 		refocus()
 		e.end_update()
-		e.fire('reset', true)
+		e.fire('reset')
 
 	}
 
@@ -3093,6 +3096,7 @@ function nav_widget(e) {
 				save_to_row_states()
 			else
 				save_to_row_vals()
+			e.fire('saved')
 		} else if (e.rowset_url)
 			save_to_server()
 	}
@@ -3109,6 +3113,7 @@ function nav_widget(e) {
 
 	function save_success(result) {
 		apply_result(result, this.changed_rows)
+		e.fire('saved')
 	}
 
 	function save_fail(type, status, message, body) {
@@ -3562,6 +3567,8 @@ component('x-bare-nav', function(e) {
 	e.init = function() {
 		init()
 		e.bind(true)
+		if (e.id)
+			window[e.id] = e
 	}
 
 	e.free = function() {

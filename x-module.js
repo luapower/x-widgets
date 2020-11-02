@@ -30,12 +30,11 @@ function xmodule(opt) {
 	// init root widget -------------------------------------------------------
 
 	function init_root_widget() {
-		if (opt.root_module) {
-			root_widget = opt.root_id
-				? component.create(opt.root_id)
-				: widget_placeholder({module: opt.root_module})
-			document.body.set(root_widget)
-		}
+		if (!opt.root_id)
+			return
+		assert(opt.root_module, 'x-module: `root_id` option requires `root_module` option')
+		root_widget = component.create(opt.root_id) || widget_placeholder({module: opt.root_module})
+		document.body.set(root_widget)
 	}
 
 	// init prop layer slots --------------------------------------------------
@@ -253,17 +252,23 @@ function xmodule(opt) {
 	function get_layer(name) {
 		let t = xm.layers[name]
 		if (!t) {
-			ajax({
-				url: 'xmodule-layer.json/'+name,
-				async: false,
-				success: function(props) {
-					t = {name: name, props: props}
-				},
-				fail: function(how, status) {
-					assert(how == 'http' && status == 404)
-					t = {name: name, props: {}}
-				},
-			})
+			let props
+			if (name.starts('local:')) {
+				let shortname = name.replace(/^local\:/, '')
+				props = JSON.parse(localStorage.getItem('layer:'+shortname))
+			} else {
+				ajax({
+					url: 'xmodule-layer.json/'+name,
+					async: false,
+					success: function(props1) {
+						props = props1
+					},
+					fail: function(how, status) {
+						assert(how == 'http' && status == 404)
+					},
+				})
+			}
+			t = {name: name, props: props || {}}
 			xm.layers[name] = t
 		}
 		return t
@@ -272,12 +277,21 @@ function xmodule(opt) {
 	xm.save = function() {
 		for (let name in xm.layers) {
 			let t = xm.layers[name]
-			if (t.modified && !t.save_request)
-				t.save_request = ajax({
-					url: 'xmodule-layer.json/'+name,
-					upload: json(t.props, null, '\t'),
-					done: () => t.save_request = null,
-				})
+			if (t.modified) {
+				let saved = () => debug('layer-saved', name)
+				if (name.starts('local:')) {
+					let shortname = name.replace(/^local\:/, '')
+					localStorage.setItem('layer:'+shortname, json(t.props))
+					saved()
+				} else if (!t.save_request) {
+					t.save_request = ajax({
+						url: 'xmodule-layer.json/'+name,
+						upload: json(t.props, null, '\t'),
+						done: () => t.save_request = null,
+						success: saved,
+					})
+				}
+			}
 		}
 	}
 
@@ -287,7 +301,7 @@ function xmodule(opt) {
 		return widget_select_editor(xm.instances, e => e.isnav, ...options)
 	}
 
-	on_dom_load(init)
+	init()
 
 }
 
@@ -943,17 +957,17 @@ function show_toolboxes(on) {
 		prop_layers_tb = prop_layers_toolbox({
 			popup_y: 2, w: 262, h: 225,
 		})
-		prop_layers_tb.show(true, true)
+		prop_layers_tb.show(true, {layout_changed: true})
 
 		props_tb = props_toolbox({
 			popup_y: 230, w: 262, h: 397,
 		}, {header_w: 80})
-		props_tb.show(true, true)
+		props_tb.show(true, {layout_changed: true})
 
 		tree_tb = widget_tree_toolbox({
 			popup_y: 630, w: 262, h: 311,
 		})
-		tree_tb.show(true, true)
+		tree_tb.show(true, {layout_changed: true})
 	} else {
 
 		prop_layers_tb.inspector.reset_to_default()

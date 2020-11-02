@@ -40,6 +40,7 @@
 	--x-margin                      : .25em;
 	--x-border-radius               : .25em;
 	--x-padding-button              : .4em 1.2em;
+	--x-padding-button-icon-side    : .4em;
 
 	--x-input-min-height            : 3.4em;
 	--x-input-width                 : 12em;
@@ -347,9 +348,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 	/* behavior */
 	user-select: none;
-}
-
-.x-button {
 	cursor: pointer;
 }
 
@@ -361,11 +359,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	outline-offset: -2px;
 }
 
-.x-button-icon {
-	margin-right: .5em;
+.x-button.empty { /* icon-only */
+	padding-left : var(--x-padding-button-icon-side);
+	padding-right: var(--x-padding-button-icon-side);
 }
 
-.x-button-text {
+.x-button:not(.empty) > .x-button-icon {
+	margin-right: .5em;
 }
 
 /* styling (from github) */
@@ -403,6 +403,26 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	box-shadow: var(--x-shadow-button-pressed);
 }
 
+/* bare buttons (no borders) */
+
+.x-button[bare] {
+	border: 0;
+	background: none;
+	box-shadow: none;
+	border-radius: 0;
+}
+
+.x-button[bare]:not([disabled]):not(.widget-editing):not(.widget-selected):hover {
+	filter: contrast(.7);
+}
+
+.x-button[bare]:not([disabled]):not(.widget-editing):not(.widget-selected):active,
+.x-button[bare]:not([disabled]):not(.widget-editing):not(.widget-selected).active
+{
+	box-shadow: none;
+	filter: contrast(.4);
+}
+
 /* action band ------------------------------------------------------------ */
 
 .x-action-band {
@@ -428,7 +448,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	align-items: flex-start;
 	justify-content: flex-start;
 	overflow: visible; /* for the tip */
-	pointer-events: none;
 
 	/* styling */
 	border: 0; /* container */
@@ -2677,6 +2696,16 @@ x-prop-inspector .x-grid-cell:not(.focused):not(.selected):not(.invalid).modifie
 
 x-prop-inspector .x-grid-cell:not(.modified) {
 	color: var(--x-fg-disabled);
+}
+
+/* settings button & popup ------------------------------------------------ */
+
+.x-settings-button {
+
+	position: absolute;
+	right: 1em;
+	top: 1em;
+
 }
 
 /* ------------------------------------------------------------------------ */
