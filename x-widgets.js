@@ -121,8 +121,8 @@ function component(tag, cons) {
 			e.type = type         // for serialization.
 			e.init = noop         // init point after all props are set.
 			e.class('x-widget')
-			opt = update(attr_val_opt(e), opt)
-			update(opt, construct(e))
+			let cons_opt = construct(e)
+			opt = update(attr_val_opt(e), cons_opt, opt)
 			e.initialized = false // setter barrier to delay init to e.init().
 			if (opt.on) {
 				for (let k in opt.on)
@@ -353,9 +353,13 @@ function props_mixin(e, iprops) {
 	}
 	*/
 
+	e.xon  = function() { e.xmodule_update = true  }
+	e.xoff = function() { e.xmodule_update = false }
+
 	function fire_prop_changed(e, prop, v1, v0, slot) {
-		// TODO: add this to simplify some things?
-		// e.fire('prop_changed', e, prop, v1, v0, slot)
+		//if (!e.xmodule_update)
+		//	return
+		e.fire('prop_changed', e, prop, v1, v0, slot)
 		document.fire('prop_changed', e, prop, v1, v0, slot)
 	}
 
@@ -1229,6 +1233,8 @@ component('x-tooltip', function(e) {
 
 	function close() { e.close() }
 
+	let last_popup_time
+
 	e.do_update = function(opt) {
 		if (e.close_button && !e.xbutton) {
 			e.xbutton = div({class: 'x-tooltip-xbutton fa fa-times'})
@@ -1242,6 +1248,8 @@ component('x-tooltip', function(e) {
 		e.popup(e.target, e.side, e.align, e.px, e.py, e.pw, e.ph)
 		if (opt && opt.reset_timer)
 			reset_timeout_timer()
+		if (e.target)
+			last_popup_time = time()
 	}
 
 	function call_update() { e.update() }
@@ -1291,6 +1299,20 @@ component('x-tooltip', function(e) {
 		}
 	})
 
+	e.content.on('pointerdown', function(ev) {
+		if (ev.target != this)
+			return // clicked inside the tooltip.
+		let first_focusable = this.focusables()[0]
+		if (!first_focusable)
+			return
+		first_focusable.focus()
+		return false
+	})
+
+	// autoclose --------------------------------------------------------------
+
+	e.prop('autoclose', {store: 'var', type: 'bool', default: true})
+
 	e.on('popup_bind', function(on) {
 		document.on('pointerdown', document_pointerdown, on)
 		document.on('stopped_event', document_stopped_event, on)
@@ -1298,21 +1320,31 @@ component('x-tooltip', function(e) {
 		document.on('focusout', document_focusout, on)
 	})
 
+	function too_soon() {
+		// HACK: if less than 100ms has passed since the last call to popup()
+		// then it means that this event is the one that made the popup show
+		// in the first place, so we don't close the popup in that case.
+		return (time() - last_popup_time) < .1
+	}
+
 	// clicking outside the tooltip or its anchor closes the tooltip.
 	function document_pointerdown(ev) {
-		if (!e.close_button)
+		if (!e.autoclose)
 			return
 		if (e.target && e.target.contains(ev.target)) // clicked inside the anchor.
 			return
-		if (e.contains(ev.target)) // clicked inside the picker.
+		if (e.contains(ev.target)) // clicked inside the tooltip.
+			return
+		if (too_soon())
 			return
 		e.close()
 	}
 
 	// clicking outside the tooltip closes the tooltip, even if the click did something.
 	function document_stopped_event(ev) {
-		if (ev.type.ends('pointerdown'))
-			document_pointerdown(ev)
+		if (!ev.type.ends('pointerdown'))
+			return
+		document_pointerdown(ev)
 	}
 
 	// focusing an element outside the tooltip or its anchor closes the tooltip.
@@ -1322,10 +1354,13 @@ component('x-tooltip', function(e) {
 
 	// focusing out of the document (to the titlebar etc.) closes the tooltip.
 	function document_focusout(ev) {
-		if (!e.close_button)
+		if (!e.autoclose)
 			return
-		if (!ev.relatedTarget)
-			e.close()
+		if (ev.relatedTarget)
+			return
+		if (!e.autoclose)
+			return
+		e.close()
 	}
 
 })

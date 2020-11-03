@@ -593,7 +593,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	/* styling */
 	border: 1px dashed transparent;
 	border-radius: 0;
-	cursor: default;
+	cursor: pointer;
+}
+
+.x-markbox:hover {
+	filter: contrast(60%);
 }
 
 .x-markbox.with-label {

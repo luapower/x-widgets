@@ -162,7 +162,7 @@ function val_widget(e, enabled_without_nav) {
 	}
 
 	function bind_nav(nav, col, on) {
-		if (!e.attached)
+		if (on && !e.attached)
 			return
 		if (!(nav && col != null))
 			return
@@ -2996,6 +2996,11 @@ component('x-form', function(e) {
 		for (let i = 1; i <= 12; i++)
 			e.class('maxcols'+i, i <= n)
 		e.class('compact', n < 2)
+	})
+
+	e.on('bind', function(on) {
+		if (on)
+			e.fire('resize', e.rect())
 	})
 
 	return {items: dom_items}
