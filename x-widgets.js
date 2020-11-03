@@ -1311,7 +1311,7 @@ component('x-tooltip', function(e) {
 
 	// autoclose --------------------------------------------------------------
 
-	e.prop('autoclose', {store: 'var', type: 'bool', default: true})
+	e.prop('autoclose', {store: 'var', type: 'bool', default: false})
 
 	e.on('popup_bind', function(on) {
 		document.on('pointerdown', document_pointerdown, on)
@@ -3117,6 +3117,7 @@ component('x-settings-button', function(e) {
 				icon_style: 'toggle',
 				nav: xwidgets_user_settings_nav,
 				col: 'night_mode',
+				autoclose: true,
 			})
 
 			night_mode.on('val_changed', function(v) {

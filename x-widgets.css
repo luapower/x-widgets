@@ -469,6 +469,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	border-radius: var(--x-border-radius);
 	background-color: var(--x-bg-popup);
 	box-shadow: var(--x-shadow-tooltip);
+	line-height: 1.5em;
 }
 
 /* visibility animation */

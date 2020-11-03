@@ -21,6 +21,7 @@
 		sql_editor
 		chart
 		input
+		form
 
 */
 
@@ -97,7 +98,7 @@ publishes:
 	e.modified
 	e.set_val(v, ev)
 	e.reset_val(v, ev)
-	e.display_val()
+	e.display_val_for()
 implements:
 	e.do_update([opt])
 calls:
@@ -108,7 +109,7 @@ calls:
 	e.from_val(v) -> v
 --------------------------------------------------------------------------- */
 
-function val_widget(e, enabled_without_nav) {
+function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 	selectable_widget(e)
 	contained_widget(e)
@@ -230,7 +231,7 @@ function val_widget(e, enabled_without_nav) {
 
 	function get_val() {
 		let row = e.row
-		return row && e.field ? e.nav.cell_val(row, e.field) : null
+		return e.field && row ? e.nav.cell_val(row, e.field) : null
 	}
 	let initial_val
 	e.set_val = function(v, ev) {
@@ -267,13 +268,13 @@ function val_widget(e, enabled_without_nav) {
 		return row && e.field ? e.nav.cell_modified(row, e.field) : false
 	})
 
-	e.display_val = function() {
+	e.display_val = function(v) {
 		if (!e.field)
 			return 'no field'
 		let row = e.row
 		if (!row)
 			return 'no row'
-		return e.nav.cell_display_val(row, e.field)
+		return e.nav.cell_display_val_for(row, e.field, v)
 	}
 
 	// view -------------------------------------------------------------------
@@ -305,6 +306,8 @@ function val_widget(e, enabled_without_nav) {
 	}
 
 	e.do_update_error = function(err) {
+		if (show_error_tooltip === false)
+			return
 		if (!e.error_tooltip) {
 			if (!e.invalid)
 				return // don't create it until needed.
@@ -1476,9 +1479,9 @@ function dropdown_widget(e) {
 	// val updating
 
 	e.do_update_val = function(v, ev) {
-		let text = e.picker && e.picker.dropdown_display_val()
+		let text = e.picker && e.picker.dropdown_display_val(v)
 		if (text == null)
-			text = e.display_val()
+			text = e.display_val(v)
 		let empty = text === ''
 		e.val_div.class('empty', empty)
 		e.val_div.class('null', false)
@@ -1850,8 +1853,8 @@ component('x-calendar', function(e) {
 
 	// picker protocol
 
-	e.dropdown_display_val = function() {
-		return e.display_val()
+	e.dropdown_display_val = function(v) {
+		return e.display_val(v)
 	}
 
 	// hack: trick dropdown into thinking that our own opened dropdown picker
@@ -2307,14 +2310,14 @@ component('x-chart', function(e) {
 		let i = 0
 		for (let field of e.nav.flds(cols)) {
 			let v = vals[i]
-			let text = e.nav.cell_display_val_for(field, v, row)
+			let text = e.nav.cell_display_val_for(row, field, v)
 			if (i == 1)
 				label.add('/')
 			label.add(text)
 			i++
 		}
 		label.add(tag('br'))
-		label.add(e.nav.cell_display_val_for(e.nav.fld(e.sum_col), sum, row))
+		label.add(e.nav.cell_display_val_for(row, e.nav.fld(e.sum_col), sum))
 		return label
 	}
 
@@ -2357,7 +2360,7 @@ component('x-chart', function(e) {
 			other_slice.label = div({class: 'x-chart-label'},
 				e.other_text,
 				tag('br'),
-				e.nav.cell_display_val_for(e.nav.fld(e.sum_col), other_slice.sum)
+				e.nav.cell_display_val_for(null, e.nav.fld(e.sum_col), other_slice.sum)
 			)
 			big_slices.push(other_slice)
 		}
@@ -2861,7 +2864,7 @@ component('x-chart', function(e) {
 
 component('x-input', function(e) {
 
-	val_widget(e)
+	val_widget(e, true, false)
 
 	e.prop('widget_type', {store: 'var', type: 'enum', enum_values: []})
 
@@ -2992,6 +2995,8 @@ component('x-form', function(e) {
 	e.detect_resize()
 
 	e.on('resize', function(r) {
+		if (!e.attached)
+			return
 		let n = clamp(floor(r.w / 150), 1, 12)
 		for (let i = 1; i <= 12; i++)
 			e.class('maxcols'+i, i <= n)

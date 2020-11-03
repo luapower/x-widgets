@@ -479,7 +479,7 @@ component('x-grid', function(e, is_val_widget) {
 	}
 
 	e.do_update_cell_val = function(cell, row, field, input_val) {
-		let v = e.cell_display_val_for(field, input_val, row)
+		let v = e.cell_display_val_for(row, field, input_val)
 		cell.qs_val = v
 		let node = cell.childNodes[cell.indent ? 1 : 0]
 		if (cell.qs_div) { // value is wrapped

@@ -1927,7 +1927,7 @@ function nav_widget(e) {
 		}
 		if (!nav) {
 			function format_row(row) {
-				return e.cell_display_val_for(field, null, row)
+				return e.cell_display_val_for(row, field, null)
 			}
 			nav = e.create_exclude_vals_nav({
 					rowset: {
@@ -2421,7 +2421,7 @@ function nav_widget(e) {
 		return ln.cell_display_val(ln_row, df)
 	}
 
-	e.cell_display_val_for = function(field, v, row) {
+	e.cell_display_val_for = function(row, field, v) {
 		if (v == null)
 			return null_display_val_for(row, field)
 		if (v === '')
@@ -2439,7 +2439,7 @@ function nav_widget(e) {
 	}
 
 	e.cell_display_val = function(row, field) {
-		return e.cell_display_val_for(field, e.cell_input_val(row, field), row)
+		return e.cell_display_val_for(row, field, e.cell_input_val(row, field))
 	}
 
 	e.on('display_vals_changed', function(field) {
@@ -3506,10 +3506,9 @@ function nav_widget(e) {
 		return e.cell_display_val(row, field)
 	}
 
-	e.dropdown_display_val = function() {
-		if (!e.focused_row)
-			return
-		return e.row_display_val(e.focused_row)
+	e.dropdown_display_val = function(v) {
+		let row = e.val_field && e.lookup(e.val_col, [v])[0]
+		return row && e.row_display_val(row)
 	}
 
 	e.pick_near_val = function(delta, ev) {
