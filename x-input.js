@@ -48,9 +48,7 @@ function row_widget(e, enabled_without_nav) {
 
 	e.do_update = function() {
 		let row = e.row
-		enabled = !!(enabled_without_nav || row)
-		e.class('disabled', !enabled)
-		e.focusable = enabled
+		e.disabled = !(enabled_without_nav || row)
 		e.do_update_row(row)
 	}
 
@@ -269,35 +267,22 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	})
 
 	e.display_val = function(v) {
-		if (!e.field)
-			return 'no field'
 		let row = e.row
 		if (!row)
-			return 'no row'
+			return div({class: 'x-input-placeholder'})
 		return e.nav.cell_display_val_for(row, e.field, v)
 	}
 
 	// view -------------------------------------------------------------------
 
-	let enabled = true
-
 	e.do_update = function() {
-		enabled = !!(enabled_without_nav || (e.row && e.field))
-		e.class('disabled', !enabled)
-		e.focusable = enabled
+		let disabled = !(enabled_without_nav || (e.row && e.field))
+		e.attr('disabled', disabled) // for non-focusables
+		e.disabled = disabled
 		cell_state_changed(e.field, 'input_val', e.input_val)
 		cell_state_changed(e.field, 'val', e.val)
 		cell_state_changed(e.field, 'error', e.error)
 		cell_state_changed(e.field, 'modified', e.modified)
-	}
-
-	{
-		let prevent_if_disabled = function() {
-			if (!enabled) return false
-		}
-		e.on('pointerdown', prevent_if_disabled)
-		e.on('pointerup'  , prevent_if_disabled)
-		e.on('click'      , prevent_if_disabled)
 	}
 
 	e.do_error_tooltip_check = function() {
@@ -343,7 +328,7 @@ function input_widget(e) {
 	e.do_update = function() {
 		inh_do_update()
 		update_label()
-		let s = or(e.label, e.field ? e.field.text : '(no field)')
+		let s = or(e.label, e.field ? e.field.text : div({class: 'x-input-placeholder'}))
 		e.label_div.set(s)
 	}
 
@@ -372,14 +357,14 @@ component('x-checkbox', function(e) {
 	function update_icon() {
 		let ie = e.icon_div
 		ie.class('fa far fa-square fa-check-square fa-toggle-on fa-toggle-off', false)
-		if (e.icon_style == 'checkbox')
-			ie.classes = e.checked ? 'fa fa-check-square' : 'far fa-square'
-		else if (e.icon_style == 'toggle')
+		if (e.button_style == 'toggle')
 			ie.classes = 'fa fa-toggle-'+(e.checked ? 'on' : 'off')
+		else
+			ie.classes = e.checked ? 'fa fa-check-square' : 'far fa-square'
 	}
 
-	e.set_icon_style = update_icon
-	e.prop('icon_style', {store: 'var', type: 'enum', enum_values: ['checkbox', 'toggle'], default: 'checkbox'})
+	e.set_button_style = update_icon
+	e.prop('button_style', {store: 'var', type: 'enum', enum_values: ['checkbox', 'toggle'], default: 'checkbox', attr: true})
 
 	// model
 
@@ -397,7 +382,7 @@ component('x-checkbox', function(e) {
 		let c = e.checked
 		e.class('checked', c)
 		update_icon()
-		e.label_div.class('empty', v === '')
+		e.class('no-field', !e.field)
 	}
 
 	// controller
@@ -1220,7 +1205,7 @@ component('x-placeedit', function(e) {
 
 	e.override('do_update_val', function(inherited, v, ev) {
 		inherited(v, ev)
-		let pin = e.field.format_pin(v)
+		let pin = e.field && e.field.format_pin(v)
 		e.pin_ct.set(pin)
 		if (e.val && !e.place_id)
 			pin.title = S('find_place', 'Find this place on Google Maps')
@@ -2109,7 +2094,10 @@ component('x-image', function(e) {
 
 	row_widget(e)
 
-	e.img = tag('img', {class: 'x-image-img'})
+	e.img = tag('img', {
+			class: 'x-image-img',
+			src: '', // believe it or not, this is the only way to remove the border
+		})
 
 	e.overlay = div({class: 'x-image-overlay'})
 
@@ -2147,12 +2135,10 @@ component('x-image', function(e) {
 	}
 
 	e.do_update_row = function() {
-
-		e.img.attr('src', format_url())
-
-		e.upload_btn.show(e.allow_upload)
-		e.download_btn.show(e.allow_download)
-		S('loading', 'Loading...')
+		e.attr('disabled', e.disabled)
+		e.img.attr('src', format_url() || '')
+		e.upload_btn.show(!e.disabled && e.allow_upload)
+		e.download_btn.show(!e.disabled && e.allow_download)
 	}
 
 	function refresh() {

@@ -1123,6 +1123,16 @@ publishes:
 	e.tabindex
 	e.disabled
 	e.focusable
+
+NOTE: The `disabled` state is a concerted effort located in multiple places:
+	- mouse events are blocked in divs.js.
+	- forcing the default cursor on the element and its children is done in css.
+	- showing the element with 50% transparency is done in css.
+	- keyboard focusing is disabled here.
+
+NOTE: To disable a non-focusable but clickable element it's enough to set its
+attr `disabled` but note that `:hover` and `:active` will still work so
+make sure to add `:not([disabled])` in css on those selectors.
 --------------------------------------------------------------------------- */
 
 function focusable_widget(e, fe, css_class) {
@@ -3114,9 +3124,9 @@ component('x-settings-button', function(e) {
 		} else {
 
 			let night_mode = checkbox({
-				icon_style: 'toggle',
 				nav: xwidgets_user_settings_nav,
 				col: 'night_mode',
+				button_style: 'toggle',
 				autoclose: true,
 			})
 

@@ -3682,6 +3682,8 @@ component('x-lookup-dropdown', function(e) {
 	email
 	phone
 	image
+	tags
+	place
 
 */
 

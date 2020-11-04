@@ -9,6 +9,7 @@
 
 [disabled] {
 	opacity: .5;
+	filter: grayscale();
 }
 
 [disabled],
@@ -615,6 +616,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	text-overflow: ellipsis;
 }
 
+.x-markbox.no-field > .x-markbox-label { flex: 1; }
+
 .x-markbox:focus-within {
 	border-color: var(--x-markbox-outline-color-focus);
 }
@@ -640,8 +643,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	text-align: right;
 }
 
-.x-markbox[align=left]  > .x-markbox-label:not(:empty) { padding-left : .5em; }
-.x-markbox[align=right] > .x-markbox-label:not(:empty) { padding-right: .5em; }
+.x-markbox[align=left ] > .x-markbox-label { padding-left : .5em; }
+.x-markbox[align=right] > .x-markbox-label { padding-right: .5em; }
+
+.x-markbox[button_style=toggle] > .x-markbox-label { flex: 1; }
+.x-markbox[button_style=toggle] > .x-markbox-icon  { order: 2; }
+.x-markbox[button_style=toggle] > .x-markbox-label { padding-right: .5em; }
 
 .x-markbox.grid-editor { justify-content: center; }
 
@@ -697,6 +704,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 	/* sizing for inline use */
 	padding: 0;              /* set from code */
+}
+
+.x-input-placeholder {
+	width: 100%;
+	height: 1em;
+	background-color: var(--x-smoke);
 }
 
 .x-flex > .x-editbox,
@@ -1042,10 +1055,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 /* fixed mode: fixed-width, no-wrap, hide-overflow */
-.x-dropdown[mode=fixed],
-.x-flex > .x-dropdown,
-.x-flex > .x-input > .x-dropdown
-{
+.x-dropdown[mode=fixed] {
 	width: 0;                /* fixed width, constrained by x-input's min-width */
 }
 
@@ -1210,10 +1220,14 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* input ------------------------------------------------------------------ */
 
 .x-input {
-	margin: 0;
-	border: 0;
 	display: flex;
 	align-self: stretch;
+}
+
+.x-input:not(:empty) {
+	margin: 0;
+	border: 0;
+	border-radius: 0;
 }
 
 .x-flex > .x-input {
