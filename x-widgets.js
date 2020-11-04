@@ -159,8 +159,11 @@ function component(tag, cons) {
 		}
 
 		detect_resize() {
-			resize_observer.observe(this)
-			this.detect_resize = noop
+			if (this.__detect_resize)
+				return
+			this.__detect_resize = true
+			if (this.attached)
+				resize_observer.observe(this)
 		}
 
 		bind(on) {
@@ -180,6 +183,8 @@ function component(tag, cons) {
 					document.fire(this.id+'.bind', this, true)
 				}
 				this.end_update()
+				if (this.__detect_resize)
+					resize_observer.observe(this)
 
 				if (DEBUG_ATTACH_TIME) {
 					let t1 = time()
@@ -191,7 +196,7 @@ function component(tag, cons) {
 				if (!this.attached)
 					return
 				this.attached = false
-				if (this.detect_resize == noop)
+				if (this.__detect_resize)
 					resize_observer.unobserve(this)
 				this.fire('bind', false)
 				if (this.id) {
@@ -1409,7 +1414,7 @@ component('x-button', function(e) {
 
 	e.set_icon = function(v) {
 		if (isstr(v))
-			e.icon_div.attr('class', 'x-button-icon fa '+v)
+			e.icon_div.attr('class', 'x-button-icon '+v)
 		else
 			e.icon_div.set(v)
 		e.icon_div.show(!!v)
@@ -1427,6 +1432,13 @@ component('x-button', function(e) {
 		e.fire('activate')
 	}
 
+	function set_active(on) {
+		e.class('active', on)
+		e.fire('active', on)
+		if (!on)
+			e.activate()
+	}
+
 	e.on('keydown', function keydown(key, shift, ctrl) {
 		if (e.widget_editing) {
 			if (key == 'Enter') {
@@ -1441,7 +1453,7 @@ component('x-button', function(e) {
 			return
 		}
 		if (key == ' ' || key == 'Enter') {
-			e.class('active', true)
+			set_active(true)
 			return false
 		}
 	})
@@ -1453,8 +1465,7 @@ component('x-button', function(e) {
 			// could've been selected by pressing Enter which closed the menu
 			// and focused this button back and that Enter's keyup got here.
 			if (key == ' ' || key == 'Enter') {
-				e.activate()
-				e.class('active', false)
+				set_active(false)
 			}
 			return false
 		}
@@ -1464,8 +1475,9 @@ component('x-button', function(e) {
 		if (e.widget_editing)
 			return
 		e.focus()
+		set_active(true)
 		return this.capture_pointer(ev, null, function() {
-			e.activate()
+			set_active(false)
 		})
 	})
 
@@ -3111,7 +3123,7 @@ component('x-settings-button', function(e) {
 
 	e.bare = true
 	e.text = ''
-	e.icon = 'fa-cog'
+	e.icon = 'fa fa-cog'
 
 	let tt
 

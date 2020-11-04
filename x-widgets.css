@@ -835,6 +835,23 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	}
 }
 
+.x-editbox-copy-to-clipboard-button {
+	margin: 0;
+	border-width: 0;
+	border-left-width: 1px;
+	border-radius: 0;
+}
+
+.x-editbox-copy-to-clipboard-button > .x-button-icon > img {
+	filter: contrast(.8);
+}
+
+/* passedit --------------------------------------------------------------- */
+
+.x-passedit-eye-icon {
+	margin: 0;
+}
+
 /* spinedit --------------------------------------------------------------- */
 
 .x-spinedit-button {

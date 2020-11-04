@@ -675,6 +675,31 @@ component('x-editbox', function(e) {
 			document_pointerdown(ev)
 	}
 
+	// copy-to-clipboard button -----------------------------------------------
+
+	e.set_copy_to_clipboard_button = function(v) {
+		if (v && !e.clipboard_button) {
+			function copy_to_clipboard() {
+				copy_text(e.input.value, function() {
+					notify(S('copied_to_clipboard', 'Copied to clipboard'), 'info')
+				})
+			}
+			e.clipboard_button = button({
+				classes: 'x-editbox-copy-to-clipboard-button',
+				icon: tag('img', {src: '/clipboard-arrow-in.svg'}),
+				text: '',
+				title: S('copy_to_clipboard', 'Copy to clipboard'),
+				action: copy_to_clipboard
+			})
+			e.add(e.clipboard_button)
+		} else if (!v && e.clipboard_button) {
+			e.clipboard_button.remove()
+			e.clipboard_button = null
+		}
+	}
+
+	e.prop('copy_to_clipboard_button', {store: 'var', type: 'bool'})
+
 	// grid editor protocol ---------------------------------------------------
 
 	e.input.on('blur', function() {
@@ -764,6 +789,41 @@ component('x-editbox', function(e) {
 	e.set_text_min_w = function(w) {
 		e.input.min_w = w
 	}
+
+})
+
+
+// ---------------------------------------------------------------------------
+// passedit
+// ---------------------------------------------------------------------------
+
+component('x-passedit', function(e) {
+
+	editbox.construct(e)
+	e.input.attr('type', 'password')
+
+	e.view_password_button = button({
+		classes: 'x-passedit-eye-icon',
+		icon: 'far fa-eye-slash',
+		text: '',
+		bare: true,
+		focusable: false,
+		title: S('view_password', 'View password'),
+	})
+	e.add(e.view_password_button)
+
+	e.view_password_button.on('active', function(on) {
+		let s1 = e.input.selectionStart
+		let s2 = e.input.selectionEnd
+		e.input.attr('type', on ? null : 'password')
+		this.icon = 'far fa-eye' + (on ? '' : '-slash')
+		if (!on) {
+			after(0, function() {
+				e.input.selectionStart = s1
+				e.input.selectionEnd   = s2
+			})
+		}
+	})
 
 })
 

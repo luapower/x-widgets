@@ -421,6 +421,7 @@ main.add(H.div({}, 'type in "Klaus" to validate: ', editbox({
 
 main.add(H.div({}, 'type in "Klaus" to validate: ', editbox({
 	field: {validate: say_my_name_long},
+	copy_to_clipboard_button: true,
 })))
 
 main.add(
@@ -437,6 +438,14 @@ main.add(
 		)
 	)
 )
+
+main.add(passedit({
+	field: {
+		validate: say_my_name,
+		text: 'Password',
+	},
+	val: 'Klaus',
+}))
 
 </script>
 </template>
