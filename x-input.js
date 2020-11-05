@@ -8,6 +8,7 @@
 		checkbox
 		radiogroup
 		editbox
+		passedit
 		spinedit
 		tagsedit
 		placeedit
@@ -686,10 +687,11 @@ component('x-editbox', function(e) {
 			}
 			e.clipboard_button = button({
 				classes: 'x-editbox-copy-to-clipboard-button',
-				icon: tag('img', {src: '/clipboard-arrow-in.svg'}),
+				icon: 'far fa-clipboard',
 				text: '',
+				bare: true,
 				title: S('copy_to_clipboard', 'Copy to clipboard'),
-				action: copy_to_clipboard
+				action: copy_to_clipboard,
 			})
 			e.add(e.clipboard_button)
 		} else if (!v && e.clipboard_button) {

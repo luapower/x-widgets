@@ -407,7 +407,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* bare buttons (no borders) */
 
 .x-button[bare] {
-	border: 0;
+	border-width: 0;
 	background: none;
 	box-shadow: none;
 	border-radius: 0;
@@ -648,7 +648,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-markbox[button_style=toggle] > .x-markbox-label { flex: 1; }
 .x-markbox[button_style=toggle] > .x-markbox-icon  { order: 2; }
-.x-markbox[button_style=toggle] > .x-markbox-label { padding-right: .5em; }
+.x-markbox[button_style=toggle] > .x-markbox-label { padding-left: 0; padding-right: .5em; }
 
 .x-markbox.grid-editor { justify-content: center; }
 
@@ -835,11 +835,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	}
 }
 
-.x-editbox-copy-to-clipboard-button {
+.x-button.x-editbox-copy-to-clipboard-button {
 	margin: 0;
-	border-width: 0;
-	border-left-width: 1px;
+	padding: 0 .5em;
+	border-left: 1px solid var(--x-smoke);
 	border-radius: 0;
+	color: var(--x-fg);
 }
 
 .x-editbox-copy-to-clipboard-button > .x-button-icon > img {
