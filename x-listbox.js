@@ -118,13 +118,16 @@ component('x-listbox', function(e) {
 		item.set(e.row_display_val(row))
 	}
 
-	let update_val = e.do_update
+	let inh_do_update = e.do_update
 	e.do_update = function(opt) {
 
 		if (opt.reload) {
 			e.reload()
-			opt.rows = true
+			opt.fields = true
 		}
+
+		if (opt.fields)
+			opt.rows = true
 
 		if (opt.rows) {
 			e.clear()
@@ -138,16 +141,22 @@ component('x-listbox', function(e) {
 				}
 				e.add(item)
 			}
+			opt.vals = true
+			opt.state = true
 		}
 
-		if (opt.rows || opt.vals || opt.fields)
+		if (opt.vals) {
 			for (let i = 0; i < e.rows.length; i++)
 				e.do_update_item(e.at[i], e.rows[i])
+			opt.state = true
+		}
 
-		if (opt.val)
-			update_val()
+		if (opt.val) {
+			inh_do_update()
+			opt.state = true
+		}
 
-		if (opt.rows || opt.state)
+		if (opt.state)
 			if (e.at.length)
 				for (let i = 0; i < e.rows.length; i++) {
 					let item = e.at[i]

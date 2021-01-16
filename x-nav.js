@@ -44,7 +44,7 @@ rowset field attributes:
 
 	validation:
 		allow_null     : allow null (true).
-		validate       : f(v, field) -> undefined|err_string
+		validator_*    : f(field) -> {validate: f(v) -> true|false, message: text}
 		convert        : f(v) -> v
 		min            : min value (0).
 		max            : max value (inf).
@@ -79,8 +79,8 @@ rowset row attributes:
 	row.focusable      : row can be focused (true).
 	row.editable       : allow modifying (true).
 	row[input_val_i]   : currently set cell value, whether valid or not.
-	row[error_i]       : error message if cell is invalid.
-	row.error          : error message if row is invalid.
+	row[errors_i]      : cell errors array, only if the cell is invalid.
+	row.errors         : row errors array, if the row is invalid.
 	row[modified_i]    : value was modified, change not on server yet.
 	row[old_val_i]     : initial value before modifying.
 	row.is_new         : new row, not added on server yet.
@@ -180,15 +180,15 @@ cell values & state:
 		e.cell_input_val()
 		e.cell_old_val()
 		e.cell_prev_val()
-		e.cell_error()
+		e.cell_errors()
 		e.cell_modified()
 		e.cell_vals()
 
 updating cells:
 	publishes:
 		e.set_cell_state()
+		e.validator_*: f(field) -> {validate: f(v) -> true|false, message: text}
 		e.validate_val()
-		e.on_validate_val()
 		e.set_cell_val()
 		e.reset_cell_val()
 	calls:
@@ -205,7 +205,7 @@ updating row state:
 	publishes:
 		e.set_row_state()
 		e.validate_row()
-		e.set_row_error()
+		e.set_row_errors()
 		e.set_row_is_new()
 	calls:
 		e.do_update_row_state(ri, prop, val, ev)
@@ -1661,8 +1661,8 @@ function nav_widget(e) {
 
 	e.compare_rows = function(row1, row2) {
 		// invalid rows come first.
-		if (row1.invalid != row2.invalid)
-			return row1.invalid ? -1 : 1
+		if (!row1.errors != !row2.errors)
+			return row1.errors ? -1 : 1
 		return 0
 	}
 
@@ -1720,19 +1720,19 @@ function nav_widget(e) {
 			let i = field.val_index
 			cmps[i] = field_comparator(field)
 			let r = dir == 'desc' ? -1 : 1
-			let err_i = cell_state_val_index('error', field)
+			let errors_i = cell_state_val_index('errors', field)
 			if (field != e.index_field) {
 				// invalid rows come first
 				s.push('{')
-				s.push('  let v1 = r1.error == null')
-				s.push('  let v2 = r2.error == null')
+				s.push('  let v1 = r1.errors == null')
+				s.push('  let v2 = r2.errors == null')
 				s.push('  if (v1 < v2) return -1')
 				s.push('  if (v1 > v2) return  1')
 				s.push('}')
 				// invalid vals come after
 				s.push('{')
-				s.push('  let v1 = r1['+err_i+'] == null')
-				s.push('  let v2 = r2['+err_i+'] == null')
+				s.push('  let v1 = r1['+errors_i+'] == null')
+				s.push('  let v2 = r2['+errors_i+'] == null')
 				s.push('  if (v1 < v2) return -1')
 				s.push('  if (v1 > v2) return  1')
 				s.push('}')
@@ -2040,7 +2040,7 @@ function nav_widget(e) {
 	e.cell_input_val    = (row, col) => e.cell_state(row, fld(col), 'input_val'   , row[fld(col).val_index])
 	e.cell_old_val      = (row, col) => e.cell_state(row, fld(col), 'old_val'     , row[fld(col).val_index])
 	e.cell_prev_val     = (row, col) => e.cell_state(row, fld(col), 'prev_val'    , row[fld(col).val_index])
-	e.cell_error        = (row, col) => e.cell_state(row, fld(col), 'error')
+	e.cell_errors       = (row, col) => e.cell_state(row, fld(col), 'errors')
 	e.cell_modified     = (row, col) => e.cell_state(row, fld(col), 'modified', false)
 
 	e.cell_vals = function(row, cols) {
@@ -2052,53 +2052,74 @@ function nav_widget(e) {
 		return field.convert ? field.convert.call(e, val, field, row) : val
 	}
 
-	e.validate_val = function(field, val, row, ev) {
-
-		if (val == null)
-			if (!field.allow_null)
-				return S('error_not_null', 'NULL not allowed')
-			else
-				return
-
-		if (field.min != null && val < field.min)
-			return S('error_min_value', 'Value must be at least {0}').subst(field.min)
-
-		if (field.max != null && val > field.max)
-			return S('error_max_value', 'Value must be at most {0}').subst(field.max)
-
-		let ln = field.lookup_nav
-		if (ln) {
-			field.display_field = field.display_field || ln.all_fields[field.display_col || ln.name_col]
-			if (!ln.lookup(field.lookup_col, [val]).length)
-				return S('error_lookup', 'Value not found in lookup nav')
+	e.field_validators = function(field) {
+		let t = []
+		for (let k in field) {
+			if (k.starts('validator_')) {
+				let v = field[k](field)
+				if (v) t.push(v)
+			}
 		}
-
-		let err = field.validate && field.validate.call(e, val, field, row)
-		if (isstr(err))
-			return err
-
-		return e.fire('validate_'+field.name, val, row, ev)
+		return t
 	}
 
-	e.on_validate_val = function(col, validate, on) {
-		e.on('validate_'+e.all_fields[col].name, validate, on)
+	e.row_validators = function() {
+		let t = []
+		for (let k in e) {
+			if (k.starts('validator_')) {
+				let v = e[k]()
+				if (v) t.push(v)
+			}
+		}
+		return t
+	}
+
+	e.validate_val = function(field, val, row, ev) {
+		let validators = e.field_validators(field)
+		let errors = []
+		errors.passed = true
+		for (let validator of validators) {
+			if (validator.validate) {
+				let error = {}
+				errors.push(error)
+				error.message = validator.message
+				error.passed = validator.validate(val)
+				if (!error.passed)
+					errors.passed = false
+			}
+		}
+		return errors
 	}
 
 	e.validate_row = function(row) {
-		return e.fire('validate', row)
+		let validators = e.row_validators()
+		let errors = []
+		errors.passed = true
+		for (let validator of validators) {
+			if (validator.validate) {
+				let error = {}
+				errors.push(error)
+				error.passed = validator.validate(row)
+				error.message = validator.get_message(row)
+				if (!error.passed)
+					errors.passed = false
+			}
+		}
+		return errors
 	}
 
 	e.row_can_have_children = function(row) {
 		return row.can_have_children != false
 	}
 
-	e.set_row_error = function(row, err, ev) {
-		err = isstr(err) ? err : undefined
-		if (err != null) {
-			e.notify('error', err)
-			warn(err)
-		}
-		e.set_row_state(row, 'error', err, undefined, true, ev)
+	e.set_row_errors = function(row, errors, ev) {
+		if (errors)
+			for (let error of errors)
+				if (!error.passed) {
+					e.notify('error', error.message)
+					warn(error.message)
+				}
+		e.set_row_state(row, 'errors', errors, undefined, true, ev)
 	}
 
 	e.set_row_is_new = function(row, is_new, ev) {
@@ -2109,10 +2130,10 @@ function nav_widget(e) {
 	}
 
 	e.row_has_errors = function(row) {
-		if (row.error != null)
+		if (!row.errors || row.errors.passed)
 			return true
 		for (let field of e.all_fields)
-			if (e.cell_error(row, field) != null)
+			if (!e.cell_errors(row, field).passed)
 				return true
 		return false
 	}
@@ -2143,15 +2164,16 @@ function nav_widget(e) {
 		if (val === undefined)
 			val = null
 		val = e.convert_val(field, val, row, ev)
-		let err = e.validate_val(field, val, row, ev)
-		err = isstr(err) ? err : undefined
-		let invalid = err != null
+		let errors = e.validate_val(field, val, row, ev)
+		let invalid = !errors.passed
 		let cur_val = row[field.val_index]
 		let val_changed = !invalid && val !== cur_val
 
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
-		let cell_err_changed = e.set_cell_state(row, field, 'error', err, undefined, false)
-		let row_err_changed = e.set_row_state(row, 'error', undefined, undefined, false)
+		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
+
+		// reset row's invalid state, to be validated again on `exit_row` if it's set to do so.
+		let row_errors_changed = e.set_row_state(row, 'errors', undefined, undefined, false)
 
 		if (val_changed) {
 			let was_modified = e.cell_modified(row, field)
@@ -2179,10 +2201,10 @@ function nav_widget(e) {
 
 		if (input_val_changed)
 			cell_state_changed(row, field, 'input_val', val, ev)
-		if (cell_err_changed)
-			cell_state_changed(row, field, 'error', err, ev)
-		if (row_err_changed)
-			row_state_changed(row, 'error', undefined, ev)
+		if (cell_errors_changed)
+			cell_state_changed(row, field, 'errors', errors, ev)
+		if (row_errors_changed)
+			row_state_changed(row, 'errors', false, ev)
 
 		if (e.save_row_on == 'input' && (!row.is_new || e.save_new_row_on == 'input'))
 			e.save()
@@ -2193,19 +2215,15 @@ function nav_widget(e) {
 	e.reset_cell_val = function(row, field, val, ev) {
 		if (val === undefined)
 			val = null
-		let err
-		if (ev && ev.validate) {
-			err = e.validate_val(field, val, row, ev)
-			err = isstr(err) ? err : undefined
-		}
-		let invalid = err != null
+		let errors = ev && ev.validate ? e.validate_val(field, val, row, ev) : undefined
+		let invalid = !errors.passed
 		let cur_val = row[field.val_index]
 		let old_val = e.cell_old_val(row, field)
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
+		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
 		let old_val_changed = e.set_cell_state(row, field, 'old_val', val, old_val, false)
 		let cell_modified_changed = e.set_cell_state(row, field, 'modified', false, false, false)
-		let cell_err_changed = e.set_cell_state(row, field, 'error', err, undefined, false)
-		let row_err_changed = e.set_row_state(row, 'error', undefined, undefined, false)
+		let row_errors_changed = e.set_row_state(row, 'errors', undefined, undefined, false)
 		let row_is_new_changed = e.set_row_state(row, 'is_new', false, false, false)
 		if (val !== cur_val) {
 			row[field.val_index] = val
@@ -2218,12 +2236,12 @@ function nav_widget(e) {
 			cell_state_changed(row, field, 'old_val', val, ev)
 		if (input_val_changed)
 			cell_state_changed(row, field, 'input_val', val, ev)
+		if (cell_errors_changed)
+			cell_state_changed(row, field, 'errors', errors, ev)
 		if (cell_modified_changed)
 			cell_state_changed(row, field, 'modified', false, ev)
-		if (cell_err_changed)
-			cell_state_changed(row, field, 'error', err, ev)
-		if (row_err_changed)
-			row_state_changed(row, 'error', undefined, ev)
+		if (row_errors_changed)
+			row_state_changed(row, 'errors', undefined, ev)
 		if (row_is_new_changed)
 			row_state_changed(row, 'is_new', false, ev)
 
@@ -2351,8 +2369,8 @@ function nav_widget(e) {
 		if (!e.exit_edit(force))
 			return false
 		if (row.modified) {
-			let err = e.validate_row(row)
-			e.set_row_error(row, err)
+			let errors = e.validate_row(row)
+			e.set_row_errors(row, errors)
 		}
 		if (!force)
 			if (!e.can_exit_row_on_errors && e.row_has_errors(row))
@@ -3028,7 +3046,7 @@ function nav_widget(e) {
 
 			let err = isstr(rt.error) ? rt.error : undefined
 			let row_failed = rt.error != null
-			e.set_row_error(row, err)
+			e.set_row_errors(row, [{message: err, passed: false}])
 
 			if (rt.remove) {
 				rows_to_remove.push(row)
@@ -3046,7 +3064,7 @@ function nav_widget(e) {
 						let field = e.all_fields[k]
 						let err = rt.field_errors[k]
 						err = isstr(err) ? err : undefined
-						e.set_cell_state(row, field, 'error', err)
+						e.set_cell_state(row, field, 'errors', [{message: err, passed: false}])
 					}
 				}
 				if (rt.values)
@@ -3153,7 +3171,7 @@ function nav_widget(e) {
 		e.begin_update()
 		let rows_to_remove = []
 		for (let row of e.changed_rows) {
-			e.set_row_error(row, undefined)
+			e.set_row_errors(row, undefined)
 			if (row.removed) {
 				rows_to_remove.push(row)
 			} else {
@@ -3710,6 +3728,26 @@ component('x-lookup-dropdown', function(e) {
 		},
 	}
 
+	all_field_types.validator_not_null = field => ({
+		validate : !field.allow_null ? (v => v != null) : undefined,
+		message  : S('validation_required', 'Required'),
+	})
+
+	all_field_types.validator_min = field => ({
+		validate : field.min != null ? (v => v >= field.min) : undefined,
+		message  : S('validation_min_value', 'Value must be at least {0}').subst(field.min),
+	})
+
+	all_field_types.validator_max = field => ({
+		validate : field.max != null ? (v => v <= field.max) : undefined,
+		message  : S('validation_max_value', 'Value must be at most {0}').subst(field.max),
+	})
+
+	all_field_types.validator_lookup = field => ({
+		validate : field.lookup_nav ? (v => !field.lookup_nav.lookup(field.lookup_col, [v]).length) : undefined,
+		message  : S('validation_lookup', 'Value must be in the list of allowed values.'),
+	})
+
 	all_field_types.format = function(v) {
 		return String(v)
 	}
@@ -3736,19 +3774,20 @@ component('x-lookup-dropdown', function(e) {
 	let number = {align: 'right', min: 0, max: 1/0, multiple_of: 1}
 	field_types.number = number
 
-	number.validate = function(val, field) {
-		val = num(val)
+	number.validator_number = field => ({
+		validate : val => { val = num(val); return isnum(val) && val === val; },
+		message  : S('validation_number', 'Value must be a number'),
+	})
 
-		if (!isnum(val) || val !== val)
-			return S('error_invalid_number', 'Invalid number')
+	number.validator_integer = field => ({
+		validate : field.multiple_of == 1 ? (v => v % 1 == 0) : undefined,
+		message  : S('validation_integer', 'Value must be an integer'),
+	})
 
-		if (field.multiple_of != null)
-			if (val % field.multiple_of != 0) {
-				if (field.multiple_of == 1)
-					return S('error_integer', 'Value must be an integer')
-				return S('error_multiple', 'Value must be multiple of {0}').subst(field.multiple_of)
-			}
-	}
+	number.validator_multiple = field => ({
+		validate : field.multiple_of != null && field.multiple_of != 1 ? (v => v % field.multiple_of == 0) : undefined,
+		message  : S('validation_multiple', 'Value must be multiple of {0}').subst(field.multiple_of),
+	})
 
 	number.editor = function(...opt) {
 		return spinedit(update({
@@ -3790,10 +3829,10 @@ component('x-lookup-dropdown', function(e) {
 	let date = {align: 'right', min: -(2**52), max: 2**52}
 	field_types.date = date
 
-	date.validate = function(val, field) {
-		if (!isnum(val) || val !== val)
-			return S('error_date', 'Invalid date')
-	}
+	date.validator_date = field => ({
+		validate : v => isnum(val) && val === val,
+		message  : S('validation_date', 'Date must be valid'),
+	})
 
 	date.format = function(t) {
 		_d.setTime(t * 1000)
@@ -3850,10 +3889,10 @@ component('x-lookup-dropdown', function(e) {
 
 	bool.null_text = () => H('<div class="fa fa-square"></div>')
 
-	bool.validate = function(val, field) {
-		if (!isbool(val))
-			return S('error_boolean', 'Value not true or false')
-	}
+	bool.validator_bool = field => ({
+		validate : v => isbool(v),
+		message  : S('validation_boolean', 'Value must be true or false'),
+	})
 
 	bool.format = function(val) {
 		return val ? this.true_text : this.false_text

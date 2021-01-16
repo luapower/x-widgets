@@ -102,7 +102,7 @@ implements:
 	e.do_update([opt])
 calls:
 	e.do_update_val(val, ev)
-	e.do_update_error(err, ev)
+	e.do_update_errors(errors, ev)
 	e.do_error_tooltip_check()
 	e.to_val(v) -> v
 	e.from_val(v) -> v
@@ -153,10 +153,10 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 			e.do_update_val(val, ev)
 		else if (key == 'val')
 			e.fire('val_changed', val, ev)
-		else if (key == 'error') {
-			e.invalid = val != null
+		else if (key == 'errors') {
+			e.invalid = val != null && !val.passed
 			e.class('invalid', e.invalid)
-			e.do_update_error(val, ev)
+			e.do_update_errors(val, ev)
 		} else if (key == 'modified')
 			e.class('modified', val)
 	}
@@ -257,9 +257,9 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		return row && e.field ? e.from_val(e.nav.cell_input_val(e.row, e.field)) : null
 	})
 
-	e.property('error', function() {
+	e.property('errors', function() {
 		let row = e.row
-		return row && e.field ? e.nav.cell_error(row, e.field) : undefined
+		return row && e.field ? e.nav.cell_errors(row, e.field) : undefined
 	})
 
 	e.property('modified', function() {
@@ -282,7 +282,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		e.disabled = disabled
 		cell_state_changed(e.field, 'input_val', e.input_val)
 		cell_state_changed(e.field, 'val', e.val)
-		cell_state_changed(e.field, 'error', e.error)
+		cell_state_changed(e.field, 'errors', e.errors)
 		cell_state_changed(e.field, 'modified', e.modified)
 	}
 
@@ -291,7 +291,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 			&& (e.hasfocus || e.hovered)
 	}
 
-	e.do_update_error = function(err) {
+	e.do_update_errors = function(errors) {
 		if (show_error_tooltip === false)
 			return
 		if (!e.error_tooltip) {
@@ -300,8 +300,10 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 			e.error_tooltip = tooltip({kind: 'error', target: e,
 				check: e.do_error_tooltip_check})
 		}
-		if (e.invalid)
-			e.error_tooltip.text = err
+		if (e.invalid) {
+			let errs = errors.filter(err => !err.passed).map(err => err.message)
+			e.error_tooltip.text = errs.length > 1 ? tag('ul', {style: 'text-align: start'}, ...errs.map(s => tag('li', 0, s))) : errs
+		}
 		e.error_tooltip.update()
 	}
 
@@ -690,6 +692,7 @@ component('x-editbox', function(e) {
 				icon: 'far fa-clipboard',
 				text: '',
 				bare: true,
+				focusable: false,
 				title: S('copy_to_clipboard', 'Copy to clipboard'),
 				action: copy_to_clipboard,
 			})
@@ -2303,7 +2306,7 @@ component('x-sql-editor', function(e) {
 		e.editor.getSession().setValue(v || '')
 	}
 
-	e.do_update_error = function(err, ev) {
+	e.do_update_errors = function(errors, ev) {
 		// TODO
 	}
 

@@ -840,7 +840,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	padding: 0 .5em;
 	border-left: 1px solid var(--x-smoke);
 	border-radius: 0;
-	color: var(--x-fg);
 }
 
 .x-editbox-copy-to-clipboard-button > .x-button-icon > img {

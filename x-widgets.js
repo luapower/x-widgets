@@ -46,7 +46,7 @@ of creating normal elements is because of connectedCallback and
 disconnectedCallback for which there are no events in built-in elements,
 and we use those events to solve the so-called "lapsed listener problem"
 (a proper iterable weak hash map would be a better way to solve this but
-alas, the web people could't get that one right either).
+alas, the web people couldn't get that one right either).
 --------------------------------------------------------------------------- */
 
 let resize_observer = new ResizeObserver(function(entries) {

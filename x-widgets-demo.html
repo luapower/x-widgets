@@ -166,7 +166,7 @@ main.add(checkbox({
 	val: 'wrong',
 	field: {
 		text: 'Wassup homie',
-		validate: function(v) {
+		validators: [{message: 'Value must be a boolean', function(v) {
 			return typeof(v) == 'boolean' || 'Value not a boolean'
 		},
 	},

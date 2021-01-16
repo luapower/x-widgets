@@ -20,7 +20,7 @@ implements:
 	nav widget protocol.
 calls:
 	e.do_update_cell_val(cell, row, field, input_val)
-	e.do_update_cell_error(cell, row, field, err)
+	e.do_update_cell_errors(cell, row, field, errors)
 --------------------------------------------------------------------------- */
 
 component('x-grid', function(e, is_val_widget) {
@@ -492,10 +492,10 @@ component('x-grid', function(e, is_val_widget) {
 		cell.class('empty', input_val == '')
 	}
 
-	e.do_update_cell_error = function(cell, row, field, err) {
-		let invalid = !!err
+	e.do_update_cell_errors = function(cell, row, field, errors) {
+		let invalid = errors && !errors.passed || false
 		cell.class('invalid', invalid)
-		cell.attr('title', err || null)
+		cell.attr('title', errors && errors.join('\n') || null)
 	}
 
 	function indent_offset(indent) {
@@ -544,7 +544,7 @@ component('x-grid', function(e, is_val_widget) {
 		}
 
 		e.do_update_cell_val(cell, row, field, e.cell_input_val(row, field))
-		e.do_update_cell_error(cell, row, field, e.cell_error(row, field))
+		e.do_update_cell_errors(cell, row, field, e.cell_errors(row, field))
 
 		row_focused = or(row_focused, e.focused_row == row)
 		let cell_focused = row_focused && (!e.can_focus_cells || field == e.focused_field)
@@ -762,7 +762,7 @@ component('x-grid', function(e, is_val_widget) {
 
 	// responding to rowset changes -------------------------------------------
 
-	let update_val = e.do_update
+	let inh_do_update = e.do_update
 	e.do_update = function(opt) {
 
 		if (opt.reload) {
@@ -790,7 +790,7 @@ component('x-grid', function(e, is_val_widget) {
 		if (opt_rows || opt.state)
 			update_quicksearch_cell()
 		if (opt.val)
-			update_val()
+			inh_do_update()
 		if (opt.enter_edit)
 			e.enter_edit(...opt.enter_edit)
 		if (opt.scroll_to_cell)
@@ -803,8 +803,8 @@ component('x-grid', function(e, is_val_widget) {
 			return
 		if (prop == 'input_val')
 			e.do_update_cell_val(cell, e.rows[ri], e.fields[fi], val)
-		else if (prop == 'error')
-			e.do_update_cell_error(cell, e.rows[ri], e.fields[fi], val)
+		else if (prop == 'errors')
+			e.do_update_cell_errors(cell, e.rows[ri], e.fields[fi], val)
 		else if (prop == 'modified')
 			cell.class('modified', val)
 	}
