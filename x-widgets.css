@@ -2744,6 +2744,41 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 
 }
 
+/* model editor ----------------------------------------------------------- */
+
+.model-editor-dot {
+	position: absolute;
+	pointer-events: none;
+	margin-left: -4px;
+	margin-top : -4px;
+	width : 8px;
+	height: 8px;
+	border: 1px solid black;
+}
+
+.model-editor-dot[snap=point] {
+	border-radius: 100%;
+	background-color: black;
+}
+
+.model-editor-dot[snap=line] {
+	background-color: #ff00ff;
+}
+
+.model-editor-dot[snap=line_middle] {
+	border-radius: 100%;
+	background-color: #ffff00;
+}
+
+.model-editor-dot[snap=face] {
+	transform: rotate(45deg);
+	background-color: #ff00ff;
+}
+
+.model-editor-dot[snap=line_plane_intersection] {
+	background-color: #00ffff;
+}
+
 /* ------------------------------------------------------------------------ */
 /* dark theme                                                               */
 /* ------------------------------------------------------------------------ */

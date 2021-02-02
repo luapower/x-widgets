@@ -1302,7 +1302,7 @@ component('x-tooltip', function(e) {
 
 	e.property('visible',
 		function()  { return !e.hasattr('hidden') },
-		function(v) { e.show(v) }
+		function(v) { e.show(!!v) }
 	)
 
 	// keyboard, mouse & focusing behavior ------------------------------------
