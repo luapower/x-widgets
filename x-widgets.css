@@ -2779,6 +2779,16 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	background-color: #00ffff;
 }
 
+.model-editor-dot[snap=ref_point] {
+	border-radius: 100%;
+	border-width: 1px;
+	margin-left: -3px;
+	margin-top : -3px;
+	width : 6px;
+	height: 6px;
+	background-color: white;
+}
+
 /* ------------------------------------------------------------------------ */
 /* dark theme                                                               */
 /* ------------------------------------------------------------------------ */

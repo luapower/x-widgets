@@ -21,11 +21,11 @@ let ground_color  = 0xe0dddd
 
 // precision settings --------------------------------------------------------
 
-let MIND   = 0.001         // min line distance
-let MAXD   = 1e4           // max model total distance
-let SNAPD  = 20            // max pixel distance for snapping
-let SELD   = 10            // max pixel distance for selecting
-let NEARD  = 0.00001       // max distance for intersections
+let MIND   = 0.001  // min line distance
+let MAXD   = 1e4    // max model total distance
+let SNAPD  = 20     // max pixel distance for snapping
+let SELD   = 10     // max pixel distance for selecting
+let NEARD  = 1e-5   // distance epsilon (tolerance)
 
 // primitive construction ----------------------------------------------------
 
@@ -457,10 +457,6 @@ function poly_mesh(e) {
 		} else if (dx <= max_d && dx <= d1 && dx <= d2 && dx <= dm && dx <= dp) {
 			update(p, axes_int_p) // comes with its own snap flags and indices.
 		}
-
-		// preserve relevant coincidences.
-		if (axes_int_p && axes_int_p.equals(p))
-			p.line_snap = axes_int_p.line_snap
 
 	}
 
@@ -932,8 +928,9 @@ component('x-modeleditor', function(e) {
 	// cursor tooltip ---------------------------------------------------------
 
 	{
-		let timer
+
 		let tooltip_text = ''
+
 		let tooltip = div({style: `
 			position: absolute;
 			white-space: nowrap;
@@ -951,22 +948,19 @@ component('x-modeleditor', function(e) {
 		tooltip.hide()
 		e.add(tooltip)
 
-		function show_tooltip() {
+		let show_tooltip_after = timer(function() {
 			tooltip.show()
-			timer = null
-		}
+		})
 
 		e.property('tooltip', () => tooltip_text, function(s) {
-			if (timer) {
-				clearInterval(timer)
-				timer = null
-			}
 			tooltip.hide()
 			if (s) {
 				tooltip.set(s)
 				tooltip.x = e.mouse.x
 				tooltip.y = e.mouse.y
-				timer = setTimeout(show_tooltip, 200)
+				show_tooltip_after(.2)
+			} else {
+				show_tooltip_after(false)
 			}
 		})
 	}
@@ -1120,7 +1114,9 @@ component('x-modeleditor', function(e) {
 		}
 
 		e.update_point = function(p) {
-			e.point.copy(p)
+			let snap = e.point.snap
+			update(e.point, p)
+			e.point.snap = snap
 			e.visible = true
 			e.update()
 		}
@@ -1149,7 +1145,7 @@ component('x-modeleditor', function(e) {
 
 	let helpers = {}
 
-	function v3d(id, vector, origin) {
+	e.v3d = function(id, vector, origin) {
 		let e = helpers[id]
 		if (!e) {
 			e = new THREE.Group()
@@ -1205,6 +1201,19 @@ component('x-modeleditor', function(e) {
 
 	// reference planes -------------------------------------------------------
 
+	// intersect infinite line (p1, p2) with its perpendicular from point p.
+	function point2_hit_line2(p, p1, p2, int_p) {
+		let dx = p2.x - p1.x
+		let dy = p2.y - p1.y
+		let k = dx ** 2 + dy ** 2
+		if (k == 0)
+			return false // line has no length
+		k = ((p.x - p1.x) * dy - (p.y - p1.y) * dx) / k
+		int_p.x = p.x - k * dy
+		int_p.y = p.y + k * dx
+		return true
+	}
+
 	function ref_plane(
 			name, normal, plane_hit_tooltip,
 			main_axis_snap, main_axis, main_axis_snap_tooltip
@@ -1215,8 +1224,7 @@ component('x-modeleditor', function(e) {
 		e.name = name
 
 		let hits = []
-
-		e.ray_hit_plane = function(plane_position) {
+		e.mouse_hit_plane = function(plane_position) {
 			e.position.copy(plane_position)
 			hits.length = 0
 			let h = pe.raycaster.intersectObject(e, false, hits)[0]
@@ -1232,25 +1240,58 @@ component('x-modeleditor', function(e) {
 			return p
 		}
 
-		e.ray_hit_main_axis = function(axis_position) {
-			e.position.copy(axis_position)
-			let h = pe.raycaster.intersectObject(e)[0]
-			if (!h)
-				return
-			let p1 = h.point.clone().sub(axis_position)
-			let p21 = main_axis.clone().setLength(p1.length())
-			let p22 = p21.clone().negate()
-			let ds1 = canvas_p2p_distance2(p1, p21)
-			let ds2 = canvas_p2p_distance2(p1, p22)
-			let p2 = ds1 < ds2 ? p21 : p22
-			let ds = min(ds1, ds2)
-			if (ds > e.snap_d ** 2)
-				return
-			let p = p2.add(axis_position)
-			p.ds = ds
-			p.line_snap = main_axis_snap
-			p.tooltip = main_axis_snap_tooltip
-			return p
+		{
+			let _p1 = v3()
+			let _p2 = v3()
+			let _line1 = line3(_p1, _p2)
+			let _p3 = v3()
+			let _p4 = v3()
+			let _line2 = line3(_p3, _p4)
+			let _line3 = line3()
+
+			e.mouse_hit_main_axis = function(axis_position, int_p) {
+
+				int_p.ds = 1/0
+				int_p.line_snap = null
+				int_p.tooltip = null
+
+				let p1 = axis_position.project_to_canvas(pe.camera, _p1)
+				let p2 = _p2.copy(axis_position).add(main_axis).project_to_canvas(pe.camera, _p2)
+				let hit = point2_hit_line2(pe.mouse, p1, p2, int_p)
+				if (!hit)
+					return
+				let ds = _p1.set(pe.mouse.x, pe.mouse.y, 0).distanceToSquared(int_p)
+				if (ds > pe.snap_d ** 2)
+					return
+
+				// get hit point in 3D space by raycasting to int_p.
+
+				update_raycaster(int_p)
+				_p1.copy(pe.raycaster.ray.origin)
+				_p2.copy(pe.raycaster.ray.origin).add(pe.raycaster.ray.direction)
+				update_raycaster(pe.mouse)
+
+				_p3.copy(axis_position)
+				_p4.copy(axis_position).add(main_axis)
+
+				let int_line = _line1.intersectLine(_line2, false, _line3)
+				if (!int_line)
+					return
+
+				int_p.copy(int_line.end)
+				int_p.ds = ds
+				int_p.line_snap = main_axis_snap
+				int_p.tooltip = main_axis_snap_tooltip
+
+			}
+		}
+
+		let _p = v3()
+		e.point_along_main_axis = function(p, axis_position) {
+			if (_p.copy(p).sub(axis_position).cross(main_axis).lengthSq() < NEARD ** 2) {
+				p.line_snap = main_axis_snap
+				return true
+			}
 		}
 
 		// intersect the plane's main axis from an origin with a line
@@ -1295,31 +1336,29 @@ component('x-modeleditor', function(e) {
 		return e
 	}
 
-	function ray_hit_ref_planes(plane_position) {
+	function mouse_hit_ref_planes(plane_position) {
 		// hit horizontal plane first.
-		let p = e.xzplane.ray_hit_plane(plane_position)
+		let p = e.xzplane.mouse_hit_plane(plane_position)
 		if (p)
 			return p
 		// hit vertical ref planes.
-		let p1 = e.xyplane.ray_hit_plane(plane_position)
-		let p2 = e.zyplane.ray_hit_plane(plane_position)
+		let p1 = e.xyplane.mouse_hit_plane(plane_position)
+		let p2 = e.zyplane.mouse_hit_plane(plane_position)
 		// pick whichever plane is facing the camera more straightly.
 		return (p1 ? p1.angle : 1/0) < (p2 ? p2.angle : 1/0) ? p1 : p2
 	}
 
 	{
-		let ps = []
+		let ps = [v3(), v3(), v3()]
 		let cmp_ps = function(p1, p2) {
-			let ds1 = p1 ? p1.ds : 1/0
-			let ds2 = p2 ? p2.ds : 1/0
-			return ds1 == ds2 ? 0 : (ds1 < ds2 ? -1 : 1)
+			return p1.ds == p2.ds ? 0 : (p1.ds < p2.ds ? -1 : 1)
 		}
-		function ray_hit_axes(axis_position) {
+		function mouse_hit_axes(axis_position) {
 			let i = 0
 			for (let plane of e.ref_planes)
-				ps[i++] = plane.ray_hit_main_axis(axis_position)
+				plane.mouse_hit_main_axis(axis_position, ps[i++])
 			ps.sort(cmp_ps)
-			return ps[0]
+			return ps[0].line_snap ? ps[0] : null
 		}
 
 	}
@@ -1328,7 +1367,7 @@ component('x-modeleditor', function(e) {
 	{
 		let int_p = v3()
 		let ret = v3()
-		function axes_hit_line(p, axes_origin, line) {
+		function axes_hit_line(axes_origin, p, line) {
 			let min_ds = 1/0
 			let min_int_p
 			for (let plane of e.ref_planes) {
@@ -1342,6 +1381,12 @@ component('x-modeleditor', function(e) {
 			}
 			return min_int_p
 		}
+	}
+
+	function check_point_on_axes(p, axes_origin) {
+		for (let plane of e.ref_planes)
+			if (plane.point_along_main_axis(p, axes_origin))
+				return true
 	}
 
 	// model ------------------------------------------------------------------
@@ -1382,7 +1427,7 @@ component('x-modeleditor', function(e) {
 		e.controls.enabled = on
 	}
 
-	tools.orbit.pointermove = function(e) {
+	tools.orbit.pointermove = function() {
 		e.controls.update()
 		e.camera.updateProjectionMatrix()
 		e.camera.getWorldDirection(e.dirlight.position)
@@ -1391,7 +1436,7 @@ component('x-modeleditor', function(e) {
 
 	// current point hit-testing and snapping ---------------------------------
 
-	function ray_hit_polys() {
+	function mouse_hit_polys() {
 		let hit = e.raycaster.intersectObject(e.model, true)[0]
 		if (!(hit && hit.object.type == 'Mesh'))
 			return
@@ -1400,11 +1445,12 @@ component('x-modeleditor', function(e) {
 		return hit.point
 	}
 
-	function ray_hit_model(axes_origin) {
+	function mouse_hit_model(axes_origin) {
 
-		let p = ray_hit_polys()
+		let p = mouse_hit_polys()
 
 		if (p) {
+
 			// we've hit a poly face, but we still have to hit any lines
 			// that lie in front of it, on it, or intersecting it.
 
@@ -1418,8 +1464,11 @@ component('x-modeleditor', function(e) {
 			function is_line_not_behind_poly_plane(line) {
 				let d1 = plane.distanceToPoint(line.start)
 				let d2 = plane.distanceToPoint(line.end)
-				line.intersects_poly_plane = (d1 > 0 && d2 < 0 && 1) || (d1 < 0 && d2 > 0 && 2) || 0
-				return d1 > 0 || d2 > 0 || (d1 == 0 && d2 == 0)
+				let intersects =
+				      (d2 < -NEARD && d1 > NEARD && 1)
+					|| (d1 < -NEARD && d2 > NEARD && 2)
+				line.intersects_poly_plane = intersects
+				return intersects || (d1 >= -NEARD && d2 >= -NEARD)
 			}
 
 			// complete (but more expensive) line filter applied after hit-testing.
@@ -1438,21 +1487,22 @@ component('x-modeleditor', function(e) {
 			if (p1) {
 
 				// we've hit a line. snap to it.
-				update(p, p1) // copy snap data too.
-				let line = e.instance.get_line(p.line_i)
+				let line = e.instance.get_line(p1.line_i)
 
 				// check if the hit line intersects the hit plane: that's a snap point.
 				let plane_int_p = e.instance.line_intersect_poly_plane(line, p.poly_i)
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
-				let axes_int_p = axes_origin && axes_hit_line(p, axes_origin, line)
+				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p1, line)
 
 				// snap the hit point along the hit line along with any additional snap points.
-				e.instance.snap_point_on_line(p, line, e.snap_d, canvas_p2p_distance2, plane_int_p, axes_int_p)
+				e.instance.snap_point_on_line(p1, line, e.snap_d, canvas_p2p_distance2, plane_int_p, axes_int_p)
+				if (axes_origin)
+					check_point_on_axes(p1, axes_origin)
 
-				// if the snapped point ended up behind the plane, move it to on-plane.
-				if (plane.distanceToPoint(p) < 0)
-					update(p, plane_int_p)
+				// if the snapped point is not behind the plane, use it, otherwise forget that we even hit the line.
+				if (plane.distanceToPoint(p1) >= -NEARD)
+					update(p, p1) // merge snap data.
 
 			} else {
 
@@ -1475,10 +1525,18 @@ component('x-modeleditor', function(e) {
 				let line = e.instance.get_line(p.line_i)
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
-				let axes_int_p = axes_origin && axes_hit_line(p, axes_origin, line)
+				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p, line)
 
 				// snap the hit point along the hit line along with any additional snap points.
 				e.instance.snap_point_on_line(p, line, e.snap_d, canvas_p2p_distance2, null, axes_int_p)
+				if (axes_origin)
+					check_point_on_axes(p, axes_origin)
+
+			} else {
+
+				// we've hit squat: hit the axes and the ref planes.
+				p = axes_origin && mouse_hit_axes(axes_origin)
+					|| mouse_hit_ref_planes(axes_origin || v3())
 
 			}
 
@@ -1500,6 +1558,7 @@ component('x-modeleditor', function(e) {
 			e.cur_point.visible = false
 			e.cur_line.visible = false
 			e.ref_point = e.dot()
+			e.ref_point.point.snap = 'ref_point'
 			e.ref_point.visible = false
 			e.ref_line = e.line('ref_line', line3(), true)
 			e.ref_line.visible = false
@@ -1536,7 +1595,12 @@ component('x-modeleditor', function(e) {
 		line_point_intersection: 0xff00ff,
 	}
 
-	tools.line.pointermove = function(e) {
+	let future_ref_point = v3()
+	let ref_point_update_after = timer(function() {
+		e.ref_point.update_point(future_ref_point)
+	})
+
+	tools.line.pointermove = function() {
 
 		let cline = e.cur_line.line
 		let p1 = cline.start
@@ -1551,53 +1615,67 @@ component('x-modeleditor', function(e) {
 		e.ref_line.snap = null
 		e.ref_line.visible = false
 
-		let p
+		ref_point_update_after(false)
 
-		if (!e.cur_line.visible) { // moving the start point
+		let p = mouse_hit_model(e.cur_line.visible ? p1 : null)
 
-			p = ray_hit_model() || ray_hit_ref_planes(v3())
+		if (p) {
 
-			if (p) {
-				update(p1, p)
-				update(p2, p)
+			// change the ref point.
+			if ((p.snap == 'point' || p.snap == 'line_middle')
+				&& (p.i == null || !e.cur_line.visible || p.i != cline.start.i)
+			) {
+				update(future_ref_point, p)
+				ref_point_update_after(.5)
 			}
 
-		} else { // moving the line end-point
+			if (!e.cur_line.visible) { // moving the start point
 
-			p = ray_hit_model(p1) || ray_hit_axes(p1) || ray_hit_ref_planes(p1)
+				if (!p.snap) { // free-moving point.
 
-			// changing the ref point.
-			if (p && p.i != null && p.i != cline.start.i)
-				e.ref_point.update_point(p)
-
-			if (p && !p.snap) { // free-moving point.
-
-				// snap point to axes originating at the ref point.
-				if (e.ref_point.visible) {
-					update(cline.end, p)
-					let p_line_snap = p.line_snap
-					let axes_int_p = axes_hit_line(p, e.ref_point.point, cline)
-					if (axes_int_p) {
-						update(p, axes_int_p)
-						e.ref_line.snap = axes_int_p.line_snap
-						p.line_snap = p_line_snap
-						e.ref_line.update_endpoints(e.ref_point.point, p)
+					// snap point to axes originating at the ref point.
+					if (e.ref_point.visible) {
+						let axes_int_p = mouse_hit_axes(e.ref_point.point)
+						if (axes_int_p) {
+							p = axes_int_p
+							e.ref_line.snap = p.line_snap
+							e.ref_line.update_endpoints(e.ref_point.point, p)
+						}
 					}
+
 				}
 
-				// check again if the snapped point hits the model.
-				//p = ray_hit_model()
-				//
-				//let p1 = e.instance.point_hit_lines(p, e.snap_d, canvas_p2p_distance2)
-				//if (p1) {
-				//	p = p1
-				//	e.instance.snap_point_on_line(int_p, line, max_d, p2p_distance2)
-				//}
+				update(p1, p)
+				update(p2, p)
+
+			} else { // moving the line end-point.
+
+				if (!p.snap) { // (semi-)free-moving point.
+
+					// NOTE: p.line_snap makes the hit point lose one degree of freedom,
+					// so there's still one degree of freedom to lose to point-snapping.
+
+					// snap point to axes originating at the ref point.
+					if (e.ref_point.visible) {
+						update(p2, p)
+						let p_line_snap = p.line_snap
+						let axes_int_p = axes_hit_line(e.ref_point.point, p, cline)
+						if (axes_int_p && canvas_p2p_distance2(axes_int_p, p) <= e.snap_d ** 2) {
+							update(p, axes_int_p)
+							e.ref_line.snap = axes_int_p.line_snap
+							p.line_snap = p_line_snap
+							e.ref_line.update_endpoints(e.ref_point.point, p)
+						}
+
+					}
+
+					// TODO: check again if the snapped point hits the model.
+
+				}
+
+				update(p2, p)
 
 			}
-
-			if (p)
-				update(p2, p)
 
 		}
 
@@ -1617,10 +1695,11 @@ component('x-modeleditor', function(e) {
 
 	tools.line.pointerdown = function(e) {
 		e.tooltip = ''
+		let cline = e.cur_line.line
 		if (e.cur_line.visible) {
-			let cline = e.cur_line.line
 			let closing = cline.end.i != null || cline.end.line_i != null
 			e.instance.add_line(cline)
+			e.ref_point.visible = false
 			if (closing) {
 				tools.line.cancel()
 			} else {
@@ -1628,8 +1707,9 @@ component('x-modeleditor', function(e) {
 				cline.start.i = cline.end.i
 			}
 		} else {
+			if (cline.start.i != null && e.ref_point.point.i == cline.start.i)
+				e.ref_point.visible = false
 			e.cur_line.visible = true
-			e.ref_point.update_point(e.cur_line.line.start)
 		}
 	}
 
@@ -1673,8 +1753,7 @@ component('x-modeleditor', function(e) {
 			toolname = name
 			if (tool.bind)
 				tool.bind(e, true)
-			if (tool.pointermove)
-				tool.pointermove(e, ev)
+			fire_pointermove()
 			e.cursor = tool.cursor || name
 		})
 	}
@@ -1683,25 +1762,30 @@ component('x-modeleditor', function(e) {
 
 	e.mouse = v2()
 	e.raycaster = new THREE.Raycaster()
-	// TODO: remove
-	e.raycaster.params.Line.threshold = SELD
 
 	{
-		let pm = v2()
+		let _p = v2()
+		function update_raycaster(p) {
+			_p.x =  (p.x / e.canvas.width ) * 2 - 1
+			_p.y = -(p.y / e.canvas.height) * 2 + 1
+			e.raycaster.setFromCamera(_p, e.camera)
+		}
+
 		function update_mouse(mx, my) {
 			e.mouse.x = mx
 			e.mouse.y = my
-			// calculate mouse position in normalized device coordinates.
-			pm.x =  (mx / e.canvas.width ) * 2 - 1
-			pm.y = -(my / e.canvas.height) * 2 + 1
-			e.raycaster.setFromCamera(pm, e.camera)
+			update_raycaster(e.mouse)
 		}
+	}
+
+	function fire_pointermove() {
+		if (tool.pointermove)
+			tool.pointermove()
 	}
 
 	e.on('pointermove', function(ev, mx, my) {
 		update_mouse(mx, my)
-		if (tool.pointermove)
-			tool.pointermove(e)
+		fire_pointermove()
 	})
 
 	e.on('pointerdown', function(ev, mx, my) {
@@ -1719,8 +1803,7 @@ component('x-modeleditor', function(e) {
 				return e.capture_pointer(ev, movewrap, upwrap)
 			}
 			tool.pointerdown(e, capture)
-			if (tool.pointermove)
-				tool.pointermove(e)
+			fire_pointermove()
 		}
 	})
 
