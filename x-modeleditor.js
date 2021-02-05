@@ -319,6 +319,15 @@ function poly_mesh(e) {
 		}
 	}
 
+	e.selected_lines = [] // [line1i, ...]
+
+	e.each_selected_line = function(f) {
+		for (let i of e.selected_lines) {
+			e.get_line(i, _line)
+			f(_line)
+		}
+	}
+
 	{
 		let xy_normal = v3(0, 0, 1)
 		let p1 = v3()
@@ -647,6 +656,14 @@ function poly_mesh(e) {
 
 	let dispose = []
 
+	let canvas_w = 0
+	let canvas_h = 0
+	e.set_size = function(w1, h1) {
+		canvas_w = w1
+		canvas_h = h1
+		e.invalidate()
+	}
+
 	e.invalidate = function() {
 
 		e.group.clear()
@@ -670,7 +687,7 @@ function poly_mesh(e) {
 			let mat = new THREE.MeshPhongMaterial({
 				color: white,
 				polygonOffset: true,
-				polygonOffsetFactor: 1,
+				polygonOffsetFactor: 1, // 1 pixel behind lines.
 			})
 
 			let mesh = new THREE.Mesh(geo, mat)
@@ -717,6 +734,102 @@ function poly_mesh(e) {
 			})
 
 			let lines = new THREE.LineSegments(geo, mat)
+			lines.poly_mesh = e
+			lines.layers.set(1) // make it non-hit-testable.
+
+			e.group.add(lines)
+			dispose.push(geo, mat)
+		}
+
+		{
+			let ps = []
+			let qs = []
+			let dirs = []
+			let pis = []
+			let i = 0
+			e.each_selected_line(function(line) {
+				let p1 = line.start
+				let p2 = line.end
+
+				// each line has 4 points.
+				ps.push(p1.x, p1.y, p1.z)
+				ps.push(p1.x, p1.y, p1.z)
+				ps.push(p2.x, p2.y, p2.z)
+				ps.push(p2.x, p2.y, p2.z)
+
+				// each point has access to its opposite point.
+				qs.push(p2.x, p2.y, p2.z)
+				qs.push(p2.x, p2.y, p2.z)
+				qs.push(p1.x, p1.y, p1.z)
+				qs.push(p1.x, p1.y, p1.z)
+
+				// each point has an alternating normal direction.
+				dirs.push(1, -1, -1, 1)
+
+				// each line is made of 2 triangles (0, 1, 2) and (1, 3, 2).
+				pis.push(
+					i+0, i+1, i+2,  // triangle 1
+					i+1, i+3, i+2   // triangle 2
+				)
+
+				i += 4
+			})
+
+			let pbuf   = new THREE.BufferAttribute(new Float32Array(ps  ), 3)
+			let qbuf   = new THREE.BufferAttribute(new Float32Array(qs  ), 3)
+			let dirbuf = new THREE.BufferAttribute(new Float32Array(dirs), 1)
+
+			let geo = new THREE.BufferGeometry()
+			geo.setAttribute('position', pbuf)
+			geo.setAttribute('q', qbuf)
+			geo.setAttribute('dir', dirbuf)
+
+			geo.setIndex(pis)
+
+			let vshader = `
+				uniform vec2 canvas;
+				attribute vec3 q;
+				attribute float dir;
+				void main() {
+					mat4 pvm = projectionMatrix * modelViewMatrix;
+
+					// line points in NDC.
+					vec4 dp = pvm * vec4(position, 1.0);
+					vec4 dq = pvm * vec4(q, 1.0);
+					dp /= dp.w;
+					dq /= dq.w;
+
+					// line normal in screen space.
+					float dx = dq.x - dp.x;
+					float dy = dq.y - dp.y;
+					vec2 n = normalize(vec2(-dy, dx) * dir) / canvas * dp.w * 2.0;
+
+					gl_Position = dp + vec4(n, 0.0, 0.0);
+				}
+			`
+
+			let fshader = `
+				uniform vec3 color;
+				void main() {
+					gl_FragColor = vec4(color, 1.0);
+				}
+			`
+
+			let uniforms = {
+				canvas : {type: 'v3', value: {x: canvas_w, y: canvas_h}},
+				color  : {value: color3(0x0000ff)},
+			}
+
+			let mat = new THREE.ShaderMaterial({
+				uniforms       : uniforms,
+				vertexShader   : vshader,
+				fragmentShader : fshader,
+				polygonOffset: true,
+				polygonOffsetFactor: -1, // 1 pixel in front of lines.
+				side: THREE.DoubleSide,
+			})
+
+			let lines = new THREE.Mesh(geo, mat)
 			lines.poly_mesh = e
 			lines.layers.set(1) // make it non-hit-testable.
 
@@ -796,6 +909,7 @@ component('x-modeleditor', function(e) {
 			e.camera.aspect = r.w / r.h
 			e.camera.updateProjectionMatrix()
 			e.renderer.setSize(r.w, r.h)
+			e.instance.set_size(r.w, r.h)
 		}
 		e.on('resize', resized)
 
@@ -809,9 +923,9 @@ component('x-modeleditor', function(e) {
 	e.camera = new THREE.PerspectiveCamera(60, 1, MIND * 100, MAXD * 100)
 	e.camera.canvas = e.canvas // for v3.project_to_canvas()
 	e.camera.layers.enable(1) // render objects that we don't hit test.
-	e.camera.position.x = 2
-	e.camera.position.y = 4
-	e.camera.position.z = 4
+	e.camera.position.x = -0.3
+	e.camera.position.y = 1.8
+	e.camera.position.z = 2.7
 	e.scene.add(e.camera)
 
 	// screen-projected distances for hit testing -----------------------------
@@ -981,27 +1095,25 @@ component('x-modeleditor', function(e) {
 				if (!dotted_mat) {
 
 					let vshader = `
-						flat out vec4 p0;
+						flat out vec4 p2; // because GL_LAST_VERTEX_CONVENTION
 						out vec4 p;
 						void main() {
-							vec4 p1 = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-							gl_Position = p1;
-							p  = p1;
-							p0 = p1;
+							p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+							gl_Position = p;
+							p2 = p;
 						}
 					`
 
 					let fshader = `
 						precision highp float;
-						flat in vec4 p0;
+						flat in vec4 p2;
 						in vec4 p;
-						uniform vec3  color;
-						uniform vec2  canvas;
+						uniform vec3 color;
+						uniform vec2 canvas;
 						uniform float dash;
 						uniform float gap;
 						void main(){
-							vec2 dir = ((p.xyz / p.w).xy - (p0.xyz / p0.w).xy) * canvas.xy / 2.0;
-							float dist = length(dir);
+							float dist = length(((p.xyz / p.w).xy - (p2.xyz / p2.w).xy) * canvas.xy / 2.0);
 							if (fract(dist / (dash + gap)) > dash / (dash + gap))
 								discard;
 							gl_FragColor = vec4(color.rgb, 1.0);
@@ -1406,11 +1518,14 @@ component('x-modeleditor', function(e) {
 
 	tools.select = {}
 
+
+	e.selected_lines = [] // [line1i, ...]
+
 	tools.select.pointerdown = function(e) {
 
-		let h = e.raycaster.intersectObject(e.model, true)[0]
-		if (!h)
-			return
+		let p = mouse_hit_model()
+
+		//if (p.
 
 	}
 
@@ -1553,13 +1668,16 @@ component('x-modeleditor', function(e) {
 		if (on) {
 			let endp = v3()
 			e.cur_point = e.dot(endp)
+			e.cur_point.visible = false
+
 			e.cur_line = e.line('cur_line', line3(v3(), endp))
 			e.cur_line.color = black
-			e.cur_point.visible = false
 			e.cur_line.visible = false
+
 			e.ref_point = e.dot()
 			e.ref_point.point.snap = 'ref_point'
 			e.ref_point.visible = false
+
 			e.ref_line = e.line('ref_line', line3(), true)
 			e.ref_line.visible = false
 		} else {
@@ -1567,6 +1685,7 @@ component('x-modeleditor', function(e) {
 			e.cur_point = e.cur_point.free()
 			e.cur_line  = e.cur_line.free()
 			e.ref_point = e.ref_point.free()
+			e.ref_line  = e.ref_line.free()
 		}
 	}
 
@@ -1893,6 +2012,8 @@ component('x-modeleditor', function(e) {
 		]
 
 		e.instance.invalidate()
+
+		e.instance.selected_lines.push(0, 1, 2)
 
 		//e.instance.group.position.y = 1
 
