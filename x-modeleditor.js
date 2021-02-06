@@ -7,6 +7,8 @@
 
 (function() {
 
+let NEARD = 1e-5   // distance epsilon (tolerance)
+
 // colors --------------------------------------------------------------------
 
 let white = 0xffffff
@@ -19,13 +21,6 @@ let sky_color     = 0xccddff
 let horizon_color = 0xffffff
 let ground_color  = 0xe0dddd
 
-// precision settings --------------------------------------------------------
-
-let MIND   = 0.001  // min line distance
-let MAXD   = 1e4    // max model total distance
-let SNAPD  = 20     // max pixel distance for snapping
-let SELD   = 10     // max pixel distance for selecting
-let NEARD  = 1e-5   // distance epsilon (tolerance)
 
 // primitive construction ----------------------------------------------------
 
@@ -272,6 +267,8 @@ function poly_mesh(e) {
 
 	e = e || {}
 
+	// model ------------------------------------------------------------------
+
 	e.point_coords = [] // [p1x, p1y, p1z, p2x, ...]
 	e.line_pis = [] // [l1p1i, l1p2i, l2p1i, l2p2i, ...]
 	e.polys = [] // [[material_id: mi, plane_normal: p, triangle_pis: [t1p1i, ...], p1i, p2i, ...], ...]
@@ -319,14 +316,7 @@ function poly_mesh(e) {
 		}
 	}
 
-	e.selected_lines = [] // [line1i, ...]
-
-	e.each_selected_line = function(f) {
-		for (let i of e.selected_lines) {
-			e.get_line(i, _line)
-			f(_line)
-		}
-	}
+	// poly plane -------------------------------------------------------------
 
 	{
 		let xy_normal = v3(0, 0, 1)
@@ -370,6 +360,8 @@ function poly_mesh(e) {
 		return poly.plane
 	}
 
+	// poly triangulation -----------------------------------------------------
+
 	function poly_get_point_on_xy_plane(poly, i, p) {
 		e.get_point(poly[i], p).applyQuaternion(poly.xy_quaternion)
 	}
@@ -392,6 +384,7 @@ function poly_mesh(e) {
 		}
 	}
 
+	// hit testing & snapping -------------------------------------------------
 
 	e.line_intersect_poly_plane = function(line, poly_i) {
 		let plane = e.poly_plane(poly_i)
@@ -536,6 +529,62 @@ function poly_mesh(e) {
 		return min_int_p
 	}
 
+	// selection --------------------------------------------------------------
+
+	e.selected_lines = {} // {line1i = true, ...}
+
+	e.each_selected_line = function(f) {
+		for (let line_i in e.selected_lines) {
+			e.get_line(line_i, _line)
+			f(_line)
+		}
+	}
+
+	function unselect_all_polys() {
+		for (let poly of e.polys)
+			poly.uniforms.selected.value = false
+	}
+
+	function unselect_all_lines() {
+		e.selected_lines = {}
+	}
+
+	e.select_poly = function(poly_i, mode) {
+		let poly = e.polys[poly_i]
+		if (mode == 'replace') {
+			unselect_all_lines()
+			unselect_all_polys()
+			poly.uniforms.selected.value = true
+			e.update_selections()
+		} else if (mode == 'add' || mode == 'remove') {
+			poly.uniforms.selected.value = mode == 'add'
+		} else if (mode == 'toggle') {
+			e.select_poly(poly_i, poly.uniforms.selected.value ? 'remove' : 'add')
+		}
+	}
+
+	e.select_line = function(line_i, mode) {
+		if (mode == 'replace') {
+			unselect_all_polys()
+			e.selected_lines = {[line_i]: true}
+		} else if (mode == 'add') {
+			e.selected_lines[line_i] = true
+		} else if (mode == 'remove') {
+			delete e.selected_lines[line_i]
+		} else if (mode == 'toggle') {
+			e.select_line(line_i, e.selected_lines[line_i] ? 'remove' : 'add')
+		}
+		e.update_selections()
+	}
+
+	e.unselect_all = function() {
+		unselect_all_polys()
+		unselect_all_lines()
+		e.update_selections()
+	}
+
+	// model editing ----------------------------------------------------------
+
 	e.add_line = function(line) {
 
 		let p1 = line.start
@@ -625,46 +674,46 @@ function poly_mesh(e) {
 			}
 		}
 
-		e.invalidate()
+		e.update()
 	}
 
 	e.remove_line = function(line_i) {
 		//
-		e.invalidate()
+		e.update()
 	}
 
 	e.move_line = function(line_i, rel_p) {
 		//
-		e.invalidate()
+		e.update()
 	}
 
 	e.move_point = function(p_i, rel_p) {
 		//
-		e.invalidate()
+		e.update()
 	}
 
 	e.remove_poly = function(poly) {
 		if (e.polys.remove_value(poly))
-			e.invalidate()
+			e.update()
 	}
 
-	// rendering
+	// rendering --------------------------------------------------------------
 
 	e.group = new THREE.Group()
-	e.group.poly_mesh = e
+	e.group.poly = e
 	e.group.name = e.name
-
-	let dispose = []
 
 	let canvas_w = 0
 	let canvas_h = 0
 	e.set_size = function(w1, h1) {
 		canvas_w = w1
 		canvas_h = h1
-		e.invalidate()
+		e.update()
 	}
 
-	e.invalidate = function() {
+	let dispose = []
+
+	e.update = function() {
 
 		e.group.clear()
 
@@ -708,11 +757,7 @@ function poly_mesh(e) {
 				`
 			)
 
-			// print(vshader)
-			// print('-----------------')
-			// print(fshader)
-
-			var mat = new THREE.ShaderMaterial({
+			let mat = new THREE.ShaderMaterial({
 				uniforms       : uniforms,
 				vertexShader   : vshader,
 				fragmentShader : fshader,
@@ -730,12 +775,14 @@ function poly_mesh(e) {
 
 			let mesh = new THREE.Mesh(geo, mat)
 			mesh.i = i++
-			mesh.poly_mesh = e
+			mesh.poly = e
 			mesh.castShadow = true
 
 			e.group.add(mesh)
 			dispose.push(geo, mat)
 			poly.mesh = mesh
+			poly.uniforms = uniforms
+
 		}
 
 		{
@@ -772,19 +819,32 @@ function poly_mesh(e) {
 			})
 
 			let lines = new THREE.LineSegments(geo, mat)
-			lines.poly_mesh = e
+			lines.poly = e
 			lines.layers.set(1) // make it non-hit-testable.
 
 			e.group.add(lines)
 			dispose.push(geo, mat)
 		}
 
-		{
+		e.update_selections()
+
+	}
+
+	{
+		let geo, mat, lines
+
+		e.update_selections = function() {
+
+			if (geo) geo.dispose()
+			if (mat) mat.dispose()
+			if (lines) e.group.remove(lines)
+
 			let ps = []
 			let qs = []
 			let dirs = []
 			let pis = []
 			let i = 0
+
 			e.each_selected_line(function(line) {
 				let p1 = line.start
 				let p2 = line.end
@@ -817,7 +877,7 @@ function poly_mesh(e) {
 			let qbuf   = new THREE.BufferAttribute(new Float32Array(qs  ), 3)
 			let dirbuf = new THREE.BufferAttribute(new Float32Array(dirs), 1)
 
-			let geo = new THREE.BufferGeometry()
+			geo = new THREE.BufferGeometry()
 			geo.setAttribute('position', pbuf)
 			geo.setAttribute('q', qbuf)
 			geo.setAttribute('dir', dirbuf)
@@ -858,7 +918,7 @@ function poly_mesh(e) {
 				color  : {value: color3(0x0000ff)},
 			}
 
-			let mat = new THREE.ShaderMaterial({
+			mat = new THREE.ShaderMaterial({
 				uniforms       : uniforms,
 				vertexShader   : vshader,
 				fragmentShader : fshader,
@@ -867,15 +927,15 @@ function poly_mesh(e) {
 				side: THREE.DoubleSide,
 			})
 
-			let lines = new THREE.Mesh(geo, mat)
-			lines.poly_mesh = e
+			lines = new THREE.Mesh(geo, mat)
+			lines.poly = e
 			lines.layers.set(1) // make it non-hit-testable.
 
 			e.group.add(lines)
-			dispose.push(geo, mat)
 		}
 
 	}
+
 
 	{
 		let _raycaster = new THREE.Raycaster()
@@ -958,7 +1018,10 @@ component('x-modeleditor', function(e) {
 
 	// camera -----------------------------------------------------------------
 
-	e.camera = new THREE.PerspectiveCamera(60, 1, MIND * 100, MAXD * 100)
+	e.min_distance = 0.001  // min line distance
+	e.max_distance = 1e4    // max model total distance
+
+	e.camera = new THREE.PerspectiveCamera(60, 1, e.min_distance * 100, e.max_distance * 100)
 	e.camera.canvas = e.canvas // for v3.project_to_canvas()
 	e.camera.layers.enable(1) // render objects that we don't hit test.
 	e.camera.position.x = 2.3
@@ -968,8 +1031,10 @@ component('x-modeleditor', function(e) {
 
 	// screen-projected distances for hit testing -----------------------------
 
-	e.snap_d = SNAPD
-	e.sel_d  = SELD
+	e.snap_distance   = 20  // max pixel distance for snapping
+	e.select_distance =  6  // max pixel distance for selecting
+
+	e.hit_d = null // current hit distance, one of the above depending on tool.
 
 	{
 		let p = v3()
@@ -1049,7 +1114,8 @@ component('x-modeleditor', function(e) {
 			exponent      : {value: .5},
 		}
 
-		let geo = new THREE.BoxBufferGeometry(2*MAXD, 2*MAXD, 2*MAXD)
+		let d = 2 * pe.max_distance
+		let geo = new THREE.BoxBufferGeometry(d, d, d)
 		let mat = new THREE.ShaderMaterial({
 			uniforms       : uniforms,
 			vertexShader   : vshader,
@@ -1332,7 +1398,7 @@ component('x-modeleditor', function(e) {
 	// axes -------------------------------------------------------------------
 
 	function axis(name, p, color, dotted) {
-		return e.line(name, line3(v3(), p.setLength(MAXD)), dotted, color)
+		return e.line(name, line3(v3(), p.setLength(e.max_distance)), dotted, color)
 	}
 
 	function axes() {
@@ -1368,7 +1434,8 @@ component('x-modeleditor', function(e) {
 			name, normal, plane_hit_tooltip,
 			main_axis_snap, main_axis, main_axis_snap_tooltip
 	) {
-		let geo = new THREE.PlaneBufferGeometry(2*MAXD, 2*MAXD)
+		let d = 2 * pe.max_distance
+		let geo = new THREE.PlaneBufferGeometry(d)
 		let mat = new THREE.MeshLambertMaterial({depthTest: false, visible: false, side: THREE.DoubleSide})
 		let e = new THREE.Mesh(geo, mat)
 		e.name = name
@@ -1411,7 +1478,7 @@ component('x-modeleditor', function(e) {
 				if (!hit)
 					return
 				let ds = _p1.set(pe.mouse.x, pe.mouse.y, 0).distanceToSquared(int_p)
-				if (ds > pe.snap_d ** 2)
+				if (ds > pe.hit_d ** 2)
 					return
 
 				// get hit point in 3D space by raycasting to int_p.
@@ -1523,7 +1590,7 @@ component('x-modeleditor', function(e) {
 			for (let plane of e.ref_planes) {
 				if (plane.main_axis_hit_line(axes_origin, line, int_p)) {
 					let ds = sqrt(canvas_p2p_distance2(p, int_p))
-					if (ds <= e.snap_d ** 2 && ds <= min_ds) {
+					if (ds <= e.hit_d ** 2 && ds <= min_ds) {
 						min_ds = ds
 						min_int_p = update(min_int_p || v3(), int_p)
 					}
@@ -1552,30 +1619,15 @@ component('x-modeleditor', function(e) {
 
 	let tools = {}
 
-	// select tool ------------------------------------------------------------
-
-	tools.select = {}
-
-
-	e.selected_lines = [] // [line1i, ...]
-
-	tools.select.pointerdown = function(e) {
-
-		let p = mouse_hit_model()
-
-		//if (p.
-
-	}
-
 	// orbit tool -------------------------------------------------------------
 
 	tools.orbit = {}
 
-	tools.orbit.bind = function(e, on) {
+	tools.orbit.bind = function(on) {
 		if (on && !e.controls) {
 			e.controls = new THREE.OrbitControls(e.camera, e.canvas)
-			e.controls.minDistance = MIND * 10
-			e.controls.maxDistance = MAXD / 100
+			e.controls.minDistance = e.min_distance * 10
+			e.controls.maxDistance = e.max_distance / 100
 		}
 		e.controls.enabled = on
 	}
@@ -1598,7 +1650,7 @@ component('x-modeleditor', function(e) {
 		return hit.point
 	}
 
-	function mouse_hit_model(axes_origin) {
+	function mouse_hit_model(axes_origin, hit_void) {
 
 		let p = mouse_hit_polys()
 
@@ -1608,7 +1660,7 @@ component('x-modeleditor', function(e) {
 			// that lie in front of it, on it, or intersecting it.
 
 			let p0 = e.raycaster.ray.origin
-			let ray = line3(p0, e.raycaster.ray.direction.clone().setLength(2*MAXD).add(p0))
+			let ray = line3(p0, e.raycaster.ray.direction.clone().setLength(2 * e.max_distance).add(p0))
 			let plane = e.instance.poly_plane(p.poly_i)
 
 			// preliminary line filter before hit-testing.
@@ -1634,7 +1686,7 @@ component('x-modeleditor', function(e) {
 					}
 			}
 
-			let p1 = e.instance.line_hit_lines(ray, e.snap_d, canvas_p2p_distance2, true,
+			let p1 = e.instance.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true,
 				is_intersecting_line_valid, null, is_line_not_behind_poly_plane)
 
 			if (p1) {
@@ -1649,7 +1701,7 @@ component('x-modeleditor', function(e) {
 				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p1, line)
 
 				// snap the hit point along the hit line along with any additional snap points.
-				e.instance.snap_point_on_line(p1, line, e.snap_d, canvas_p2p_distance2, plane_int_p, axes_int_p)
+				e.instance.snap_point_on_line(p1, line, e.hit_d, canvas_p2p_distance2, plane_int_p, axes_int_p)
 				if (axes_origin)
 					check_point_on_axes(p1, axes_origin)
 
@@ -1669,8 +1721,8 @@ component('x-modeleditor', function(e) {
 			// we haven't hit a face: hit the line closest to the ray regardless of depth.
 			let p0 = e.raycaster.ray.origin
 			let p1 = e.raycaster.ray.direction
-			let ray = line3(p0, p1.clone().setLength(2 * MAXD).add(p0))
-			p = e.instance.line_hit_lines(ray, e.snap_d, canvas_p2p_distance2, true)
+			let ray = line3(p0, p1.clone().setLength(2 * e.max_distance).add(p0))
+			p = e.instance.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true)
 
 			if (p) {
 
@@ -1681,11 +1733,11 @@ component('x-modeleditor', function(e) {
 				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p, line)
 
 				// snap the hit point along the hit line along with any additional snap points.
-				e.instance.snap_point_on_line(p, line, e.snap_d, canvas_p2p_distance2, null, axes_int_p)
+				e.instance.snap_point_on_line(p, line, e.hit_d, canvas_p2p_distance2, null, axes_int_p)
 				if (axes_origin)
 					check_point_on_axes(p, axes_origin)
 
-			} else {
+			} else if (hit_void) {
 
 				// we've hit squat: hit the axes and the ref planes.
 				p = axes_origin && mouse_hit_axes(axes_origin)
@@ -1702,7 +1754,7 @@ component('x-modeleditor', function(e) {
 
 	tools.line = {}
 
-	tools.line.bind = function(e, on) {
+	tools.line.bind = function(on) {
 		if (on) {
 			let endp = v3()
 			e.cur_point = e.dot(endp)
@@ -1774,7 +1826,8 @@ component('x-modeleditor', function(e) {
 
 		ref_point_update_after(false)
 
-		let p = mouse_hit_model(e.cur_line.visible ? p1 : null)
+		e.hit_d = e.snap_distance
+		let p = mouse_hit_model(e.cur_line.visible ? p1 : null, true)
 
 		if (p) {
 
@@ -1817,7 +1870,7 @@ component('x-modeleditor', function(e) {
 						update(p2, p)
 						let p_line_snap = p.line_snap
 						let axes_int_p = axes_hit_line(e.ref_point.point, p, cline)
-						if (axes_int_p && canvas_p2p_distance2(axes_int_p, p) <= e.snap_d ** 2) {
+						if (axes_int_p && canvas_p2p_distance2(axes_int_p, p) <= e.hit_d ** 2) {
 							update(p, axes_int_p)
 							e.ref_line.snap = axes_int_p.line_snap
 							p.line_snap = p_line_snap
@@ -1850,7 +1903,7 @@ component('x-modeleditor', function(e) {
 
 	}
 
-	tools.line.pointerdown = function(e) {
+	tools.line.pointerdown = function() {
 		e.tooltip = ''
 		let cline = e.cur_line.line
 		if (e.cur_line.visible) {
@@ -1870,7 +1923,7 @@ component('x-modeleditor', function(e) {
 		}
 	}
 
-	tools.line.keydown = function(e, key) {
+	tools.line.keydown = function(key) {
 		if (key == 'Escape') {
 			tools.line.cancel()
 			return false
@@ -1881,7 +1934,7 @@ component('x-modeleditor', function(e) {
 
 	tools.rect = {}
 
-	tools.rect.pointerdown = function(e) {
+	tools.rect.pointerdown = function() {
 
 	}
 
@@ -1889,8 +1942,45 @@ component('x-modeleditor', function(e) {
 
 	tools.pull = {}
 
-	tools.pull.pointerdown = function(e) {
+	tools.pull.pointerdown = function() {
 		//
+	}
+
+	// select tool ------------------------------------------------------------
+
+	tools.select = {}
+
+	{
+
+		let mode = 'replace'
+
+		let update_mode = function() {
+			mode = e.shift && e.ctrl && 'remove'
+				|| e.shift && 'toggle' || e.ctrl && 'add' || 'replace'
+			e.cursor = 'select' + (mode == 'replace' ? '' : '_' + mode)
+		}
+
+		tools.select.keydown = function() {
+			update_mode()
+		}
+
+		tools.select.keyup = function() {
+			update_mode()
+		}
+
+		tools.select.pointerdown = function() {
+			e.hit_d = e.select_distance
+			let p = mouse_hit_model()
+			if (p) {
+				if (p.line_i != null) {
+					e.instance.select_line(p.line_i, mode)
+				} else if (p.poly_i != null) {
+					e.instance.select_poly(p.poly_i, mode)
+				}
+			} else {
+				e.instance.unselect_all()
+			}
+		}
 	}
 
 	// move tool --------------------------------------------------------------
@@ -1905,11 +1995,11 @@ component('x-modeleditor', function(e) {
 		e.property('tool', () => toolname, function(name) {
 			e.tooltip = ''
 			if (tool && tool.bind)
-				tool.bind(e, false)
+				tool.bind(false)
 			tool = assert(tools[name])
 			toolname = name
 			if (tool.bind)
-				tool.bind(e, true)
+				tool.bind(true)
 			fire_pointermove()
 			e.cursor = tool.cursor || name
 		})
@@ -1928,11 +2018,18 @@ component('x-modeleditor', function(e) {
 			e.raycaster.setFromCamera(_p, e.camera)
 		}
 
-		function update_mouse(mx, my) {
+		function update_mouse(ev, mx, my) {
 			e.mouse.x = mx
 			e.mouse.y = my
+			update_keys(ev)
 			update_raycaster(e.mouse)
 		}
+	}
+
+	function update_keys(ev) {
+		e.shift = ev.shiftKey
+		e.ctrl  = ev.ctrlKey
+		e.alt   = ev.altKey
 	}
 
 	function fire_pointermove() {
@@ -1941,25 +2038,25 @@ component('x-modeleditor', function(e) {
 	}
 
 	e.on('pointermove', function(ev, mx, my) {
-		update_mouse(mx, my)
+		update_mouse(ev, mx, my)
 		fire_pointermove()
 	})
 
 	e.on('pointerdown', function(ev, mx, my) {
-		update_mouse(mx, my)
+		update_mouse(ev, mx, my)
 		if (tool.pointerdown) {
 			function capture(move, up) {
 				let movewrap = move && function(ev, mx, my) {
-					update_mouse(mx, my)
-					return move(e, ev)
+					update_mouse(ev, mx, my)
+					return move()
 				}
 				let upwrap = up && function(ev, mx, my) {
-					update_mouse(mx, my)
-					return up(e, ev)
+					update_mouse(ev, mx, my)
+					return up()
 				}
 				return e.capture_pointer(ev, movewrap, upwrap)
 			}
-			tool.pointerdown(e, capture)
+			tool.pointerdown(capture)
 			fire_pointermove()
 		}
 	})
@@ -1970,7 +2067,7 @@ component('x-modeleditor', function(e) {
 
 	e.canvas.on('wheel', function(ev, delta) {
 		e.controls.enableZoom = false
-		let factor = .1
+		let factor = 1
 		let mx =  (ev.clientX / e.canvas.width ) * 2 - 1
 		let my = -(ev.clientY / e.canvas.height) * 2 + 1
 		let v = v3(mx, my, 0.5)
@@ -1989,6 +2086,7 @@ component('x-modeleditor', function(e) {
 		e.camera.getWorldDirection(e.dirlight.position)
 		e.dirlight.position.negate()
 		update_dot_positions()
+		fire_pointermove()
 		return false
 	})
 
@@ -2002,12 +2100,13 @@ component('x-modeleditor', function(e) {
 		m: 'move',
 	}
 
-	e.on('keydown', function(key, shift, ctrl) {
+	e.on('keydown', function(key, shift, ctrl, alt, ev) {
+		update_keys(ev)
+		if (tool.keydown)
+			if (tool.keydown(key) === false)
+				return false
 		if (shift || ctrl)
 			return
-		if (tool.keydown)
-			if (tool.keydown(e, key) === false)
-				return false
 		let toolname = tool_keys[key.toLowerCase()]
 		if (toolname) {
 			e.tool = toolname
@@ -2016,6 +2115,13 @@ component('x-modeleditor', function(e) {
 			e.tool = e.tool == 'select' ? 'orbit' : 'select'
 			return false
 		}
+	})
+
+	e.on('keyup', function(key, shift, ctrl, alt, ev) {
+		update_keys(ev)
+		if (tool.keydown)
+			if (tool.keydown(key) === false)
+				return false
 	})
 
 	// test cube --------------------------------------------------------------
@@ -2049,9 +2155,9 @@ component('x-modeleditor', function(e) {
 			[5, 1, 2, 6],
 		]
 
-		e.instance.invalidate()
+		e.instance.update()
 
-		e.instance.selected_lines.push(0, 1, 2)
+		e.instance.selected_lines[5] = true
 
 		e.instance.polys[5].selected = true
 

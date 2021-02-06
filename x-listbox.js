@@ -220,7 +220,10 @@ component('x-listbox', function(e) {
 
 		let scroll_timer, mx0, my0
 
-		function item_pointermove(ev, mx, my, down_mx, down_my) {
+		let down_mx = mx
+		let down_my = my
+
+		function item_pointermove(ev, mx, my) {
 			if (!dragging) {
 				dragging = e.can_move_items
 					&& (e.axis == 'x' ? abs(down_mx - mx) > 4 : abs(down_my - my) > 4)
