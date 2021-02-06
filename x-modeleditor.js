@@ -271,7 +271,8 @@ function poly_mesh(e) {
 
 	e.point_coords = [] // [p1x, p1y, p1z, p2x, ...]
 	e.line_pis = [] // [l1p1i, l1p2i, l2p1i, l2p2i, ...]
-	e.polys = [] // [[material_id: mi, plane_normal: p, triangle_pis: [t1p1i, ...], p1i, p2i, ...], ...]
+	e.polys = [] // [[material_id: mi, plane: Plane, line_is: [line1i,...],
+	             //    triangle_pis: [t1p1i, ...], p1i, p2i, ...], ...]
 
 	e.points_len = () => e.point_coords.length / 3
 	e.lines_len = () => e.line_pis.length / 2
@@ -295,23 +296,45 @@ function poly_mesh(e) {
 		return out
 	}
 
-	let _line = line3()
-
-	e.each_poly_line = function(f, i) {
-		let poly = e.polys[i]
-		e.get_point(poly[0], _line.start)
-		for (let i = 1, n = poly.length; i < n; i++) {
-			e.get_point(poly[i], _line.end)
-			f(_line)
-			_line.start.copy(_line.end)
-		}
-		e.get_point(poly[0], _line.end)
-		f(_line)
-	}
-
 	e.each_line = function(f) {
 		for (let i = 0, len = e.lines_len(); i < len; i++) {
 			e.get_line(i, _line)
+			f(_line)
+		}
+	}
+
+	let _line = line3()
+
+	e.update_poly_line_is = function(poly_i) {
+		if (poly_i == null) {
+			for (let i = 0; i < e.polys.length; i++)
+				e.update_poly_line_is(i)
+			return
+		}
+		let poly = e.polys[poly_i]
+		let line_is = []
+		poly.line_is = line_is
+		function find_line(p1i, p2i) {
+			for (let i = 0, len = e.lines_len(); i < len; i++) {
+				let _p1i = e.line_pis[2*i+0]
+				let _p2i = e.line_pis[2*i+1]
+				if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i))
+					line_is.push(i)
+			}
+		}
+		let p1i = poly[0]
+		for (let i = 1, n = poly.length; i < n; i++) {
+			let p2i = poly[i]
+			find_line(p1i, p2i)
+			p1i = p2i
+		}
+		find_line(p1i, poly[0])
+	}
+
+	e.each_poly_line = function(poly_i, f) {
+		let poly = e.polys[poly_i]
+		for (let line_i of poly.line_is) {
+			e.get_line(line_i, _line)
 			f(_line)
 		}
 	}
@@ -486,7 +509,7 @@ function poly_mesh(e) {
 
 	// return the point on closest poly line from target point.
 	e.point_hit_poly_lines = function(p, poly_i, max_d, p2p_distance2, f) {
-		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_poly_line(f, poly_i))
+		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_poly_line(poly_i, f))
 	}
 
 	// return the projected point on closest line from target line.
@@ -540,47 +563,78 @@ function poly_mesh(e) {
 		}
 	}
 
-	function unselect_all_polys() {
+	function select_all_lines(sel) {
+		if (sel)
+			for (let i = 0, n = e.lines_len(); i < n; i++)
+				e.selected_lines[i] = true
+		else
+			e.selected_lines = {}
+	}
+
+	function select_all_polys(sel) {
 		for (let poly of e.polys)
-			poly.uniforms.selected.value = false
+			poly.uniforms.selected.value = sel
 	}
 
-	function unselect_all_lines() {
-		e.selected_lines = {}
+	function select_poly_lines(poly_i, sel) {
+		e.each_poly_line(poly_i, function(line) {
+			e.select_line(line.i, sel)
+		})
 	}
 
-	e.select_poly = function(poly_i, mode) {
-		let poly = e.polys[poly_i]
-		if (mode == 'replace') {
-			unselect_all_lines()
-			unselect_all_polys()
-			poly.uniforms.selected.value = true
-			e.update_selections()
-		} else if (mode == 'add' || mode == 'remove') {
-			poly.uniforms.selected.value = mode == 'add'
-		} else if (mode == 'toggle') {
-			e.select_poly(poly_i, poly.uniforms.selected.value ? 'remove' : 'add')
+	function select_line_polys(line_i, sel) {
+		let poly_i = 0
+		for (let poly of e.polys) {
+			for (let _line_i of poly.line_is)
+				if (_line_i == line_i)
+					e.select_poly(poly_i, sel)
+			poly_i++
 		}
 	}
 
-	e.select_line = function(line_i, mode) {
-		if (mode == 'replace') {
-			unselect_all_polys()
+	e.select_poly = function(poly_i, mode, with_lines) {
+		let poly = e.polys[poly_i]
+		if (mode == null) {
+			select_all_lines(false)
+			select_all_polys(false)
+			poly.uniforms.selected.value = true
+			if (with_lines)
+				select_poly_lines(poly_i, true)
+			update_selected_lines()
+		} else if (mode === true || mode === false) {
+			poly.uniforms.selected.value = mode
+			if (mode && with_lines) {
+				select_poly_lines(poly_i, true)
+				update_selected_lines()
+			}
+		} else if (mode == 'toggle') {
+			e.select_poly(poly_i, !poly.uniforms.selected.value, with_lines)
+		}
+	}
+
+	e.select_line = function(line_i, mode, with_polys) {
+		if (mode == null) {
+			select_all_polys(false)
 			e.selected_lines = {[line_i]: true}
-		} else if (mode == 'add') {
+			if (with_polys)
+				select_line_polys(line_i, true)
+		} else if (mode === true) {
 			e.selected_lines[line_i] = true
-		} else if (mode == 'remove') {
+			if (with_polys)
+				select_line_polys(line_i, true)
+		} else if (mode === false) {
 			delete e.selected_lines[line_i]
 		} else if (mode == 'toggle') {
-			e.select_line(line_i, e.selected_lines[line_i] ? 'remove' : 'add')
+			e.select_line(line_i, !e.selected_lines[line_i], with_polys)
 		}
-		e.update_selections()
+		update_selected_lines()
 	}
 
-	e.unselect_all = function() {
-		unselect_all_polys()
-		unselect_all_lines()
-		e.update_selections()
+	e.select_all = function(sel) {
+		if (sel == null) sel = true
+		select_all_polys(sel)
+		select_all_lines(sel)
+		update_selected_lines()
 	}
 
 	// model editing ----------------------------------------------------------
@@ -826,14 +880,14 @@ function poly_mesh(e) {
 			dispose.push(geo, mat)
 		}
 
-		e.update_selections()
+		update_selected_lines()
 
 	}
 
 	{
 		let geo, mat, lines
 
-		e.update_selections = function() {
+		function update_selected_lines() {
 
 			if (geo) geo.dispose()
 			if (mat) mat.dispose()
@@ -1952,12 +2006,15 @@ component('x-modeleditor', function(e) {
 
 	{
 
-		let mode = 'replace'
+		let mode
+		let p
 
 		let update_mode = function() {
 			mode = e.shift && e.ctrl && 'remove'
-				|| e.shift && 'toggle' || e.ctrl && 'add' || 'replace'
-			e.cursor = 'select' + (mode == 'replace' ? '' : '_' + mode)
+				|| e.shift && 'toggle' || e.ctrl && 'add' || null
+			e.cursor = 'select' + (mode && '_' + mode || '')
+			if (mode == 'remove') mode = false
+			if (mode == 'add') mode = true
 		}
 
 		tools.select.keydown = function() {
@@ -1968,19 +2025,25 @@ component('x-modeleditor', function(e) {
 			update_mode()
 		}
 
-		tools.select.pointerdown = function() {
+		tools.select.click = function(nclicks) {
+			if (nclicks > 3)
+				return
 			e.hit_d = e.select_distance
-			let p = mouse_hit_model()
-			if (p) {
+			p = mouse_hit_model()
+			if (!p && nclicks == 1 && !mode) {
+				e.instance.select_all(false)
+			} else if (p && nclicks == 3) {
+				e.instance.select_all(true)
+			} else if (p && nclicks <= 2) {
 				if (p.line_i != null) {
-					e.instance.select_line(p.line_i, mode)
+					e.instance.select_line(p.line_i, mode, nclicks == 2)
 				} else if (p.poly_i != null) {
-					e.instance.select_poly(p.poly_i, mode)
+					print(mode)
+					e.instance.select_poly(p.poly_i, mode, nclicks == 2)
 				}
-			} else {
-				e.instance.unselect_all()
 			}
 		}
+
 	}
 
 	// move tool --------------------------------------------------------------
@@ -2063,6 +2126,11 @@ component('x-modeleditor', function(e) {
 
 	e.on('pointerleave', function(ev) {
 		e.tooltip = ''
+	})
+
+	e.on('click', function(ev, nclicks) {
+		if (tool.click)
+			tool.click(nclicks)
 	})
 
 	e.canvas.on('wheel', function(ev, delta) {
@@ -2155,11 +2223,9 @@ component('x-modeleditor', function(e) {
 			[5, 1, 2, 6],
 		]
 
+		e.instance.update_poly_line_is()
+
 		e.instance.update()
-
-		e.instance.selected_lines[5] = true
-
-		e.instance.polys[5].selected = true
 
 		//e.instance.group.position.y = 1
 
