@@ -684,7 +684,45 @@ function poly_mesh(e) {
 			geo.setIndex(poly.triangle_pis)
 			geo.computeVertexNormals()
 
-			let mat = new THREE.MeshPhongMaterial({
+			let phong = THREE.ShaderLib.phong
+
+			let uniforms = THREE.UniformsUtils.merge([phong.uniforms, {
+				selected : {type: 'b', value: poly.selected},
+				canvas   : {type: 'v2', value: {x: canvas_w, y: canvas_h}},
+			}])
+
+			let vshader = phong.vertexShader
+
+			let fshader = `
+					uniform bool selected;
+				` + THREE.ShaderChunk.meshphong_frag.replace(/}\s*$/,
+				`
+						if (selected) {
+							float x = mod(gl_FragCoord.x, 4.0);
+							float y = mod(gl_FragCoord.y, 8.0);
+							if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
+								 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
+								gl_FragColor = vec4(0.0, 0.0, .8, 1.0);
+						}
+					}
+				`
+			)
+
+			// print(vshader)
+			// print('-----------------')
+			// print(fshader)
+
+			var mat = new THREE.ShaderMaterial({
+				uniforms       : uniforms,
+				vertexShader   : vshader,
+				fragmentShader : fshader,
+				polygonOffset: true,
+				polygonOffsetFactor: 1, // 1 pixel behind lines.
+			})
+
+			mat.lights = true
+
+			let mat1 = new THREE.MeshPhongMaterial({
 				color: white,
 				polygonOffset: true,
 				polygonOffsetFactor: 1, // 1 pixel behind lines.
@@ -923,9 +961,9 @@ component('x-modeleditor', function(e) {
 	e.camera = new THREE.PerspectiveCamera(60, 1, MIND * 100, MAXD * 100)
 	e.camera.canvas = e.canvas // for v3.project_to_canvas()
 	e.camera.layers.enable(1) // render objects that we don't hit test.
-	e.camera.position.x = -0.3
-	e.camera.position.y = 1.8
-	e.camera.position.z = 2.7
+	e.camera.position.x = 2.3
+	e.camera.position.y = 2.8
+	e.camera.position.z = 3.7
 	e.scene.add(e.camera)
 
 	// screen-projected distances for hit testing -----------------------------
@@ -2014,6 +2052,8 @@ component('x-modeleditor', function(e) {
 		e.instance.invalidate()
 
 		e.instance.selected_lines.push(0, 1, 2)
+
+		e.instance.polys[5].selected = true
 
 		//e.instance.group.position.y = 1
 
