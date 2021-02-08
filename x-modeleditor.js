@@ -249,7 +249,7 @@ function material_db() {
 
 // editable polygon meshes ---------------------------------------------------
 
-// Polygon meshes are lists of polygons enclosed and connected by lines
+// polygon meshes are lists of polygons enclosed and connected by lines
 // defined over a common point cloud.
 
 // The editing API implements the direct manipulation UI and is designed to
@@ -263,32 +263,130 @@ function real_p2p_distance2(p1, p2) { // stub
 	return p1.distanceToSquared(p2)
 }
 
-function poly_mesh(e) {
+function face_mesh(e) {
 
 	e = e || {}
 
 	// model ------------------------------------------------------------------
 
-	e.point_coords = [] // [p1x, p1y, p1z, p2x, ...]
-	e.line_pis = [] // [l1p1i, l1p2i, l2p1i, l2p2i, ...]
-	e.polys = [] // [[material_id: mi, plane: Plane, line_is: [line1i,...],
-	             //    triangle_pis: [t1p1i, ...], p1i, p2i, ...], ...]
+	let point_coords = [] // [p1x, p1y, p1z, p2x, ...]
+	let used_pis     = [] // [p1i,...]
+	let free_pis     = [] // [pi1,...]
+	let prc          = [] // [rc1,...] (point ref counts)
+	let line_pis     = [] // [l1p1i, l1p2i, l2p1i, l2p2i, ...]
+	let faces        = [] // [[material_id: mi, plane: Plane, lis: [line1i,...],
+	                      //    triangle_pis: [t1p1i, ...], p1i, p2i, ...], ...]
 
-	e.points_len = () => e.point_coords.length / 3
-	e.lines_len = () => e.line_pis.length / 2
+	e.set = function(t) {
+		point_coords = t.point_coords || []
+		line_pis     = t.line_pis     || []
+		faces        = t.faces        || []
+		_update_prc()
+		update_face_lis()
+		e.update()
+	}
+
+	function _update_prc() {
+		let n = e.point_count()
+		prc.length = n
+		for (let i = 0; i < n; i++)
+			prc[i] = 0
+		for (let face of faces)
+			for (let pi of face)
+				prc[pi]++
+		for (let pi of line_pis)
+			prc[pi]++
+		update_pis()
+	}
+
+	function update_pis() {
+		used_pis.length = 0
+		free_pis.length = 0
+		let pi = 0
+		for (let rc of prc) {
+			if (rc)
+				used_pis.push(pi)
+			else
+				free_pis.push(pi)
+			pi++
+		}
+	}
+
+	function add_point(p) {
+		let pi = free_pis.pop()
+		if (pi == null) {
+			pi = e.point_count()
+			point_coords.push(p.x, p.y, p.z)
+			prc[pi] = 0
+		} else {
+			e.set_point(pi, p)
+		}
+		return pi
+	}
+
+	function add_line(p1i, p2i) {
+		line_pis.push(p1i, p2i)
+		prc[p1i]++
+		prc[p2i]++
+	}
+
+	function cut_line(li, pmi) {
+		let p1i = line_pis[2*li+0]
+		let p2i = line_pis[2*li+1]
+		line_pis[2*li+0] = p1i
+		line_pis[2*li+1] = pmi
+		line_pis.push(pmi, p2i)
+		prc[pmi] += 2
+	}
+
+	function remove_lines(li_map) {
+		for (let li = 0, n = e.line_count(); li < n; li++) {
+			if (li_map[li]) {
+				prc[line_pis[2*li+0]]--
+				prc[line_pis[2*li+1]]--
+				line_pis[2*li+0] = null
+				line_pis[2*li+1] = null
+			}
+		}
+		line_pis.remove_values(v => v == null)
+	}
+
+	function _ref_face(face, inc) {
+		for (let pi of face)
+			prc[pi] += inc
+	}
+
+	function add_face(face) {
+		faces.push(face)
+		_ref_face(face, 1)
+	}
+
+	function remove_face(fi) {
+		let face = faces.remove(fi)
+		_ref_face(face, -1)
+	}
+
+	e.point_count = () => point_coords.length / 3
+	e.line_count = () => line_pis.length / 2
 
 	e.get_point = function(i, out) {
 		out = out || v3()
-		out.x = e.point_coords[3*i+0]
-		out.y = e.point_coords[3*i+1]
-		out.z = e.point_coords[3*i+2]
+		out.x = point_coords[3*i+0]
+		out.y = point_coords[3*i+1]
+		out.z = point_coords[3*i+2]
 		out.i = i
 		return out
 	}
 
+	e.set_point = function(i, p) {
+		point_coords[3*i+0] = p.x
+		point_coords[3*i+1] = p.y
+		point_coords[3*i+2] = p.z
+	}
+
 	e.get_line = function(i, out) {
-		let p1i = e.line_pis[2*i+0]
-		let p2i = e.line_pis[2*i+1]
+		let p1i = line_pis[2*i+0]
+		let p2i = line_pis[2*i+1]
 		out = out || line3()
 		e.get_point(p1i, out.start)
 		e.get_point(p2i, out.end)
@@ -296,69 +394,80 @@ function poly_mesh(e) {
 		return out
 	}
 
+	let _line = line3()
+
 	e.each_line = function(f) {
-		for (let i = 0, len = e.lines_len(); i < len; i++) {
+		for (let i = 0, len = e.line_count(); i < len; i++) {
 			e.get_line(i, _line)
 			f(_line)
 		}
 	}
 
-	let _line = line3()
-
-	e.update_poly_line_is = function(poly_i) {
-		if (poly_i == null) {
-			for (let i = 0; i < e.polys.length; i++)
-				e.update_poly_line_is(i)
+	function update_face_lis(fi) {
+		if (fi == null) {
+			for (let fi = 0; fi < faces.length; fi++)
+				update_face_lis(fi)
 			return
 		}
-		let poly = e.polys[poly_i]
-		let line_is = []
-		poly.line_is = line_is
+		let face = faces[fi]
+		let lis = []
+		face.lis = lis
 		function find_line(p1i, p2i) {
-			for (let i = 0, len = e.lines_len(); i < len; i++) {
-				let _p1i = e.line_pis[2*i+0]
-				let _p2i = e.line_pis[2*i+1]
+			for (let i = 0, len = e.line_count(); i < len; i++) {
+				let _p1i = line_pis[2*i+0]
+				let _p2i = line_pis[2*i+1]
 				if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i))
-					line_is.push(i)
+					lis.push(i)
 			}
 		}
-		let p1i = poly[0]
-		for (let i = 1, n = poly.length; i < n; i++) {
-			let p2i = poly[i]
+		let p1i = face[0]
+		for (let i = 1, n = face.length; i < n; i++) {
+			let p2i = face[i]
 			find_line(p1i, p2i)
 			p1i = p2i
 		}
-		find_line(p1i, poly[0])
+		find_line(p1i, face[0])
 	}
 
-	e.each_poly_line = function(poly_i, f) {
-		let poly = e.polys[poly_i]
-		for (let line_i of poly.line_is) {
-			e.get_line(line_i, _line)
+	e.each_face_line = function(fi, f) {
+		let face = faces[fi]
+		for (let li of face.lis) {
+			e.get_line(li, _line)
 			f(_line)
 		}
 	}
 
-	// poly plane -------------------------------------------------------------
+	e.each_line_face = function(li, f) {
+		for (let fi = 0; fi < faces.length; fi++) {
+			let face = faces[fi]
+			if (face.lis.indexOf(li) != -1) {
+				f(fi)
+				if (faces[fi] != face) // face removed
+					fi--
+			}
+		}
+	}
+
+	// face plane -------------------------------------------------------------
 
 	{
 		let xy_normal = v3(0, 0, 1)
 		let p1 = v3()
 		let p2 = v3()
 		let pn = v3()
-		function poly_update_plane(poly) {
-			if (poly.valid)
+		function face_update_plane(face) {
+			if (face.valid)
 				return
-			assert(poly.length >= 3)
+			assert(face.length >= 3)
 
-			poly.plane = poly.plane || new THREE.Plane()
-			poly.plane.poly = poly
+			face.plane = face.plane || new THREE.Plane()
+			face.plane.face = face
 
 			// compute plane normal using Newell's method.
 			pn.set(0, 0, 0)
-			e.get_point(poly[0], p1)
-			for (let i = 1, n = poly.length; i <= n; i++) {
-				e.get_point(poly[i % n], p2)
+			e.get_point(face[0], p1)
+			for (let i = 1, n = face.length; i <= n; i++) {
+				e.get_point(face[i % n], p2)
 				pn.x += (p1.y - p2.y) * (p1.z + p2.z)
 				pn.y += (p1.z - p2.z) * (p1.x + p2.x)
 				pn.z += (p1.x - p2.x) * (p1.y + p2.y)
@@ -366,57 +475,57 @@ function poly_mesh(e) {
 			}
 			pn.normalize()
 
-			poly.plane.setFromNormalAndCoplanarPoint(pn, p1)
+			face.plane.setFromNormalAndCoplanarPoint(pn, p1)
 
-			// the xy quaternion rotates poly's plane to the xy-plane so we can do
+			// the xy quaternion rotates face's plane to the xy-plane so we can do
 			// 2d geometry like triangulation on its points.
-			poly.xy_quaternion = poly.xy_quaternion || new THREE.Quaternion()
-			poly.xy_quaternion.setFromUnitVectors(poly.plane.normal, xy_normal)
+			face.xy_quaternion = face.xy_quaternion || new THREE.Quaternion()
+			face.xy_quaternion.setFromUnitVectors(face.plane.normal, xy_normal)
 
-			poly.valid = true
+			face.valid = true
 		}
 	}
 
-	e.poly_plane = function(poly_i) {
-		let poly = e.polys[poly_i]
-		poly_update_plane(poly)
-		return poly.plane
+	e.face_plane = function(fi) {
+		let face = faces[fi]
+		face_update_plane(face)
+		return face.plane
 	}
 
-	// poly triangulation -----------------------------------------------------
+	// face triangulation -----------------------------------------------------
 
-	function poly_get_point_on_xy_plane(poly, i, p) {
-		e.get_point(poly[i], p).applyQuaternion(poly.xy_quaternion)
+	function face_get_point_on_xy_plane(face, i, p) {
+		e.get_point(face[i], p).applyQuaternion(face.xy_quaternion)
 	}
 
-	// length of output index array is always: 3 * (poly.length - 2).
-	function triangulate_poly(poly) {
-		if (!poly.triangle_pis) {
-			poly_update_plane(poly)
+	// length of output index array is always: 3 * (face.length - 2).
+	function triangulate_face(face) {
+		if (!face.triangle_pis) {
+			face_update_plane(face)
 			let ps = []
 			let p = v3()
-			for (let i = 0; i < poly.length; i++) {
-				e.get_point(poly[i], p)
-				poly_get_point_on_xy_plane(poly, i, p)
+			for (let i = 0; i < face.length; i++) {
+				e.get_point(face[i], p)
+				face_get_point_on_xy_plane(face, i, p)
 				ps.push(p.x, p.y)
 			}
 			let pis = THREE.Earcut.triangulate(ps, null, 2)
 			for (let i = 0; i < pis.length; i++)
-				pis[i] = poly[pis[i]]
-			poly.triangle_pis	= pis
+				pis[i] = face[pis[i]]
+			face.triangle_pis = pis
 		}
 	}
 
 	// hit testing & snapping -------------------------------------------------
 
-	e.line_intersect_poly_plane = function(line, poly_i) {
-		let plane = e.poly_plane(poly_i)
+	e.line_intersect_face_plane = function(line, fi) {
+		let plane = e.face_plane(fi)
 		let d1 = plane.distanceToPoint(line.start)
 		let d2 = plane.distanceToPoint(line.end)
 		if ((d1 < -NEARD && d2 > NEARD) || (d2 < -NEARD && d1 > NEARD)) {
 			let int_p = plane.intersectLine(line, v3())
 			if (int_p) {
-				int_p.poly_i = poly_i
+				int_p.fi = fi
 				int_p.snap = 'line_plane_intersection'
 				return int_p
 			}
@@ -433,7 +542,7 @@ function poly_mesh(e) {
 		let p2 = int_line.end
 		let i1 = target_line.start.i
 		let i2 = target_line.end.i
-		for (let i = 0, len = e.points_len(); i < len; i++) {
+		for (let i = 0, n = e.point_count(); i < n; i++) {
 			if (i == i1 || i == i2) // don't hit target line's endpoints
 				continue
 			e.get_point(i, p2)
@@ -457,7 +566,7 @@ function poly_mesh(e) {
 	e.snap_point_on_line = function(p, line, max_d, p2p_distance2, plane_int_p, axes_int_p) {
 
 		p.i = null
-		p.line_i = line.i
+		p.li = line.i
 		p.snap = 'line'
 
 		max_d = max_d ** 2
@@ -507,9 +616,9 @@ function poly_mesh(e) {
 		return min_int_p
 	}
 
-	// return the point on closest poly line from target point.
-	e.point_hit_poly_lines = function(p, poly_i, max_d, p2p_distance2, f) {
-		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_poly_line(poly_i, f))
+	// return the point on closest face line from target point.
+	e.point_hit_face_lines = function(p, fi, max_d, p2p_distance2, f) {
+		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_face_line(fi, f))
 	}
 
 	// return the projected point on closest line from target line.
@@ -536,7 +645,7 @@ function poly_mesh(e) {
 					if (target_line.intersectLine(line, clamp, int_line)) {
 						let ds = p2p_distance2(int_line.start, int_line.end)
 						if (ds <= max_d ** 2) {
-							int_line.end.line_i = line.i
+							int_line.end.li = line.i
 							int_line.end.snap = 'line'
 							if (!(f && f(int_line.end, line) === false)) {
 								if (ds < min_ds) {
@@ -557,87 +666,106 @@ function poly_mesh(e) {
 	e.selected_lines = {} // {line1i = true, ...}
 
 	e.each_selected_line = function(f) {
-		for (let line_i in e.selected_lines) {
-			e.get_line(line_i, _line)
+		for (let li in e.selected_lines) {
+			e.get_line(li, _line)
 			f(_line)
 		}
 	}
 
 	function select_all_lines(sel) {
 		if (sel)
-			for (let i = 0, n = e.lines_len(); i < n; i++)
+			for (let i = 0, n = e.line_count(); i < n; i++)
 				e.selected_lines[i] = true
 		else
 			e.selected_lines = {}
 	}
 
-	function select_all_polys(sel) {
-		for (let poly of e.polys)
-			poly.uniforms.selected.value = sel
+	function select_all_faces(sel) {
+		for (let face of faces)
+			face.uniforms.selected.value = sel
 	}
 
-	function select_poly_lines(poly_i, sel) {
-		e.each_poly_line(poly_i, function(line) {
+	function select_face_lines(fi, sel) {
+		e.each_face_line(fi, function(line) {
 			e.select_line(line.i, sel)
 		})
 	}
 
-	function select_line_polys(line_i, sel) {
-		let poly_i = 0
-		for (let poly of e.polys) {
-			for (let _line_i of poly.line_is)
-				if (_line_i == line_i)
-					e.select_poly(poly_i, sel)
-			poly_i++
-		}
+	function select_line_faces(li, sel) {
+		e.each_line_face(li, function(fi) {
+			e.select_face(fi, sel)
+		})
 	}
 
-	e.select_poly = function(poly_i, mode, with_lines) {
-		let poly = e.polys[poly_i]
+	e.select_face = function(fi, mode, with_lines) {
+		let face = faces[fi]
 		if (mode == null) {
 			select_all_lines(false)
-			select_all_polys(false)
-			poly.uniforms.selected.value = true
+			select_all_faces(false)
+			face.uniforms.selected.value = true
 			if (with_lines)
-				select_poly_lines(poly_i, true)
+				select_face_lines(fi, true)
 			update_selected_lines()
 		} else if (mode === true || mode === false) {
-			poly.uniforms.selected.value = mode
+			face.uniforms.selected.value = mode
 			if (mode && with_lines) {
-				select_poly_lines(poly_i, true)
+				select_face_lines(fi, true)
 				update_selected_lines()
 			}
 		} else if (mode == 'toggle') {
-			e.select_poly(poly_i, !poly.uniforms.selected.value, with_lines)
+			e.select_face(fi, !face.uniforms.selected.value, with_lines)
 		}
 	}
 
-	e.select_line = function(line_i, mode, with_polys) {
+	e.select_line = function(li, mode, with_faces) {
 		if (mode == null) {
-			select_all_polys(false)
-			e.selected_lines = {[line_i]: true}
-			if (with_polys)
-				select_line_polys(line_i, true)
+			select_all_faces(false)
+			e.selected_lines = {[li]: true}
+			if (with_faces)
+				select_line_faces(li, true)
 		} else if (mode === true) {
-			e.selected_lines[line_i] = true
-			if (with_polys)
-				select_line_polys(line_i, true)
+			e.selected_lines[li] = true
+			if (with_faces)
+				select_line_faces(li, true)
 		} else if (mode === false) {
-			delete e.selected_lines[line_i]
+			delete e.selected_lines[li]
 		} else if (mode == 'toggle') {
-			e.select_line(line_i, !e.selected_lines[line_i], with_polys)
+			e.select_line(li, !e.selected_lines[li], with_faces)
 		}
 		update_selected_lines()
 	}
 
 	e.select_all = function(sel) {
 		if (sel == null) sel = true
-		select_all_polys(sel)
+		select_all_faces(sel)
 		select_all_lines(sel)
 		update_selected_lines()
 	}
 
 	// model editing ----------------------------------------------------------
+
+	e.remove_selection = function() {
+
+		// remove all faces that selected lines are sides of.
+		for (let li in e.selected_lines)
+			e.each_line_face(li, remove_face)
+
+		// remove all selected faces.
+		for (let fi = 0; fi < faces.length; fi++)
+			if (faces[fi].uniforms.selected.value)
+				remove_face(fi--)
+
+		// remove all selected lines.
+		remove_lines(e.selected_lines)
+
+		// TODO: merge faces.
+
+		select_all_lines(false)
+		update_face_lis()
+		update_pis()
+
+		e.update()
+	}
 
 	e.add_line = function(line) {
 
@@ -689,9 +817,9 @@ function poly_mesh(e) {
 			seg.start = line_ps[i]
 			seg.end   = line_ps[i+1]
 			e.line_hit_lines(seg, NEARD, real_p2p_distance2, true, function(p, line) {
-				let line_i = p.line_i
+				let li = p.li
 				p = p.clone()
-				p.line_i = line_i
+				p.li = li
 				line_ps.push(p)
 			})
 		}
@@ -703,58 +831,124 @@ function poly_mesh(e) {
 		// create missing points.
 		for (let p of line_ps)
 			if (p.i == null) {
-				e.point_coords.push(p.x, p.y, p.z)
-				p.i = e.points_len() - 1
+				p.i = add_point(p)
 				print('point', p.i)
 			}
 
 		// create line segments.
 		for (let i = 0, len = line_ps.length; i < len-1; i++) {
-			let p1i = line_ps[i  ].i
+			let p1i = line_ps[i+0].i
 			let p2i = line_ps[i+1].i
-			e.line_pis.push(p1i, p2i)
+			add_line(p1i, p2i)
 			print('line', p1i, p2i)
 		}
 
 		// cut intersecting lines in two.
 		for (let p of line_ps) {
-			if (p.line_i != null) {
-				let p1i = e.line_pis[2*p.line_i  ]
-				let p2i = e.line_pis[2*p.line_i+1]
-				let pmi = p.i
-				e.line_pis[2*p.line_i  ] = p1i
-				e.line_pis[2*p.line_i+1] = pmi
-				e.line_pis.push(pmi, p2i)
-			}
+			if (p.li != null)
+				cut_line(p.li, p.i)
 		}
 
 		e.update()
 	}
 
-	e.remove_line = function(line_i) {
-		//
-		e.update()
-	}
+	// push/pull --------------------------------------------------------------
 
-	e.move_line = function(line_i, rel_p) {
-		//
-		e.update()
-	}
+	{
+		// search the perpendicular face for two edges that each have one point
+		// in common with the edge at `li` and are perpendicular to it.
+		let _line = line3()
+		let _p1 = v3()
+		let _p2 = v3()
+		function pp_edges(face, li) {
+			e.get_line(li, _line)
+			let p1i = _line.start.i
+			let p2i = _line.end.i
+			let normal = _line.delta(_p1)
+			let n = 0
+			for (let li1 of face.lis) {
+				if (li1 != li) {
+					e.get_line(li1, _line)
+					let _p1i = _line.start.i
+					let _p2i = _line.end.i
+					if (_p1i == p1i || _p2i == p1i || _p1i == p2i || _p2i == p2i)
+						if (_line.delta(_p2).dot(normal) < NEARD ** 2) {
+							n++
+							if (n == 2)
+								return true
+						}
+				}
+			}
+		}
 
-	e.move_point = function(p_i, rel_p) {
-		//
-		e.update()
-	}
+		let pulling
+		let ps
+		let dir = line3()
 
-	e.remove_poly = function(poly) {
-		if (e.polys.remove_value(poly))
-			e.update()
+		e.start_pull = function() {
+			if (pulling)
+				return
+			pulling = true
+			face = faces[p.fi]
+
+			for (let li of face.lis) {
+				let pp_face
+				for (let face1 of faces)
+					if (face1 != face && face1.lis.indexOf(li))
+						if (face.plane.normal.dot(face1.plane.normal) < NEARD ** 2) {
+							pp_face = face1
+							if (!pp_edges(face1, li)) {
+								// TODO:
+							}
+						}
+				if (!pp_face) {
+					//
+				}
+			}
+
+			ps = face.map(pi => e.get_point(pi))
+
+			dir.start.copy(p)
+			dir.end.copy(p).add(face.plane.normal)
+
+		}
+
+		e.pull = function() {
+			start()
+			let p1 = mouse_hit_model()
+			if (!p1) {
+
+				let int_line = e.mouse_ray.intersectLine(dir, false, _line)
+				if (!int_line)
+					return
+
+				let delta = int_line.end.sub(dir.start)
+
+				let i = 0
+				for (let pi of face) {
+					_p1.copy(ps[i++]).add(delta)
+					e.set_point(pi, _p1)
+				}
+
+				face.plane.setFromNormalAndCoplanarPoint(face.plane.normal, int_line.end)
+			}
+			for (let pi of face) {
+				let p = e.get_point(pi, _p1)
+				//
+			}
+		}
+
+		e.stop_pull() {
+			pulling = false
+			// TODO: make hole, etc.
+		}
+
 	}
 
 	// rendering --------------------------------------------------------------
 
 	e.group = new THREE.Group()
-	e.group.poly = e
+	e.group.face = e
 	e.group.name = e.name
 
 	let canvas_w = 0
@@ -774,23 +968,25 @@ function poly_mesh(e) {
 		for (let ce of dispose)
 			ce.dispose()
 
-		let points = new THREE.BufferAttribute(new Float32Array(e.point_coords), 3)
+		let points = new THREE.BufferAttribute(new Float32Array(point_coords), 3)
+
+		// render face faces ---------------------------------------------------
 
 		let i = 0
-		for (let poly of e.polys) {
+		for (let face of faces) {
 
-			triangulate_poly(poly)
+			triangulate_face(face)
 
 			let geo = new THREE.BufferGeometry()
 
 			geo.setAttribute('position', points)
-			geo.setIndex(poly.triangle_pis)
+			geo.setIndex(face.triangle_pis)
 			geo.computeVertexNormals()
 
 			let phong = THREE.ShaderLib.phong
 
 			let uniforms = THREE.UniformsUtils.merge([phong.uniforms, {
-				selected : {type: 'b', value: poly.selected},
+				selected : {type: 'b', value: face.selected},
 				canvas   : {type: 'v2', value: {x: canvas_w, y: canvas_h}},
 			}])
 
@@ -817,31 +1013,28 @@ function poly_mesh(e) {
 				fragmentShader : fshader,
 				polygonOffset: true,
 				polygonOffsetFactor: 1, // 1 pixel behind lines.
+				side: THREE.DoubleSide,
 			})
 
 			mat.lights = true
 
-			let mat1 = new THREE.MeshPhongMaterial({
-				color: white,
-				polygonOffset: true,
-				polygonOffsetFactor: 1, // 1 pixel behind lines.
-			})
-
 			let mesh = new THREE.Mesh(geo, mat)
 			mesh.i = i++
-			mesh.poly = e
+			mesh.face = e
 			mesh.castShadow = true
 
 			e.group.add(mesh)
 			dispose.push(geo, mat)
-			poly.mesh = mesh
-			poly.uniforms = uniforms
+			face.mesh = mesh
+			face.uniforms = uniforms
 
 		}
 
+		// render points -------------------------------------------------------
+
 		{
 			let coords = []
-			for (let i = 0, len = e.points_len(), p = v3(); i < len; i++) {
+			for (let i = 0, n = e.point_count(), p = v3(); i < n; i++) {
 				e.get_point(i, p)
 				coords.push(p.x, p.y, p.z)
 			}
@@ -849,6 +1042,7 @@ function poly_mesh(e) {
 			let pos = new THREE.BufferAttribute(new Float32Array(coords), 3)
 			let geo = new THREE.BufferGeometry()
 			geo.setAttribute('position', pos)
+			geo.setIndex(used_pis)
 
 			let mat = new THREE.PointsMaterial({
 				color: black,
@@ -863,17 +1057,19 @@ function poly_mesh(e) {
 			dispose.push(geo, mat)
 		}
 
+		// render lines --------------------------------------------------------
+
 		{
 			let geo = new THREE.BufferGeometry()
 			geo.setAttribute('position', points)
-			geo.setIndex(e.line_pis)
+			geo.setIndex(line_pis)
 
 			let mat = new THREE.LineBasicMaterial({
 				color: black,
 			})
 
 			let lines = new THREE.LineSegments(geo, mat)
-			lines.poly = e
+			lines.face = e
 			lines.layers.set(1) // make it non-hit-testable.
 
 			e.group.add(lines)
@@ -982,7 +1178,7 @@ function poly_mesh(e) {
 			})
 
 			lines = new THREE.Mesh(geo, mat)
-			lines.poly = e
+			lines.face = e
 			lines.layers.set(1) // make it non-hit-testable.
 
 			e.group.add(lines)
@@ -995,7 +1191,7 @@ function poly_mesh(e) {
 		let _raycaster = new THREE.Raycaster()
 		let _p = v3()
 		let ht = []
-		e.line_intersects_poly = function(line, poly_i, line_start_in_front_of_plane) {
+		e.line_intersects_face = function(line, fi, line_start_in_front_of_plane) {
 			let p1, p2
 			if (line_start_in_front_of_plane) {
 				p1 = line.start
@@ -1007,7 +1203,7 @@ function poly_mesh(e) {
 			let line_dir = _p.copy(p2).sub(p1).setLength(1)
 			_raycaster.ray.set(p1, line_dir)
 			ht.length = 0
-			return _raycaster.intersectObject(e.polys[poly_i].mesh, false, ht).length > 0
+			return _raycaster.intersectObject(faces[fi].mesh, false, ht).length > 0
 		}
 	}
 
@@ -1538,8 +1734,7 @@ component('x-modeleditor', function(e) {
 				// get hit point in 3D space by raycasting to int_p.
 
 				update_raycaster(int_p)
-				_p1.copy(pe.raycaster.ray.origin)
-				_p2.copy(pe.raycaster.ray.origin).add(pe.raycaster.ray.direction)
+				_line1.copy(pe.mouse_ray)
 				update_raycaster(pe.mouse)
 
 				_p3.copy(axis_position)
@@ -1666,7 +1861,7 @@ component('x-modeleditor', function(e) {
 	e.model = new THREE.Group()
 	e.model.name = 'model'
 	e.scene.add(e.model)
-	e.instance = poly_mesh()
+	e.instance = face_mesh()
 	e.model.add(e.instance.group)
 
 	// direct-manipulation tools ==============================================
@@ -1695,61 +1890,61 @@ component('x-modeleditor', function(e) {
 
 	// current point hit-testing and snapping ---------------------------------
 
-	function mouse_hit_polys() {
+	function mouse_hit_faces() {
 		let hit = e.raycaster.intersectObject(e.model, true)[0]
 		if (!(hit && hit.object.type == 'Mesh'))
 			return
-		hit.point.poly_i = hit.object.i
+		hit.point.fi = hit.object.i
 		hit.point.snap = 'face'
 		return hit.point
 	}
 
 	function mouse_hit_model(axes_origin, hit_void) {
 
-		let p = mouse_hit_polys()
+		let p = mouse_hit_faces()
 
 		if (p) {
 
-			// we've hit a poly face, but we still have to hit any lines
+			// we've hit a face face, but we still have to hit any lines
 			// that lie in front of it, on it, or intersecting it.
 
 			let p0 = e.raycaster.ray.origin
 			let ray = line3(p0, e.raycaster.ray.direction.clone().setLength(2 * e.max_distance).add(p0))
-			let plane = e.instance.poly_plane(p.poly_i)
+			let plane = e.instance.face_plane(p.fi)
 
 			// preliminary line filter before hit-testing.
 			// this can filter a lot or very little depending on context.
 			// also marks the lines that are intersecting the plane for a later check.
-			function is_line_not_behind_poly_plane(line) {
+			function is_line_not_behind_face_plane(line) {
 				let d1 = plane.distanceToPoint(line.start)
 				let d2 = plane.distanceToPoint(line.end)
 				let intersects =
 				      (d2 < -NEARD && d1 > NEARD && 1)
 					|| (d1 < -NEARD && d2 > NEARD && 2)
-				line.intersects_poly_plane = intersects
+				line.intersects_face_plane = intersects
 				return intersects || (d1 >= -NEARD && d2 >= -NEARD)
 			}
 
 			// complete (but more expensive) line filter applied after hit-testing.
-			// filters out lines that are marked as intersecting the poly plane
-			// but are not intersecting the poly mesh itself.
+			// filters out lines that are marked as intersecting the face plane
+			// but are not intersecting the face mesh itself.
 			function is_intersecting_line_valid(int_p, line) {
-				if (line.intersects_poly_plane)
-					if (!e.instance.line_intersects_poly(line, p.poly_i, line.intersects_poly_plane == 1)) {
+				if (line.intersects_face_plane)
+					if (!e.instance.line_intersects_face(line, p.fi, line.intersects_face_plane == 1)) {
 						return false
 					}
 			}
 
 			let p1 = e.instance.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true,
-				is_intersecting_line_valid, null, is_line_not_behind_poly_plane)
+				is_intersecting_line_valid, null, is_line_not_behind_face_plane)
 
 			if (p1) {
 
 				// we've hit a line. snap to it.
-				let line = e.instance.get_line(p1.line_i)
+				let line = e.instance.get_line(p1.li)
 
 				// check if the hit line intersects the hit plane: that's a snap point.
-				let plane_int_p = e.instance.line_intersect_poly_plane(line, p.poly_i)
+				let plane_int_p = e.instance.line_intersect_face_plane(line, p.fi)
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
 				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p1, line)
@@ -1765,7 +1960,7 @@ component('x-modeleditor', function(e) {
 
 			} else {
 
-				// free moving on the poly face.
+				// free moving on the face face.
 
 
 			}
@@ -1781,7 +1976,7 @@ component('x-modeleditor', function(e) {
 			if (p) {
 
 				// we've hit a line. snap to it.
-				let line = e.instance.get_line(p.line_i)
+				let line = e.instance.get_line(p.li)
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
 				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p, line)
@@ -1869,8 +2064,8 @@ component('x-modeleditor', function(e) {
 		let p1 = cline.start
 		let p2 = cline.end
 		p2.i = null
-		p2.poly_i = null
-		p2.line_i = null
+		p2.fi = null
+		p2.li = null
 		p2.snap = null
 		p2.line_snap = null
 		p2.tooltip = null
@@ -1961,7 +2156,7 @@ component('x-modeleditor', function(e) {
 		e.tooltip = ''
 		let cline = e.cur_line.line
 		if (e.cur_line.visible) {
-			let closing = cline.end.i != null || cline.end.line_i != null
+			let closing = cline.end.i != null || cline.end.li != null
 			e.instance.add_line(cline)
 			e.ref_point.visible = false
 			if (closing) {
@@ -1996,8 +2191,122 @@ component('x-modeleditor', function(e) {
 
 	tools.pull = {}
 
-	tools.pull.pointerdown = function() {
-		//
+	{
+		let p, pulling, face
+
+		tools.pull.pointermove = function() {
+			if (pulling) {
+				move()
+				return
+			}
+			let p1 = mouse_hit_model()
+			if (p1 && p1.snap == 'face') {
+				p = p1
+				e.instance.select_face(p.fi)
+			} else
+				e.instance.select_all(false)
+		}
+
+		// search the perpendicular face for two edges that each have one point
+		// in common with the edge at `li` and are perpendicular to it.
+		let _line = line3()
+		let _p1 = v3()
+		let _p2 = v3()
+		function pp_edges(face, li) {
+			e.get_line(li, _line)
+			let p1i = _line.start.i
+			let p2i = _line.end.i
+			let normal = _line.delta(_p1)
+			let n = 0
+			for (let li1 of face.lis) {
+				if (li1 != li) {
+					e.get_line(li1, _line)
+					let _p1i = _line.start.i
+					let _p2i = _line.end.i
+					if (_p1i == p1i || _p2i == p1i || _p1i == p2i || _p2i == p2i)
+						if (_line.delta(_p2).dot(normal) < NEARD ** 2) {
+							n++
+							if (n == 2)
+								return true
+						}
+				}
+			}
+		}
+
+		let ps
+		let dir = line3()
+
+		function start() {
+			if (pulling)
+				return
+			pulling = true
+			face = faces[p.fi]
+
+			for (let li of face.lis) {
+				let pp_face
+				for (let face1 of faces)
+					if (face1 != face && face1.lis.indexOf(li))
+						if (face.plane.normal.dot(face1.plane.normal) < NEARD ** 2) {
+							pp_face = face1
+							if (!pp_edges(face1, li)) {
+								// TODO:
+							}
+						}
+				if (!pp_face) {
+					//
+				}
+			}
+
+			ps = face.map(pi => e.get_point(pi))
+
+			dir.start.copy(p)
+			dir.end.copy(p).add(face.plane.normal)
+
+		}
+
+		function move() {
+			start()
+			let p1 = mouse_hit_model()
+			if (!p1) {
+
+				let int_line = e.mouse_ray.intersectLine(dir, false, _line)
+				if (!int_line)
+					return
+
+				let delta = int_line.end.sub(dir.start)
+
+				let i = 0
+				for (let pi of face) {
+					_p1.copy(ps[i++]).add(delta)
+					e.set_point(pi, _p1)
+				}
+
+				face.plane.setFromNormalAndCoplanarPoint(face.plane.normal, int_line.end)
+			}
+			for (let pi of face) {
+				let p = e.get_point(pi, _p1)
+				//
+			}
+		}
+
+		function stop() {
+			pulling = false
+			// TODO: make hole, etc.
+		}
+
+		tools.pull.pointerdown = function(capture) {
+			if (!p)
+				return
+			if (pulling)
+				stop()
+			return capture(move, function() {
+				if (pulling)
+					stop()
+				else
+					start()
+			})
+		}
+
 	}
 
 	// select tool ------------------------------------------------------------
@@ -2035,11 +2344,10 @@ component('x-modeleditor', function(e) {
 			} else if (p && nclicks == 3) {
 				e.instance.select_all(true)
 			} else if (p && nclicks <= 2) {
-				if (p.line_i != null) {
-					e.instance.select_line(p.line_i, mode, nclicks == 2)
-				} else if (p.poly_i != null) {
-					print(mode)
-					e.instance.select_poly(p.poly_i, mode, nclicks == 2)
+				if (p.li != null) {
+					e.instance.select_line(p.li, mode, nclicks == 2)
+				} else if (p.fi != null) {
+					e.instance.select_face(p.fi, mode, nclicks == 2)
 				}
 			}
 		}
@@ -2071,6 +2379,7 @@ component('x-modeleditor', function(e) {
 	// mouse handling ---------------------------------------------------------
 
 	e.mouse = v2()
+	e.mouse_ray = line3()
 	e.raycaster = new THREE.Raycaster()
 
 	{
@@ -2079,6 +2388,8 @@ component('x-modeleditor', function(e) {
 			_p.x =  (p.x / e.canvas.width ) * 2 - 1
 			_p.y = -(p.y / e.canvas.height) * 2 + 1
 			e.raycaster.setFromCamera(_p, e.camera)
+			e.mouse_ray.start.copy(e.raycaster.ray.origin)
+			e.mouse_ray.end.copy(e.raycaster.ray.origin).add(e.raycaster.ray.direction)
 		}
 
 		function update_mouse(ev, mx, my) {
@@ -2170,6 +2481,8 @@ component('x-modeleditor', function(e) {
 
 	e.on('keydown', function(key, shift, ctrl, alt, ev) {
 		update_keys(ev)
+		if (key == 'Delete')
+			e.instance.remove_selection()
 		if (tool.keydown)
 			if (tool.keydown(key) === false)
 				return false
@@ -2197,35 +2510,31 @@ component('x-modeleditor', function(e) {
 
 	function draw_test_cube() {
 
-		e.instance.point_coords = [
- 			 0,  0,  0,
-			 2,  0,  0,
-			 2,  2,  0,
-			 0,  2,  0,
-		 	 0,  0,  2,
-			.3,  0, .3,
-			.3,  2, .3,
-			 0,  2,  2,
-		]
-
-		e.instance.line_pis = [
-			0, 1, 1, 2, 2, 3, 3, 0,
-			4, 5, 5, 6, 6, 7, 7, 4,
-			0, 4, 1, 5, 2, 6, 3, 7,
-		]
-
-		e.instance.polys = [
-			[1, 0, 3, 2],
-			[4, 5, 6, 7],
-			[7, 6, 2, 3],
-			[4, 0, 1, 5],
-			[0, 4, 7, 3],
-			[5, 1, 2, 6],
-		]
-
-		e.instance.update_poly_line_is()
-
-		e.instance.update()
+		e.instance.set({
+			point_coords: [
+				 0,  0,  0,
+				 2,  0,  0,
+				 2,  2,  0,
+				 0,  2,  0,
+				 0,  0,  2,
+				.3,  0, .3,
+				.3,  2, .3,
+				 0,  2,  2,
+			],
+			line_pis: [
+				0, 1, 1, 2, 2, 3, 3, 0,
+				4, 5, 5, 6, 6, 7, 7, 4,
+				0, 4, 1, 5, 2, 6, 3, 7,
+			],
+			faces: [
+				[1, 0, 3, 2],
+				[4, 5, 6, 7],
+				[7, 6, 2, 3],
+				[4, 0, 1, 5],
+				[0, 4, 7, 3],
+				[5, 1, 2, 6],
+			],
+		})
 
 		//e.instance.group.position.y = 1
 
