@@ -20,14 +20,17 @@ layouts over newspaper-type layouts, optimize for keyboard navigation,
 and are generally designed for an office setting with a big screen, a chair
 and a keyboard and mouse ("keyboard & mouse"-first apps).
 
-So what this means is: none of that responsive stuff, keyboard is king,
+So what this means is: none of that responsive stuff (1), keyboard is king,
 no touchy the screen, and no megabytes of polyfills to implement half a
 browser because you want to squeeze that last drop of the market or deliver
 a few more ads.
 
+(1) except for forms for which you can define different grid layouts
+based on screen width.
+
 ## Components
 
-The highlight of the library is the virtual [grid widget][x-widgets-grid]
+The highlight of the library is the virtual [grid widget][x-grid]
 which can load, scroll, sort and filter 100K items instantly on any modern
 computer (or phone), can act as a tree-grid or as a vertical grid, has
 inline editing, drag & drop moving of columns and rows and tons of other
@@ -61,6 +64,9 @@ by one widget are reflected instantly in other widgets (aka 2-way binding).
 The nav widget then gathers the changes made to one or more rows/cells and
 can push them to a server (aka 3-way binding).
 
+I'm also working on a WebGL-based 3D model editor [x-modeleditor] which
+I hope to finish this year (2021).
+
 ## Browser Compatibility
 
 This will probably only work on desktop Firefox and Chrome/Edge for the
@@ -75,7 +81,7 @@ To install the library you need docker, kubernetes, webpack, redis, memcached
 Look, it's just a few .js files and one .css file. Load them as they are or
 bundle, minify and gzip them, do what you have to do. Just make it look professional.
 
-The dependencies are `glue.js` and `divs.js` from [webb] so get those first.
+The dependencies are `glue.js` and `divs.js` (included).
 
 `glue.js` extends JavaScript with basic routines similar to [glue] from Lua.
 
