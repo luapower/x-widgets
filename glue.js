@@ -36,7 +36,7 @@
 		warn()
 		debug()
 		trace()
-		assert()
+		assert(v, err, ...) -> v
 		stacktrace()
 	extending built-in objects:
 		property(cls, prop, descriptor | get,set)

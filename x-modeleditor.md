@@ -12,9 +12,9 @@
 	* TODO: snap to perpendicular to the starting line.
 	* TODO: snap free-moving line to existing points.
 	* TODO: snap free-moving line to existing intersecting or parallel lines.
-- overlapping lines cases
-	* snap to ground plane
-	* snap to most-in-front vertical plane
+	* TODO: merge overlapping lines.
+	* snap to ground plane.
+	* snap to most-in-front vertical plane.
 
 * line tool
 	* auto-cut lines.
@@ -31,9 +31,10 @@
 		* TODO: merge coplanar faces when separating edges are removed.
 
 * push-pull tool
-	* TODO: create perpendicular faces
-	* TODO: create holes
-	* TODO: snap to touching geometry along the extrusion axis.
+	* adjust geometry to make pulling available.
+	* snap to touching geometry along the extrusion axis.
+	* TODO: merge with intersecting faces at the end of pulling and create holes.
+	* TODO: intersect side faces and lines with existing existing geometery at the end of pulling.
 	* TODO: limit movement to non-intersecting faces.
 
 * move/rotate tool
@@ -48,6 +49,31 @@
 * orbit tool
 	* TODO: wheel zoom to track mouse
 
+* components
+	* make/break component
+	* enter/exit component edit mode
+	* set local axes
+	* highlight all instances
+
+* set global axes
+
+* layers
+
+* scenes
+	* scene transitions
+
+* shadows
+	* latitude-based with date/time controls.
+
+* texturing
+	* paint tool
+	* eyedropper tool
+	* move/rotate/scale/shear texture with snapping
+	* bump mapping
+	* opacity
+
 * rendering
 	* TODO: thick object outline.
 	* TODO: thick non-edge lines.
+
+

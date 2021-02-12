@@ -2789,6 +2789,15 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	background-color: white;
 }
 
+.model-editor-text {
+	position: absolute;
+	pointer-events: none;
+	padding: 0 .2em;
+	background-color: white;
+	font-family: sans-serif;
+	font-size: 12px;
+}
+
 /* ------------------------------------------------------------------------ */
 /* dark theme                                                               */
 /* ------------------------------------------------------------------------ */

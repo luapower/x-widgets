@@ -5,6 +5,13 @@
 
 */
 
+// primitive construction ----------------------------------------------------
+
+function v2(x, y)        { return new THREE.Vector2(x, y) }
+function v3(x, y, z)     { return new THREE.Vector3(x, y, z) }
+function line3(p1, p2)   { return new THREE.Line3(p1, p2) }
+function color3(c)       { return new THREE.Color(c) }
+
 (function() {
 
 let NEARD = 1e-5   // distance epsilon (tolerance)
@@ -20,14 +27,6 @@ let y_axis_color = 0x000099
 let sky_color     = 0xccddff
 let horizon_color = 0xffffff
 let ground_color  = 0xe0dddd
-
-
-// primitive construction ----------------------------------------------------
-
-function v2(x, y)        { return new THREE.Vector2(x, y) }
-function v3(x, y, z)     { return new THREE.Vector3(x, y, z) }
-function line3(p1, p2)   { return new THREE.Line3(p1, p2) }
-function color3(c)       { return new THREE.Color(c) }
 
 // disable THREE.js UUID generation ------------------------------------------
 
@@ -271,7 +270,7 @@ function face_mesh(e) {
 
 	let point_coords = [] // [p1x, p1y, p1z, p2x, ...]
 	let used_pis     = [] // [p1i,...]
-	let free_pis     = [] // [pi1,...]
+	let free_pis     = [] // [p1i,...]
 	let prc          = [] // [rc1,...] (point ref counts)
 	let line_pis     = [] // [l1p1i, l1p2i, l2p1i, l2p2i, ...]
 	let faces        = [] // [[material_id: mi, plane: Plane, lis: [line1i,...],
@@ -319,15 +318,16 @@ function face_mesh(e) {
 			point_coords.push(p.x, p.y, p.z)
 			prc[pi] = 0
 		} else {
-			e.set_point(pi, p)
+			e.move_point(pi, p)
 		}
 		return pi
 	}
 
 	function add_line(p1i, p2i) {
-		line_pis.push(p1i, p2i)
+		let li = line_pis.push(p1i, p2i) / 2 - 1
 		prc[p1i]++
 		prc[p2i]++
+		return li
 	}
 
 	function cut_line(li, pmi) {
@@ -337,6 +337,11 @@ function face_mesh(e) {
 		line_pis[2*li+1] = pmi
 		line_pis.push(pmi, p2i)
 		prc[pmi] += 2
+	}
+
+	function change_line_endpoints(li, p1i, p2i) {
+		if (p1i != null) line_pis[2*li+0] = p1i
+		if (p2i != null) line_pis[2*li+1] = p2i
 	}
 
 	function remove_lines(li_map) {
@@ -356,9 +361,15 @@ function face_mesh(e) {
 			prc[pi] += inc
 	}
 
-	function add_face(face) {
-		faces.push(face)
+	function add_face(pis, lis) {
+		let face = pis
+		let fi = faces.push(face) - 1
+		if (lis)
+			face.lis = lis
+		else
+			update_face_lis(face)
 		_ref_face(face, 1)
+		return fi
 	}
 
 	function remove_face(fi) {
@@ -369,72 +380,94 @@ function face_mesh(e) {
 	e.point_count = () => point_coords.length / 3
 	e.line_count = () => line_pis.length / 2
 
-	e.get_point = function(i, out) {
+	e.get_point = function(pi, out) {
 		out = out || v3()
-		out.x = point_coords[3*i+0]
-		out.y = point_coords[3*i+1]
-		out.z = point_coords[3*i+2]
-		out.i = i
+		out.x = point_coords[3*pi+0]
+		out.y = point_coords[3*pi+1]
+		out.z = point_coords[3*pi+2]
+		out.i = pi
 		return out
 	}
 
-	e.set_point = function(i, p) {
-		point_coords[3*i+0] = p.x
-		point_coords[3*i+1] = p.y
-		point_coords[3*i+2] = p.z
+	e.move_point = function(pi, p) {
+		point_coords[3*pi+0] = p.x
+		point_coords[3*pi+1] = p.y
+		point_coords[3*pi+2] = p.z
 	}
 
-	e.get_line = function(i, out) {
-		let p1i = line_pis[2*i+0]
-		let p2i = line_pis[2*i+1]
+	e.get_line = function(li, out) {
+		let p1i = line_pis[2*li+0]
+		let p2i = line_pis[2*li+1]
 		out = out || line3()
 		e.get_point(p1i, out.start)
 		e.get_point(p2i, out.end)
-		out.i = i
+		out.i = li
 		return out
 	}
 
-	let _line = line3()
-
-	e.each_line = function(f) {
-		for (let i = 0, len = e.line_count(); i < len; i++) {
-			e.get_line(i, _line)
-			f(_line)
+	{
+		let _line = line3()
+		e.each_line = function(f) {
+			for (let i = 0, len = e.line_count(); i < len; i++) {
+				e.get_line(i, _line)
+				f(_line)
+			}
 		}
 	}
 
-	function update_face_lis(fi) {
-		if (fi == null) {
+	function find_or_add_line(p1i, p2i) {
+		for (let li = 0, n = e.line_count(); li < n; li++) {
+			let _p1i = line_pis[2*li+0]
+			let _p2i = line_pis[2*li+1]
+			if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i))
+				return li
+		}
+		return add_line(p1i, p2i)
+	}
+
+	function update_face_lis(face) {
+		if (!face) {
 			for (let fi = 0; fi < faces.length; fi++)
-				update_face_lis(fi)
+				update_face_lis(faces[fi])
 			return
 		}
-		let face = faces[fi]
-		let lis = []
-		face.lis = lis
-		function find_line(p1i, p2i) {
-			for (let i = 0, len = e.line_count(); i < len; i++) {
-				let _p1i = line_pis[2*i+0]
-				let _p2i = line_pis[2*i+1]
-				if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i))
-					lis.push(i)
-			}
-		}
+		face.lis = face.lis || []
+		let lis = face.lis
+		lis.length = 0
 		let p1i = face[0]
 		for (let i = 1, n = face.length; i < n; i++) {
 			let p2i = face[i]
-			find_line(p1i, p2i)
+			lis.push(assert(find_or_add_line(p1i, p2i)))
 			p1i = p2i
 		}
-		find_line(p1i, face[0])
+		lis.push(assert(find_or_add_line(p1i, face[0])))
 	}
 
-	e.each_face_line = function(fi, f) {
-		let face = faces[fi]
-		for (let li of face.lis) {
-			e.get_line(li, _line)
-			f(_line)
+	e.get_edge = function(fi, ei, out) {
+		out = e.get_line(faces[fi].lis[ei], out)
+		out.ei = ei // edge index.
+		if (out.end.i == faces[fi][ei]) { // fix edge endpoints order.
+			let p1 = out.start
+			let p2 = out.end
+			out.start = p2
+			out.end   = p1
 		}
+		return out
+	}
+
+	{
+		let _line = line3()
+		e.each_edge = function(fi, f) {
+			for (let ei = 0, n = faces[fi].length; ei < n; ei++) {
+				e.get_edge(fi, ei, _line)
+				f(_line)
+			}
+		}
+	}
+
+	function insert_edge(face, ei, pi, li) {
+		face.insert(ei, pi)
+		face.lis.insert(ei, li)
 	}
 
 	e.each_line_face = function(li, f) {
@@ -455,7 +488,7 @@ function face_mesh(e) {
 		let p1 = v3()
 		let p2 = v3()
 		let pn = v3()
-		function face_update_plane(face) {
+		function update_face_plane(face) {
 			if (face.valid)
 				return
 			assert(face.length >= 3)
@@ -488,7 +521,7 @@ function face_mesh(e) {
 
 	e.face_plane = function(fi) {
 		let face = faces[fi]
-		face_update_plane(face)
+		update_face_plane(face)
 		return face.plane
 	}
 
@@ -501,7 +534,7 @@ function face_mesh(e) {
 	// length of output index array is always: 3 * (face.length - 2).
 	function triangulate_face(face) {
 		if (!face.triangle_pis) {
-			face_update_plane(face)
+			update_face_plane(face)
 			let ps = []
 			let p = v3()
 			for (let i = 0; i < face.length; i++) {
@@ -617,8 +650,8 @@ function face_mesh(e) {
 	}
 
 	// return the point on closest face line from target point.
-	e.point_hit_face_lines = function(p, fi, max_d, p2p_distance2, f) {
-		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_face_line(fi, f))
+	e.point_hit_edges = function(p, fi, max_d, p2p_distance2, f) {
+		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_edge(fi, f))
 	}
 
 	// return the projected point on closest line from target line.
@@ -665,10 +698,13 @@ function face_mesh(e) {
 
 	e.selected_lines = {} // {line1i = true, ...}
 
-	e.each_selected_line = function(f) {
-		for (let li in e.selected_lines) {
-			e.get_line(li, _line)
-			f(_line)
+	{
+		let _line = line3()
+		e.each_selected_line = function(f) {
+			for (let li in e.selected_lines) {
+				e.get_line(li, _line)
+				f(_line)
+			}
 		}
 	}
 
@@ -685,8 +721,8 @@ function face_mesh(e) {
 			face.uniforms.selected.value = sel
 	}
 
-	function select_face_lines(fi, sel) {
-		e.each_face_line(fi, function(line) {
+	function select_edges(fi, sel) {
+		e.each_edge(fi, function(line) {
 			e.select_line(line.i, sel)
 		})
 	}
@@ -704,12 +740,12 @@ function face_mesh(e) {
 			select_all_faces(false)
 			face.uniforms.selected.value = true
 			if (with_lines)
-				select_face_lines(fi, true)
+				select_edges(fi, true)
 			update_selected_lines()
 		} else if (mode === true || mode === false) {
 			face.uniforms.selected.value = mode
 			if (mode && with_lines) {
-				select_face_lines(fi, true)
+				select_edges(fi, true)
 				update_selected_lines()
 			}
 		} else if (mode == 'toggle') {
@@ -854,95 +890,228 @@ function face_mesh(e) {
 
 	// push/pull --------------------------------------------------------------
 
-	{
-		// search the perpendicular face for two edges that each have one point
-		// in common with the edge at `li` and are perpendicular to it.
-		let _line = line3()
-		let _p1 = v3()
-		let _p2 = v3()
-		function pp_edges(face, li) {
-			e.get_line(li, _line)
-			let p1i = _line.start.i
-			let p2i = _line.end.i
-			let normal = _line.delta(_p1)
-			let n = 0
-			for (let li1 of face.lis) {
-				if (li1 != li) {
-					e.get_line(li1, _line)
-					let _p1i = _line.start.i
-					let _p2i = _line.end.i
-					if (_p1i == p1i || _p2i == p1i || _p1i == p2i || _p2i == p2i)
-						if (_line.delta(_p2).dot(normal) < NEARD ** 2) {
-							n++
-							if (n == 2)
-								return true
+	e.start_pull = function(p) {
+
+		let pull = {}
+
+		// pulled face.
+		pull.fi = p.fi
+		pull.face = faces[p.fi]
+
+		// pull direction line, starting on the plane and with unit length.
+		pull.dir = line3()
+		pull.dir.start.copy(p)
+		pull.dir.end.copy(p).add(pull.face.plane.normal)
+
+		// faces and lines to exclude when hit-testing while pulling.
+		// all moving geometry must be added here.
+		let pp_fis = {} // {fi: true}
+		let pp_lis = {} // {li: true}
+
+		pp_fis[pull.fi] = true
+
+		// pulling only works if the pulled face is connected exclusively to
+		// perpendicular (pp) side faces with pp edges at the connection points.
+		// when that's not the case, we extend the geometry around the pulled
+		// face by either creating new pp faces with pp edges or extending
+		// existing pp faces with pp edges. after that, pulling on the face
+		// becomes just a matter of moving its points in the pull direction.
+
+		// the algorithm takes two steps: 1) record what needs to be done with
+		// the side geometry at each point of the pulled face, 2) perform the
+		// modifications, avoiding making duplicate pp edges.
+		{
+			let cmd_map = {} // {ei: {create_face:, create_edge:, insert_edges: {fi: ei}}}
+
+			let edge = line3()
+			let pp_edge = line3()
+			let normal = v3()
+			let _p = v3()
+
+			// for each edge of the pulled face, find all faces that also
+			// contain that edge and are pp to the pulled face. there should be
+			// at most two such faces per edge.
+			// also check for any other non-pp faces connected to the pulled face's points.
+			let en = pull.face.length
+			for (let ei = 0; ei < en; ei++) {
+
+				let pp_faces_found = 0
+				e.get_edge(pull.fi, ei, edge)
+
+				for (let sfi = 0, fn = faces.length; sfi < fn; sfi++) {
+
+					let side_face = faces[sfi]
+					if (side_face != pull.face) { // not the pulled face.
+
+						if (abs(pull.face.plane.normal.dot(side_face.plane.normal)) < NEARD) { // face is pp.
+
+							let pp_face = side_face // just to rename.
+							let pp_fi = sfi // just to rename.
+							let edge_li = pull.face.lis[ei]
+							let pp_face_ei = pp_face.lis.indexOf(edge_li)
+							if (pp_face_ei != -1) { // face contains our pulled edge.
+
+								pp_faces_found++
+
+								edge.delta(normal).normalize()
+
+								// iterate exactly twice: for prev pp edge and for next pp edge,
+								// each of which connects to one of the endpoints of our pulled edge,
+								// and we don't know which one, we need to find out.
+								for (let i = 0; i <= 1; i++) {
+
+									let pp_ei = (pp_face_ei - 1 + i * 2 + pp_face.length) % pp_face.length
+									e.get_edge(pp_fi, pp_ei, pp_edge)
+									let edge_is_pp = abs(pp_edge.delta(_p).dot(normal)) < NEARD
+
+									// figure out which endpoint this pp_edge connects to.
+									let is_first  = pp_edge.start.i == edge.start.i || pp_edge.end.i == edge.start.i
+									let is_second = pp_edge.start.i == edge.end.i   || pp_edge.end.i == edge.end.i
+									assert(is_first || is_second)
+									let endpoint_ei = (ei + ((is_first) ? 0 : 1)) % en
+
+									let cmds = attr(cmd_map, endpoint_ei)
+
+									if (!edge_is_pp)
+										cmds.create_edge = true
+
+									// add a command to extend this face with a pp edge if it turns out
+									// that the point at `endpoint_ei` will have a pp edge.
+									array_attr(attr(cmds, 'insert_edges'), pp_fi).push(pp_face_ei + 1)
+
+								}
+							}
+
+						} else { // face is not pp.
+
+							// check if side_face connects to pulled face's point at `ei`
+							// and mark the point as needing a pp edge if it does.
+							let side_face_ei = side_face.indexOf(pull.face[ei])
+							if (side_face_ei != -1) {
+								attr(cmd_map, ei).create_edge = true
+							}
+
 						}
+
+					}
+
 				}
+
+				if (!pp_faces_found) {
+					attr(cmd_map, ei).create_face = true
+					attr(cmd_map, ei).create_edge = true
+					attr(cmd_map, (ei+1) % en).create_edge = true
+				}
+
 			}
-		}
 
-		let pulling
-		let ps
-		let dir = line3()
+			print(pull.face.join(' '), JSON.parse(json(cmd_map)))
 
-		e.start_pull = function() {
-			if (pulling)
-				return
-			pulling = true
-			face = faces[p.fi]
+			// create pp side edges.
+			for (let ei in cmd_map) {
+				let cmds = cmd_map[ei]
+				if (cmds.create_edge) {
 
-			for (let li of face.lis) {
-				let pp_face
-				for (let face1 of faces)
-					if (face1 != face && face1.lis.indexOf(li))
-						if (face.plane.normal.dot(face1.plane.normal) < NEARD ** 2) {
-							pp_face = face1
-							if (!pp_edges(face1, li)) {
-								// TODO:
+					let edge_pi = pull.face[ei]
+					let p = e.get_point(edge_pi, _p)
+					let pi = add_point(p)
+					let li = add_line(edge_pi, pi)
+					cmds.pull_pi = pi
+					cmds.pp_li = li
+
+					// extend pp faces with this edge.
+					if (cmds.insert_edges) {
+						for (let pp_fi in cmds.insert_edges) {
+							let pp_face = faces[pp_fi]
+							let insert_offset = 0
+							for (let pp_ei of cmds.insert_edges[pp_fi]) {
+								insert_edge(pp_face, pp_ei + insert_offset, pi, li)
+								insert_offset++
 							}
 						}
-				if (!pp_face) {
-					//
+					}
+
 				}
 			}
 
-			ps = face.map(pi => e.get_point(pi))
+			// create pp side faces using newly created pp side edges.
+			// also update pulled face points and edge endpoints.
+			for (let e1i in cmd_map) {
+				let e2i = (e1i + 1) % en
+				let cmds1 = cmd_map[e1i]
+				let cmds2 = cmd_map[e2i]
+				let p1i = cmds1.pull_pi
+				let p2i = cmds2.pull_pi
 
-			dir.start.copy(p)
-			dir.end.copy(p).add(face.plane.normal)
+				if (cmds1.create_face) {
+
+					// create pp side face.
+					cmds1.pull_li = add_line(p1i, p2i)
+					let old_p1i = pull.face[e1i]
+					let old_p2i = pull.face[e2i]
+					let pis = [old_p1i, old_p2i, p2i, p1i]
+					let old_pull_li = pull.face[e1i]
+					let lis = [old_pull_li, cmds2.pp_li, cmds1.pull_li, cmds1.pp_li]
+					add_face(pis, lis)
+
+					// replace edge in pulled face.
+					pull.face.lis[e1i] = cmds1.pull_li
+
+				} else {
+
+					// update edge endpoints in pulled face.
+					let li = pull.face.lis[e1i]
+					change_line_endpoints(li, p1i, p2i)
+
+				}
+
+				// replace point in pulled face.
+				if (p1i != null)
+					pull.face[e1i] = p1i
+
+			}
 
 		}
 
-		e.pull = function() {
-			start()
-			let p1 = mouse_hit_model()
-			if (!p1) {
+		pull.can_hit = function(p) {
+			return (!(pp_fis[p.fi] || pp_lis[p.li]))
+		}
 
-				let int_line = e.mouse_ray.intersectLine(dir, false, _line)
-				if (!int_line)
-					return
+		{
+			let initial_ps = pull.face.map(pi => e.get_point(pi))
 
-				let delta = int_line.end.sub(dir.start)
+			let delta = v3()
+			let _p = v3()
+
+			pull.pull = function(p) {
+
+				pull.dir.closestPointToPoint(p, false, delta)
+				delta.sub(pull.dir.start)
 
 				let i = 0
-				for (let pi of face) {
-					_p1.copy(ps[i++]).add(delta)
-					e.set_point(pi, _p1)
+				for (let pi of pull.face) {
+					_p.copy(initial_ps[i++]).add(delta)
+					e.move_point(pi, _p)
 				}
 
-				face.plane.setFromNormalAndCoplanarPoint(face.plane.normal, int_line.end)
-			}
-			for (let pi of face) {
-				let p = e.get_point(pi, _p1)
-				//
+				pull.face.plane.setFromNormalAndCoplanarPoint(pull.face.plane.normal, _p)
+
+				e.update()
 			}
 		}
 
-		e.stop_pull() {
-			pulling = false
+		pull.stop = function() {
 			// TODO: make hole, etc.
+
+			pull.pull = null
+			pull.pull = null
 		}
 
+		pull.cancel = function() {
+			// TODO
+		}
+
+		return pull
 	}
 
 	// rendering --------------------------------------------------------------
@@ -1037,6 +1206,11 @@ function face_mesh(e) {
 			for (let i = 0, n = e.point_count(), p = v3(); i < n; i++) {
 				e.get_point(i, p)
 				coords.push(p.x, p.y, p.z)
+				if (1) { // enable for debugging
+					let d = e.editor.dot(p.clone(), i+'')
+					d.dispose = d.free
+					dispose.push(d)
+				}
 			}
 
 			let pos = new THREE.BufferAttribute(new Float32Array(coords), 3)
@@ -1564,10 +1738,12 @@ component('x-modeleditor', function(e) {
 
 	// helper dots ------------------------------------------------------------
 
-	e.dot = function(point) {
+	e.dot = function(point, text) {
 
-		let e = div({class: 'model-editor-dot'})
+		let e = div({class: (text ? 'model-editor-text' : 'model-editor-dot')})
 		e.point = point || v3()
+		if (text)
+			e.set(text)
 
 		let p = v3()
 		e.update = function() {
@@ -1596,6 +1772,7 @@ component('x-modeleditor', function(e) {
 			e.remove()
 		}
 
+		e.update()
 		pe.add(e)
 
 		return e
@@ -1862,6 +2039,7 @@ component('x-modeleditor', function(e) {
 	e.model.name = 'model'
 	e.scene.add(e.model)
 	e.instance = face_mesh()
+	e.instance.editor = e
 	e.model.add(e.instance.group)
 
 	// direct-manipulation tools ==============================================
@@ -2020,7 +2198,6 @@ component('x-modeleditor', function(e) {
 			e.ref_line = e.line('ref_line', line3(), true)
 			e.ref_line.visible = false
 		} else {
-			tools.line.cancel()
 			e.cur_point = e.cur_point.free()
 			e.cur_line  = e.cur_line.free()
 			e.ref_point = e.ref_point.free()
@@ -2172,13 +2349,6 @@ component('x-modeleditor', function(e) {
 		}
 	}
 
-	tools.line.keydown = function(key) {
-		if (key == 'Escape') {
-			tools.line.cancel()
-			return false
-		}
-	}
-
 	// rectangle tool ---------------------------------------------------------
 
 	tools.rect = {}
@@ -2192,119 +2362,66 @@ component('x-modeleditor', function(e) {
 	tools.pull = {}
 
 	{
-		let p, pulling, face
+		let hit_p // point on the plane hit for pulling.
+		let pull  // pull state for live pulling.
+
+		tools.pull.bind = function(on) {
+			if (!on)
+				tools.pull.cancel()
+		}
 
 		tools.pull.pointermove = function() {
-			if (pulling) {
+			if (pull) {
 				move()
-				return
+			} else {
+				let p = mouse_hit_faces()
+				if (p && p.snap == 'face') {
+					e.instance.select_face(p.fi)
+					hit_p = p
+				} else {
+					hit_p = null
+					e.instance.select_all(false)
+				}
 			}
-			let p1 = mouse_hit_model()
-			if (p1 && p1.snap == 'face') {
-				p = p1
-				e.instance.select_face(p.fi)
-			} else
-				e.instance.select_all(false)
 		}
 
-		// search the perpendicular face for two edges that each have one point
-		// in common with the edge at `li` and are perpendicular to it.
 		let _line = line3()
-		let _p1 = v3()
-		let _p2 = v3()
-		function pp_edges(face, li) {
-			e.get_line(li, _line)
-			let p1i = _line.start.i
-			let p2i = _line.end.i
-			let normal = _line.delta(_p1)
-			let n = 0
-			for (let li1 of face.lis) {
-				if (li1 != li) {
-					e.get_line(li1, _line)
-					let _p1i = _line.start.i
-					let _p2i = _line.end.i
-					if (_p1i == p1i || _p2i == p1i || _p1i == p2i || _p2i == p2i)
-						if (_line.delta(_p2).dot(normal) < NEARD ** 2) {
-							n++
-							if (n == 2)
-								return true
-						}
-				}
-			}
-		}
-
-		let ps
-		let dir = line3()
-
-		function start() {
-			if (pulling)
-				return
-			pulling = true
-			face = faces[p.fi]
-
-			for (let li of face.lis) {
-				let pp_face
-				for (let face1 of faces)
-					if (face1 != face && face1.lis.indexOf(li))
-						if (face.plane.normal.dot(face1.plane.normal) < NEARD ** 2) {
-							pp_face = face1
-							if (!pp_edges(face1, li)) {
-								// TODO:
-							}
-						}
-				if (!pp_face) {
-					//
-				}
-			}
-
-			ps = face.map(pi => e.get_point(pi))
-
-			dir.start.copy(p)
-			dir.end.copy(p).add(face.plane.normal)
-
-		}
 
 		function move() {
-			start()
-			let p1 = mouse_hit_model()
-			if (!p1) {
+			if (!pull)
+				start()
+			let p = mouse_hit_model()
+			if (!p || !pull.can_hit(p)) {
+				let int_line = e.mouse_ray.intersectLine(pull.dir, false, _line)
+				if (int_line)
+					p = int_line.start
 
-				let int_line = e.mouse_ray.intersectLine(dir, false, _line)
-				if (!int_line)
-					return
-
-				let delta = int_line.end.sub(dir.start)
-
-				let i = 0
-				for (let pi of face) {
-					_p1.copy(ps[i++]).add(delta)
-					e.set_point(pi, _p1)
-				}
-
-				face.plane.setFromNormalAndCoplanarPoint(face.plane.normal, int_line.end)
 			}
-			for (let pi of face) {
-				let p = e.get_point(pi, _p1)
-				//
-			}
+			if (p)
+				pull.pull(p)
 		}
 
-		function stop() {
-			pulling = false
-			// TODO: make hole, etc.
-		}
+		function start() { pull = e.instance.start_pull(hit_p) }
+		function stop() { pull.stop(); pull = null }
 
 		tools.pull.pointerdown = function(capture) {
-			if (!p)
-				return
-			if (pulling)
+			if (pull) {
 				stop()
-			return capture(move, function() {
-				if (pulling)
-					stop()
-				else
-					start()
-			})
+			} else if (hit_p != null) {
+				return capture(move, function() {
+					if (pull)
+						stop()
+					else
+						start()
+				})
+			}
+		}
+
+		tools.pull.cancel = function() {
+			if (pull) {
+				pull.cancel()
+				pull = null
+			}
 		}
 
 	}
@@ -2414,6 +2531,7 @@ component('x-modeleditor', function(e) {
 	e.on('pointermove', function(ev, mx, my) {
 		update_mouse(ev, mx, my)
 		fire_pointermove()
+		update_dot_positions()
 	})
 
 	e.on('pointerdown', function(ev, mx, my) {
@@ -2486,6 +2604,9 @@ component('x-modeleditor', function(e) {
 		if (tool.keydown)
 			if (tool.keydown(key) === false)
 				return false
+		if (key == 'Escape')
+			if (tool.cancel)
+				tool.cancel()
 		if (shift || ctrl)
 			return
 		let toolname = tool_keys[key.toLowerCase()]
@@ -2512,24 +2633,19 @@ component('x-modeleditor', function(e) {
 
 		e.instance.set({
 			point_coords: [
-				 0,  0,  0,
-				 2,  0,  0,
+				 0,  0, -1,
+				 2,  0, -1,
 				 2,  2,  0,
 				 0,  2,  0,
 				 0,  0,  2,
-				.3,  0, .3,
-				.3,  2, .3,
+				 2,  0,  2,
+				 2,  2,  2,
 				 0,  2,  2,
-			],
-			line_pis: [
-				0, 1, 1, 2, 2, 3, 3, 0,
-				4, 5, 5, 6, 6, 7, 7, 4,
-				0, 4, 1, 5, 2, 6, 3, 7,
 			],
 			faces: [
 				[1, 0, 3, 2],
 				[4, 5, 6, 7],
-				[7, 6, 2, 3],
+				[7, 6, 2, 3], //[6, 2, 3],
 				[4, 0, 1, 5],
 				[0, 4, 7, 3],
 				[5, 1, 2, 6],
