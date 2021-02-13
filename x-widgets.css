@@ -2787,16 +2787,22 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	width : 6px;
 	height: 6px;
 	background-color: white;
+	user-select: none;
 }
 
-.model-editor-text {
+.model-editor-dot-debug {
 	position: absolute;
 	pointer-events: none;
 	padding: 0 .2em;
 	background-color: white;
 	font-family: sans-serif;
 	font-size: 12px;
+	user-select: none;
 }
+
+.model-editor-dot-debug-face  { background-color: #ccccff; }
+.model-editor-dot-debug-point { background-color: #ffffff; }
+.model-editor-dot-debug-line  { background-color: #ffffcc; }
 
 /* ------------------------------------------------------------------------ */
 /* dark theme                                                               */

@@ -139,7 +139,7 @@ function xmodule(opt) {
 
 	xm.bind_instance = function(e, on) {
 		if (on) {
-			array_attr(xm.instances, e.id).push(e)
+			attr(xm.instances, e.id, Array).push(e)
 			update_instance(e)
 		} else {
 			let t = xm.instances[e.id]

@@ -59,12 +59,11 @@
 		a.last
 		a.binsearch(v, cmp, i1, i2)
 	hash maps:
+		map()
 		empty
 		keys(t)
 		update(dt, t1, ...)
-		attr(t, k)
-		array_attr(t, k)
-		map_attr(t, k)
+		attr(t, k[, cons])
 		memoize(f)
 	events:
 		events_mixin(o)
@@ -361,6 +360,8 @@ property(Array, 'last', {get: function() { return this[this.length-1] } })
 
 // hash maps -----------------------------------------------------------------
 
+map = (iter) => new Map(iter)
+
 empty = {}
 
 keys = Object.keys
@@ -376,21 +377,16 @@ function update(dt, ...args) {
 	return dt
 }
 
-function attr(t, k) {
-	let v = t[k]
-	if (!v) { v = {}; t[k] = v }
-	return v
-}
-
-function array_attr(t, k) {
-	let v = t[k]
-	if (!v) { v = []; t[k] = v }
-	return v
-}
-
-function map_attr(t, k) {
-	let v = t.get(k)
-	if (!v) { v = new Map(); t.set(k, v) }
+function attr(t, k, cons) {
+	cons = cons || Object
+	let v = (t instanceof Map) ? t.get(k) : t[k]
+	if (!v) {
+		v = new cons()
+		if (t instanceof Map)
+			t.set(k, v)
+		else
+			t[k] = v
+	}
 	return v
 }
 
