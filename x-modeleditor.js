@@ -1965,7 +1965,7 @@ function editable_model(e) {
 				if (face.valid) {
 					pb.array.set(face.triangles, offset)
 					nb.array.set(face.normals  , offset)
-					sb.array.fill(1, offset, offset + face.triangles.length)
+					sb.array.fill(face.selected, offset, offset + face.triangles.length)
 
 					offset += face.triangles.length
 				}
