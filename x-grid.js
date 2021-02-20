@@ -2073,7 +2073,7 @@ component('x-grid-dropdown', function(e) {
 	nav_dropdown_widget(e)
 
 	e.create_picker = function(opt) {
-		return component.create(update(opt, {
+		return component.create(assign_opt(opt, {
 			type: 'grid',
 			id: e.id && e.id + '.dropdown',
 			val_col: e.val_col,

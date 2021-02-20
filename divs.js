@@ -49,11 +49,11 @@
 		e.once (name|ev, f, [enable], [capture])
 		e.fire   (name, ...args)
 		e.fireup (name, ...args)
-		~[right]click       (ev, nclicks)
+		~[right]click       (ev, nclicks, mx, my)
 		~[right]pointerdown (ev, mx, my)
 		~[right]pointerup   (ev, mx, my)
 		~pointermove        (ev, mx, my)
-		~wheel              (ev, dy)
+		~wheel              (ev, dy, mx, my)
 		~keydown            (key, shift, ctrl, alt, ev)
 		~keyup              (key, shift, ctrl, alt, ev)
 		~keypress           (key, shift, ctrl, alt, ev)
@@ -330,9 +330,9 @@ callers.click = function(ev, f) {
 	if (ev.target.effectively_disabled)
 		return false
 	if (ev.which == 1)
-		return f.call(this, ev, ev.detail)
+		return f.call(this, ev, ev.detail, ev.clientX, ev.clientY)
 	else if (ev.which == 3)
-		return this.fireup('rightclick', ev, ev.detail)
+		return this.fireup('rightclick', ev, ev.detail, ev.clientX, ev.clientY)
 }
 
 callers.pointerdown = function(ev, f) {
@@ -396,7 +396,7 @@ callers.wheel = function(ev, f) {
 	if (ev.target.effectively_disabled)
 		return
 	if (ev.deltaY)
-		return f.call(this, ev, ev.deltaY)
+		return f.call(this, ev, ev.deltaY, ev.clientX, ev.clientY)
 }
 
 etrack = new Map()

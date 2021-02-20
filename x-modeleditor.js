@@ -12,15 +12,34 @@ function v3(x, y, z)     { return new THREE.Vector3(x, y, z) }
 function line3(p1, p2)   { return new THREE.Line3(p1, p2) }
 function color3(c)       { return new THREE.Color(c) }
 
+function vertex_buffer(n) {
+	return new THREE.BufferAttribute(new Float32Array(3 * n), 3).setUsage(THREE.DynamicDrawUsage)
+}
+
+function index_buffer(n, maxn) {
+	let T = or(maxn, n) > 65535 ? UInt32Array : Uint16Array
+	return new THREE.BufferAttribute(new T(n), 1).setUsage(THREE.DynamicDrawUsage)
+}
+
+function int8_buffer(n) {
+	return new THREE.BufferAttribute(new Int8Array(n), 1).setUsage(THREE.DynamicDrawUsage)
+}
+
+function uint32_buffer(n) {
+	return new THREE.BufferAttribute(new Uint32Array(n), 1).setUsage(THREE.DynamicDrawUsage)
+}
+
 (function() {
 
-let DEBUG = 0
+let DEBUG = 1
 let NEARD = 1e-5   // distance epsilon (tolerance)
 
 // colors --------------------------------------------------------------------
 
 let white = 0xffffff
 let black = 0x000000
+let selected_color = 0x0000ff
+let ref_color = 0xff00ff
 let z_axis_color = 0x006600
 let x_axis_color = 0x990000
 let y_axis_color = 0x000099
@@ -37,12 +56,12 @@ let ground_color  = 0xe0dddd
 
 {
 	let p = v3()
-	THREE.Vector3.prototype.project_to_canvas = function(camera, out_p) {
+	THREE.Vector3.prototype.project_to_canvas = function(camera, out) {
 		p.copy(this).project(camera)
-		out_p.x = round(( p.x + 1) * camera.canvas.width  / 2)
-		out_p.y = round((-p.y + 1) * camera.canvas.height / 2)
-		out_p.z = 0
-		return out_p
+		out.x = round(( p.x + 1) * camera.canvas.width  / 2)
+		out.y = round((-p.y + 1) * camera.canvas.height / 2)
+		out.z = 0
+		return out
 	}
 }
 
@@ -60,7 +79,7 @@ let ground_color  = 0xe0dddd
 
 	// returns the smallest line that connects two (coplanar or skewed) lines.
 	// returns null for parallel lines.
-	THREE.Line3.prototype.intersectLine = function intersectLine(lq, clamp, out_line) {
+	THREE.Line3.prototype.intersectLine = function intersectLine(lq, clamp, out) {
 
 		let lp = this
 		let p = lp.start
@@ -102,7 +121,7 @@ let ground_color  = 0xe0dddd
 				rq.copy(lq.end)
 		}
 
-		return out_line.copy(line)
+		return out.copy(line)
 	}
 }
 
@@ -237,7 +256,7 @@ function v2_pseudo_angle(dx, dy) {
 // works with LineSegments().
 // the `canvas` uniform must be updated when canvas is resized.
 
-function dashed_line_material(color) {
+function dashed_line_material(opt) {
 
 	let vshader = `
 		flat out vec4 p2; // because GL_LAST_VERTEX_CONVENTION
@@ -267,9 +286,9 @@ function dashed_line_material(color) {
 
 	let uniforms = {
 		 canvas : {type: 'v2', value: {x: 0, y: 0}},
-		 dash   : {type: 'f' , value: 1},
-		 gap    : {type: 'f' , value: 3},
-		 color  : {value: color3(color)},
+		 dash   : {type: 'f' , value: or(opt.dash, 1)},
+		 gap    : {type: 'f' , value: or(opt.gap, 3)},
+		 color  : {value: color3(or(opt.color, black))},
 	}
 
 	let mat = new THREE.ShaderMaterial({
@@ -295,10 +314,10 @@ function material_db() {
 	return e
 }
 
-// editable polygon meshes ---------------------------------------------------
+// editable models -----------------------------------------------------------
 
-// polygon meshes are lists of polygons enclosed and connected by lines
-// defined over a common point cloud.
+// models are comprised of polygons enclosed and connected by lines defined
+// over a common point cloud, plus standalone lines plus any child models.
 
 // The editing API implements the direct manipulation UI and is designed to
 // perform automatic creation/removal/intersection of points/lines/polygons
@@ -311,240 +330,254 @@ function real_p2p_distance2(p1, p2) { // stub
 	return p1.distanceToSquared(p2)
 }
 
-function face_mesh(e) {
+function editable_model(e) {
 
 	e = e || {}
 
+	// undo/redo stacks -------------------------------------------------------
+
+	{
+		let undo_groups = [] // [i1, ...] indices in undo_stack where groups start
+		let undo_stack  = [] // [args1...,argc1,f1, ...]
+		let redo_groups = [] // same
+		let redo_stack  = [] // same
+
+		function start_undo() {
+			undo_groups.push(undo_stack.length)
+		}
+
+		function push_undo(f, ...args) {
+			undo_stack.push(...args, args.length, f)
+		}
+
+		function _undo(stack, start) {
+			start_undo()
+			while (stack.length >= start) {
+				let f = stack.pop()
+				let argc = stack.pop()
+				f(...stack.splice(-argc))
+			}
+		}
+
+		function undo() {
+			let stack  = undo_stack
+			let groups = undo_groups
+			let start  = groups.pop()
+			if (start == null)
+				return
+			undo_groups = redo_groups
+			undo_stack  = redo_stack
+			_undo(stack, start)
+			undo_groups = groups
+			undo_stack  = stack
+		}
+
+		function redo() {
+			_undo(redo_stack, redo_groups.pop())
+		}
+	}
+
 	// model ------------------------------------------------------------------
 
-	let point_coords = [] // [p1x, p1y, p1z, p2x, ...]
-	let used_pis     = [] // [p1i,...]
-	let free_pis     = [] // [p1i,...]
-	let prc          = [] // [rc1,...] (point ref counts)
-	let line_pis     = [] // [l1p1i, l1p2i, l2p1i, l2p2i, ...]
-	let faces        = [] // [[mesh:, plane:, selected:, lis: [line1i,...],
-	                      //    triangle_pis: [t1p1i, ...], p1i, p2i, ...], ...]
+	let point_coords = [] // [(x, y, z), ...]
+	let free_pis     = [] // [p1i,...]; freelist of point indices.
+	let prc          = [] // [rc1,...]; ref counts of points.
+	let lines        = [] // [(p1i, p2i, rc, sm, op), ...]; rc=refcount, sm=smoothness, op=opacity.
+	let free_lis     = [] // [l1i,...]; freelist of line indices.
+	let faces        = new Set() // {[p1i, p2i, ..., selected:, lis: [line1i,...]]}
+	let sm_faces = map() // {li->[face1,...]}; faces of smooth lines for computing normals.
 
-	e.set = function(t) {
+	// model-to-view info.
+	let point_coords_changed    // time to reload the points_coords_buf.
+	let used_points_changed     // time to reload the used_pis_buf.
+	let used_lines_changed      // time to reload *_edge_lis_buf.
+	let edge_line_count = 0     // number of face edge lines.
+	let nonedge_line_count = 0  // number of standalone lines.
 
-		point_coords = t.point_coords || []
-		line_pis     = t.line_pis     || []
-		faces        = t.faces        || []
+	// low-level model editing API that:
+	// - records undo ops in the undo stack.
+	// - updates and/or invalidates any affected view buffers.
 
-		points_buf = null
-		_update_prc()
-		update_face_lis()
-		e.update()
+	e.point_count = () => prc.length
 
-		if (DEBUG) {
-			window.faces = faces
-			window.lp = line_pis
+	{
+		let p = v3()
+		e.get_point = function(pi, out) {
+			out = out || p
+			out.x = point_coords[3*pi+0]
+			out.y = point_coords[3*pi+1]
+			out.z = point_coords[3*pi+2]
+			out.i = pi
+			return out
 		}
 	}
 
-	function _update_prc() {
-		let n = e.point_count()
-		prc.length = n
-		for (let i = 0; i < n; i++)
-			prc[i] = 0
-		for (let face of faces)
-			for (let pi of face)
-				prc[pi]++
-		for (let pi of line_pis)
-			prc[pi]++
-		pis_valid = false
+	function set_point(pi, x, y, z) {
+		point_coords[3*pi+0] = x
+		point_coords[3*pi+1] = y
+		point_coords[3*pi+2] = z
 	}
 
-	let pis_valid
-	function _update_pis() {
-		if (pis_valid)
-			return
-		used_pis.length = 0
-		free_pis.length = 0
-		let pi = 0
-		for (let rc of prc) {
-			if (rc)
-				used_pis.push(pi)
-			else
-				free_pis.push(pi)
-			pi++
-		}
-		pis_valid = true
-	}
+	e.add_point = function(x, y, z, need_pi) {
 
-	function get_used_pis() {
-		_update_pis()
-		return used_pis
-	}
-
-	let points_buf
-	function get_points_buf() {
-		if (!points_buf)
-			points_buf = new THREE.BufferAttribute(new Float32Array(point_coords), 3)
-		return points_buf
-	}
-
-	function add_point(p) {
 		let pi = free_pis.pop()
 		if (pi == null) {
-			pi = e.point_count()
-			point_coords.push(p.x, p.y, p.z)
-			prc[pi] = 0
-			points_buf = null
+			point_coords.push(x, y, z)
+			pi = prc.length
 		} else {
-			e.move_point(pi, p)
+			set_point(pi, x, y, z)
 		}
+		prc[pi] = 1
+		used_points_changed = true
+
+		if (need_pi != null)
+			assert(pi == need_pi)
+
+		update_point_coords(pi, x, y, z)
+
+		push_undo(e.unref_point, pi)
+
 		if (DEBUG)
 			print('add_point', pi, p.x+','+p.y+','+p.z)
+
 		return pi
 	}
 
-	function add_line(p1i, p2i) {
-		let li = line_pis.push(p1i, p2i) / 2 - 1
-		prc[p1i]++
-		prc[p2i]++
-		pis_valid = false
+	e.unref_point = function(pi) {
+
+		if (--prc[pi] == 0) {
+
+			free_pis.push(pi)
+			used_points_changed = true
+
+			let p = e.get_point(pi)
+			push_undo(e.add_point, p.x, p.y, p.z, pi)
+
+		} else {
+			push_undo(ref_point, pi)
+		}
+
+		// if (DEBUG) print('unref_point', pi, prc[pi])
+	}
+
+	let ref_point = function(pi) {
+
+		assert(prc[pi]++ > 0)
+		push_undo(e.unref_point, pi)
+
+		// if (DEBUG) print('ref_point', pi, prc[pi])
+	}
+
+	e.move_point = function(pi, x, y, z) {
+		let p = e.get_point(pi)
+		set_point(pi, x, y, z)
+		update_point_coords(pi, x, y, z)
+		push_undo(e.move_point, pi, x0, y0, z0)
+	}
+
+	e.line_count = () => lines.length / 5
+
+	{
+		let line = line3()
+		e.get_line = function(li, out) {
+			out = out || line
+			let p1i = lines[5*li+0]
+			let p2i = lines[5*li+1]
+			e.get_point(p1i, out.start)
+			e.get_point(p2i, out.end)
+			out.i = li
+			return out
+		}
+	}
+
+	e.each_line = function(f) {
+		for (let li = 0, n = e.line_count(); li < n; li++)
+			if (lines[5*li+2]) // ref count: used.
+				f(e.get_line(li))
+	}
+
+	e.add_line = function(p1i, p2i, need_li) {
+
+		let li = free_lis.pop()
+		if (li == null) {
+			li = lines.push(p1i, p2i, 1, 0, 1)
+			li = lines.length / 5
+		} else {
+			lines[5*li+0] = p1i
+			lines[5*li+1] = p2i
+			lines[5*li+2] = 1 // ref. count
+			lines[5*li+3] = 0 // smoothness
+			lines[5*li+4] = 1 // opacity
+		}
+		nonedge_line_count++
+		used_lines_changed = true
+
+		if (need_li != null)
+			assert(li == need_li)
+
+		ref_point(p1i)
+		ref_point(p2i)
+
+		push_undo(e.unref_line, li)
+
 		if (DEBUG)
 			print('add_line', li, p1i+','+p2i)
+
 		return li
 	}
 
-	function cut_line(li, pmi) {
-		let p1i = line_pis[2*li+0]
-		let p2i = line_pis[2*li+1]
-		line_pis[2*li+0] = p1i
-		line_pis[2*li+1] = pmi
-		line_pis.push(pmi, p2i)
-		prc[pmi] += 2
-		pis_valid = false
-	}
+	e.unref_line = function(li) {
 
-	function change_line_endpoint(li, pi, old_pi) {
-		let old_pi1 = line_pis[2*li+0]
-		let old_pi2 = line_pis[2*li+1]
-		let is_first  = old_pi1 == old_pi
-		let is_second = old_pi2 == old_pi
-		assert(is_first || is_second)
-		let which = is_first ? 0 : 1
-		line_pis[2*li+which] = pi
-		if (DEBUG)
-			print('change_line_endpoint', li, '@'+which, old_pi+'->'+pi)
-	}
+		let rc = --lines[5*li+2]
+		assert(rc >= 0)
 
-	function remove_lines(li_map) {
-		for (let li = 0, n = e.line_count(); li < n; li++) {
-			if (li_map[li]) {
-				prc[line_pis[2*li+0]]--
-				prc[line_pis[2*li+1]]--
-				pis_valid = false
-				line_pis[2*li+0] = null
-				line_pis[2*li+1] = null
-			}
+		if (rc == 0) {
+			nonedge_line_count--
+			used_lines_changed = true
+			if (DEBUG)
+				print('remove_line', li)
+		} else if (rc == 1) {
+			nonedge_line_count++
+			edge_line_count--
+			used_lines_changed = true
+		} else {
+			edge_line_count--
 		}
-		line_pis.remove_values(v => v == null)
-	}
 
-	function _ref_face_points(face, inc) {
-		for (let pi of face)
-			prc[pi] += inc
-		pis_valid = false
-	}
+		if (rc == 0) {
+			free_lis.push(li)
 
-	function add_face(pis, lis) {
-		let face = pis
-		let fi = faces.push(face) - 1
-		if (lis)
-			face.lis = lis
-		else
-			update_face_lis(face)
-		_ref_face_points(face, 1)
-		if (DEBUG)
-			print('add_face', fi, pis.join(','), lis.join(','))
-		return fi
-	}
-
-	function remove_face(fi) {
-		let face = faces.remove(fi)
-		_ref_face_points(face, -1)
-		face.free()
-		if (DEBUG)
-			print('remove_face', fi)
-	}
-
-	e.point_count = () => point_coords.length / 3
-	e.line_count = () => line_pis.length / 2
-
-	e.get_point = function(pi, out) {
-		out = out || v3()
-		out.x = point_coords[3*pi+0]
-		out.y = point_coords[3*pi+1]
-		out.z = point_coords[3*pi+2]
-		out.i = pi
-		return out
-	}
-
-	e.move_point = function(pi, p) {
-		point_coords[3*pi+0] = p.x
-		point_coords[3*pi+1] = p.y
-		point_coords[3*pi+2] = p.z
-		if (points_buf) {
-			points_buf.setXYZ(pi, p.x, p.y, p.z)
-			points_buf.needsUpdate = true
+			let line = e.get_line(li)
+			push_undo(e.add_line, line.start.i, line.end.i, li)
+		} else {
+			push_undo(ref_line, li)
 		}
+
+		// if (DEBUG) print('unref_line', li, lines[5*li+2])
 	}
 
-	e.get_line = function(li, out) {
-		let p1i = line_pis[2*li+0]
-		let p2i = line_pis[2*li+1]
-		out = out || line3()
-		e.get_point(p1i, out.start)
-		e.get_point(p2i, out.end)
-		out.i = li
-		return out
-	}
+	let ref_line = function(li) {
 
-	{
-		let _line = line3()
-		e.each_line = function(f) {
-			for (let i = 0, len = e.line_count(); i < len; i++) {
-				e.get_line(i, _line)
-				f(_line)
-			}
+		let rc0 = lines[5*li+2]++
+
+		if (rc0 == 1) {
+			nonedge_line_count--
+			edge_line_count++
+			used_lines_changed = true
+		} else {
+			assert(rc0 > 1)
+			edge_line_count++
 		}
+
+		push_undo(e.unref_line, li)
+
+		// if (DEBUG) print('ref_line', li, lines[5*li+2])
 	}
 
-	function find_or_add_line(p1i, p2i) {
-		for (let li = 0, n = e.line_count(); li < n; li++) {
-			let _p1i = line_pis[2*li+0]
-			let _p2i = line_pis[2*li+1]
-			if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i))
-				return li
-		}
-		return add_line(p1i, p2i)
-	}
-
-	function update_face_lis(face) {
-		if (!face) {
-			for (let fi = 0; fi < faces.length; fi++)
-				update_face_lis(faces[fi])
-			return
-		}
-		face.lis = face.lis || []
-		let lis = face.lis
-		lis.length = 0
-		let p1i = face[0]
-		for (let i = 1, n = face.length; i < n; i++) {
-			let p2i = face[i]
-			lis.push(assert(find_or_add_line(p1i, p2i)))
-			p1i = p2i
-		}
-		lis.push(assert(find_or_add_line(p1i, face[0])))
-	}
-
-	e.get_edge = function(fi, ei, out) {
-		out = e.get_line(faces[fi].lis[ei], out)
+	e.get_edge = function(face, ei, out) {
+		out = e.get_line(face.lis[ei], out)
 		out.ei = ei // edge index.
-		if (out.end.i == faces[fi][ei]) { // fix edge endpoints order.
+		if (out.end.i == face[ei]) { // fix edge endpoints order.
 			let p1 = out.start
 			let p2 = out.end
 			out.start = p2
@@ -553,35 +586,114 @@ function face_mesh(e) {
 		return out
 	}
 
-	{
-		let _line = line3()
-		e.each_edge = function(fi, f) {
-			for (let ei = 0, n = faces[fi].length; ei < n; ei++) {
-				e.get_edge(fi, ei, _line)
-				f(_line)
-			}
-		}
+	e.each_edge = function(face, f) {
+		for (let ei = 0, n = face.length; ei < n; ei++)
+			f(e.get_edge(face, ei))
 	}
 
-	function insert_edge(fi, ei, pi, line_before_point, li) {
-		let face = faces[fi]
+	let next_face_id = 0
+	function add_face(face) {
+		let id = next_face_id++
+		if (!face.lis)
+			update_face_lis(face)
+		face.id = id
+		for (let pi of face)
+			ref_point(pi)
+		for (let li of face.lis)
+			ref_line(li)
+		if (DEBUG)
+			print('add_face', id, pis.join(','), lis.join(','))
+		return id
+	}
+
+	function remove_face(face) {
+		faces.delete(face)
+		for (let li of face.lis)
+			e.unref_line(li)
+		for (let pi of face)
+			e.unref_point(pi)
+		if (DEBUG)
+			print('remove_face', face.id)
+	}
+
+	function ref_or_add_line(p1i, p2i) {
+		for (let li = 0, n = e.line_count(); li < n; li++) {
+			let _p1i = lines[5*li+0]
+			let _p2i = lines[5*li+1]
+			if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i)) {
+				ref_line(li)
+				return li
+			}
+		}
+		return e.add_line(p1i, p2i)
+	}
+
+	function update_face_lis(face) {
+		if (!face) {
+			for (let face of faces)
+				update_face_lis(face)
+			return
+		}
+		face.lis = face.lis || []
+		let lis = face.lis
+		lis.length = 0
+		let p1i = face[0]
+		for (let i = 1, n = face.length; i < n; i++) {
+			let p2i = face[i]
+			lis.push(assert(ref_or_add_line(p1i, p2i)))
+			p1i = p2i
+		}
+		lis.push(assert(ref_or_add_line(p1i, face[0])))
+	}
+
+	function insert_edge(face, ei, pi, line_before_point, li) {
 		let line_ei = ei - (line_before_point ? 1 : 0)
 		assert(line_ei >= 0) // can't use ei=0 and line_before_point=true with this function.
 		if (DEBUG)
-			print('insert_edge', fi, '@'+ei, 'pi='+pi, '@'+line_ei, 'li='+li, 'before_pi='+face[ei])
+			print('insert_edge', face.id, '@'+ei, 'pi='+pi, '@'+line_ei, 'li='+li, 'before_pi='+face[ei])
 		face.insert(ei, pi)
 		face.lis.insert(line_ei, li)
-		face.triangle_pis = null
+		face.triangle_coords = null
 	}
 
 	e.each_line_face = function(li, f) {
-		for (let fi = 0; fi < faces.length; fi++) {
-			let face = faces[fi]
-			if (face.lis.indexOf(li) != -1) {
-				f(fi)
-				if (faces[fi] != face) // face removed
-					fi--
-			}
+		for (let face of faces)
+			if (face.lis.indexOf(li) != -1)
+				f(face)
+	}
+
+	function _update_prc() {
+		let n = point_coords.length / 3
+		prc.length = n
+		for (let i = 0; i < n; i++)
+			prc[i] = 0
+		for (let face of faces)
+			for (let pi of face)
+				prc[pi]++
+		for (let i = 0, n = lines.length; i < n; i += 5) {
+			prc[lines[i+0]]++
+			prc[lines[i+1]]++
+		}
+	}
+
+	e.set = function(t) {
+
+		point_coords = t.point_coords || []
+		lines = t.lines || []
+		faces = new Set(t.faces)
+
+		point_coords_changed = true
+		used_points_changed = true
+		used_lines_changed = true
+
+		_update_prc()
+		update_face_lis()
+
+		e.update()
+
+		if (DEBUG) {
+			window.faces = faces
+			window.lines = lines
 		}
 	}
 
@@ -592,7 +704,7 @@ function face_mesh(e) {
 		let p1 = v3()
 		let p2 = v3()
 		let pn = v3()
-		function update_face_plane(face) {
+		function update_face_plane(face, normal) {
 			if (face.valid)
 				return
 			assert(face.length >= 3)
@@ -600,31 +712,34 @@ function face_mesh(e) {
 			face.plane = face.plane || new THREE.Plane()
 			face.plane.face = face
 
-			// compute plane normal using Newell's method.
-			pn.set(0, 0, 0)
-			e.get_point(face[0], p1)
-			for (let i = 1, n = face.length; i <= n; i++) {
-				e.get_point(face[i % n], p2)
-				pn.x += (p1.y - p2.y) * (p1.z + p2.z)
-				pn.y += (p1.z - p2.z) * (p1.x + p2.x)
-				pn.z += (p1.x - p2.x) * (p1.y + p2.y)
-				p1.copy(p2)
+			if (normal) {
+				e.get_point(face[0], p1)
+				face.plane.setFromNormalAndCoplanarPoint(normal, p1)
+			} else {
+				// compute plane normal using Newell's method.
+				pn.set(0, 0, 0)
+				e.get_point(face[0], p1)
+				for (let i = 1, n = face.length; i <= n; i++) {
+					e.get_point(face[i % n], p2)
+					pn.x += (p1.y - p2.y) * (p1.z + p2.z)
+					pn.y += (p1.z - p2.z) * (p1.x + p2.x)
+					pn.z += (p1.x - p2.x) * (p1.y + p2.y)
+					p1.copy(p2)
+				}
+				pn.normalize()
+				face.plane.setFromNormalAndCoplanarPoint(pn, p1)
 			}
-			pn.normalize()
-
-			face.plane.setFromNormalAndCoplanarPoint(pn, p1)
 
 			// the xy quaternion rotates face's plane to the xy-plane so we can do
 			// 2d geometry like triangulation on its points.
 			face.xy_quaternion = face.xy_quaternion || new THREE.Quaternion()
 			face.xy_quaternion.setFromUnitVectors(face.plane.normal, xy_normal)
 
-			face.valid = true
+			face.valid = face.plane.normal.lengthSq() > .5
 		}
 	}
 
-	e.face_plane = function(fi) {
-		let face = faces[fi]
+	e.face_plane = function(face) {
 		update_face_plane(face)
 		return face.plane
 	}
@@ -643,48 +758,39 @@ function face_mesh(e) {
 		return c
 	}
 
-	// face triangulation -----------------------------------------------------
-
-	function face_get_point_on_xy_plane(face, i, p) {
-		e.get_point(face[i], p).applyQuaternion(face.xy_quaternion)
-	}
-
-	// length of output index array is always: 3 * (face.length - 2).
-	function update_face_triangle_pis(face) {
-		if (!face.triangle_pis) {
-			update_face_plane(face)
-			let ps = []
-			let p = v3()
-			for (let i = 0; i < face.length; i++) {
-				e.get_point(face[i], p)
-				face_get_point_on_xy_plane(face, i, p)
-				ps.push(p.x, p.y)
-			}
-			let pis = THREE.Earcut.triangulate(ps, null, 2)
-			let max_pi = 0
-			for (let i = 0; i < pis.length; i++) {
-				pis[i] = face[pis[i]]
-				max_pi = max(max_pi, pis[i])
-			}
-			let pib = new (max_pi > 65535 ? THREE.Uint32BufferAttribute : THREE.Uint16BufferAttribute)(pis, 1)
-			face.triangle_pis = pib
-			return pib
-		}
-	}
-
 	// hit testing & snapping -------------------------------------------------
 
-	e.line_intersect_face_plane = function(line, fi) {
-		let plane = e.face_plane(fi)
+	e.line_intersect_face_plane = function(line, face) {
+		let plane = e.face_plane(face)
 		let d1 = plane.distanceToPoint(line.start)
 		let d2 = plane.distanceToPoint(line.end)
 		if ((d1 < -NEARD && d2 > NEARD) || (d2 < -NEARD && d1 > NEARD)) {
 			let int_p = plane.intersectLine(line, v3())
 			if (int_p) {
-				int_p.fi = fi
+				int_p.face = face
 				int_p.snap = 'line_plane_intersection'
 				return int_p
 			}
+		}
+	}
+
+	{
+		let _raycaster = new THREE.Raycaster()
+		let _p = v3()
+		let ht = []
+		e.line_intersects_face = function(line, face, line_start_in_front_of_plane) {
+			let p1, p2
+			if (line_start_in_front_of_plane) {
+				p1 = line.start
+				p2 = line.end
+			} else {
+				p1 = line.end
+				p2 = line.start
+			}
+			let line_dir = _p.copy(p2).sub(p1).setLength(1)
+			_raycaster.ray.set(p1, line_dir)
+			ht.length = 0
+			return _raycaster.intersectObject(face.mesh, false, ht).length > 0
 		}
 	}
 
@@ -734,18 +840,18 @@ function face_mesh(e) {
 		let dx = axes_int_p  ? p2p_distance2(p, axes_int_p ) : 1/0
 
 		if (d1 <= max_d && d1 <= d2 && d1 <= dm && d1 <= dp && d1 <= dx) {
-			update(p, line.start) // comes with its own point index.
+			assign(p, line.start) // comes with its own point index.
 			p.snap = 'point'
 		} else if (d2 <= max_d && d2 <= d1 && d2 <= dm && d2 <= dp && d2 <= dx) {
-			update(p, line.end) // comes with its own point index.
+			assign(p, line.end) // comes with its own point index.
 			p.snap = 'point'
 		} else if (dp <= max_d && dp <= d1 && dp <= d2 && dp <= dm && dp <= dx) {
-			update(p, plane_int_p) // comes with its own snap flags and indices.
+			assign(p, plane_int_p) // comes with its own snap flags and indices.
 		} else if (dm <= max_d && dm <= d1 && dm <= d2 && dm <= dp && dm <= dx) {
 			line.at(.5, p)
 			p.snap = 'line_middle'
 		} else if (dx <= max_d && dx <= d1 && dx <= d2 && dx <= dm && dx <= dp) {
-			update(p, axes_int_p) // comes with its own snap flags and indices.
+			assign(p, axes_int_p) // comes with its own snap flags and indices.
 		}
 
 	}
@@ -764,7 +870,7 @@ function face_mesh(e) {
 				if (!(f && f(int_p, line) === false)) {
 					if (ds < min_ds) {
 						min_ds = ds
-						min_int_p = update(min_int_p || v3(), int_p)
+						min_int_p = assign(min_int_p || v3(), int_p)
 					}
 				}
 			}
@@ -773,8 +879,8 @@ function face_mesh(e) {
 	}
 
 	// return the point on closest face line from target point.
-	e.point_hit_edges = function(p, fi, max_d, p2p_distance2, f) {
-		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_edge(fi, f))
+	e.point_hit_edges = function(p, face, max_d, p2p_distance2, f) {
+		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_edge(face, f))
 	}
 
 	// return the projected point on closest line from target line.
@@ -806,7 +912,7 @@ function face_mesh(e) {
 							if (!(f && f(int_line.end, line) === false)) {
 								if (ds < min_ds) {
 									min_ds = ds
-									min_int_p = update(min_int_p || v3(), int_line.end)
+									min_int_p = assign(min_int_p || v3(), int_line.end)
 								}
 							}
 						}
@@ -819,12 +925,13 @@ function face_mesh(e) {
 
 	// selection --------------------------------------------------------------
 
-	e.selected_lines = {} // {line1i = true, ...}
+	e.sel_lines = new Set() // {l1i,...}
+	let sel_lines_changed
 
 	{
 		let _line = line3()
 		e.each_selected_line = function(f) {
-			for (let li in e.selected_lines) {
+			for (let li in e.sel_lines) {
 				e.get_line(li, _line)
 				f(_line)
 			}
@@ -834,10 +941,10 @@ function face_mesh(e) {
 	function select_all_lines(sel) {
 		if (sel)
 			for (let i = 0, n = e.line_count(); i < n; i++)
-				e.selected_lines[i] = true
+				e.sel_lines.add(i)
 		else
-			e.selected_lines = {}
-	}
+			e.sel_lines.clear()
+}
 
 	function face_set_selected(face, sel) {
 		face.selected = sel
@@ -850,61 +957,61 @@ function face_mesh(e) {
 			face_set_selected(face, sel)
 	}
 
-	function select_edges(fi, sel) {
-		e.each_edge(fi, function(line) {
+	function select_edges(face, sel) {
+		e.each_edge(face, function(line) {
 			e.select_line(line.i, sel)
 		})
 	}
 
 	function select_line_faces(li, sel) {
-		e.each_line_face(li, function(fi) {
-			e.select_face(fi, sel)
+		e.each_line_face(li, function(face) {
+			e.select_face(face, sel)
 		})
 	}
 
-	e.select_face = function(fi, mode, with_lines) {
-		let face = faces[fi]
+	e.select_face = function(face, mode, with_lines) {
 		if (mode == null) {
 			select_all_lines(false)
 			select_all_faces(false)
 			face_set_selected(face, true)
 			if (with_lines)
-				select_edges(fi, true)
-			update_selected_lines()
+				select_edges(face, true)
+			sel_lines_changed = true
 		} else if (mode === true || mode === false) {
 			face_set_selected(face, mode)
 			if (mode && with_lines) {
-				select_edges(fi, true)
-				update_selected_lines()
+				select_edges(face, true)
+				sel_lines_changed = true
 			}
 		} else if (mode == 'toggle') {
-			e.select_face(fi, !face.selected, with_lines)
+			e.select_face(face, !face.selected, with_lines)
 		}
 	}
 
 	e.select_line = function(li, mode, with_faces) {
 		if (mode == null) {
 			select_all_faces(false)
-			e.selected_lines = {[li]: true}
+			e.sel_lines.clear()
+			e.sel_lines.add(li)
 			if (with_faces)
 				select_line_faces(li, true)
 		} else if (mode === true) {
-			e.selected_lines[li] = true
+			e.sel_lines.add(li)
 			if (with_faces)
 				select_line_faces(li, true)
 		} else if (mode === false) {
-			delete e.selected_lines[li]
+			e.sel_lines.delete(li)
 		} else if (mode == 'toggle') {
-			e.select_line(li, !e.selected_lines[li], with_faces)
+			e.select_line(li, !e.sel_lines.has(li), with_faces)
 		}
-		update_selected_lines()
+		sel_lines_changed = true
 	}
 
 	e.select_all = function(sel) {
 		if (sel == null) sel = true
 		select_all_faces(sel)
 		select_all_lines(sel)
-		update_selected_lines()
+		sel_lines_changed = true
 	}
 
 	// model editing ----------------------------------------------------------
@@ -912,26 +1019,24 @@ function face_mesh(e) {
 	e.remove_selection = function() {
 
 		// remove all faces that selected lines are sides of.
-		for (let li in e.selected_lines)
+		for (let li in e.sel_lines)
 			e.each_line_face(li, remove_face)
 
 		// remove all selected faces.
-		for (let fi = 0; fi < faces.length; fi++)
-			if (faces[fi].selected)
-				remove_face(fi--)
+		for (let face of faces)
+			if (face.selected)
+				remove_face(face)
 
 		// remove all selected lines.
-		remove_lines(e.selected_lines)
+		remove_lines(e.sel_lines)
 
 		// TODO: merge faces.
 
 		select_all_lines(false)
 		update_face_lis()
-
-		e.update()
 	}
 
-	e.add_line = function(line) {
+	e.draw_line = function(line) {
 
 		let p1 = line.start
 		let p2 = line.end
@@ -1011,7 +1116,6 @@ function face_mesh(e) {
 				cut_line(p.li, p.i)
 		}
 
-		e.update()
 	}
 
 	// push/pull --------------------------------------------------------------
@@ -1021,8 +1125,7 @@ function face_mesh(e) {
 		let pull = {}
 
 		// pulled face.
-		pull.fi = p.fi
-		pull.face = faces[p.fi]
+		pull.face = p.face
 
 		// pull direction line, starting on the plane and with unit length.
 		pull.dir = line3()
@@ -1031,13 +1134,13 @@ function face_mesh(e) {
 
 		// faces and lines to exclude when hit-testing while pulling.
 		// all moving geometry must be added here.
-		let moving_fis = {} // {fi: true}
+		let moving_faces = {} // {face: true}
 		let moving_lis = {} // {li: true}
 
 		// faces that need re-triangulation while moving.
 		let shape_changing_faces = new Set()
 
-		moving_fis[pull.fi] = true
+		moving_faces[pull.face] = true
 
 		// pulling only works if the pulled face is connected exclusively to
 		// perpendicular (pp) side faces with pp edges at the connection points.
@@ -1052,7 +1155,7 @@ function face_mesh(e) {
 		{
 			let new_pp_edge = {} // {pull_ei: true}
 			let new_pp_face = {} // {pull_ei: true}
-			let ins_edge = {} // {pp_fi: [[pp_ei, line_before_point, pull_ei],...]}
+			let ins_edge = map() // {pp_face: [[pp_ei, line_before_point, pull_ei],...]}
 
 			let pull_edge = line3()
 			let side_edge = line3()
@@ -1068,11 +1171,10 @@ function face_mesh(e) {
 			for (let pull_ei = 0; pull_ei < en; pull_ei++) {
 
 				let pp_faces_found = 0
-				e.get_edge(pull.fi, pull_ei, pull_edge)
+				e.get_edge(pull.face, pull_ei, pull_edge)
 
-				for (let fi = 0, fn = faces.length; fi < fn; fi++) {
+				for (let face of faces) {
 
-					let face = faces[fi]
 					if (face != pull.face) { // not the pulled face.
 
 						if (abs(pull.face.plane.normal.dot(face.plane.normal)) < NEARD) { // face is pp.
@@ -1091,7 +1193,7 @@ function face_mesh(e) {
 								for (let i = 0; i <= 1; i++) {
 
 									let side_ei = mod(face_ei - 1 + i * 2, face.length)
-									e.get_edge(fi, side_ei, side_edge)
+									e.get_edge(face, side_ei, side_edge)
 
 									let is_side_edge_pp = abs(side_edge.delta(_p).dot(normal)) < NEARD
 
@@ -1109,7 +1211,7 @@ function face_mesh(e) {
 									// add a command to extend this face with a pp edge if it turns out
 									// that the point at `endpoint_ei` will have a pp edge.
 									// NOTE: can't call insert_edge() with ei=0. luckily, we don't have to.
-									attr(ins_edge, fi, Array).push([face_ei + 1, i == 0, endpoint_ei])
+									attr(ins_edge, face, Array).push([face_ei + 1, i == 0, endpoint_ei])
 
 								}
 
@@ -1139,7 +1241,7 @@ function face_mesh(e) {
 			}
 
 			if (DEBUG) {
-				print('pull', pull.fi,
+				print('pull.start', pull.face.id,
 					'edges:'+Object.keys(new_pp_edge).join(','),
 					'faces:'+Object.keys(new_pp_face).join(','),
 					'insert:'+json(ins_edge).replaceAll('"', '')
@@ -1162,7 +1264,7 @@ function face_mesh(e) {
 				// replace point in pulled face.
 				old_points[ei] = old_pi
 				pull.face[ei] = new_pi
-				pull.face.triangle_pis = null
+				face_points_changed(pull.face)
 
 				// update the endpoint of pulled face edges that are connected to this point.
 				let next_ei = ei
@@ -1189,21 +1291,21 @@ function face_mesh(e) {
 				let pull_li = add_line(p1i, p2i)
 				let pis = [old_p1i, old_p2i, p2i, p1i]
 				let lis = [old_pull_li, side2_li, pull_li, side1_li]
-				add_face(pis, lis)
+				let face = pis; face.lis = lis
+				add_face(face)
 
 				// replace edge in pulled face.
 				pull.face.lis[e1i] = pull_li
 			}
 
 			// extend pp faces with newly created pp side edges.
-			for (let pp_fi in ins_edge) {
-				pp_fi = num(pp_fi)
+			for (let [pp_face, t] in ins_edge) {
 				let insert_offset = 0
-				for (let [pp_ei, line_before_point, pull_ei] of ins_edge[pp_fi]) {
+				for (let [pp_ei, line_before_point, pull_ei] of t) {
 					let pull_pi = pull.face[pull_ei]
 					let pp_li = new_pp_edge[pull_ei]
 					if (pp_li != null) {
-						insert_edge(pp_fi, pp_ei + insert_offset, pull_pi, line_before_point, pp_li)
+						insert_edge(pp_face, pp_ei + insert_offset, pull_pi, line_before_point, pp_li)
 						insert_offset++
 					}
 				}
@@ -1212,7 +1314,7 @@ function face_mesh(e) {
 		}
 
 		pull.can_hit = function(p) {
-			return (!(moving_fis[p.fi] || moving_lis[p.li]))
+			return (!(moving_faces[p.face] || moving_lis[p.li]))
 		}
 
 		{
@@ -1229,34 +1331,34 @@ function face_mesh(e) {
 				let i = 0
 				for (let pi of pull.face) {
 					_p.copy(initial_ps[i++]).add(delta)
-					e.move_point(pi, _p)
-					for (let face of shape_changing_faces)
-						face.triangle_pis = null
+					e.move_point(pi, _p.x, _p.y, _p.z)
 				}
+				for (let face of shape_changing_faces)
+					face_points_changed(face)
+				face_points_changed(pull.face)
 
-				pull.face.plane.setFromNormalAndCoplanarPoint(pull.face.plane.normal, _p)
-
-				e.update()
 			}
 		}
 
 		pull.stop = function() {
 			// TODO: make hole, etc.
-
-			e.update()
+			if (DEBUG)
+				print('pull.stop')
 		}
 
 		pull.cancel = function() {
 			// TODO
+			if (DEBUG)
+				print('pull.cancel')
 		}
 
 		return pull
 	}
 
-	// rendering --------------------------------------------------------------
+	// view -------------------------------------------------------------------
 
 	e.group = new THREE.Group()
-	e.group.instance = e
+	e.group.model = e
 	e.group.name = e.name
 
 	if (DEBUG)
@@ -1265,130 +1367,164 @@ function face_mesh(e) {
 	let canvas_w = 0
 	let canvas_h = 0
 
-	function update_canvas_uniform(obj) {
-		if (!obj.material.uniforms)
-			return
-		let cu = obj.material.uniforms.canvas
-		if (!cu)
-			return
-		cu.value.x = canvas_w
-		cu.value.y = canvas_h
-	}
+	let resizing_meshes = []
 
 	e.canvas_resized = function(w, h) {
 		canvas_w = w
 		canvas_h = h
-		for (let face of faces)
-			if (face.mesh)
-				update_canvas_uniform(face.mesh)
+		for (let mesh of resizing_meshes) {
+			let cu = mesh.material.uniforms.canvas
+			cu.value.x = canvas_w
+			cu.value.y = canvas_h
+		}
 	}
 
-	function face_mesh_material(selected) {
+	// view --------------------------------------------------------------------
 
-		let phong = THREE.ShaderLib.phong
+	let point_coords_buf     // vertex buffer for points, edges and faces.
+	let used_pis_buf         // index buffer for points.
+	let vis_edge_lis_buf     // index buffer for normal face edges (black thin lines).
+	let inv_edge_lis_buf     // index buffer for invisible face edges (black dashed lines).
+	let sel_inv_edge_lis_buf // index buffer for selected invisible face edges (blue dashed lines).
 
-		let uniforms = THREE.UniformsUtils.merge([phong.uniforms, {
-			selected : {type: 'b', value: selected},
-			canvas   : {type: 'v2', value: {x: canvas_w, y: canvas_h}},
-		}])
+	function update_point_coords(pi, x, y, z) {
+		let pn = e.point_count()
+		let b = point_coords_buf
+		if (b && b.count >= pn) {
+			b.setXYZ(pi, x, y, z)
+			// TODO: switch to ever-increasing range?
+			b.updateRange.count = 3 * pn
+			b.needsUpdate = true
+		} else {
+			point_coords_changed = true
+		}
+	}
 
-		let vshader = phong.vertexShader
+	function update_point_coords_buf() {
+		if (!point_coords_changed)
+			return
 
-		let fshader = `
-				uniform bool selected;
-			` + THREE.ShaderChunk.meshphong_frag.replace(/}\s*$/,
-			`
-					if (selected) {
-						float x = mod(gl_FragCoord.x, 4.0);
-						float y = mod(gl_FragCoord.y, 8.0);
-						if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
-							 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
-							gl_FragColor = vec4(0.0, 0.0, .8, 1.0);
-					}
+		let pn = e.point_count()
+		let b = point_coords_buf
+		if (!b || b.count < pn) {
+			b = vertex_buffer(nextpow2(pn))
+			point_coords_buf = b
+		}
+
+		b.array.set(point_coords)
+		b.updateRange.count = 3 * pn
+		b.needsUpdate = true
+	}
+
+	function update_used_pis_buf() {
+		if (!used_points_changed)
+			return
+
+		let pn = e.point_count()
+		let b = used_pis_buf
+		if (!b || b.count < pn) {
+			b = index_buffer(nextpow2(pn))
+			used_pis_buf = b
+		}
+
+		let i = 0
+		let is = b.array
+		for (let pi = 0; pi < pn; pi++)
+			if (prc[pi]) // is used
+				is[i++] = pi
+
+		b.updateRange.count = i
+		b.needsUpdate = true
+		b.used_count = i
+	}
+
+	e.show_invisible_lines = true
+
+	function update_edge_lis_bufs() {
+		if (!used_lines_changed)
+			return
+
+		let vln = edge_line_count
+		let iln = e.show_invisible_lines ? vln : 0
+
+		let vb = vis_edge_lis_buf
+		let ib = inv_edge_lis_buf
+
+		if (!vb || vb.count < vln) {
+			vb = index_buffer(nextpow2(2 * vln))
+			vis_edge_lis_buf = vb
+		}
+
+		if ((ib ? ib.count : 0) < iln) {
+			ib = index_buffer(nextpow2(2 * iln))
+			inv_edge_lis_buf = ib
+		}
+
+		let vi = 0
+		let ii = 0
+		let vis = vb.array
+		let iis = ib && ib.array
+		for (let i = 0, n = lines.length; i < n; i += 5) {
+			if (lines[i+2] >= 2) { // refcount: is edge
+				let p1i = lines[i+0]
+				let p2i = lines[i+1]
+				if (lines[i+4] > 0) { // opacity: is not invisible
+					vis[vi++] = p1i
+					vis[vi++] = p2i
+				} else if (is) {
+					iis[ii++] = p1i
+					iis[ii++] = p2i
 				}
-			`
-		)
+			}
+		}
 
-		let mat = new THREE.ShaderMaterial({
-			uniforms       : uniforms,
-			vertexShader   : vshader,
-			fragmentShader : fshader,
-			polygonOffset: true,
-			polygonOffsetFactor: 1, // 1 pixel behind lines.
-			side: THREE.DoubleSide,
-		})
+		vb.updateRange.count = vi
+		vb.needsUpdate = true
+		vb.used_count = vi
 
-		mat.lights = true
-
-		return mat
+		if (ib) {
+			ib.updateRange.count = ii
+			ib.needsUpdate = true
+			ib.used_count = ii
+		}
 	}
 
-	function update_face_mesh(fi) {
+	function update_sel_inv_edge_lis_buf() {
 
-		let face = faces[fi]
+		let ln = e.show_invisible_lines ? e.sel_lines.size : 0
+		let b = sel_inv_edge_lis_buf
+		if ((b ? b.count : 0) < ln) {
+			b = index_buffer(nextpow2(ln))
+			sel_inv_edge_lis_buf = b
+		}
 
-		if (!face.mesh) {
-
-			let geo = new THREE.BufferGeometry()
-			let mat = face_mesh_material(face.selected)
-
-			let mesh = new THREE.Mesh(geo, mat)
-			mesh.castShadow = true
-
-			face.mesh = mesh
-
-			face.free = function() {
-				e.group.remove(mesh)
-				geo.dispose()
-				mat.dispose()
-				if (face.debug_dot)
-					face.debug_dot.free()
+		if (b) {
+			let i = 0
+			let is = b.array
+			for (let li in e.sel_lines) {
+				if (lines[5*li+4] == 0) { // opacity: is invisible.
+					let p1i = lines[5*li+0]
+					let p2i = lines[5*li+1]
+					is[i++] = p1i
+					is[i++] = p2i
+				}
 			}
 
-			e.group.add(mesh)
-
-		}
-
-		// for hit-testing.
-		let mesh = face.mesh
-		mesh.fi = fi
-		mesh.face = face
-
-		let geo = mesh.geometry
-		geo.setAttribute('position', get_points_buf())
-		let triangle_pis = update_face_triangle_pis(face)
-		if (triangle_pis) {
-			geo.setIndex(triangle_pis)
-			//geo.computeFaceNormals()
-			geo.deleteAttribute('normal')
-			geo.computeVertexNormals()
-		}
-
-		if (0 && DEBUG) {
-			if (face.normals_helper)
-				e.group.remove(face.normals_helper)
-			face.normals_helper = new THREE.VertexNormalsHelper(mesh, 2, 0x00ff00, 1)
-			face.normals_helper.layers.set(1)
-			e.group.add(face.normals_helper)
-		}
-
-		if (DEBUG) {
-			if (face.debug_dot)
-				face.debug_dot.free()
-			face.debug_dot = e.editor.dot(face_center(face), fi+':'+face[0], 'face')
+			b.updateRange.count = i
+			b.needsUpdate = true
+			b.used_count = i
 		}
 
 	}
 
-	{
-		let geo = new THREE.BufferGeometry()
+	function points_mesh() {
 
+		let geo = new THREE.BufferGeometry()
 		let mat = new THREE.PointsMaterial({
 			color: black,
 			size: 4,
 			sizeAttenuation: false,
 		})
-
 		let points = new THREE.Points(geo, mat)
 		points.name = 'points'
 		points.layers.set(1) // make it non-hit-testable.
@@ -1397,60 +1533,87 @@ function face_mesh(e) {
 
 		let dots
 
-		function update_points() {
+		function update() {
 
-			geo.setAttribute('position', get_points_buf())
-			geo.setIndex(get_used_pis())
+			geo.setAttribute('position', point_coords_buf)
+			geo.setIndex(used_pis_buf)
 
 			if (DEBUG) {
 				if (dots)
 					for (dot of dots)
 						dot.free()
 				dots = []
-				for (let i = 0, n = e.point_count(); i < n; i++) {
-					let p = e.get_point(i)
-					let dot = e.editor.dot(p, i, 'point')
+				for (let pi of used_pis_buf.array) {
+					let p = e.get_point(pi)
+					let dot = e.editor.dot(p.clone(), pi, 'point')
 					dots.push(dot)
 				}
 			}
 		}
 
+		return update
 	}
 
+	let update_points_mesh = points_mesh()
 
-	{
-		let geo = new THREE.BufferGeometry()
+	function thin_lines_mesh(name, get_lis_buf, mat) {
 
-		let mat = new THREE.LineBasicMaterial({
-			color: black,
-		})
+		let geo, lines, dots
 
-		let lines = new THREE.LineSegments(geo, mat)
-		lines.name = 'lines'
-		lines.layers.set(1) // make it non-hit-testable.
+		function update() {
+			let b = get_lis_buf()
+			if (!b)
+				return
 
-		e.group.add(lines)
+			if (!geo) {
+				geo = new THREE.BufferGeometry()
+				lines = new THREE.LineSegments(geo, mat)
+				lines.name = name
+				lines.layers.set(1) // make it non-hit-testable.
 
-		let dots
+				e.group.add(lines)
 
-		function update_lines() {
+				if (mat.uniforms && mat.uniforms.canvas)
+					resizing_meshes.push(lines)
+			}
 
-			geo.setAttribute('position', get_points_buf())
-			geo.setIndex(line_pis)
+			geo.setAttribute('position', point_coords_buf)
+			geo.setIndex(b)
+			geo.setDrawRange(0, b.used_count)
 
 			if (DEBUG) {
 				if (dots)
 					for (dot of dots)
 						dot.free()
 				dots = []
-				e.each_line(function(line) {
+				for (let li of b.array) {
+					let line = e.get_line(li)
 					let dot = e.editor.dot(line.at(.5, v3()), line.i, 'line')
 					dots.push(dot)
-				})
+				}
 			}
 		}
 
+		return update
 	}
+
+	let update_vis_edges_mesh = thin_lines_mesh(
+		'vis_edges',
+		() => vis_edge_lis_buf,
+		new THREE.LineBasicMaterial({color: black}),
+	)
+
+	let update_inv_edges_mesh = thin_lines_mesh(
+		'inv_edges',
+		() => inv_edge_lis_buf,
+		dashed_line_material({color: black, dash: 3, gap: 3}),
+	)
+
+	let update_sel_inv_edges_mesh = thin_lines_mesh(
+		'sel_inv_edges',
+		() => sel_inv_edge_lis_buf,
+		dashed_line_material({color: selected_color, dash: 3, gap: 3}),
+	)
 
 	function fat_line_material(color) {
 
@@ -1501,103 +1664,364 @@ function face_mesh(e) {
 
 	}
 
-	function fat_line_update_geometry(geo, each_line) {
+	function fat_lines_mesh(name, should_update, get_max_count, each_li, color) {
 
-		let ps = []
-		let qs = []
-		let dirs = []
-		let pis = []
+		let geo = new THREE.BufferGeometry()
+		let mat = fat_line_material(color)
+		let mesh = new THREE.Mesh(geo, mat)
+		mesh.name = name
 
-		let i = 0
-		each_line(function(line) {
+		resizing_meshes.push(mesh)
+		e.group.add(mesh)
 
-			let p1 = line.start
-			let p2 = line.end
+		let capacity = 0
+		let pb, qb, dirb, pib
 
-			// each line has 4 points.
-			ps.push(p1.x, p1.y, p1.z)
-			ps.push(p1.x, p1.y, p1.z)
-			ps.push(p2.x, p2.y, p2.z)
-			ps.push(p2.x, p2.y, p2.z)
+		function update() {
 
-			// each point has access to its opposite point.
-			qs.push(p2.x, p2.y, p2.z)
-			qs.push(p2.x, p2.y, p2.z)
-			qs.push(p1.x, p1.y, p1.z)
-			qs.push(p1.x, p1.y, p1.z)
+			if (!should_update())
+				return
 
-			// each point has an alternating normal direction.
-			dirs.push(1, -1, -1, 1)
+			let max_count = get_max_count()
 
-			// each line is made of 2 triangles (0, 1, 2) and (1, 3, 2).
-			pis.push(
-				i+0, i+1, i+2,  // triangle 1
-				i+1, i+3, i+2   // triangle 2
-			)
+			if (capacity < max_count) {
 
-			i += 4
+				capacity = nextpow2(max_count)
+
+				pb   = vertex_buffer(4 * capacity) // 4 points per line.
+				qb   = vertex_buffer(4 * capacity) // 4 "other-line-endpoint" points per line.
+				dirb =   int8_buffer(4 * capacity) // one direction sign per vertex.
+				pib  =  index_buffer(6 * capacity) // 1 quad = 2 triangles = 6 points per line.
+
+				geo.setAttribute('position', pb)
+				geo.setAttribute('q', qb)
+				geo.setAttribute('dir', dirb)
+				geo.setIndex(pib)
+
+			}
+
+			if (!pb)
+				return
+
+			let ps = pb.array
+			let qs = qb.array
+			let dirs = dirb.array
+			let pis = pib.array
+
+			let i = 0
+			let j = 0
+			each_li(function(li) {
+				/*
+				// simpler but slower (if not jit'ed) code for setting pb and qb:
+
+				let line = e.get_line(li)
+				let p1 = line.start
+				let p2 = line.end
+
+				pb.setXYZ(i+0, p1.x, p1.y, p1.z)
+				pb.setXYZ(i+1, p1.x, p1.y, p1.z)
+				pb.setXYZ(i+2, p2.x, p2.y, p2.z)
+				pb.setXYZ(i+3, p2.x, p2.y, p2.z)
+
+				qb.setXYZ(i+0, p2.x, p2.y, p2.z)
+				qb.setXYZ(i+1, p2.x, p2.y, p2.z)
+				qb.setXYZ(i+2, p1.x, p1.y, p1.z)
+				qb.setXYZ(i+3, p1.x, p1.y, p1.z)
+				*/
+
+				let p1i = lines[5*li+0]
+				let p2i = lines[5*li+1]
+				let p1x = point_coords[3*p1i+0]
+				let p1y = point_coords[3*p1i+1]
+				let p1z = point_coords[3*p1i+2]
+				let p2x = point_coords[3*p2i+0]
+				let p2y = point_coords[3*p2i+1]
+				let p2z = point_coords[3*p2i+2]
+
+				// each line has 4 points: (p1, p1, p2, p2).
+				ps[3*(i+0)+0] = p1x
+				ps[3*(i+0)+1] = p1y
+				ps[3*(i+0)+2] = p1z
+
+				ps[3*(i+1)+0] = p1x
+				ps[3*(i+1)+1] = p1y
+				ps[3*(i+1)+2] = p1z
+
+				ps[3*(i+2)+0] = p2x
+				ps[3*(i+2)+1] = p2y
+				ps[3*(i+2)+2] = p2z
+
+				ps[3*(i+3)+0] = p2x
+				ps[3*(i+3)+1] = p2y
+				ps[3*(i+3)+2] = p2z
+
+				// each point has access to its opposite point, so (p2, p2, p1, p1).
+				qs[3*(i+0)+0] = p2x
+				qs[3*(i+0)+1] = p2y
+				qs[3*(i+0)+2] = p2z
+
+				qs[3*(i+1)+0] = p2x
+				qs[3*(i+1)+1] = p2y
+				qs[3*(i+1)+2] = p2z
+
+				qs[3*(i+2)+0] = p1x
+				qs[3*(i+2)+1] = p1y
+				qs[3*(i+2)+2] = p1z
+
+				qs[3*(i+3)+0] = p1x
+				qs[3*(i+3)+1] = p1y
+				qs[3*(i+3)+2] = p1z
+
+				// each point has an alternating normal direction.
+				dirs[i+0] =  1
+				dirs[i+1] = -1
+				dirs[i+2] = -1
+				dirs[i+3] =  1
+
+				// each line is made of 2 triangles (0, 1, 2) and (1, 3, 2).
+				pis[j+0] = i+0
+				pis[j+1] = i+1
+				pis[j+2] = i+2
+				pis[j+3] = i+1
+				pis[j+4] = i+3
+				pis[j+5] = i+2
+
+				i += 4
+				j += 6
+			})
+
+			pb   .updateRange.count = 3 * i
+			qb   .updateRange.count = 3 * i
+			dirb .updateRange.count = i
+			pib  .updateRange.count = j
+
+			pb   .needsUpdate = true
+			qb   .needsUpdate = true
+			dirb .needsUpdate = true
+			pib  .needsUpdate = true
+
+			geo.setDrawRange(0, j)
+		}
+
+		return update
+	}
+
+	function each_nonedge_line(f) {
+		for (let i = 0, n = lines.length; i < n; i += 5)
+			if (lines[i+2] == 1) // is standalone.
+				f(li)
+	}
+
+	function each_sel_vis_line(f) {
+		for (li of e.sel_lines)
+			if (lines[5*li+4] > 0) // is visible.
+				f(li)
+	}
+
+	let update_nonedge_lines = fat_lines_mesh(
+		'fat_lines',
+		() => point_coords_changed || used_lines_changed,
+		() => nonedge_line_count,
+		each_nonedge_line,
+		black
+	)
+
+	let update_sel_vis_lines = fat_lines_mesh(
+		'sel_lines',
+		() => point_coords_changed || sel_lines_changed,
+		() => e.sel_lines.size,
+		each_sel_vis_line,
+		selected_color
+	)
+
+	function face_mesh_material() {
+
+		let phong = THREE.ShaderLib.phong
+
+		let uniforms = THREE.UniformsUtils.merge([phong.uniforms, {
+			canvas: {type: 'v2', value: {x: canvas_w, y: canvas_h}},
+		}])
+
+		let vshader = `
+				attribute uint selected;
+				flat out uint vselected;
+			` + phong.vertexShader.replace(/}\s*$/,
+			`
+					vselected = selected;
+				}
+			`
+		)
+
+		let fshader = `
+				flat in uint vselected;
+			` + THREE.ShaderChunk.meshphong_frag.replace(/}\s*$/,
+			`
+					if (vselected == uint(1)) {
+						float x = mod(gl_FragCoord.x, 4.0);
+						float y = mod(gl_FragCoord.y, 8.0);
+						if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
+							 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
+							gl_FragColor = vec4(0.0, 0.0, .8, 1.0);
+					}
+				}
+			`
+		)
+
+		let mat = new THREE.ShaderMaterial({
+			uniforms       : uniforms,
+			vertexShader   : vshader,
+			fragmentShader : fshader,
+			polygonOffset: true,
+			polygonOffsetFactor: 1, // 1 pixel behind lines.
+			side: THREE.DoubleSide,
 		})
 
-		let pbuf   = new THREE.BufferAttribute(new Float32Array(ps  ), 3)
-		let qbuf   = new THREE.BufferAttribute(new Float32Array(qs  ), 3)
-		let dirbuf = new THREE.BufferAttribute(new Float32Array(dirs), 1)
+		mat.lights = true
 
-		geo.setAttribute('position', pbuf)
-		geo.setAttribute('q', qbuf)
-		geo.setAttribute('dir', dirbuf)
-
-		geo.setIndex(pis)
-
-		geo.computeBoundingBox()
-		geo.computeBoundingSphere()
-
+		return mat
 	}
 
-	{
-		let lines
-		function update_selected_lines() {
-
-			if (lines)
-				e.group.remove(lines)
-
-			let geo = new THREE.BufferGeometry()
-			let mat = fat_line_material(0x0000ff)
-			lines = new THREE.Mesh(geo, mat)
-			lines.name = 'selected_lines'
-			lines.layers.set(1) // make it non-hit-testable.
-
-			e.group.add(lines)
-
-			fat_line_update_geometry(geo, e.each_selected_line)
+	function update_face_triangles(face) {
+		if (!face.update_triangles) {
+			let ps = []
+			let p = v3()
+			let triangles
+			let normals
+			face.update_triangles = function() {
+				if (face.triangles_valid)
+					return
+				update_face_plane(face)
+				if (!face.valid)
+					return
+				let pn = face.length
+				ps.length = pn * 2
+				for (let i = 0; i < pn; i++) {
+					e.get_point(face[i], p)
+					p.applyQuaternion(face.xy_quaternion) // project p to xy plane.
+					ps[2*i+0] = p.x
+					ps[2*i+1] = p.y
+				}
+				let pis = THREE.Earcut.triangulate(ps, null, 2)
+				let tn = pis.length
+				assert(tn == 3 * (pn - 2))
+				if (!face.triangles) {
+					face.triangles = []
+					face.  normals = []
+				} else {
+					face.triangles.length = 0
+					face.  normals.length = 0
+				}
+				let n = face.plane.normal
+				for (let i = 0; i < tn; i++) {
+					let p = e.get_point(face[pis[i]])
+					face.triangles.push(p.x, p.y, p.z)
+					face.  normals.push(n.x, n.y, n.z)
+				}
+				face.triangles_valid = true
+			}
 		}
+		face.update_triangles()
 	}
+
+	function face_points_changed(face) {
+		face.valid = false
+		face.triangles_valid = false
+	}
+
+	function faces_mesh() {
+
+		let geo = new THREE.BufferGeometry()
+		let mat = face_mesh_material()
+		let mesh = new THREE.Mesh(geo, mat)
+		mesh.castShadow = true
+
+		resizing_meshes.push(mesh)
+		e.group.add(mesh)
+
+		let pb, nb, sb
+
+		function update() {
+
+			let pn = 0
+			for (let face of faces) {
+				update_face_triangles(face)
+				if (face.valid) {
+					pn += face.triangles.length
+				}
+			}
+
+			if (!pb || pb.count < pn) {
+				let capacity = nextpow2(pn)
+				pb = vertex_buffer(capacity)
+				nb = vertex_buffer(capacity)
+				sb = uint32_buffer(capacity)
+				geo.setAttribute('position', pb)
+				geo.setAttribute('normal'  , nb)
+				geo.setAttribute('selected', sb)
+			}
+
+			let offset = 0
+			for (let face of faces) {
+				if (face.valid) {
+					pb.array.set(face.triangles, offset)
+					nb.array.set(face.normals  , offset)
+					sb.array.fill(1, offset, offset + face.triangles.length)
+
+					offset += face.triangles.length
+				}
+			}
+
+			pb.updateRange.count = 3 * pn
+			nb.updateRange.count = 3 * pn
+			sb.updateRange.count = pn
+
+			pb.needsUpdate = true
+			nb.needsUpdate = true
+			sb.needsUpdate = true
+
+			geo.setDrawRange(0, pn)
+
+			/*
+			if (DEBUG) {
+				if (face.normals_helper)
+					e.group.remove(face.normals_helper)
+				if (face.valid) {
+					face.normals_helper = new THREE.VertexNormalsHelper(mesh, 2, 0x00ff00, 1)
+					face.normals_helper.layers.set(1)
+					e.group.add(face.normals_helper)
+				}
+			}
+
+			if (DEBUG) {
+				if (face.debug_dot)
+					face.debug_dot.free()
+				face.debug_dot = e.editor.dot(face_center(face), face.id+':'+face[0], 'face')
+			}
+			*/
+
+		}
+
+		return update
+	}
+
+	let update_faces_mesh = faces_mesh()
 
 	e.update = function() {
-		for (let fi = 0; fi < faces.length; fi++)
-			update_face_mesh(fi)
-		update_points()
-		update_lines()
-		update_selected_lines()
-	}
+		update_point_coords_buf()
+		update_used_pis_buf()
+		update_points_mesh()
+		update_edge_lis_bufs()
+		update_vis_edges_mesh()
+		update_inv_edges_mesh()
+		update_sel_inv_edges_mesh()
+		update_nonedge_lines()
+		update_sel_vis_lines()
+		update_faces_mesh()
 
-	{
-		let _raycaster = new THREE.Raycaster()
-		let _p = v3()
-		let ht = []
-		e.line_intersects_face = function(line, fi, line_start_in_front_of_plane) {
-			let p1, p2
-			if (line_start_in_front_of_plane) {
-				p1 = line.start
-				p2 = line.end
-			} else {
-				p1 = line.end
-				p2 = line.start
-			}
-			let line_dir = _p.copy(p2).sub(p1).setLength(1)
-			_raycaster.ray.set(p1, line_dir)
-			ht.length = 0
-			return _raycaster.intersectObject(faces[fi].mesh, false, ht).length > 0
-		}
+		point_coords_changed = false
+		used_points_changed = false
+		used_lines_changed = false
+		sel_lines_changed = false
 	}
 
 	return e
@@ -1628,10 +2052,12 @@ component('x-modeleditor', function(e) {
 		let raf_id
 		let do_render = function() {
 			e.renderer.render(e.scene, e.camera)
+			update_dot_positions()
 			raf_id = null
 		}
 		function render() {
-			raf_id = raf_id || raf(do_render)
+			//raf_id = raf_id ||
+			do_render()
 		}
 	}
 
@@ -1657,13 +2083,11 @@ component('x-modeleditor', function(e) {
 			e.camera.aspect = r.w / r.h
 			e.camera.updateProjectionMatrix()
 			e.renderer.setSize(r.w, r.h)
-			e.instance.canvas_resized(r.w, r.h)
+			e.model.canvas_resized(r.w, r.h)
+			render()
 		}
 		e.on('resize', resized)
 
-		e.on('bind', function(on) {
-			//if (on) resized(e.rect())
-		})
 	}
 
 	// camera -----------------------------------------------------------------
@@ -1843,7 +2267,7 @@ component('x-modeleditor', function(e) {
 
 		if (dotted) {
 
-			mat = dashed_line_material(color)
+			mat = dashed_line_material({color: color})
 
 			function resized(r) {
 				mat.uniforms.canvas.value.x = r.w
@@ -1864,7 +2288,7 @@ component('x-modeleditor', function(e) {
 
 		} else {
 
-			mat = new THREE.LineBasicMaterial({color: color, polygonOffset: true})
+			mat = new THREE.LineBasicMaterial({color: color})
 
 			mat.set_color = function(color) {
 				this.color.set(color)
@@ -1937,7 +2361,7 @@ component('x-modeleditor', function(e) {
 
 		e.update_point = function(p) {
 			let snap = e.point.snap
-			update(e.point, p)
+			assign(e.point, p)
 			e.point.snap = snap
 			e.visible = true
 			e.update()
@@ -2043,7 +2467,11 @@ component('x-modeleditor', function(e) {
 	) {
 		let d = 2 * pe.max_distance
 		let geo = new THREE.PlaneBufferGeometry(d)
-		let mat = new THREE.MeshLambertMaterial({depthTest: false, visible: false, side: THREE.DoubleSide})
+		let mat = new THREE.MeshLambertMaterial({
+			depthTest: false,
+			visible: false,
+			side: THREE.DoubleSide,
+		})
 		let e = new THREE.Mesh(geo, mat)
 		e.name = name
 
@@ -2198,7 +2626,7 @@ component('x-modeleditor', function(e) {
 					let ds = sqrt(canvas_p2p_distance2(p, int_p))
 					if (ds <= e.hit_d ** 2 && ds <= min_ds) {
 						min_ds = ds
-						min_int_p = update(min_int_p || v3(), int_p)
+						min_int_p = assign(min_int_p || v3(), int_p)
 					}
 				}
 			}
@@ -2215,12 +2643,9 @@ component('x-modeleditor', function(e) {
 	// model ------------------------------------------------------------------
 
 	e.components = {} // {name->group}
-	e.model = new THREE.Group()
-	e.model.name = 'model'
-	e.scene.add(e.model)
-	e.instance = face_mesh()
-	e.instance.editor = e
-	e.model.add(e.instance.group)
+	e.model = editable_model()
+	e.model.editor = e
+	e.scene.add(e.model.group)
 
 	// direct-manipulation tools ==============================================
 
@@ -2230,6 +2655,13 @@ component('x-modeleditor', function(e) {
 
 	tools.orbit = {}
 
+	function update_controls() {
+		e.controls.update()
+		e.camera.updateProjectionMatrix()
+		e.camera.getWorldDirection(e.dirlight.position)
+		e.dirlight.position.negate()
+	}
+
 	tools.orbit.bind = function(on) {
 		if (on && !e.controls) {
 			e.controls = new THREE.OrbitControls(e.camera, e.canvas)
@@ -2237,22 +2669,23 @@ component('x-modeleditor', function(e) {
 			e.controls.maxDistance = e.max_distance / 100
 		}
 		e.controls.enabled = on
+		update_controls()
 	}
 
 	tools.orbit.pointermove = function() {
-		e.controls.update()
-		e.camera.updateProjectionMatrix()
-		e.camera.getWorldDirection(e.dirlight.position)
-		e.dirlight.position.negate()
+		if (!e.mouse.left)
+			return
+		update_controls()
+		return true
 	}
 
 	// current point hit-testing and snapping ---------------------------------
 
 	function mouse_hit_faces() {
-		let hit = e.raycaster.intersectObject(e.model, true)[0]
+		let hit = e.raycaster.intersectObject(e.model.group, true)[0]
 		if (!(hit && hit.object.type == 'Mesh'))
 			return
-		hit.point.fi = hit.object.fi
+		hit.point.face = hit.object.face
 		hit.point.snap = 'face'
 		return hit.point
 	}
@@ -2268,7 +2701,7 @@ component('x-modeleditor', function(e) {
 
 			let p0 = e.raycaster.ray.origin
 			let ray = line3(p0, e.raycaster.ray.direction.clone().setLength(2 * e.max_distance).add(p0))
-			let plane = e.instance.face_plane(p.fi)
+			let plane = e.model.face_plane(p.face)
 
 			// preliminary line filter before hit-testing.
 			// this can filter a lot or very little depending on context.
@@ -2288,33 +2721,33 @@ component('x-modeleditor', function(e) {
 			// but are not intersecting the face mesh itself.
 			function is_intersecting_line_valid(int_p, line) {
 				if (line.intersects_face_plane)
-					if (!e.instance.line_intersects_face(line, p.fi, line.intersects_face_plane == 1)) {
+					if (!e.model.line_intersects_face(line, p.face, line.intersects_face_plane == 1)) {
 						return false
 					}
 			}
 
-			let p1 = e.instance.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true,
+			let p1 = e.model.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true,
 				is_intersecting_line_valid, null, is_line_not_behind_face_plane)
 
 			if (p1) {
 
 				// we've hit a line. snap to it.
-				let line = e.instance.get_line(p1.li)
+				let line = e.model.get_line(p1.li)
 
 				// check if the hit line intersects the hit plane: that's a snap point.
-				let plane_int_p = e.instance.line_intersect_face_plane(line, p.fi)
+				let plane_int_p = e.model.line_intersect_face_plane(line, p.face)
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
 				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p1, line)
 
 				// snap the hit point along the hit line along with any additional snap points.
-				e.instance.snap_point_on_line(p1, line, e.hit_d, canvas_p2p_distance2, plane_int_p, axes_int_p)
+				e.model.snap_point_on_line(p1, line, e.hit_d, canvas_p2p_distance2, plane_int_p, axes_int_p)
 				if (axes_origin)
 					check_point_on_axes(p1, axes_origin)
 
 				// if the snapped point is not behind the plane, use it, otherwise forget that we even hit the line.
 				if (plane.distanceToPoint(p1) >= -NEARD)
-					update(p, p1) // merge snap data.
+					assign(p, p1) // merge snap data.
 
 			} else {
 
@@ -2329,18 +2762,18 @@ component('x-modeleditor', function(e) {
 			let p0 = e.raycaster.ray.origin
 			let p1 = e.raycaster.ray.direction
 			let ray = line3(p0, p1.clone().setLength(2 * e.max_distance).add(p0))
-			p = e.instance.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true)
+			p = e.model.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true)
 
 			if (p) {
 
 				// we've hit a line. snap to it.
-				let line = e.instance.get_line(p.li)
+				let line = e.model.get_line(p.li)
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
 				let axes_int_p = axes_origin && axes_hit_line(axes_origin, p, line)
 
 				// snap the hit point along the hit line along with any additional snap points.
-				e.instance.snap_point_on_line(p, line, e.hit_d, canvas_p2p_distance2, null, axes_int_p)
+				e.model.snap_point_on_line(p, line, e.hit_d, canvas_p2p_distance2, null, axes_int_p)
 				if (axes_origin)
 					check_point_on_axes(p, axes_origin)
 
@@ -2407,7 +2840,7 @@ component('x-modeleditor', function(e) {
 		y_axis: y_axis_color,
 		x_axis: x_axis_color,
 		z_axis: z_axis_color,
-		line_point_intersection: 0xff00ff,
+		line_point_intersection: ref_color,
 	}
 
 	let future_ref_point = v3()
@@ -2421,7 +2854,7 @@ component('x-modeleditor', function(e) {
 		let p1 = cline.start
 		let p2 = cline.end
 		p2.i = null
-		p2.fi = null
+		p2.face = null
 		p2.li = null
 		p2.snap = null
 		p2.line_snap = null
@@ -2441,7 +2874,7 @@ component('x-modeleditor', function(e) {
 			if ((p.snap == 'point' || p.snap == 'line_middle')
 				&& (p.i == null || !e.cur_line.visible || p.i != cline.start.i)
 			) {
-				update(future_ref_point, p)
+				assign(future_ref_point, p)
 				ref_point_update_after(.5)
 			}
 
@@ -2461,8 +2894,8 @@ component('x-modeleditor', function(e) {
 
 				}
 
-				update(p1, p)
-				update(p2, p)
+				assign(p1, p)
+				assign(p2, p)
 
 			} else { // moving the line end-point.
 
@@ -2473,11 +2906,11 @@ component('x-modeleditor', function(e) {
 
 					// snap point to axes originating at the ref point.
 					if (e.ref_point.visible) {
-						update(p2, p)
+						assign(p2, p)
 						let p_line_snap = p.line_snap
 						let axes_int_p = axes_hit_line(e.ref_point.point, p, cline)
 						if (axes_int_p && canvas_p2p_distance2(axes_int_p, p) <= e.hit_d ** 2) {
-							update(p, axes_int_p)
+							assign(p, axes_int_p)
 							e.ref_line.snap = axes_int_p.line_snap
 							p.line_snap = p_line_snap
 							e.ref_line.update_endpoints(e.ref_point.point, p)
@@ -2489,7 +2922,7 @@ component('x-modeleditor', function(e) {
 
 				}
 
-				update(p2, p)
+				assign(p2, p)
 
 			}
 
@@ -2507,6 +2940,7 @@ component('x-modeleditor', function(e) {
 		e.cur_line.update()
 		e.ref_line.update()
 
+		return true
 	}
 
 	tools.line.pointerdown = function() {
@@ -2514,7 +2948,8 @@ component('x-modeleditor', function(e) {
 		let cline = e.cur_line.line
 		if (e.cur_line.visible) {
 			let closing = cline.end.i != null || cline.end.li != null
-			e.instance.add_line(cline)
+			e.model.draw_line(cline)
+			e.model.update()
 			e.ref_point.visible = false
 			if (closing) {
 				tools.line.cancel()
@@ -2553,15 +2988,20 @@ component('x-modeleditor', function(e) {
 		tools.pull.pointermove = function() {
 			if (pull) {
 				move()
+				return true
 			} else {
 				let p = mouse_hit_faces()
 				if (p && p.snap == 'face') {
-					e.instance.select_face(p.fi)
-					hit_p = p
+					e.model.select_face(p.face)
+					e.model.update()
 				} else {
-					hit_p = null
-					e.instance.select_all(false)
+					p = null
+					e.model.select_all(false)
+					e.model.update()
 				}
+				let hit_face_changed = (hit_p && hit_p.face) !== (p && p.face)
+				hit_p = p
+				return hit_face_changed
 			}
 		}
 
@@ -2582,13 +3022,15 @@ component('x-modeleditor', function(e) {
 		}
 
 		function start() {
-			pull = e.instance.start_pull(hit_p)
+			pull = e.model.start_pull(hit_p)
+			e.model.update()
 		}
 
 		function stop() {
 			pull.stop()
 			pull = null
-			e.instance.select_all(false)
+			e.model.select_all(false)
+			e.model.update()
 		}
 
 		tools.pull.pointerdown = function(capture) {
@@ -2644,14 +3086,18 @@ component('x-modeleditor', function(e) {
 			e.hit_d = e.select_distance
 			p = mouse_hit_model()
 			if (!p && nclicks == 1 && !mode) {
-				e.instance.select_all(false)
+				e.model.select_all(false)
+				e.model.update()
 			} else if (p && nclicks == 3) {
-				e.instance.select_all(true)
+				e.model.select_all(true)
+				e.model.update()
 			} else if (p && nclicks <= 2) {
 				if (p.li != null) {
-					e.instance.select_line(p.li, mode, nclicks == 2)
-				} else if (p.fi != null) {
-					e.instance.select_face(p.fi, mode, nclicks == 2)
+					e.model.select_line(p.li, mode, nclicks == 2)
+					e.model.update()
+				} else if (p.face != null) {
+					e.model.select_face(p.face, mode, nclicks == 2)
+					e.model.update()
 				}
 			}
 		}
@@ -2673,10 +3119,11 @@ component('x-modeleditor', function(e) {
 				tool.bind(false)
 			tool = assert(tools[name])
 			toolname = name
-			if (tool.bind)
-				tool.bind(true)
-			fire_pointermove()
 			e.cursor = tool.cursor || name
+			if (tool.bind) {
+				tool.bind(true)
+				fire_pointermove(true)
+			}
 		})
 	}
 
@@ -2696,9 +3143,11 @@ component('x-modeleditor', function(e) {
 			e.mouse_ray.end.copy(e.raycaster.ray.origin).add(e.raycaster.ray.direction)
 		}
 
-		function update_mouse(ev, mx, my) {
+		function update_mouse(ev, mx, my, left_down) {
 			e.mouse.x = mx
 			e.mouse.y = my
+			if (left_down != null)
+				e.mouse.left = left_down
 			update_keys(ev)
 			update_raycaster(e.mouse)
 		}
@@ -2710,52 +3159,66 @@ component('x-modeleditor', function(e) {
 		e.alt   = ev.altKey
 	}
 
-	function fire_pointermove() {
+	function fire_pointermove(do_render) {
 		if (tool.pointermove)
-			tool.pointermove()
+			do_render = or(tool.pointermove(), do_render)
+		if (do_render)
+			render()
 	}
 
 	e.on('pointermove', function(ev, mx, my) {
 		update_mouse(ev, mx, my)
 		fire_pointermove()
-		update_dot_positions()
-		render()
 	})
 
 	e.on('pointerdown', function(ev, mx, my) {
-		update_mouse(ev, mx, my)
+		update_mouse(ev, mx, my, true)
 		if (tool.pointerdown) {
+			fire_pointermove(false)
 			function capture(move, up) {
 				let movewrap = move && function(ev, mx, my) {
 					update_mouse(ev, mx, my)
 					return move()
 				}
 				let upwrap = up && function(ev, mx, my) {
-					update_mouse(ev, mx, my)
+					update_mouse(ev, mx, my, false)
 					return up()
 				}
 				return e.capture_pointer(ev, movewrap, upwrap)
 			}
 			tool.pointerdown(capture)
+			fire_pointermove(true)
+		} else {
 			fire_pointermove()
 		}
+	})
+
+	e.on('pointerup', function(ev, mx, my) {
+		update_mouse(ev, mx, my, false)
+		fire_pointermove()
 	})
 
 	e.on('pointerleave', function(ev) {
 		e.tooltip = ''
 	})
 
-	e.on('click', function(ev, nclicks) {
-		if (tool.click)
+	e.on('click', function(ev, nclicks, mx, my) {
+		update_mouse(ev, mx, my)
+		if (tool.click) {
 			tool.click(nclicks)
+			fire_pointermove(true)
+		} else {
+			fire_pointermove()
+		}
 	})
 
-	e.canvas.on('wheel', function(ev, delta) {
+	e.canvas.on('wheel', function(ev, delta, mx, my) {
+		update_mouse(ev, mx, my)
 		e.controls.enableZoom = false
 		let factor = 1
-		let mx =  (ev.clientX / e.canvas.width ) * 2 - 1
-		let my = -(ev.clientY / e.canvas.height) * 2 + 1
-		let v = v3(mx, my, 0.5)
+		let ndc_mx =  (mx / e.canvas.width ) * 2 - 1
+		let ndc_my = -(my / e.canvas.height) * 2 + 1
+		let v = v3(ndc_mx, ndc_my, 0.5)
 		v.unproject(e.camera)
 		v.sub(e.camera.position)
 		v.setLength(factor)
@@ -2770,9 +3233,7 @@ component('x-modeleditor', function(e) {
 		e.camera.updateProjectionMatrix()
 		e.camera.getWorldDirection(e.dirlight.position)
 		e.dirlight.position.negate()
-		fire_pointermove()
-		update_dot_positions()
-		render()
+		fire_pointermove(true)
 		return false
 	})
 
@@ -2788,8 +3249,10 @@ component('x-modeleditor', function(e) {
 
 	e.on('keydown', function(key, shift, ctrl, alt, ev) {
 		update_keys(ev)
-		if (key == 'Delete')
-			e.instance.remove_selection()
+		if (key == 'Delete') {
+			e.model.remove_selection()
+			e.model.update()
+		}
 		if (tool.keydown)
 			if (tool.keydown(key) === false)
 				return false
@@ -2820,7 +3283,7 @@ component('x-modeleditor', function(e) {
 
 	function draw_test_cube() {
 
-		e.instance.set({
+		e.model.set({
 			point_coords: [
 				 0,  0, -1,
 				 2,  0, -1,
@@ -2841,7 +3304,7 @@ component('x-modeleditor', function(e) {
 			],
 		})
 
-		//e.instance.group.position.y = 1
+		//e.model.group.position.y = 1
 
 	}
 

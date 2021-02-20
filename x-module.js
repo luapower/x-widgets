@@ -68,7 +68,7 @@ function xmodule(opt) {
 		for (let k in xm.active_layers) {
 			let layer = xm.active_layers[k]
 			if (layer != layer0) {
-				update(pv, layer.props[id])
+				assign_opt(pv, layer.props[id])
 				layer0 = layer
 			}
 		}
@@ -323,7 +323,7 @@ field_types.rowset.editor = function(...options) {
 		let d = sql_rowset_editor_dialog()
 		d.modal()
 	}
-	return list_dropdown(update({
+	return list_dropdown(assign_opt({
 		nolabel: true,
 		rowset_name: 'rowsets',
 		val_col: 'name',
@@ -342,7 +342,7 @@ field_types.col.editor = function(...options) {
 	let rs = rowset({
 		fields: [{name: 'name'}],
 	})
-	let e = list_dropdown(update({
+	let e = list_dropdown(assign_opt({
 		nolabel: true,
 		lookup_rowset: rs,
 		mode: 'fixed',
@@ -692,7 +692,7 @@ component('x-prop-inspector', function(e) {
 
 		for (let prop in prop_counts)
 			if (prop_counts[prop] == widgets.size) {
-				rs.fields.push(update({}, defs[prop], {convert: null}))
+				rs.fields.push(assign_opt({}, defs[prop], {convert: null}))
 				row.push(repl(pv0[prop], undefined, null))
 			}
 
@@ -894,10 +894,10 @@ let dev_toolbox_props = {
 }
 
 function prop_layers_toolbox(tb_opt, insp_opt) {
-	let pg = prop_layers_inspector(update({
+	let pg = prop_layers_inspector(assign_opt({
 			id: 'dev_prop_layers_inspector',
 		}, insp_opt))
-	let tb = toolbox(update({
+	let tb = toolbox(assign_opt({
 			id: 'dev_prop_layers_toolbox',
 			classes: 'x-dev-toolbox',
 			text: 'property layers',
@@ -910,10 +910,10 @@ function prop_layers_toolbox(tb_opt, insp_opt) {
 }
 
 function props_toolbox(tb_opt, insp_opt) {
-	let pg = prop_inspector(update({
+	let pg = prop_inspector(assign_opt({
 			id: 'dev_prop_inspector',
 		}, insp_opt))
-	let tb = toolbox(update({
+	let tb = toolbox(assign_opt({
 			id: 'dev_props_toolbox',
 			classes: 'x-dev-toolbox',
 			text: 'properties',
@@ -929,10 +929,10 @@ function props_toolbox(tb_opt, insp_opt) {
 }
 
 function widget_tree_toolbox(tb_opt, wt_opt) {
-	let wt = widget_tree(update({
+	let wt = widget_tree(assign_opt({
 			id: 'dev_widget_tree',
 		}, wt_opt))
-	let tb = toolbox(update({
+	let tb = toolbox(assign_opt({
 			id: 'dev_widget_tree_toolbox',
 			classes: 'x-dev-toolbox',
 			text: 'widget tree',

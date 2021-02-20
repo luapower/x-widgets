@@ -122,7 +122,7 @@ function component(tag, cons) {
 			e.init = noop         // init point after all props are set.
 			e.class('x-widget')
 			let cons_opt = construct(e)
-			opt = update(attr_val_opt(e), cons_opt, opt)
+			opt = assign_opt(attr_val_opt(e), cons_opt, opt)
 			e.initialized = false // setter barrier to delay init to e.init().
 			if (opt.on) {
 				for (let k in opt.on)
@@ -227,7 +227,7 @@ function component(tag, cons) {
 
 	function create(...args) {
 		let e = new cls()
-		e._initialize(update({}, ...args))
+		e._initialize(assign_opt({}, ...args))
 		return e
 	}
 
@@ -318,7 +318,7 @@ let component_deferred_updating = function(e) {
 		if (in_update)
 			return
 		opt1 = opt1 || {val: true}
-		opt = opt ? update(opt, opt1) : opt1
+		opt = opt ? assign_opt(opt, opt1) : opt1
 		if (e.updating)
 			return
 		if (!e.attached)
@@ -381,7 +381,7 @@ function props_mixin(e, iprops) {
 
 	e.prop = function(prop, opt) {
 		opt = opt || {}
-		update(opt, e.props[prop], iprops && iprops[prop]) // class & instance overrides
+		assign_opt(opt, e.props[prop], iprops && iprops[prop]) // class & instance overrides
 		let getter = 'get_'+prop
 		let setter = 'set_'+prop
 		let type = opt.type
@@ -2551,7 +2551,7 @@ component('x-split', function(e) {
 })
 
 function hsplit(...options) { return split(...options) }
-function vsplit(...options) { return split(update({orientation: 'vertical'}, ...options)) }
+function vsplit(...options) { return split(assign_opt({orientation: 'vertical'}, ...options)) }
 
 // ---------------------------------------------------------------------------
 // toaster
@@ -2659,7 +2659,7 @@ component('x-action-band', function(e) {
 				if (typeof btn == 'function')
 					btn = {action: btn}
 				else
-					btn = update({}, btn)
+					btn = assign_opt({}, btn)
 				if (spec.has('primary') || spec.has('ok'))
 					btn.primary = true
 				btn_sets_text = btn.text != null
@@ -2998,7 +2998,7 @@ component('x-widget-switcher', function(e) {
 		let row = e.nav && e.nav.focused_row
 		let vals = row && e.nav.serialize_row_vals(row)
 		let id = vals && e.format_item_id(vals)
-		let item = id && component.create(update({id: id}, e.item_create_options(vals))) || null
+		let item = id && component.create(assign_opt({id: id}, e.item_create_options(vals))) || null
 		e.set(item)
 	}
 

@@ -62,7 +62,8 @@
 		map()
 		empty
 		keys(t)
-		update(dt, t1, ...)
+		assign(dt, t1, ...)
+		assign_opt(dt, t1, ...)
 		attr(t, k[, cons])
 		memoize(f)
 	events:
@@ -366,8 +367,10 @@ empty = {}
 
 keys = Object.keys
 
+assign = Object.assign
+
 // like Object.assign() but skips assigning `undefined` values.
-function update(dt, ...args) {
+function assign_opt(dt, ...args) {
 	for (let arg of args)
 		if (arg != null)
 			for (let k in arg)

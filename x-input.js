@@ -1236,7 +1236,7 @@ component('x-placeedit', function(e) {
 
 	e.create_picker = function(opt) {
 
-		let lb = listbox(update({
+		let lb = listbox(assign_opt({
 			val_col: 0,
 			display_col: 0,
 			format_item: format_item,
@@ -2928,7 +2928,7 @@ component('x-input', function(e) {
 	function bind_field(on) {
 		if (on) {
 			let type = widget_type(e.widget_type)
-			let opt = update({
+			let opt = assign_opt({
 				type: type,
 				nav: e.nav,
 				col: e.col,
