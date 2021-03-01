@@ -555,6 +555,9 @@ alias(Element, 'x', 'x1')
 alias(Element, 'y', 'y1')
 alias(Element, 'rect', 'getBoundingClientRect')
 
+alias(Element, 'cw', 'clientWidth')
+alias(Element, 'ch', 'clientHeight')
+
 alias(HTMLElement, 'ox', 'offsetLeft')
 alias(HTMLElement, 'oy', 'offsetTop')
 

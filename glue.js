@@ -21,6 +21,7 @@
 		random()
 		PI sin(x) cos(x) tan(x) rad(x) deg(x)
 		clamp(x, x0, x1)
+		sign(x)
 		strict_sign(x)
 		lerp(x, x0, x1, y0, y1)
 		num(s, z)
@@ -52,6 +53,7 @@
 		s.lower()
 	arrays:
 		empty_array
+		a.extend(a1)
 		a.insert(i, v)
 		a.remove(i) -> v
 		a.remove_value(v) -> v
@@ -59,6 +61,7 @@
 		a.last
 		a.binsearch(v, cmp, i1, i2)
 	hash maps:
+		set()
 		map()
 		empty
 		keys(t)
@@ -66,6 +69,8 @@
 		assign_opt(dt, t1, ...)
 		attr(t, k[, cons])
 		memoize(f)
+	typed arrays:
+		f32arr i8arr u8arr i16arr u16arr i32arr u32arr
 	events:
 		events_mixin(o)
 	timestamps:
@@ -142,6 +147,7 @@ max = Math.max
 sqrt = Math.sqrt
 random = Math.random
 log = Math.log
+sign = Math.sign
 
 // NOTE: returns x1 if x1 < x0, which enables the idiom
 // `a[clamp(i, 0, b.length-1)]` to return undefined when b is empty.
@@ -279,7 +285,7 @@ function override_property_setter(cls, prop, set) {
 
 method(String, 'subst', function(...args) {
 	if (!args.length)
-		return s
+		return this.toString()
 	if (isarray(args[0]))
 		args = args[0]
 	if (isobject(args[0]))
@@ -298,6 +304,14 @@ S = window.S || function S(label, msg) { return msg }
 // arrays --------------------------------------------------------------------
 
 empty_array = []
+
+method(Array, 'extend', function(a) {
+	let i0 = this.length
+	let n = a.length
+	this.length += n
+	for (let i = 0; i < n; i++)
+		this[i0+i] = a[i]
+})
 
 method(Array, 'insert', function(i, v) {
 	if (i >= this.length)
@@ -361,6 +375,7 @@ property(Array, 'last', {get: function() { return this[this.length-1] } })
 
 // hash maps -----------------------------------------------------------------
 
+set = (iter) => new Set(iter)
 map = (iter) => new Map(iter)
 
 empty = {}
@@ -406,6 +421,16 @@ function memoize(f) {
 		}
 	}
 }
+
+// typed arrays --------------------------------------------------------------
+
+f32arr = Float32Array
+i8arr  = Int8Array
+u8arr  = Uint8Array
+i16arr = Int16Array
+u16arr = Uint16Array
+i32arr = Int32Array
+u32arr = Uint32Array
 
 // events --------------------------------------------------------------------
 

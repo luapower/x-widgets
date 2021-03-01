@@ -11,8 +11,11 @@ function v2(x, y)        { return new THREE.Vector2(x, y) }
 function v3(x, y, z)     { return new THREE.Vector3(x, y, z) }
 function line3(p1, p2)   { return new THREE.Line3(p1, p2) }
 function color3(c)       { return new THREE.Color(c) }
+function mat3()          { return new THREE.Matrix3() }
+function mat4()          { return new THREE.Matrix4() }
+function quaternion()    { return new THREE.Quaternion() }
 
-function vertex_buffer(n) {
+function point_buffer(n) {
 	return new THREE.BufferAttribute(new Float32Array(3 * n), 3).setUsage(THREE.DynamicDrawUsage)
 }
 
@@ -27,6 +30,10 @@ function int8_buffer(n) {
 
 function uint32_buffer(n) {
 	return new THREE.BufferAttribute(new Uint32Array(n), 1).setUsage(THREE.DynamicDrawUsage)
+}
+
+function mat4_instance_buffer(n) {
+	return new THREE.InstancedBufferAttribute(new Float32Array(16 * n), 16).setUsage(THREE.DynamicDrawUsage)
 }
 
 (function() {
@@ -139,7 +146,7 @@ function v2_pseudo_angle(dx, dy) {
 }
 
 {
-	let quat = new THREE.Quaternion()
+	let quat = quaternion()
 	let xy_normal = v3(0, 0, 1)
 
 	function plane_graph_regions(plane_normal, get_point, lines) {
@@ -259,6 +266,7 @@ function v2_pseudo_angle(dx, dy) {
 function dashed_line_material(opt) {
 
 	let vshader = `
+		attribute mat4 instance_matrix;
 		flat out vec4 p2; // because GL_LAST_VERTEX_CONVENTION
 		out vec4 p;
 		void main() {
@@ -301,19 +309,6 @@ function dashed_line_material(opt) {
 
 }
 
-// material database ---------------------------------------------------------
-
-function material_db() {
-
-	let e = {}
-
-	e.get_color = function(color) {
-
-	}
-
-	return e
-}
-
 // editable models -----------------------------------------------------------
 
 // models are comprised of polygons enclosed and connected by lines defined
@@ -331,8 +326,6 @@ function real_p2p_distance2(p1, p2) { // stub
 }
 
 function editable_model(e) {
-
-	e = e || {}
 
 	// undo/redo stacks -------------------------------------------------------
 
@@ -379,20 +372,34 @@ function editable_model(e) {
 
 	// model ------------------------------------------------------------------
 
-	let point_coords = [] // [(x, y, z), ...]
-	let free_pis     = [] // [p1i,...]; freelist of point indices.
-	let prc          = [] // [rc1,...]; ref counts of points.
-	let lines        = [] // [(p1i, p2i, rc, sm, op), ...]; rc=refcount, sm=smoothness, op=opacity.
-	let free_lis     = [] // [l1i,...]; freelist of line indices.
-	let faces        = new Set() // {[p1i, p2i, ..., selected:, lis: [line1i,...]]}
-	let sm_faces = map() // {li->[face1,...]}; faces of smooth lines for computing normals.
+	let points    = [] // [(x, y, z), ...]
+	let normals   = [] // [(x, y, z), ...]
+	let free_pis  = [] // [p1i,...]; freelist of point indices.
+	let prc       = [] // [rc1,...]; ref counts of points.
+	let lines     = [] // [(p1i, p2i, rc, sm, op), ...]; rc=refcount, sm=smoothness, op=opacity.
+	let free_lis  = [] // [l1i,...]; freelist of line indices.
+	let faces     = set() // {[p1i, p2i, ..., lis: [line1i,...], selected:, material:, mesh:, ]}
+	let meshes    = set() // {{face},...}; meshes are sets of all faces connected by smooth lines.
+	let materials = []    // [mat1,...]
+	let inst_mat  = [] // [mat4_1, ...]; instance position/scale/rotation matrices.
+
+	let child_models = [] // [model1, ...]
+	let child_mats   = [] // [mat1, ...]
 
 	// model-to-view info.
-	let point_coords_changed    // time to reload the points_coords_buf.
+	let points_changed    // time to reload points_buf.
+	let normals_changed   // time to reload normals_buf.
 	let used_points_changed     // time to reload the used_pis_buf.
 	let used_lines_changed      // time to reload *_edge_lis_buf.
 	let edge_line_count = 0     // number of face edge lines.
 	let nonedge_line_count = 0  // number of standalone lines.
+	let inst_mat_changed
+
+	if (DEBUG) {
+		window.materials = materials
+		window.faces = faces
+		window.lines = lines
+	}
 
 	// low-level model editing API that:
 	// - records undo ops in the undo stack.
@@ -404,48 +411,50 @@ function editable_model(e) {
 		let p = v3()
 		e.get_point = function(pi, out) {
 			out = out || p
-			out.x = point_coords[3*pi+0]
-			out.y = point_coords[3*pi+1]
-			out.z = point_coords[3*pi+2]
+			out.x = points[3*pi+0]
+			out.y = points[3*pi+1]
+			out.z = points[3*pi+2]
 			out.i = pi
 			return out
 		}
 	}
 
-	function set_point(pi, x, y, z) {
-		point_coords[3*pi+0] = x
-		point_coords[3*pi+1] = y
-		point_coords[3*pi+2] = z
+	function set_xyz(a, pi, x, y, z) {
+		a[3*pi+0] = x
+		a[3*pi+1] = y
+		a[3*pi+2] = z
 	}
 
 	e.add_point = function(x, y, z, need_pi) {
 
 		let pi = free_pis.pop()
 		if (pi == null) {
-			point_coords.push(x, y, z)
+			points.push(x, y, z)
+			normals.push(0, 0, 0)
 			pi = prc.length
 		} else {
-			set_point(pi, x, y, z)
+			set_xyz(points, pi, x, y, z)
+			set_xyz(normals, 0, 0, 0)
 		}
-		prc[pi] = 1
-		used_points_changed = true
+		prc[pi] = 0
 
 		if (need_pi != null)
 			assert(pi == need_pi)
 
-		update_point_coords(pi, x, y, z)
-
-		push_undo(e.unref_point, pi)
+		update_point(pi, x, y, z)
 
 		if (DEBUG)
-			print('add_point', pi, p.x+','+p.y+','+p.z)
+			print('add_point', pi, x+','+y+','+z)
 
 		return pi
 	}
 
-	e.unref_point = function(pi) {
+	let unref_point = function(pi) {
 
-		if (--prc[pi] == 0) {
+		let rc0 = prc[pi]--
+		assert(rc0 > 0)
+
+		if (rc0 == 1) {
 
 			free_pis.push(pi)
 			used_points_changed = true
@@ -453,25 +462,29 @@ function editable_model(e) {
 			let p = e.get_point(pi)
 			push_undo(e.add_point, p.x, p.y, p.z, pi)
 
-		} else {
-			push_undo(ref_point, pi)
 		}
+
+		push_undo(ref_point, pi)
 
 		// if (DEBUG) print('unref_point', pi, prc[pi])
 	}
 
 	let ref_point = function(pi) {
 
-		assert(prc[pi]++ > 0)
-		push_undo(e.unref_point, pi)
+		let rc0 = prc[pi]++
+
+		if (rc0 == 0)
+			used_points_changed = true
+
+		push_undo(unref_point, pi)
 
 		// if (DEBUG) print('ref_point', pi, prc[pi])
 	}
 
 	e.move_point = function(pi, x, y, z) {
 		let p = e.get_point(pi)
-		set_point(pi, x, y, z)
-		update_point_coords(pi, x, y, z)
+		set_xyz(points, pi, x, y, z)
+		update_point(pi, x, y, z)
 		push_undo(e.move_point, pi, x0, y0, z0)
 	}
 
@@ -501,7 +514,7 @@ function editable_model(e) {
 		let li = free_lis.pop()
 		if (li == null) {
 			li = lines.push(p1i, p2i, 1, 0, 1)
-			li = lines.length / 5
+			li = (lines.length / 5) - 1
 		} else {
 			lines[5*li+0] = p1i
 			lines[5*li+1] = p2i
@@ -532,25 +545,35 @@ function editable_model(e) {
 		assert(rc >= 0)
 
 		if (rc == 0) {
+
 			nonedge_line_count--
 			used_lines_changed = true
-			if (DEBUG)
-				print('remove_line', li)
-		} else if (rc == 1) {
-			nonedge_line_count++
-			edge_line_count--
-			used_lines_changed = true
-		} else {
-			edge_line_count--
-		}
 
-		if (rc == 0) {
+			let p1i = lines[5*li+0]
+			let p2i = lines[5*li+1]
+
+			unref_point(p1i)
+			unref_point(p2i)
+
 			free_lis.push(li)
 
-			let line = e.get_line(li)
-			push_undo(e.add_line, line.start.i, line.end.i, li)
+			push_undo(e.add_line, p1i, p2i, li)
+
+			if (DEBUG)
+				print('remove_line', li)
+
 		} else {
+
+			if (rc == 1) {
+				nonedge_line_count++
+				edge_line_count--
+				used_lines_changed = true
+			} else {
+				edge_line_count--
+			}
+
 			push_undo(ref_line, li)
+
 		}
 
 		// if (DEBUG) print('unref_line', li, lines[5*li+2])
@@ -574,6 +597,14 @@ function editable_model(e) {
 		// if (DEBUG) print('ref_line', li, lines[5*li+2])
 	}
 
+	e.add_material = function(opt) {
+		let mat = face_mesh_material(opt)
+		mat.faces = []
+		let mi = materials.push(mat) - 1
+		mat.mi = mi
+		return mat
+	}
+
 	e.get_edge = function(face, ei, out) {
 		out = e.get_line(face.lis[ei], out)
 		out.ei = ei // edge index.
@@ -594,15 +625,20 @@ function editable_model(e) {
 	let next_face_id = 0
 	function add_face(face) {
 		let id = next_face_id++
-		if (!face.lis)
-			update_face_lis(face)
-		face.id = id
 		for (let pi of face)
 			ref_point(pi)
-		for (let li of face.lis)
-			ref_line(li)
+		if (!face.lis)
+			update_face_lis(face)
+		else
+			for (let li of face.lis)
+				ref_line(li)
+		face.id = id
+		face.material = face.material || materials[0]
+		face.material.faces.push(face)
+		face.triangles = []
+		faces.add(face)
 		if (DEBUG)
-			print('add_face', id, pis.join(','), lis.join(','))
+			print('add_face', id, face.join(','), face.lis.join(','))
 		return id
 	}
 
@@ -611,29 +647,36 @@ function editable_model(e) {
 		for (let li of face.lis)
 			e.unref_line(li)
 		for (let pi of face)
-			e.unref_point(pi)
+			unref_point(pi)
+		face.material.faces.remove_value(face)
 		if (DEBUG)
 			print('remove_face', face.id)
 	}
 
+	e.set_material = function(face, mat) {
+		face.material.faces.remove_value(face)
+		face.material = mat
+		mat.faces.push(face)
+		if (DEBUG)
+			print('set_material', face.id, mat.mi)
+	}
+
 	function ref_or_add_line(p1i, p2i) {
+		let found_li
 		for (let li = 0, n = e.line_count(); li < n; li++) {
 			let _p1i = lines[5*li+0]
 			let _p2i = lines[5*li+1]
 			if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i)) {
-				ref_line(li)
-				return li
+				found_li = li
+				break
 			}
 		}
-		return e.add_line(p1i, p2i)
+		let li = found_li != null ? found_li : e.add_line(p1i, p2i)
+		ref_line(li)
+		return li
 	}
 
 	function update_face_lis(face) {
-		if (!face) {
-			for (let face of faces)
-				update_face_lis(face)
-			return
-		}
 		face.lis = face.lis || []
 		let lis = face.lis
 		lis.length = 0
@@ -658,43 +701,146 @@ function editable_model(e) {
 
 	e.each_line_face = function(li, f) {
 		for (let face of faces)
-			if (face.lis.indexOf(li) != -1)
+			if (face.lis.includes(li))
 				f(face)
 	}
 
-	function _update_prc() {
-		let n = point_coords.length / 3
-		prc.length = n
-		for (let i = 0; i < n; i++)
-			prc[i] = 0
-		for (let face of faces)
-			for (let pi of face)
-				prc[pi]++
-		for (let i = 0, n = lines.length; i < n; i += 5) {
-			prc[lines[i+0]]++
-			prc[lines[i+1]]++
+	{
+		let common_meshes = set()
+		let nomesh_faces = []
+
+		e.set_line_smoothness = function(li, sm) {
+
+			let sm0 = lines[5*li+3]
+			if (sm == sm0)
+				return
+
+			push_undo(e.set_line_smoothness, li, sm0)
+
+			if (!sm0 == !sm) // smoothness category hasn't changed.
+				return
+
+			lines[5*li+3] = sm
+
+			if (sm > 0) { // line has gotten smooth.
+
+				e.each_line_face(li, function(face) {
+					if (face.mesh)
+						common_meshes.add(face.mesh)
+					else
+						nomesh_faces.push(face)
+				})
+
+				let target_mesh
+
+				if (common_meshes.size == 0) {
+					// none of the faces are part of a mesh, so make one.
+					let mesh = set()
+					meshes.add(mesh)
+					common_meshes.add(mesh)
+					target_mesh = mesh
+				} else {
+					// merge all meshes into the first one and remove the rest.
+					for (let mesh of common_meshes) {
+						if (!target_mesh) {
+							target_mesh = mesh
+						} else {
+							for (let face of mesh) {
+								target_mesh.add(face)
+								face.mesh = target_mesh
+							}
+							meshes.delete(mesh)
+						}
+					}
+				}
+
+				// add flat faces to the target mesh.
+				for (let face of nomesh_faces) {
+					target_mesh.add(face)
+					face.mesh = target_mesh
+				}
+
+				target_mesh.normals_valid = false
+
+			} else { // line has gotten non-smooth.
+
+				// remove faces containing `li` from their smooth mesh.
+				let target_mesh
+				e.each_line_face(li, function(face) {
+					assert(!target_mesh || target_mesh == mesh) // one mesh only.
+					target_mesh = face.mesh
+					// TODO: this is not right.
+					face.mesh.delete(face)
+					face.mesh = null
+				})
+
+				// remove the mesh if it became empty.
+				if (target_mesh.size == 0)
+					meshes.delete(target_mesh)
+
+			}
+
+			common_meshes.clear()
+			nomesh_faces.length = 0
 		}
+	}
+
+	e.set_line_opacity = function(li, op) {
+
+		let op0 = lines[5*li+4]
+		if (op == op0)
+			return
+
+		push_undo(e.set_line_opacity, li, op0)
+
+		if (!op0 == !op) // opacity category hasn't changed.
+			return
+
+		lines[5*li+4] = op
+		used_lines_changed = true
+
 	}
 
 	e.set = function(t) {
 
-		point_coords = t.point_coords || []
-		lines = t.lines || []
-		faces = new Set(t.faces)
+		points.length = 0
+		if (t.points)
+			for (let i = 0, n = t.points.length; i < n; i += 3)
+				e.add_point(
+					t.points[i+0],
+					t.points[i+1],
+					t.points[i+2]
+				)
 
-		point_coords_changed = true
-		used_points_changed = true
-		used_lines_changed = true
+		lines.length = 0
+		if (t.lines)
+			for (let i = 0, n = t.lines.length; i < n; i += 2)
+				add_line(t.lines[i], t.lines[i+1])
 
-		_update_prc()
-		update_face_lis()
+		faces.clear()
+		if (t.faces)
+			for (let face of t.faces)
+				add_face(face)
 
-		e.update()
+	}
 
-		if (DEBUG) {
-			window.faces = faces
-			window.lines = lines
+	e.instance_count = () => inst_mat.length / 16
+
+	{
+		let m = mat4()
+		e.get_instance_matrix = function(i, out) {
+			out = out || m
+			out.fromArray(inst_mat, 16 * i)
+			out.i = i
+			return out
 		}
+	}
+
+	e.add_instance = function(m) {
+		m.toArray(inst_mat, inst_mat.length)
+		inst_mat_changed = true
+		if (DEBUG)
+			print('add_instance', m.elements.join(','))
 	}
 
 	// face plane -------------------------------------------------------------
@@ -732,7 +878,7 @@ function editable_model(e) {
 
 			// the xy quaternion rotates face's plane to the xy-plane so we can do
 			// 2d geometry like triangulation on its points.
-			face.xy_quaternion = face.xy_quaternion || new THREE.Quaternion()
+			face.xy_quaternion = face.xy_quaternion || quaternion()
 			face.xy_quaternion.setFromUnitVectors(face.plane.normal, xy_normal)
 
 			face.valid = face.plane.normal.lengthSq() > .5
@@ -790,6 +936,8 @@ function editable_model(e) {
 			let line_dir = _p.copy(p2).sub(p1).setLength(1)
 			_raycaster.ray.set(p1, line_dir)
 			ht.length = 0
+			// TODO: redo this
+			return false
 			return _raycaster.intersectObject(face.mesh, false, ht).length > 0
 		}
 	}
@@ -925,7 +1073,7 @@ function editable_model(e) {
 
 	// selection --------------------------------------------------------------
 
-	e.sel_lines = new Set() // {l1i,...}
+	e.sel_lines = set() // {l1i,...}
 	let sel_lines_changed
 
 	{
@@ -948,8 +1096,6 @@ function editable_model(e) {
 
 	function face_set_selected(face, sel) {
 		face.selected = sel
-		if (face.mesh)
-			face.mesh.material.uniforms.selected.value = sel
 	}
 
 	function select_all_faces(sel) {
@@ -1138,7 +1284,7 @@ function editable_model(e) {
 		let moving_lis = {} // {li: true}
 
 		// faces that need re-triangulation while moving.
-		let shape_changing_faces = new Set()
+		let shape_changing_faces = set()
 
 		moving_faces[pull.face] = true
 
@@ -1373,47 +1519,63 @@ function editable_model(e) {
 		canvas_w = w
 		canvas_h = h
 		for (let mesh of resizing_meshes) {
-			let cu = mesh.material.uniforms.canvas
-			cu.value.x = canvas_w
-			cu.value.y = canvas_h
+			if (isarray(mesh.material)) {
+				for (let mat of mesh.material) {
+					let cu = mat.uniforms.canvas
+					cu.value.x = canvas_w
+					cu.value.y = canvas_h
+				}
+			} else {
+				let cu = mesh.material.uniforms.canvas
+				cu.value.x = canvas_w
+				cu.value.y = canvas_h
+			}
 		}
 	}
 
 	// view --------------------------------------------------------------------
 
-	let point_coords_buf     // vertex buffer for points, edges and faces.
+	let points_buf           // common point coordinates buffer for points, edges and smooth meshes.
+	let normals_buf          // normal buffer for the normals of smooth meshes.
 	let used_pis_buf         // index buffer for points.
-	let vis_edge_lis_buf     // index buffer for normal face edges (black thin lines).
+	let vis_edge_lis_buf     // index buffer for face edges (black thin lines).
 	let inv_edge_lis_buf     // index buffer for invisible face edges (black dashed lines).
 	let sel_inv_edge_lis_buf // index buffer for selected invisible face edges (blue dashed lines).
+	let inst_mat_buf         // instance matrices.
 
-	function update_point_coords(pi, x, y, z) {
+	function update_point(pi, x, y, z) {
 		let pn = e.point_count()
-		let b = point_coords_buf
+		let b = points_buf
 		if (b && b.count >= pn) {
 			b.setXYZ(pi, x, y, z)
 			// TODO: switch to ever-increasing range?
 			b.updateRange.count = 3 * pn
 			b.needsUpdate = true
 		} else {
-			point_coords_changed = true
+			points_changed = true
 		}
 	}
 
-	function update_point_coords_buf() {
-		if (!point_coords_changed)
-			return
-
-		let pn = e.point_count()
-		let b = point_coords_buf
+	function _update_points_buf(b, points, pn) {
 		if (!b || b.count < pn) {
-			b = vertex_buffer(nextpow2(pn))
-			point_coords_buf = b
+			b = point_buffer(nextpow2(pn))
 		}
-
-		b.array.set(point_coords)
+		b.array.set(points)
 		b.updateRange.count = 3 * pn
 		b.needsUpdate = true
+		return b
+	}
+
+	function update_points_buf() {
+		if (!points_changed)
+			return
+		points_buf = _update_points_buf(points_buf, points, e.point_count())
+	}
+
+	function update_normals_buf() {
+		if (!normals_changed)
+			return
+		normals_buf = _update_points_buf(normals_buf, normals, e.point_count())
 	}
 
 	function update_used_pis_buf() {
@@ -1440,6 +1602,11 @@ function editable_model(e) {
 
 	e.show_invisible_lines = true
 
+	e.toggle_invisible_lines = function() {
+		e.show_invisible_lines = !e.show_invisible_lines
+		used_lines_changed = true
+	}
+
 	function update_edge_lis_bufs() {
 		if (!used_lines_changed)
 			return
@@ -1462,18 +1629,18 @@ function editable_model(e) {
 
 		let vi = 0
 		let ii = 0
-		let vis = vb.array
-		let iis = ib && ib.array
+		let vs = vb.array
+		let is = iln && ib && ib.array
 		for (let i = 0, n = lines.length; i < n; i += 5) {
 			if (lines[i+2] >= 2) { // refcount: is edge
 				let p1i = lines[i+0]
 				let p2i = lines[i+1]
 				if (lines[i+4] > 0) { // opacity: is not invisible
-					vis[vi++] = p1i
-					vis[vi++] = p2i
+					vs[vi++] = p1i
+					vs[vi++] = p2i
 				} else if (is) {
-					iis[ii++] = p1i
-					iis[ii++] = p2i
+					is[ii++] = p1i
+					is[ii++] = p2i
 				}
 			}
 		}
@@ -1517,26 +1684,45 @@ function editable_model(e) {
 
 	}
 
+	function update_inst_mat_buf() {
+		if (!inst_mat_changed)
+			return
+		let b = inst_mat_buf
+		let n = e.instance_count()
+		if (!b || b.count / 4 < n) {
+			b = mat4_instance_buffer(nextpow2(n))
+			inst_mat_buf = b
+		}
+		b.array.set(inst_mat)
+		b.updateRange = 16 * n
+		print(b)
+		b.needsUpdate = true
+	}
+
 	function points_mesh() {
 
-		let geo = new THREE.BufferGeometry()
+		let geo = new THREE.InstancedBufferGeometry()
 		let mat = new THREE.PointsMaterial({
 			color: black,
 			size: 4,
 			sizeAttenuation: false,
 		})
-		let points = new THREE.Points(geo, mat)
-		points.name = 'points'
-		points.layers.set(1) // make it non-hit-testable.
+		let mesh = new THREE.Points(geo, mat)
+		mesh.name = 'points'
+		mesh.frustumCulled = false
+		mesh.layers.set(1) // make it non-hit-testable.
 
-		e.group.add(points)
+		e.group.add(mesh)
 
 		let dots
 
 		function update() {
 
-			geo.setAttribute('position', point_coords_buf)
+			geo.setAttribute('position', points_buf)
 			geo.setIndex(used_pis_buf)
+
+			geo.setAttribute('instance_matrix', inst_mat_buf)
+			geo.instanceCount = e.instance_count()
 
 			if (DEBUG) {
 				if (dots)
@@ -1558,7 +1744,7 @@ function editable_model(e) {
 
 	function thin_lines_mesh(name, get_lis_buf, mat) {
 
-		let geo, lines, dots
+		let geo, mesh, dots
 
 		function update() {
 			let b = get_lis_buf()
@@ -1566,20 +1752,25 @@ function editable_model(e) {
 				return
 
 			if (!geo) {
-				geo = new THREE.BufferGeometry()
-				lines = new THREE.LineSegments(geo, mat)
-				lines.name = name
-				lines.layers.set(1) // make it non-hit-testable.
+				geo = new THREE.InstancedBufferGeometry()
+				mesh = new THREE.LineSegments(geo, mat)
+				mesh.name = name
+				mesh.frustumCulled = false
+				mesh.layers.set(1) // make it non-hit-testable.
 
-				e.group.add(lines)
+				e.group.add(mesh)
 
 				if (mat.uniforms && mat.uniforms.canvas)
-					resizing_meshes.push(lines)
+					resizing_meshes.push(mesh)
 			}
 
-			geo.setAttribute('position', point_coords_buf)
+			geo.setAttribute('position', points_buf)
 			geo.setIndex(b)
+
 			geo.setDrawRange(0, b.used_count)
+
+			geo.setAttribute('instance_matrix', inst_mat_buf)
+			geo.instanceCount = e.instance_count()
 
 			if (DEBUG) {
 				if (dots)
@@ -1606,7 +1797,7 @@ function editable_model(e) {
 	let update_inv_edges_mesh = thin_lines_mesh(
 		'inv_edges',
 		() => inv_edge_lis_buf,
-		dashed_line_material({color: black, dash: 3, gap: 3}),
+		dashed_line_material({color: black, dash: 5, gap: 3}),
 	)
 
 	let update_sel_inv_edges_mesh = thin_lines_mesh(
@@ -1619,6 +1810,7 @@ function editable_model(e) {
 
 		let vshader = `
 			uniform vec2 canvas;
+			attribute mat4 instance_matrix;
 			attribute vec3 q;
 			attribute float dir;
 			void main() {
@@ -1666,9 +1858,10 @@ function editable_model(e) {
 
 	function fat_lines_mesh(name, should_update, get_max_count, each_li, color) {
 
-		let geo = new THREE.BufferGeometry()
+		let geo = new THREE.InstancedBufferGeometry()
 		let mat = fat_line_material(color)
 		let mesh = new THREE.Mesh(geo, mat)
+		mesh.frustumCulled = false
 		mesh.name = name
 
 		resizing_meshes.push(mesh)
@@ -1688,10 +1881,10 @@ function editable_model(e) {
 
 				capacity = nextpow2(max_count)
 
-				pb   = vertex_buffer(4 * capacity) // 4 points per line.
-				qb   = vertex_buffer(4 * capacity) // 4 "other-line-endpoint" points per line.
-				dirb =   int8_buffer(4 * capacity) // one direction sign per vertex.
-				pib  =  index_buffer(6 * capacity) // 1 quad = 2 triangles = 6 points per line.
+				pb   = point_buffer(4 * capacity) // 4 points per line.
+				qb   = point_buffer(4 * capacity) // 4 "other-line-endpoint" points per line.
+				dirb =  int8_buffer(4 * capacity) // one direction sign per vertex.
+				pib  = index_buffer(6 * capacity) // 1 quad = 2 triangles = 6 points per line.
 
 				geo.setAttribute('position', pb)
 				geo.setAttribute('q', qb)
@@ -1731,12 +1924,13 @@ function editable_model(e) {
 
 				let p1i = lines[5*li+0]
 				let p2i = lines[5*li+1]
-				let p1x = point_coords[3*p1i+0]
-				let p1y = point_coords[3*p1i+1]
-				let p1z = point_coords[3*p1i+2]
-				let p2x = point_coords[3*p2i+0]
-				let p2y = point_coords[3*p2i+1]
-				let p2z = point_coords[3*p2i+2]
+
+				let p1x = points[3*p1i+0]
+				let p1y = points[3*p1i+1]
+				let p1z = points[3*p1i+2]
+				let p2x = points[3*p2i+0]
+				let p2y = points[3*p2i+1]
+				let p2z = points[3*p2i+2]
 
 				// each line has 4 points: (p1, p1, p2, p2).
 				ps[3*(i+0)+0] = p1x
@@ -1801,6 +1995,9 @@ function editable_model(e) {
 			pib  .needsUpdate = true
 
 			geo.setDrawRange(0, j)
+
+			geo.setAttribute('instance_matrix', inst_mat_buf)
+			geo.instanceCount = e.instance_count()
 		}
 
 		return update
@@ -1818,23 +2015,23 @@ function editable_model(e) {
 				f(li)
 	}
 
-	let update_nonedge_lines = fat_lines_mesh(
+	let update_nonedge_lines_mesh = fat_lines_mesh(
 		'fat_lines',
-		() => point_coords_changed || used_lines_changed,
+		() => points_changed || used_lines_changed,
 		() => nonedge_line_count,
 		each_nonedge_line,
 		black
 	)
 
-	let update_sel_vis_lines = fat_lines_mesh(
+	let update_sel_vis_lines_mesh = fat_lines_mesh(
 		'sel_lines',
-		() => point_coords_changed || sel_lines_changed,
+		() => points_changed || sel_lines_changed,
 		() => e.sel_lines.size,
 		each_sel_vis_line,
 		selected_color
 	)
 
-	function face_mesh_material() {
+	function face_mesh_material(opt) {
 
 		let phong = THREE.ShaderLib.phong
 
@@ -1842,30 +2039,41 @@ function editable_model(e) {
 			canvas: {type: 'v2', value: {x: canvas_w, y: canvas_h}},
 		}])
 
-		let vshader = `
-				attribute uint selected;
-				flat out uint vselected;
-			` + phong.vertexShader.replace(/}\s*$/,
-			`
-					vselected = selected;
-				}
-			`
-		)
+		uniforms.diffuse.value.setHex(opt.color)
 
-		let fshader = `
-				flat in uint vselected;
-			` + THREE.ShaderChunk.meshphong_frag.replace(/}\s*$/,
-			`
-					if (vselected == uint(1)) {
-						float x = mod(gl_FragCoord.x, 4.0);
-						float y = mod(gl_FragCoord.y, 8.0);
-						if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
-							 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
-							gl_FragColor = vec4(0.0, 0.0, .8, 1.0);
-					}
+		let vshader = phong.vertexShader
+
+		vshader = `
+			attribute mat4 instance_matrix;
+			attribute uint selected;
+			flat out uint vselected;
+		` + vshader
+
+		vshader = vshader.replace(/}\s*$/, `
+				vselected = selected;
+			}
+		`)
+
+		vshader = vshader.replace('#include <begin_vertex>\n', `
+			vec3 transformed = (instance_matrix + vec4(position, 1.0)).xyz;
+		`)
+
+		let fshader = THREE.ShaderChunk.meshphong_frag
+
+		fshader = `
+			flat in uint vselected;
+		` + fshader
+
+		fshader = fshader.replace(/}\s*$/, `
+				if (vselected == uint(1)) {
+					float x = mod(gl_FragCoord.x, 4.0);
+					float y = mod(gl_FragCoord.y, 8.0);
+					if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
+						 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
+						gl_FragColor = vec4(0.0, 0.0, .8, 1.0);
 				}
-			`
-		)
+			}
+		`)
 
 		let mat = new THREE.ShaderMaterial({
 			uniforms       : uniforms,
@@ -1874,48 +2082,87 @@ function editable_model(e) {
 			polygonOffset: true,
 			polygonOffsetFactor: 1, // 1 pixel behind lines.
 			side: THREE.DoubleSide,
+			lights: true,
 		})
 
-		mat.lights = true
+		if (DEBUG)
+			print('add_material', '#'+uniforms.diffuse.value.getHexString())
 
 		return mat
+	}
+
+	e.add_material({color: white})
+
+	let convex_quad_triangle_indices = [2, 3, 0, 0, 1, 2]
+
+	{
+		let a = v3()
+		let c = v3()
+		let v = v3()
+		let m = mat3()
+		function cross_sign(_a, _b, _c) {
+			a.subVectors(_a, _b)
+			c.subVectors(_c, _b)
+			v.crossVectors(a, c)
+			// compute the signed volume between (ab, cb, ab x cb).
+			// the sign tells you the direction of the cross vector.
+			m.set(
+				v.x, a.x, c.x,
+				v.y, a.y, c.y,
+				v.z, a.z, c.z
+			)
+			return sign(m.determinant())
+		}
+		let p0 = v3()
+		let p1 = v3()
+		let p2 = v3()
+		let p3 = v3()
+		function is_face_a_convex_quad(face) {
+			e.get_point(face[0], p0)
+			e.get_point(face[1], p1)
+			e.get_point(face[2], p2)
+			e.get_point(face[3], p3)
+			let s0 = cross_sign(p0, p1, p2)
+			let s1 = cross_sign(p1, p2, p3)
+			let s2 = cross_sign(p2, p3, p0)
+			let s3 = cross_sign(p3, p0, p1)
+			let sr = abs(s0) >= NEARD ? s0 : s1 // one (and only one) of them can be zero.
+			return (s0 == 0 || s0 == sr)
+			    && (s1 == 0 || s1 == sr)
+			    && (s2 == 0 || s2 == sr)
+			    && (s3 == 0 || s3 == sr)
+		}
 	}
 
 	function update_face_triangles(face) {
 		if (!face.update_triangles) {
 			let ps = []
-			let p = v3()
 			let triangles
-			let normals
 			face.update_triangles = function() {
 				if (face.triangles_valid)
 					return
+				let pn = face.length
 				update_face_plane(face)
 				if (!face.valid)
 					return
-				let pn = face.length
-				ps.length = pn * 2
-				for (let i = 0; i < pn; i++) {
-					e.get_point(face[i], p)
-					p.applyQuaternion(face.xy_quaternion) // project p to xy plane.
-					ps[2*i+0] = p.x
-					ps[2*i+1] = p.y
-				}
-				let pis = THREE.Earcut.triangulate(ps, null, 2)
-				let tn = pis.length
-				assert(tn == 3 * (pn - 2))
-				if (!face.triangles) {
-					face.triangles = []
-					face.  normals = []
+				face.triangles.length = 0
+				if (pn == 3) { // triangle: nothing to do, push points directly.
+					face.triangles.push(...face)
+				} else if (pn == 4 && is_face_a_convex_quad(face)) { // convex quad: most common case.
+					for (let i of convex_quad_triangle_indices)
+						face.triangles.push(face[i])
 				} else {
-					face.triangles.length = 0
-					face.  normals.length = 0
-				}
-				let n = face.plane.normal
-				for (let i = 0; i < tn; i++) {
-					let p = e.get_point(face[pis[i]])
-					face.triangles.push(p.x, p.y, p.z)
-					face.  normals.push(n.x, n.y, n.z)
+					ps.length = pn * 2
+					for (let i = 0; i < pn; i++) {
+						let p = e.get_point(face[i])
+						p.applyQuaternion(face.xy_quaternion) // project p to xy plane.
+						ps[2*i+0] = p.x
+						ps[2*i+1] = p.y
+					}
+					let pis = THREE.Earcut.triangulate(ps, null, 2)
+					assert(pis.length == 3 * (pn - 2))
+					for (let i = 0, tn = pis.length; i < tn; i++)
+						face.triangles.push(face[pis[i]])
 				}
 				face.triangles_valid = true
 			}
@@ -1928,12 +2175,59 @@ function editable_model(e) {
 		face.triangles_valid = false
 	}
 
-	function faces_mesh() {
+	// from https://www.iquilezles.org/www/articles/normals/normals.htm
+	{
+		let p1 = v3()
+		let p2 = v3()
+		let p3 = v3()
+		function update_mesh_normals(mesh) {
 
-		let geo = new THREE.BufferGeometry()
-		let mat = face_mesh_material()
-		let mesh = new THREE.Mesh(geo, mat)
-		mesh.castShadow = true
+			if (mesh.normals_valid)
+				return
+
+			for (let face of mesh) {
+				if (face.valid) {
+					let t = face.triangles
+					for (let i = 0, len = t.length; i < len; i += 3) {
+
+						let p1i = t[i+0]
+						let p2i = t[i+1]
+						let p3i = t[i+2]
+
+						e.get_point(p3i, p3)
+						e.get_point(p1i, p1).sub(p3)
+						e.get_point(p2i, p2).sub(p3)
+						let p = p1.cross(p2)
+
+						normals[3*p1i+0] += p.x
+						normals[3*p1i+1] += p.y
+						normals[3*p1i+2] += p.z
+
+						normals[3*p2i+0] += p.x
+						normals[3*p2i+1] += p.y
+						normals[3*p2i+2] += p.z
+
+						normals[3*p3i+0] += p.x
+						normals[3*p3i+1] += p.y
+						normals[3*p3i+2] += p.z
+					}
+				}
+			}
+
+			mesh.normals_valid = true
+			normals_changed = true
+		}
+	}
+
+	function flat_faces_mesh() {
+
+		let geo = new THREE.InstancedBufferGeometry()
+		let mat = materials[0]
+		let mesh = new THREE.Mesh(geo, materials)
+		mesh.name = 'flat_faces'
+		mesh.castShadow = false
+		mesh.receiveShadow = false
+		mesh.frustumCulled = false
 
 		resizing_meshes.push(mesh)
 		e.group.add(mesh)
@@ -1943,17 +2237,14 @@ function editable_model(e) {
 		function update() {
 
 			let pn = 0
-			for (let face of faces) {
-				update_face_triangles(face)
-				if (face.valid) {
+			for (let face of faces)
+				if (face.valid && !face.mesh)
 					pn += face.triangles.length
-				}
-			}
 
 			if (!pb || pb.count < pn) {
 				let capacity = nextpow2(pn)
-				pb = vertex_buffer(capacity)
-				nb = vertex_buffer(capacity)
+				pb =  point_buffer(capacity)
+				nb =  point_buffer(capacity)
 				sb = uint32_buffer(capacity)
 				geo.setAttribute('position', pb)
 				geo.setAttribute('normal'  , nb)
@@ -1961,14 +2252,35 @@ function editable_model(e) {
 			}
 
 			let offset = 0
-			for (let face of faces) {
-				if (face.valid) {
-					pb.array.set(face.triangles, offset)
-					nb.array.set(face.normals  , offset)
-					sb.array.fill(face.selected, offset, offset + face.triangles.length)
+			let mi = 0
+			geo.clearGroups()
 
-					offset += face.triangles.length
+			for (let mat of materials) {
+				let offset0 = offset
+				let total = 0
+				for (let face of mat.faces) {
+					if (face.valid && !face.mesh) {
+						let t = face.triangles
+						let len = t.length
+						for (let i = 0; i < len; i++) {
+							let p = e.get_point(t[i])
+							pb.array[3*(offset+i)+0] = p.x
+							pb.array[3*(offset+i)+1] = p.y
+							pb.array[3*(offset+i)+2] = p.z
+						}
+						let n = face.plane.normal
+						for (let i = offset, j = offset + len; i < j; i++) {
+							nb.array[3*i+0] = n.x
+							nb.array[3*i+1] = n.y
+							nb.array[3*i+2] = n.z
+						}
+						sb.array.fill(face.selected, offset, offset + len)
+						offset += len
+						total += len
+					}
 				}
+				geo.addGroup(offset0, total, mi)
+				mi++
 			}
 
 			pb.updateRange.count = 3 * pn
@@ -1980,6 +2292,9 @@ function editable_model(e) {
 			sb.needsUpdate = true
 
 			geo.setDrawRange(0, pn)
+
+			geo.setAttribute('instance_matrix', inst_mat_buf)
+			geo.instanceCount = e.instance_count()
 
 			/*
 			if (DEBUG) {
@@ -2004,24 +2319,130 @@ function editable_model(e) {
 		return update
 	}
 
-	let update_faces_mesh = faces_mesh()
+	let update_flat_faces_mesh = flat_faces_mesh()
+
+	function smooth_faces_mesh() {
+
+		let geo = new THREE.InstancedBufferGeometry()
+		let mat = materials[0]
+		let mesh = new THREE.Mesh(geo, materials)
+		mesh.name = 'smooth_faces'
+		mesh.castShadow = false
+		mesh.receiveShadow = false
+		mesh.frustumCulled = false
+
+		resizing_meshes.push(mesh)
+		e.group.add(mesh)
+
+		let ib, sb
+
+		function update() {
+
+			let pn = 0
+			for (let face of faces)
+				if (face.valid && face.mesh)
+					pn += face.triangles.length
+
+			geo.setAttribute('position', points_buf)
+			geo.setAttribute('normal'  , normals_buf)
+
+			if (!sb || sb.count < pn) {
+				let capacity = nextpow2(pn)
+				ib =  index_buffer(capacity)
+				sb = uint32_buffer(capacity)
+				geo.setIndex(ib)
+				geo.setAttribute('selected', sb)
+			}
+
+			let offset = 0
+			let mi = 0
+			geo.clearGroups()
+
+			for (let mat of materials) {
+				let offset0 = offset
+				let total = 0
+				for (let face of mat.faces) {
+					if (face.valid && face.mesh) {
+						let len = face.triangles.length
+						ib.array.set(face.triangles, offset, offset + len)
+						sb.array.fill(face.selected, offset, offset + len)
+						offset += len
+						total += len
+					}
+				}
+				geo.addGroup(offset0, total, mi)
+				mi++
+			}
+
+			ib.updateRange.count = pn
+			sb.updateRange.count = pn
+
+			ib.needsUpdate = true
+			sb.needsUpdate = true
+
+			geo.setDrawRange(0, pn)
+
+			geo.setAttribute('instance_matrix', inst_mat_buf)
+			geo.instanceCount = e.instance_count()
+
+			/*
+			if (DEBUG) {
+				if (face.normals_helper)
+					e.group.remove(face.normals_helper)
+				if (face.valid) {
+					face.normals_helper = new THREE.VertexNormalsHelper(mesh, 2, 0x00ff00, 1)
+					face.normals_helper.layers.set(1)
+					e.group.add(face.normals_helper)
+				}
+			}
+
+			if (DEBUG) {
+				if (face.debug_dot)
+					face.debug_dot.free()
+				face.debug_dot = e.editor.dot(face_center(face), face.id+':'+face[0], 'face')
+			}
+			*/
+
+		}
+
+		return update
+	}
+
+	let update_smooth_faces_mesh = smooth_faces_mesh()
 
 	e.update = function() {
-		update_point_coords_buf()
+
+		for (let face of faces)
+			update_face_triangles(face)
+		for (let mesh of meshes)
+			update_mesh_normals(mesh)
+
+		update_points_buf()
+		update_normals_buf()
 		update_used_pis_buf()
-		update_points_mesh()
 		update_edge_lis_bufs()
+		update_inst_mat_buf()
+
+		update_points_mesh()
+
 		update_vis_edges_mesh()
 		update_inv_edges_mesh()
 		update_sel_inv_edges_mesh()
-		update_nonedge_lines()
-		update_sel_vis_lines()
-		update_faces_mesh()
+		update_nonedge_lines_mesh()
+		update_sel_vis_lines_mesh()
 
-		point_coords_changed = false
+		update_flat_faces_mesh()
+		update_smooth_faces_mesh()
+
+		inst_mat_changed = false
+		points_changed = false
+		normals_changed = false
 		used_points_changed = false
 		used_lines_changed = false
 		sel_lines_changed = false
+
+		if (DEBUG)
+			print('update')
 	}
 
 	return e
@@ -2048,6 +2469,9 @@ component('x-modeleditor', function(e) {
 	e.renderer.outputEncoding = THREE.sRGBEncoding
 	e.renderer.shadowMap.enabled = true
 
+	if (DEBUG)
+		window.renderer = e.renderer
+
 	{
 		let raf_id
 		let do_render = function() {
@@ -2056,8 +2480,8 @@ component('x-modeleditor', function(e) {
 			raf_id = null
 		}
 		function render() {
-			//raf_id = raf_id ||
-			do_render()
+			if (!raf_id)
+				raf_id = raf(do_render)
 		}
 	}
 
@@ -2467,7 +2891,7 @@ component('x-modeleditor', function(e) {
 	) {
 		let d = 2 * pe.max_distance
 		let geo = new THREE.PlaneBufferGeometry(d)
-		let mat = new THREE.MeshLambertMaterial({
+		let mat = new THREE.MeshBasicMaterial({
 			depthTest: false,
 			visible: false,
 			side: THREE.DoubleSide,
@@ -2643,7 +3067,7 @@ component('x-modeleditor', function(e) {
 	// model ------------------------------------------------------------------
 
 	e.components = {} // {name->group}
-	e.model = editable_model()
+	e.model = editable_model({})
 	e.model.editor = e
 	e.scene.add(e.model.group)
 
@@ -2685,6 +3109,9 @@ component('x-modeleditor', function(e) {
 		let hit = e.raycaster.intersectObject(e.model.group, true)[0]
 		if (!(hit && hit.object.type == 'Mesh'))
 			return
+		// print(hit.object.name == 'smooth_faces')
+		// print(hit.faceIndex)
+
 		hit.point.face = hit.object.face
 		hit.point.snap = 'face'
 		return hit.point
@@ -2696,7 +3123,7 @@ component('x-modeleditor', function(e) {
 
 		if (p) {
 
-			// we've hit a face face, but we still have to hit any lines
+			// we've hit a face, but we still have to hit any lines
 			// that lie in front of it, on it, or intersecting it.
 
 			let p0 = e.raycaster.ray.origin
@@ -3252,6 +3679,11 @@ component('x-modeleditor', function(e) {
 		if (key == 'Delete') {
 			e.model.remove_selection()
 			e.model.update()
+			render()
+		} else if (key == 'h') {
+			e.model.toggle_invisible_lines()
+			e.model.update()
+			render()
 		}
 		if (tool.keydown)
 			if (tool.keydown(key) === false)
@@ -3283,8 +3715,11 @@ component('x-modeleditor', function(e) {
 
 	function draw_test_cube() {
 
-		e.model.set({
-			point_coords: [
+		let mat1 = e.model.add_material({color: 0xff9900})
+		let mat2 = e.model.add_material({color: 0x0099ff})
+
+		let m = {
+			points: [
 				 0,  0, -1,
 				 2,  0, -1,
 				 2,  2,  0,
@@ -3302,9 +3737,25 @@ component('x-modeleditor', function(e) {
 				[0, 4, 7, 3],
 				[5, 1, 2, 6],
 			],
-		})
+		}
+
+		m.faces[0].material = mat1
+		m.faces[1].material = mat1
+		m.faces[2].material = mat2
+
+		e.model.set(m)
+
+		e.model.set_line_smoothness(0, 1)
+		e.model.set_line_smoothness(2, 1)
+		e.model.set_line_opacity(0, 0)
+		e.model.set_line_opacity(2, 0)
 
 		//e.model.group.position.y = 1
+
+		e.model.add_instance(mat4())
+		e.model.add_instance(mat4())
+
+		e.model.update()
 
 	}
 
