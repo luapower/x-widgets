@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8>
+<script src=glue.js></script>
+<script src=divs.js></script>
+<script src=3d.js></script>
+<script src=gl.js></script>
+<script src=earcut.js></script>
+</head>
+<body>
+<canvas id=canvas width=640 height=640></canvas>
+<script>
+
+canvas.on('webglcontextlost', function() {
+	assert(false, 'webgl context lost')
+})
+
+let gl = canvas.getContext('webgl2')
+
+gl.module('selected_face.vs', `
+	in float selected;
+	flat out float frag_selected;
+	void selected_face() {
+		frag_selected = selected;
+	}
+`)
+
+gl.module('selected_face.fs', `
+	flat in float frag_selected;
+	void selected_face() {
+		if (frag_selected == 1.0) {
+			float x = mod(gl_FragCoord.x, 4.0);
+			float y = mod(gl_FragCoord.y, 8.0);
+			if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
+				 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
+				frag_color = vec4(0.0, 0.0, .8, 1.0);
+		}
+	}
+`)
+
+// face material -------------------------------------------------------------
+
+function face_program(gl) {
+
+	let vs = `
+		#include base.vs
+		#include phong.vs
+		#include shadows.vs
+		#include selected_face.vs
+		void main() {
+			phong();
+			shadows();
+			selected_face();
+		}
+	`
+
+	let fs = `
+		#include base.fs
+		#include phong.fs
+		#include shadows.fs
+		#include selected_face.fs
+		void main() {
+			phong();
+			shadows();
+			selected_face();
+		}
+	`
+
+	let pr = gl.program('face', vs, fs)
+
+	return pr
+}
+
+// dashed line material ------------------------------------------------------
+
+// works in gl.LINES mode but uses `flat` so requires WebGL 2.
+function dashed_line_program(gl) {
+
+	let vs = `
+		#version 300 es
+
+		uniform mat4 view_proj;
+		uniform mat4 proj;
+		uniform mat4 view;
+
+		in mat4 model;
+		in vec3 pos;
+
+		flat out vec4 p2; // because GL_LAST_VERTEX_CONVENTION.
+		out vec4 p;
+
+		void main() {
+			p = view_proj * model * vec4(pos, 1.0);
+			gl_Position = p;
+			p2 = p;
+		}
+	`
+
+	let fs = `
+		#version 300 es
+		precision highp float;
+
+		uniform vec4 color;
+		uniform vec2 screen_size;
+		uniform float dash;
+		uniform float gap;
+
+		flat in vec4 p2;
+		in vec4 p;
+
+		out vec4 frag_color;
+
+		void main(){
+			float dist = length(((p.xyz / p.w).xy - (p2.xyz / p2.w).xy) * screen_size.xy / 2.0);
+			if (fract(dist / (dash + gap)) > dash / (dash + gap))
+				discard;
+			frag_color = color;
+		}
+	`
+
+	let pr = gl.program('dashed_line', vs, fs)
+
+	return pr
+}
+
+// scene ---------------------------------------------------------------------
+
+// geometry
+
+let points = [
+	 0,  0, -1,
+	 2,  0, -1,
+	 2,  2,  0,
+	 0,  2,  0,
+	 0,  0,  2,
+	 2,  0,  2,
+	 2,  2,  2,
+	 0,  2,  2,
+]
+
+{
+let _p = v3()
+face3 = poly3.subclass({
+	get_point: function(pi, p) {
+		return (p || _p).from_array(points, 3 * this[pi])
+	},
+})
+}
+
+
+let faces = [
+	face3({uvm: mat3().translate(.1, .1).scale(1)}, [1, 0, 3, 2]),
+	face3({uvm: mat3().scale(1).invert()}, [4, 5, 6, 7]),
+	face3({uvm: mat3().scale(1).invert()}, [7, 6, 2, 3]), //[6, 2, 3],
+	face3({uvm: mat3().scale(1).invert()}, [4, 0, 1, 5]),
+	face3({uvm: mat3().scale(1).invert()}, [0, 4, 7, 3]),
+	face3({uvm: mat3().scale(1).invert()}, [5, 1, 2, 6]),
+]
+
+let triangles = []
+let normals = []
+let uvs = []
+let selected = []
+
+let _p = v3()
+
+for (let face of faces) {
+	face.tris = []
+	face.triangulate(face.tris, Number.EPSILON)
+	let no = face.plane().normal
+	let p0 = face.get_point(0, _p)
+	for (let i = 0, n = face.tris.length; i < n; i++) {
+		let p = face.get_point(face.tris[i])
+		triangles.push(p.x, p.y, p.z)
+		normals.push(no.x, no.y, no.z)
+		let uv = face.uv_at(face.tris[i], face.uvm, v2(1, 1))
+		uvs.push(uv.x, uv.y)
+		selected.push((triangles.length - 4) % 12 >= 6 ? 1 : 0)
+	}
+}
+
+function scale_texture(tex) {
+	let pi = 0
+	for (let face of faces) {
+		for (let i = 0; i < face.tris.length; i++) {
+			let uv = face.uv_at(face.tris[i], face.uvm, tex.uv)
+			uvs_dbuf.set(pi, uv)
+			pi++
+		}
+	}
+	uvs_dbuf.invalidate()
+}
+
+let    points_dbuf = gl.dyn_v3_buffer(points)
+let triangles_dbuf = gl.dyn_v3_buffer(triangles)
+let   normals_dbuf = gl.dyn_v3_buffer(normals)
+let       uvs_dbuf = gl.dyn_v2_buffer(uvs)
+let  selected_dbuf = gl.dyn_u8_buffer(selected)
+
+let inst_mat1 = mat4()
+			.translate(.5,  -1, 0)
+			.rotate(rad(-20), 0, 1, 0)
+
+let inst_mat2 = mat4()
+			.translate(-.5, -3, 0)
+			.rotate(rad( 45), 0, 1, 0)
+
+let inst_mat_dbuf = gl.dyn_mat4_instance_buffer([
+		...inst_mat1,
+		...inst_mat2,
+])
+
+let lines = [
+	0, 1,  1, 2,  2, 3,  3, 0,
+]
+let line_pis_buf = gl.dyn_index_buffer(lines)
+
+// camera
+
+let proj      = mat4f32()
+let view      = mat4f32()
+let view_proj = mat4f32()
+
+function canvas_resized() {
+	let w = gl.canvas.cw
+	let h = gl.canvas.ch
+	//proj.frustum(-1, 1, -1, 1, .0001)
+	proj.perspective(rad(45), w / h, 0.0001, 500)
+	gl.set_uni('proj', proj)
+	gl.set_uni('screen_size', w, h)
+}
+
+canvas_resized()
+
+// materials & textures
+
+let face_pr = face_program(gl)
+let dashed_line_pr = dashed_line_program(gl)
+let fat_line_pr = gl.fat_line_program()
+
+let tex1 = gl.load_texture('checker-big.png', 0.001, scale_texture)
+
+// rendering
+
+gl.set_uni('sunlight_pos', 0, 0, -5)
+gl.set_uni('sunlight_color', 1, 1, 1)
+gl.set_uni('diffuse_color', 1, 1, 1, 1)
+
+let rot = 0
+
+function draw_scene(for_shadows) {
+	rot += 0.05
+
+	let radius = 5
+   let view_pos = v3(
+			1,
+			//sin(rot) * radius,
+			-1,
+			-10, //-10 + cos(rot) * radius
+	)
+	gl.set_uni('view_pos', view_pos)
+
+	inst_mat1.reset()
+		.translate(.5, 1, 0)
+		.rotate(-20 + rad(20*rot), 0, 1, 0)
+
+	inst_mat_dbuf.set(0, inst_mat1)
+
+	let target = v3(0, 0, 0)
+	let up = v3(0, 1, 0)
+	view.reset()
+		.look_at(view_pos, target, up)
+		.invert()
+	gl.set_uni('view', view)
+
+	mat4.mul(proj, view, view_proj)
+	gl.set_uni('view_proj', view_proj)
+
+	gl.clear_all(1, 1, 1)
+
+	//pos_dbuf.array[0] = rot += 0.01
+	//pos_dbuf.invalidate(0, 1)
+
+	face_pr.use()
+	face_pr.set_uni ('ambient_strength' , 0.1)
+	face_pr.set_uni ('specular_strength', .2)
+	face_pr.set_uni ('shininess'        , 1 << 5) // keep this a pow2.
+	face_pr.set_uni ('diffuse_map'      , tex1)
+	face_pr.set_attr('model'            , inst_mat_dbuf.buffer())
+	face_pr.set_attr('pos'              , triangles_dbuf.buffer())
+	face_pr.set_attr('normal'           , normals_dbuf.buffer())
+	face_pr.set_attr('uv'               , uvs_dbuf.buffer())
+	face_pr.set_attr('selected'         , selected_dbuf.buffer())
+	gl.polygonOffset(.0001, 0)
+	gl.draw_triangles()
+	gl.polygonOffset(0, 0)
+
+	dashed_line_pr.use()
+	dashed_line_pr.set_uni ('color' , 1, 0, 1, 1)
+	dashed_line_pr.set_uni ('dash'  , 2)
+	dashed_line_pr.set_uni ('gap'   , 4)
+	dashed_line_pr.set_attr('model' , inst_mat_dbuf.buffer())
+	dashed_line_pr.set_attr('pos'   , points_dbuf.buffer())
+	dashed_line_pr.set_index(line_pis_buf.buffer())
+	gl.draw_lines()
+
+	fat_line_pr.set_points([
+		line3(v3(0, 0, 0), v3(0, 0, 1)),
+		line3(v3(0, 0, 0), v3(0, 1, 0)),
+		line3(v3(0, 0, 0), v3(1, 0, 0)),
+	])
+	fat_line_pr.use()
+	fat_line_pr.set_uni('color', 0, 0, 0, 1)
+	fat_line_pr.draw()
+
+}
+
+let shadow_map = gl.shadow_map({
+	draw_scene: draw_scene,
+})
+
+function animate() {
+	shadow_map.render()
+	gl.end_frame()
+	raf(animate)
+}
+
+animate()
+
+</script>
+</body>
+</html>
