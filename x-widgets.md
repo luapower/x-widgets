@@ -87,6 +87,14 @@ The dependencies are `glue.js` and `divs.js` (included).
 
 `divs.js` is a tiny jQuery-like library for DOM manipulation.
 
+Additionally, [x-modeleditor] depends on `3d.js`, `gl.js` and `earcut.js` (also included).
+
+`3d.js` is a fast 3D math library for WebGL.
+
+`gl.js` is a tiny WebGL wrapper with a lighting model.
+
+`earcut.js` is the polygon triangulation library from mapbox.
+
 ## Styling
 
 Even though they're web components, the widgets don't use shadow DOMs so

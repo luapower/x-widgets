@@ -770,7 +770,7 @@ gl.module('base.vs', `
 	uniform mat4 view;
 	uniform mat4 proj;
 	uniform mat4 view_proj;
-	uniform vec2 screen_size;
+	uniform vec2 viewport_size;
 
 	in mat4 model;
 	in vec3 pos;
@@ -785,7 +785,7 @@ gl.module('base.fs', `
 
 	precision highp float;
 
-	uniform vec2 screen_size;
+	uniform vec2 viewport_size;
 
 	out vec4 frag_color;
 
@@ -983,7 +983,7 @@ gl.module('dashed_line.vs', `
 	out vec4 frag_p1;
 	flat out vec4 frag_p2; // because GL_LAST_VERTEX_CONVENTION.
 
-	void dashed_line(final_pos) {
+	void dashed_line(vec4 final_pos) {
 		frag_p1 = final_pos;
 		frag_p2 = final_pos;
 	}
@@ -1002,9 +1002,9 @@ gl.module('dashed_line.fs', `
 	flat in vec4 frag_p2; // because GL_LAST_VERTEX_CONVENTION.
 
 	void dashed_line() {
-		vec2 p1 = (frag_p1.xyz / frag_p1.w).xy
-		vec2 p2 = (frag_p2.xyz / frag_p2.w).xy
-		float dist = length((p1 - p2) * screen_size.xy / 2.0);
+		vec2 p1 = (frag_p1.xyz / frag_p1.w).xy;
+		vec2 p2 = (frag_p2.xyz / frag_p2.w).xy;
+		float dist = length((p1 - p2) * viewport_size.xy / 2.0);
 		if (fract(dist / (dash + gap)) > dash / (dash + gap))
 			discard;
 		frag_color = color;
@@ -1016,13 +1016,18 @@ gl.module('dashed_line.fs', `
 gl.dashed_line_program = function() {
 	let vs = `
 		#include dashed_line.vs
-		void main() { dashed_line() }
+		void main() {
+			gl_Position = view_proj * model * vec4(pos, 1.0);
+			dashed_line(gl_Position);
+		}
 	`
 	let fs = `
 		#include dashed_line.fs
-		void main() { dashed_line() }
+		void main() {
+			dashed_line();
+		}
 	`
-	let pr = gl.program('dashed_line', vs, fs)
+	let pr = this.program('dashed_line', vs, fs)
 	return pr
 }
 
@@ -1046,7 +1051,7 @@ gl.module('fat_line.vs', `
 		// line normal in screen space.
 		float dx = dq.x - dp.x;
 		float dy = dq.y - dp.y;
-		vec2 n = normalize(vec2(-dy, dx) * dir) / screen_size * dp.w * 2.0;
+		vec2 n = normalize(vec2(-dy, dx) * dir) / viewport_size * dp.w * 2.0;
 
 		gl_Position = dp + vec4(n, 0.0, 0.0);
 
@@ -1186,6 +1191,40 @@ gl.fat_line_program = function() {
 	}
 
 	return pr
+}
+
+// space conversions ---------------------------------------------------------
+
+gl.world_to_screen = function(p, inv_view, proj, out) {
+	out.set(p).transform(inv_view).transform(proj)
+	out[0] = round(( out[0] + 1) * this.canvas.cw / 2)
+	out[1] = round((-out[1] + 1) * this.canvas.ch / 2)
+}
+
+gl.screen_to_clip = function(x, y, z, out) {
+	out = out || v4()
+	let w = this.canvas.cw
+	let h = this.canvas.ch
+	out[0] = (2 * x) / w - 1
+	out[1] = 1 - (2 * y) / h
+	out[2] = z
+	out[3] = 1
+	return out
+}
+
+gl.screen_to_view = function(x, y, z, inv_proj, out) {
+	let ray = this.screen_to_clip(x, y, z, out)
+	ray.transform(inv_proj) // clip space -> view space
+	ray.z = z
+	return z
+}
+
+// https://antongerdelan.net/opengl/raycasting.html
+gl.screen_to_world = function(mx, my, inv_proj, inv_view, out) {
+	let ray = gl.screen_to_view(mx, my, -1, inv_proj, out)
+	ray.w = 0 // it's a (non-translatable) direction, not a point.
+	ray.transform(inv_view) // view space -> world space
+	return ray.normalize()
 }
 
 // install extensions --------------------------------------------------------

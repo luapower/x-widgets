@@ -55,8 +55,7 @@
 
 	triangle3 [a, b, c]
 		* normal barycoord contains_point uv is_front_facing
-		set assign clone equals
-		set_from_points_and_indices
+		set assign clone equals from_array
 		area midpoint normal plane barycoord uv contains_point is_front_facing intersects_box
 
 	box3
@@ -70,8 +69,8 @@
 	line3 [p0, p1]
 		set clone equals
 		center delta distance2 distance at
-		closest_point_to_point_t closest_point_to_point
-		apply_mat4
+		closest_point_to_point_t closest_point_to_point intersect_line
+		transform
 
 */
 
@@ -275,11 +274,16 @@ let v3c = class v extends Array {
 	}
 
 	set(x, y, z) {
-		if (isarray(x)) {
+		if (x.is_v3 || x.is_v4) {
 			let v = x
 			x = v[0]
 			y = v[1]
 			z = v[2]
+		} else if (x.is_v2) {
+			let v = x
+			z = or(y, 0)
+			x = v[0]
+			y = v[1]
 		}
 		this[0] = x
 		this[1] = y
@@ -548,11 +552,14 @@ v3.div = function div(a, b, out) {
 	return out
 }
 
-// temporaries for plane and triangle methods.
+// temporaries for plane, triangle3 and line3 methods.
 let _v0 = v3()
 let _v1 = v3()
 let _v2 = v3()
 let _v3 = v3()
+let _v4 = v3()
+let _v5 = v3()
+let _v6 = v3()
 
 // v4 ------------------------------------------------------------------------
 
@@ -563,12 +570,24 @@ let v4c = class v extends Array {
 	}
 
 	set(x, y, z, w) {
-		if (isarray(x)) {
+		if (x.is_v4) {
 			let v = x
 			x = v[0]
 			y = v[1]
 			z = v[2]
 			w = v[3]
+		} else if (x.is_v3) {
+			let v = x
+			w = or(y, 1)
+			x = v[0]
+			y = v[1]
+			z = v[2]
+		} else if (x.is_v2) {
+			let v = x
+			z = or(y, 0)
+			w = or(z, 1)
+			x = v[0]
+			y = v[1]
 		}
 		this[0] = x
 		this[1] = y
@@ -591,7 +610,7 @@ let v4c = class v extends Array {
 	}
 
 	clone() {
-		return v4().set(this[0], this[1], this[2], this[3])
+		return v4().set(this)
 	}
 
 	equals(v) {
@@ -936,14 +955,20 @@ let mat3_type = function(super_class, super_args) {
 			return this
 		}
 
-		scale(sx, sy) {
-			sy = or(sy, sx)
-			this[0] *= sx
-			this[3] *= sx
-			this[6] *= sx
-			this[1] *= sy
-			this[4] *= sy
-			this[7] *= sy
+		scale(x, y) {
+			if (isarray(x)) {
+				let v = x
+				x = v[0]
+				y = v[1]
+			} else {
+				y = or(y, x)
+			}
+			this[0] *= x
+			this[3] *= x
+			this[6] *= x
+			this[1] *= y
+			this[4] *= y
+			this[7] *= y
 			return this
 		}
 
@@ -965,13 +990,18 @@ let mat3_type = function(super_class, super_args) {
 			return this
 		}
 
-		translate(tx, ty) {
-			this[0] += tx * this[2]
-			this[3] += tx * this[5]
-			this[6] += tx * this[8]
-			this[1] += ty * this[2]
-			this[4] += ty * this[5]
-			this[7] += ty * this[8]
+		translate(x, y) {
+			if (isarray(x)) {
+				let v = x
+				x = v[0]
+				y = v[1]
+			}
+			this[0] += x * this[2]
+			this[3] += x * this[5]
+			this[6] += x * this[8]
+			this[1] += y * this[2]
+			this[4] += y * this[5]
+			this[7] += y * this[8]
 			return this
 		}
 
@@ -1234,10 +1264,16 @@ let mat4_type = function(super_class, super_args) {
 			return this
 		}
 
-		scale(v) {
-			let x = v[0]
-			let y = v[1]
-			let z = v[2]
+		scale(x, y, z) {
+			if (isarray(x)) {
+				let v = x
+				x = v[0]
+				y = v[1]
+				z = v[2]
+			} else {
+				y = or(y, x)
+				z = or(z, x)
+			}
 			this[ 0] *= x
 			this[ 4] *= y
 			this[ 8] *= z
@@ -1254,7 +1290,7 @@ let mat4_type = function(super_class, super_args) {
 		}
 
 		set_position(x, y, z) {
-			if (x.is_v3) {
+			if (x.is_v3 || x.is_v4) {
 				let v = x
 				x = v[0]
 				y = v[1]
@@ -1272,6 +1308,12 @@ let mat4_type = function(super_class, super_args) {
 		}
 
 		translate(x, y, z) {
+			if (isarray(x)) {
+				let v = x
+				x = v[0]
+				y = v[1]
+				z = v[2]
+			}
 			let m = this
 			m[12] = m[0] * x + m[4] * y + m[ 8] * z + m[12]
 			m[13] = m[1] * x + m[5] * y + m[ 9] * z + m[13]
@@ -1373,7 +1415,7 @@ let mat4_type = function(super_class, super_args) {
 			this[12] = 0
 			this[13] = 0
 			this[15] = 0
-			if (far != null && far !== Infinity) {
+			if (far != null && far != 1/0) {
 				let nf = 1 / (near - far)
 				this[10] = (far + near) * nf
 				this[14] = 2 * far * near * nf
@@ -1384,7 +1426,7 @@ let mat4_type = function(super_class, super_args) {
 			return this
 		}
 
-		ortho(left, right, top, bottom, near, far) {
+		ortho(left, right, bottom, top, near, far) {
 			let w = 1.0 / (right - left)
 			let h = 1.0 / (top - bottom)
 			let p = 1.0 / (far - near)
@@ -1410,79 +1452,36 @@ let mat4_type = function(super_class, super_args) {
 			return this
 		}
 
-		// generates a look-at matrix with the given eye position, focal point, and up axis.
-		//   eye    : position of the viewer
-		//   center : point the viewer is looking at
-		//   up     : vec3 pointing up
-		look_at(eye, center, up) {
-			let x0, x1, x2, y0, y1, y2, z0, z1, z2, len
-			let eyex = eye[0]
-			let eyey = eye[1]
-			let eyez = eye[2]
-			let upx = up[0]
-			let upy = up[1]
-			let upz = up[2]
-			let cx = center[0]
-			let cy = center[1]
-			let cz = center[2]
-			if (
-				abs(eyex - cx) < Number.EPSILON &&
-				abs(eyey - cy) < Number.EPSILON &&
-				abs(eyez - cz) < Number.EPSILON
-			) {
-				return this.reset()
+		// NOTE: this only rotates the matrix, it does not translate it.
+		//
+		// To set up the camera view matrix, use:
+		//   view.translate(camera_pos).look_at(camera_pos, target_pos, up_pos).invert()
+		//
+		look_at(eye, target, up) {
+			let z = _v0.set(eye).sub(target)
+			if (!z.len2()) // eye and target coincide, move eye back by one.
+				z.z = 1
+			z.normalize()
+			let x = _v1.set(up).cross(z)
+			if (!x.len2()) { // up and z are parallel, diverge them a little.
+				if (abs(up.z) == 1)
+					z.x += 0.0001
+				else
+					z.z += 0.0001
+				z.normalize()
+				x.set(up).cross(z)
 			}
-			z0 = eyex - cx
-			z1 = eyey - cy
-			z2 = eyez - cz
-			len = 1 / Math.hypot(z0, z1, z2)
-			z0 *= len
-			z1 *= len
-			z2 *= len
-			x0 = upy * z2 - upz * z1
-			x1 = upz * z0 - upx * z2
-			x2 = upx * z1 - upy * z0
-			len = Math.hypot(x0, x1, x2)
-			if (!len) {
-				x0 = 0
-				x1 = 0
-				x2 = 0
-			} else {
-				len = 1 / len
-				x0 *= len
-				x1 *= len
-				x2 *= len
-			}
-			y0 = z1 * x2 - z2 * x1
-			y1 = z2 * x0 - z0 * x2
-			y2 = z0 * x1 - z1 * x0
-			len = Math.hypot(y0, y1, y2)
-			if (!len) {
-				y0 = 0
-				y1 = 0
-				y2 = 0
-			} else {
-				len = 1 / len
-				y0 *= len
-				y1 *= len
-				y2 *= len
-			}
-			this[ 0] = x0
-			this[ 1] = y0
-			this[ 2] = z0
-			this[ 3] = 0
-			this[ 4] = x1
-			this[ 5] = y1
-			this[ 6] = z1
-			this[ 7] = 0
-			this[ 8] = x2
-			this[ 9] = y2
-			this[10] = z2
-			this[11] = 0
-			this[12] = -(x0 * eyex + x1 * eyey + x2 * eyez)
-			this[13] = -(y0 * eyex + y1 * eyey + y2 * eyez)
-			this[14] = -(z0 * eyex + z1 * eyey + z2 * eyez)
-			this[15] = 1
+			x.normalize()
+			let y = _v2.set(z).cross(x)
+			this[ 0] = x[0]
+			this[ 4] = y[0]
+			this[ 8] = z[0]
+			this[ 1] = x[1]
+			this[ 5] = y[1]
+			this[ 9] = z[1]
+			this[ 2] = x[2]
+			this[ 6] = y[2]
+			this[10] = z[2]
 			return this
 		}
 
@@ -1583,7 +1582,7 @@ let quatc = class q extends Array {
 	}
 
 	set(x, y, z, w) {
-		if (isarray(x)) {
+		if (x.is_quat) {
 			let v = x
 			x = v[0]
 			y = v[1]
@@ -1607,7 +1606,7 @@ let quatc = class q extends Array {
 	}
 
 	clone() {
-		return quat().set(this[0], this[1], this[2], this[3])
+		return quat().set(this)
 	}
 
 	equals(q) {
@@ -2005,7 +2004,7 @@ let tri3c = class triangle3 extends Array {
 	}
 
 	set(a, b, c) {
-		if (isarray(a)) {
+		if (a.is_triangle) {
 			let t = a
 			this[0].set(t[0])
 			this[1].set(t[1])
@@ -2038,11 +2037,16 @@ let tri3c = class triangle3 extends Array {
 		)
 	}
 
-	set_from_points_and_indices(points, i0, i1, i2) {
-		this[0].set(points[i0])
-		this[1].set(points[i1])
-		this[2].set(points[i2])
-		return this
+	set_from_array(a, i) {
+		this[0][0] = a[i+0]
+		this[0][1] = a[i+1]
+		this[0][2] = a[i+2]
+		this[1][0] = a[i+3]
+		this[1][1] = a[i+4]
+		this[1][2] = a[i+5]
+		this[2][0] = a[i+6]
+		this[2][1] = a[i+7]
+		this[2][2] = a[i+8]
 	}
 
 	area() {
@@ -2142,8 +2146,8 @@ triangle3.is_front_facing = function is_front_facing(a, b, c, direction) {
 // box3 ----------------------------------------------------------------------
 
 let box3_class = function(min, max) {
-	this.min = min || v3(+Infinity, +Infinity, +Infinity)
-	this.max = max || v3(-Infinity, -Infinity, -Infinity)
+	this.min = min || v3(+1/0, +1/0, +1/0)
+	this.max = max || v3(-1/0, -1/0, -1/0)
 }
 let box3p = box3_class.prototype
 box3 = function(min, max) { return new box3_class(min, max) }
@@ -2173,8 +2177,8 @@ box3p.equals = function equals(box) {
 }
 
 box3p.reset = function reset() {
-	this.min.x = this.min.y = this.min.z = +Infinity
-	this.max.x = this.max.y = this.max.z = -Infinity
+	this.min.x = this.min.y = this.min.z = +1/0
+	this.max.x = this.max.y = this.max.z = -1/0
 	return this
 }
 
@@ -2643,10 +2647,58 @@ let line3c = class line3 extends Array {
 		return this.delta(out).muls(t).add(this[0])
 	}
 
-	apply_mat4(m) {
-		this[0].applyMatrix4(m)
-		this[1].applyMatrix4(m)
+	transform(m) {
+		this[0].transform(m)
+		this[1].transform(m)
 		return this
+	}
+
+	// returns the smallest line that connects two (coplanar or skewed) lines.
+	// returns null for parallel lines.
+	intersect_line(lq, clamp, out) {
+		let lp = this
+		let rp = out[0]
+		let rq = out[1]
+		let p = lp[0]
+		let q = lq[0]
+		let mp = lp.delta(_v0)
+		let mq = lq.delta(_v1)
+		let qp = _v2.set(p).sub(q)
+
+		let qp_mp = qp.dot(mp)
+		let qp_mq = qp.dot(mq)
+		let mp_mp = mp.dot(mp)
+		let mq_mq = mq.dot(mq)
+		let mp_mq = mp.dot(mq)
+
+		let detp = qp_mp * mq_mq - qp_mq * mp_mq
+		let detq = qp_mp * mp_mq - qp_mq * mp_mp
+		let detm = mp_mq * mp_mq - mq_mq * mp_mp
+
+		if (detm == 0) // lines are parallel
+			return
+
+		rp.set(p).add(mp.muls(detp / detm))
+		rq.set(q).add(mq.muls(detq / detm))
+
+		if (clamp) {
+			let p1 = _v3.set(lp[1]).sub(lp[0])
+			let p2 = _v4.set(rp).sub(lp[0])
+			let tp = p2.len() / p1.len() * (p1.dot(p2) > 0 ? 1 : -1)
+			p1.set(lq[1]).sub(lq[0])
+			p2.set(rq).sub(lq[0])
+			let tq = p2.len() / p1.len() * (p1.dot(p2) > 0 ? 1 : -1)
+			if (tp < 0)
+				rp.set(lp[0])
+			else if (tp > 1)
+				rp.set(lp[1])
+			if (tq < 0)
+				rq.set(lq[0])
+			else if (tq > 1)
+				rq.set(lq[1])
+		}
+
+		return out
 	}
 
 }

@@ -72,58 +72,6 @@ function face_program(gl) {
 	return pr
 }
 
-// dashed line material ------------------------------------------------------
-
-// works in gl.LINES mode but uses `flat` so requires WebGL 2.
-function dashed_line_program(gl) {
-
-	let vs = `
-		#version 300 es
-
-		uniform mat4 view_proj;
-		uniform mat4 proj;
-		uniform mat4 view;
-
-		in mat4 model;
-		in vec3 pos;
-
-		flat out vec4 p2; // because GL_LAST_VERTEX_CONVENTION.
-		out vec4 p;
-
-		void main() {
-			p = view_proj * model * vec4(pos, 1.0);
-			gl_Position = p;
-			p2 = p;
-		}
-	`
-
-	let fs = `
-		#version 300 es
-		precision highp float;
-
-		uniform vec4 color;
-		uniform vec2 screen_size;
-		uniform float dash;
-		uniform float gap;
-
-		flat in vec4 p2;
-		in vec4 p;
-
-		out vec4 frag_color;
-
-		void main(){
-			float dist = length(((p.xyz / p.w).xy - (p2.xyz / p2.w).xy) * screen_size.xy / 2.0);
-			if (fract(dist / (dash + gap)) > dash / (dash + gap))
-				discard;
-			frag_color = color;
-		}
-	`
-
-	let pr = gl.program('dashed_line', vs, fs)
-
-	return pr
-}
-
 // scene ---------------------------------------------------------------------
 
 // geometry
@@ -199,12 +147,12 @@ let       uvs_dbuf = gl.dyn_v2_buffer(uvs)
 let  selected_dbuf = gl.dyn_u8_buffer(selected)
 
 let inst_mat1 = mat4()
-			.translate(.5,  -1, 0)
-			.rotate(rad(-20), 0, 1, 0)
+			.translate(0, 1, 0)
+			//.rotate(rad(-20), 0, 1, 0)
 
 let inst_mat2 = mat4()
-			.translate(-.5, -3, 0)
-			.rotate(rad( 45), 0, 1, 0)
+			.translate(0, -3, 0)
+			//.rotate(rad( 45), 0, 1, 0)
 
 let inst_mat_dbuf = gl.dyn_mat4_instance_buffer([
 		...inst_mat1,
@@ -221,29 +169,78 @@ let line_pis_buf = gl.dyn_index_buffer(lines)
 let proj      = mat4f32()
 let view      = mat4f32()
 let view_proj = mat4f32()
+let inv_proj  = mat4()
+let inv_view  = mat4()
 
-function canvas_resized() {
+let view_pos    = v3(3, 3, 10)
+let view_target = v3(0, 0, 0)
+let view_up     = v3(0, 1, 0)
+
+function update_camera() {
+
+	gl.set_uni('view_pos', view_pos)
+
+	view.reset()
+		.translate(view_pos)
+		.look_at(view_pos, view_target, view_up)
+		//.scale(.5)
+		.invert()
+	inv_view.set(view).invert()
+	gl.set_uni('view', view)
+
+	mat4.mul(proj, view, view_proj)
+	gl.set_uni('view_proj', view_proj)
+
+}
+
+function update_viewport_size() {
 	let w = gl.canvas.cw
 	let h = gl.canvas.ch
-	//proj.frustum(-1, 1, -1, 1, .0001)
-	proj.perspective(rad(45), w / h, 0.0001, 500)
+	gl.set_uni('viewport_size', w, h)
+	update_proj()
+}
+
+function update_proj() {
+	let w = gl.canvas.cw
+	let h = gl.canvas.ch
+	//proj.frustum(-1, 1, -1, 1, 3, 1e6)
+	//proj.ortho(-1, 1, -1, 1, -1e2, 1e2).scale(.3)
+	proj.perspective(rad(45), w / h, 0.01)
+	inv_proj.set(proj).invert()
 	gl.set_uni('proj', proj)
-	gl.set_uni('screen_size', w, h)
+	update_camera()
+}
+
+function canvas_resized() {
+	update_viewport_size()
 }
 
 canvas_resized()
 
+document.on('wheel', function(ev, dy, mx, my) {
+	let ray = gl.raycast(mx, my, inv_proj, inv_view)
+
+	let d = view_pos.clone().sub(view_target)
+	let len = max(0.01, d.len() * (1 + .2 * dy / 100))
+	d.set_len(len)
+	view_pos.set(view_target).add(d)
+})
+
+document.on('keydown', function(key) {
+	print(key)
+})
+
 // materials & textures
 
 let face_pr = face_program(gl)
-let dashed_line_pr = dashed_line_program(gl)
+let dashed_line_pr = gl.dashed_line_program()
 let fat_line_pr = gl.fat_line_program()
 
 let tex1 = gl.load_texture('checker-big.png', 0.001, scale_texture)
 
 // rendering
 
-gl.set_uni('sunlight_pos', 0, 0, -5)
+gl.set_uni('sunlight_pos', 0, 10, 0)
 gl.set_uni('sunlight_color', 1, 1, 1)
 gl.set_uni('diffuse_color', 1, 1, 1, 1)
 
@@ -252,30 +249,18 @@ let rot = 0
 function draw_scene(for_shadows) {
 	rot += 0.05
 
-	let radius = 5
-   let view_pos = v3(
-			1,
-			//sin(rot) * radius,
-			-1,
-			-10, //-10 + cos(rot) * radius
-	)
-	gl.set_uni('view_pos', view_pos)
+	let radius = 10
 
-	inst_mat1.reset()
-		.translate(.5, 1, 0)
+	inst_mat1
+		.reset()
+		.translate(0, 1, 0)
 		.rotate(-20 + rad(20*rot), 0, 1, 0)
-
 	inst_mat_dbuf.set(0, inst_mat1)
 
-	let target = v3(0, 0, 0)
-	let up = v3(0, 1, 0)
-	view.reset()
-		.look_at(view_pos, target, up)
-		.invert()
-	gl.set_uni('view', view)
-
-	mat4.mul(proj, view, view_proj)
-	gl.set_uni('view_proj', view_proj)
+	//view_pos.x = sin(rot/10) * radius
+	//view_pos.y = sin(rot/10) * radius
+	//view_pos.z = cos(rot/10) * radius
+	update_camera()
 
 	gl.clear_all(1, 1, 1)
 
