@@ -9,26 +9,33 @@
 <script src=earcut.js></script>
 </head>
 <body>
-<canvas id=canvas width=640 height=640></canvas>
+<canvas style="border: 1px solid black" id=canvas width=640 height=640></canvas>
 <script>
 
 canvas.on('webglcontextlost', function() {
 	assert(false, 'webgl context lost')
 })
 
-let gl = canvas.getContext('webgl2')
+let gl = canvas.getContext('webgl2', {
+	//antialias: false, // MSAA FBOs can't be blitted to a MSAA canvas.
+})
 
 gl.module('selected_face.vs', `
+
 	in float selected;
 	flat out float frag_selected;
-	void selected_face() {
+
+	void do_selected_face() {
 		frag_selected = selected;
 	}
+
 `)
 
 gl.module('selected_face.fs', `
+
 	flat in float frag_selected;
-	void selected_face() {
+
+	void do_selected_face() {
 		if (frag_selected == 1.0) {
 			float x = mod(gl_FragCoord.x, 4.0);
 			float y = mod(gl_FragCoord.y, 8.0);
@@ -37,39 +44,29 @@ gl.module('selected_face.fs', `
 				frag_color = vec4(0.0, 0.0, .8, 1.0);
 		}
 	}
+
 `)
 
 // face material -------------------------------------------------------------
 
 function face_program(gl) {
-
-	let vs = `
+	return gl.program('face', `
 		#include base.vs
 		#include phong.vs
-		#include shadows.vs
 		#include selected_face.vs
 		void main() {
-			phong();
-			shadows();
-			selected_face();
+			do_phong();
+			do_selected_face();
 		}
-	`
-
-	let fs = `
+	`, `
 		#include base.fs
 		#include phong.fs
-		#include shadows.fs
 		#include selected_face.fs
 		void main() {
-			phong();
-			shadows();
-			selected_face();
+			do_phong();
+			do_selected_face();
 		}
-	`
-
-	let pr = gl.program('face', vs, fs)
-
-	return pr
+	`)
 }
 
 // scene ---------------------------------------------------------------------
@@ -110,22 +107,27 @@ let triangles = []
 let normals = []
 let uvs = []
 let selected = []
+let face_ids = []
+let inst_ids = [0, 1]
 
 let _p = v3()
 
+let face_id = 0
 for (let face of faces) {
 	face.tris = []
-	face.triangulate(face.tris, Number.EPSILON)
+	face.triangulate(face.tris)
 	let no = face.plane().normal
 	let p0 = face.get_point(0, _p)
 	for (let i = 0, n = face.tris.length; i < n; i++) {
 		let p = face.get_point(face.tris[i])
 		triangles.push(p.x, p.y, p.z)
+		face_ids.push(face_id)
 		normals.push(no.x, no.y, no.z)
 		let uv = face.uv_at(face.tris[i], face.uvm, v2(1, 1))
 		uvs.push(uv.x, uv.y)
 		selected.push((triangles.length - 4) % 12 >= 6 ? 1 : 0)
 	}
+	face_id++
 }
 
 function scale_texture(tex) {
@@ -145,9 +147,11 @@ let triangles_dbuf = gl.dyn_v3_buffer(triangles)
 let   normals_dbuf = gl.dyn_v3_buffer(normals)
 let       uvs_dbuf = gl.dyn_v2_buffer(uvs)
 let  selected_dbuf = gl.dyn_u8_buffer(selected)
+let  face_ids_dbuf = gl.dyn_f32_buffer(face_ids)
+let  inst_ids_dbuf = gl.dyn_f32_instance_buffer(inst_ids)
 
 let inst_mat1 = mat4()
-			.translate(0, 1, 0)
+			.translate(0, .5, 0)
 			//.rotate(rad(-20), 0, 1, 0)
 
 let inst_mat2 = mat4()
@@ -206,6 +210,7 @@ function update_proj() {
 	//proj.frustum(-1, 1, -1, 1, 3, 1e6)
 	//proj.ortho(-1, 1, -1, 1, -1e2, 1e2).scale(.3)
 	proj.perspective(rad(45), w / h, 0.01)
+	//proj.ortho(-10, 10, -10, 10, -1e2, 1e2)
 	inv_proj.set(proj).invert()
 	gl.set_uni('proj', proj)
 	update_camera()
@@ -218,7 +223,7 @@ function canvas_resized() {
 canvas_resized()
 
 document.on('wheel', function(ev, dy, mx, my) {
-	let ray = gl.raycast(mx, my, inv_proj, inv_view)
+	let ray = gl.screen_to_world(mx, my, inv_proj, inv_view)
 
 	let d = view_pos.clone().sub(view_target)
 	let len = max(0.01, d.len() * (1 + .2 * dy / 100))
@@ -232,28 +237,93 @@ document.on('keydown', function(key) {
 
 // materials & textures
 
-let face_pr = face_program(gl)
-let dashed_line_pr = gl.dashed_line_program()
-let fat_line_pr = gl.fat_line_program()
+let face_vao = face_program(gl).vao()
+let dashed_line_vao = gl.dashed_line_program().vao()
+let fat_line_vao = gl.fat_line_vao()
 
-let tex1 = gl.load_texture('checker-big.png', 0.001, scale_texture)
+let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
 
 // rendering
 
-gl.set_uni('sunlight_pos', 0, 10, 0)
-gl.set_uni('sunlight_color', 1, 1, 1)
-gl.set_uni('diffuse_color', 1, 1, 1, 1)
+let tq
+function draw_faces(sdm_vao) {
+
+	if (sdm_vao) {
+		sdm_vao.set_attr('pos'  , triangles_dbuf.buffer())
+		sdm_vao.set_attr('model', inst_mat_dbuf.buffer())
+		sdm_vao.set_attr('face_id', face_ids_dbuf.buffer())
+		sdm_vao.set_attr('inst_id', inst_ids_dbuf.buffer())
+		sdm_vao.use()
+	} else {
+		face_vao.set_uni ('ambient_strength' , 0.1)
+		face_vao.set_uni ('specular_strength', .2)
+		face_vao.set_uni ('shininess'        , 1 << 5) // keep this a pow2.
+		face_vao.set_uni ('diffuse_map'      , tex1)
+		face_vao.set_attr('pos'              , triangles_dbuf.buffer())
+		face_vao.set_attr('normal'           , normals_dbuf.buffer())
+		face_vao.set_attr('uv'               , uvs_dbuf.buffer())
+		face_vao.set_attr('selected'         , selected_dbuf.buffer())
+		face_vao.set_attr('model'            , inst_mat_dbuf.buffer())
+		face_vao.use()
+	}
+
+	gl.polygonOffset(.0001, 0)
+	gl.draw_triangles()
+	gl.polygonOffset(0, 0)
+
+	gl.active_vao.unuse()
+
+	if (0) {
+		depth_map.uv = v2(2, 2)
+		assert(!gl.active_fbo)
+		tq = tq || gl.texture_quad(depth_map)
+		tq.model.reset().scale(5).translate(0, 0, -1)
+		tq.update_model()
+		tq.draw()
+	}
+}
+
+function draw_dashed_lines() {
+	let vao = dashed_line_vao
+	vao.set_uni ('color' , 1, 0, 1, 1)
+	vao.set_uni ('dash'  , 2)
+	vao.set_uni ('gap'   , 4)
+	vao.set_attr('model' , inst_mat_dbuf.buffer())
+	vao.set_attr('pos'   , points_dbuf.buffer())
+	vao.set_index(line_pis_buf.buffer())
+	vao.use()
+	gl.draw_lines()
+	vao.unuse()
+}
+
+function draw_fat_lines() {
+	let vao = fat_line_vao
+	vao.set_points([
+		line3(v3(0, 0, 0), v3(0, 0, 1)),
+		line3(v3(0, 0, 0), v3(0, 1, 0)),
+		line3(v3(0, 0, 0), v3(1, 0, 0)),
+	])
+	vao.set_uni('color', 0, 0, 0, 1)
+	vao.use()
+	vao.draw()
+	vao.unuse()
+}
+
+function draw_lines() {
+	//draw_dashed_lines()
+	//draw_fat_lines()
+}
 
 let rot = 0
 
-function draw_scene(for_shadows) {
-	rot += 0.05
+function start_frame() {
 
+	rot += 0.05
 	let radius = 10
 
 	inst_mat1
 		.reset()
-		.translate(0, 1, 0)
+		.translate(0, .5, 0)
 		.rotate(-20 + rad(20*rot), 0, 1, 0)
 	inst_mat_dbuf.set(0, inst_mat1)
 
@@ -262,54 +332,40 @@ function draw_scene(for_shadows) {
 	//view_pos.z = cos(rot/10) * radius
 	update_camera()
 
-	gl.clear_all(1, 1, 1)
-
 	//pos_dbuf.array[0] = rot += 0.01
 	//pos_dbuf.invalidate(0, 1)
 
-	face_pr.use()
-	face_pr.set_uni ('ambient_strength' , 0.1)
-	face_pr.set_uni ('specular_strength', .2)
-	face_pr.set_uni ('shininess'        , 1 << 5) // keep this a pow2.
-	face_pr.set_uni ('diffuse_map'      , tex1)
-	face_pr.set_attr('model'            , inst_mat_dbuf.buffer())
-	face_pr.set_attr('pos'              , triangles_dbuf.buffer())
-	face_pr.set_attr('normal'           , normals_dbuf.buffer())
-	face_pr.set_attr('uv'               , uvs_dbuf.buffer())
-	face_pr.set_attr('selected'         , selected_dbuf.buffer())
-	gl.polygonOffset(.0001, 0)
-	gl.draw_triangles()
-	gl.polygonOffset(0, 0)
-
-	dashed_line_pr.use()
-	dashed_line_pr.set_uni ('color' , 1, 0, 1, 1)
-	dashed_line_pr.set_uni ('dash'  , 2)
-	dashed_line_pr.set_uni ('gap'   , 4)
-	dashed_line_pr.set_attr('model' , inst_mat_dbuf.buffer())
-	dashed_line_pr.set_attr('pos'   , points_dbuf.buffer())
-	dashed_line_pr.set_index(line_pis_buf.buffer())
-	gl.draw_lines()
-
-	fat_line_pr.set_points([
-		line3(v3(0, 0, 0), v3(0, 0, 1)),
-		line3(v3(0, 0, 0), v3(0, 1, 0)),
-		line3(v3(0, 0, 0), v3(1, 0, 0)),
-	])
-	fat_line_pr.use()
-	fat_line_pr.set_uni('color', 0, 0, 0, 1)
-	fat_line_pr.draw()
-
 }
 
-let shadow_map = gl.shadow_map({
-	draw_scene: draw_scene,
+let renderer = gl.renderer({
+	sunlight_dir: v3(0, 1, 0),
+	enable_shadows: true,
 })
 
+let face_id_renderer = gl.face_id_renderer()
+
+function draw_all(sdm_vao) {
+	draw_faces(sdm_vao)
+	draw_lines(sdm_vao)
+}
+
 function animate() {
-	shadow_map.render()
-	gl.end_frame()
+	start_frame()
+	renderer.render(draw_all)
+	face_id_renderer.render(draw_faces)
+	//start_frame()
+	//gl.clear_all(1, 1, 1)
+	//draw_faces()
 	raf(animate)
 }
+
+canvas.on('pointermove', function(ev, mx, my) {
+	let r = this.rect()
+	mx -= r.x
+	my -= r.y
+	let [inst_id, face_id] = face_id_renderer.hit_test(mx, my)
+	print(inst_id, face_id)
+})
 
 animate()
 

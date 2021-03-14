@@ -2422,6 +2422,12 @@ box2.add_point = function(x, y) {
 
 // poly3 ---------------------------------------------------------------------
 
+let poly3_cons = function(_this, opt, elements) {
+	assign(_this, opt)
+	if (_this.mode)
+		assign(_this, assert(_this.modes[_this.mode]))
+}
+
 let poly3c = class poly3 extends Array {
 
 	constructor(opt, elements) {
@@ -2429,7 +2435,7 @@ let poly3c = class poly3 extends Array {
 			super(...elements)
 		else
 			super()
-		assign(this, opt)
+		poly3_cons(this, opt, elements)
 	}
 
 	assign(poly) {
@@ -2448,14 +2454,12 @@ poly3.class = poly3c
 
 poly3.subclass = function(methods) {
 	let cls = class poly3sub extends Array {
-		// copy-paste the constructor because these are not first-class values
-		// so we can't access the one from poly3c... stupid.
 		constructor(opt, elements) {
 			if (elements)
 				super(...elements)
 			else
 				super()
-			assign(this, opt)
+			poly3_cons(this, opt, elements)
 		}
 	}
 	assign(cls.prototype, poly3c.prototype, methods) // static inheritance (keep lookup chain short).
@@ -2464,9 +2468,15 @@ poly3.subclass = function(methods) {
 	return cons
 }
 
-// accessor stubs. replace in subclasses based on how the points are stored.
+// point accessor stubs. replace in subclasses based on how the points are stored.
 poly3p.point_count = function point_count() { return this.length }
-poly3p.get_point = function(i) { return this[i] }
+poly3p.get_point = function get_point(i, out) { return (out || _v0).set(this[i]) }
+poly3p.modes = {
+	flat: {
+		point_count: function point_count() { return this.length / 3 },
+		get_point: function get_point(i, out) { return (out || _v0).from_array(this, 3*i) }
+	},
+}
 
 poly3p.plane = function() {
 	if (!this._plane) {
@@ -2539,14 +2549,30 @@ poly3p.project_xy = function() {
 	}
 }
 
+poly3p.triangle_count = function() {
+	return 3 * (this.point_count() - 2)
+}
+
+poly3p.EPSILON = Number.EPSILON
+
 {
 	let ps = []
-	poly3p.triangulate = function(out, EPSILON) {
+	poly3p.triangulate = function(out) {
+		out = out || []
 		let pn = this.point_count()
 		if (pn == 3) { // triangle: nothing to do, push points directly.
-			out.push(0, 1, 2)
-		} else if (pn == 4 && this.is_convex_quad(EPSILON)) { // convex quad: most common case.
-			out.push(2, 3, 0, 0, 1, 2)
+			out[0] = 0
+			out[1] = 1
+			out[2] = 2
+		} else if (pn == 4 && this.is_convex_quad(this.EPSILON)) { // convex quad: most common case.
+			// triangle 1
+			out[0] = 2
+			out[1] = 3
+			out[2] = 0
+			// triangle 2
+			out[3] = 0
+			out[4] = 1
+			out[5] = 2
 		} else {
 			ps.length = pn * 2
 			let pp = this.project_xy()
@@ -2556,14 +2582,17 @@ poly3p.project_xy = function() {
 				ps[2*i+1] = p.y
 			}
 			let tri_pis = earcut2(ps, null, 2)
-			assert(tri_pis.length == 3 * (pn - 2))
-			out.extend(tri_pis)
+			assert(tri_pis.length == this.triangle_count())
+			if (isarray(out))
+				out.extend(tri_pis)
+			else // typed array
+				out.set(tri_pis)
 		}
 		return out
 	}
 }
 
-// (tu, tv) are 1 / (texture's (u, v) in world space).
+// (tex_uv) are 1 / (texture's (u, v) in world space).
 {
 	let _p0 = v3()
 	let _p1 = v3()
@@ -2577,8 +2606,19 @@ poly3p.project_xy = function() {
 		p[1] = pi[1] * tex_uv[1]
 		let px = p.x
 		let py = p.y
-		p.transform(uvm)
+		if (uvm)
+			p.transform(uvm)
 		return p
+	}
+
+	poly3p.uvs = function(uvm, tex_uv, out) {
+		out = out || []
+		for (let i = 0; i < this.point_count(); i++) {
+			let uv = this.uv_at(i, uvm, tex_uv)
+			out[2*i+0] = uv[0]
+			out[2*i+1] = uv[1]
+		}
+		return out
 	}
 }
 
