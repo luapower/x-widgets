@@ -14,7 +14,7 @@
 
 	v3 [x, y, z]
 		* add sub mul div cross
-		set assign sets clone equals from_array to_array
+		set assign sets clone equals from_array to_array from_rgb from_rgba from_hsl
 		len len2 set_len normalize
 		add adds sub subs negate mul muls div divs min max dot cross
 		angle_to distance_to distance2_to
@@ -22,7 +22,7 @@
 
 	v4 [x, y, z, w]
 		* add sub mul div
-		set assign sets clone equals from_array to_array
+		set assign sets clone equals from_array to_array from_rgb from_rgba from_hsl
 		len len2 set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
 		transform(mat4)
@@ -267,6 +267,30 @@ v2.div = function div(a, b, out) {
 
 // v3 ------------------------------------------------------------------------
 
+// hsl is in (0..360, 0..1, 0..1); rgb is (0..1, 0..1, 0..1)
+let h2rgb = function(m1, m2, h) {
+	if (h < 0) h = h + 1
+	if (h > 1) h = h - 1
+	if (h * 6 < 1)
+		return m1 + (m2 - m1) * h * 6
+	else if (h * 2 < 1)
+		return m2
+	else if (h * 3 < 2)
+		return m1 + (m2 - m1) * (2 / 3 - h) * 6
+	else
+		return m1
+}
+
+
+let _set_hsl = function(self, h, s, L) {
+	h = h / 360
+	let m2 = L <= .5 ? L * (s + 1) : L + s - L * s
+	let m1 = L * 2 - m2
+	self[0] = h2rgb(m1, m2, h+1/3)
+	self[1] = h2rgb(m1, m2, h)
+	self[2] = h2rgb(m1, m2, h-1/3)
+}
+
 let v3c = class v extends Array {
 
 	constructor(x, y, z) {
@@ -327,6 +351,25 @@ let v3c = class v extends Array {
 		a[i+1] = this[1]
 		a[i+2] = this[2]
 		return a
+	}
+
+	from_rgb(s) {
+		this[0] = ((s >> 16) & 0xff) / 255
+		this[1] = ((s >>  8) & 0xff) / 255
+		this[2] = ( s        & 0xff) / 255
+		return this
+	}
+
+	from_rgba(s) {
+		this[0] = ((s >> 24) & 0xff) / 255
+		this[1] = ((s >> 16) & 0xff) / 255
+		this[2] = ((s >>  8) & 0xff) / 255
+		return this
+	}
+
+	from_hsl(h, s, L) {
+		_set_hsl(this, h, s, L)
+		return this
 	}
 
 	len2() {
@@ -645,6 +688,27 @@ let v4c = class v extends Array {
 			this[2] ** 2 +
 			this[3] ** 2
 		)
+	}
+
+	from_rgb(s) {
+		this[0] = ((s >> 16) & 0xff) / 255
+		this[1] = ((s >>  8) & 0xff) / 255
+		this[2] = ( s        & 0xff) / 255
+		return this
+	}
+
+	from_rgba(s) {
+		this[0] = ((s >> 24) & 0xff) / 255
+		this[1] = ((s >> 16) & 0xff) / 255
+		this[2] = ((s >>  8) & 0xff) / 255
+		this[3] = ( s        & 0xff) / 255
+		return this
+	}
+
+	from_hsl(h, s, L, a) {
+		_set_hsl(this, h, s, L)
+		this[3] = or(a, 1)
+		return this
 	}
 
 	len() {
@@ -2393,16 +2457,6 @@ box3p.translate = function translate(offset) {
 	this.min.add(offset)
 	this.max.add(offset)
 	return this
-}
-
-// color3 --------------------------------------------------------------------
-
-function color3(s) {
-	return [(s >> 16) & 0xff, (s >> 8) & 0xff, s && 0xff]
-}
-
-function color4(s) {
-	return [(s >> 24) & 0xff, (s >> 16) & 0xff, (s >> 8) & 0xff, s && 0xff]
 }
 
 // box2 ----------------------------------------------------------------------

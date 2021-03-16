@@ -432,6 +432,145 @@ u16arr = Uint16Array
 i32arr = Int32Array
 u32arr = Uint32Array
 
+class dyn_arr_class {
+
+	constructor(arr_type, init_data_or_cap, n_components) {
+		this.arr_type = arr_type
+		this.capacity = 0
+		this._len = 0
+		this.n_components = n_components || 1
+		this.inv_n_components = 1 / this.n_components
+		this.data = null
+		this.invalid = false
+		this.invalid_offset1 = null
+		this.invalid_offset2 = null
+
+		if (init_data_or_cap != null)
+			if (isnum(init_data_or_cap)) {
+				let cap = init_data_or_cap
+				this.grow(cap, false)
+			} else {
+				let data = init_data_or_cap
+				let data_len = data.length * this.inv_n_components
+				assert(data_len == floor(data_len),
+					'source array length not multiple of {0}', this.n_components)
+				this.data = data
+				this._len = data_len
+			}
+
+	}
+
+	grow(cap, pow2) {
+		if (this.capacity < cap) {
+			if (pow2 !== false)
+				cap = nextpow2(cap)
+			let data = new arr_type(cap * this.n_components)
+			if (this.data)
+				data.set(this.data)
+			this.data = data
+			this.capacity = cap
+		}
+		return this
+	}
+
+	grow_type(arr_type1) {
+		if (arr_type1.BYTES_PER_ELEMENT <= this.arr_type.BYTES_PER_ELEMENT)
+			return
+		if (this.data) {
+			let data1 = new arr_type1(this.capacity)
+			for (let i = 0, n = this._len * this.n_components; i < n; i++)
+				data1[i] = this.data[i]
+			this.data = data1
+		}
+		this.arr_type = arr_type1
+		return this
+	}
+
+	set(data, offset, len, data_offset) {
+
+		// check/clamp/slice source.
+		data_offset = data_offset || 0
+		let data_len = data.length * this.inv_n_components
+		assert(data_len == floor(data_len), 'source array length not multiple of {0}', this.n_components)
+		assert(data_offset >= 0 && data_offset <= data_len, 'source offset out of range')
+		len = clamp(or(len, 1/0), 0, data_len - data_offset)
+		if (data_offset != 0 || len != data_len)
+			data = data.subarray(data_offset * this.n_components, (data_offset + len) * this.n_components)
+
+		offset = offset || 0
+		assert(offset >= 0, 'offset out of range')
+
+		this._set_len(max(this._len, offset + len))
+		this.data.set(data, offset)
+		this.invalidate(offset, len)
+
+		return this
+	}
+
+	get(out, offset, len, out_offset) {
+
+		// check/clamp/slice source.
+		offset = offset || 0
+		assert(offset >= 0 && offset <= this._len, 'offset out of range')
+		len = clamp(or(len, 1/0), 0, this._len - offset)
+		let data = this.data
+		if (offset != 0 || len != this._len)
+			data = data.subarray(offset * this.n_components, (offset + len) * this.n_components)
+
+		if (data)
+			out.set(data, out_offset)
+
+		return out
+	}
+
+	_set_len = function(len) {
+		len = max(0, len)
+		this.grow(len)
+		this._len = len
+		if (this.invalid)
+			this.invalid_offset2 = max(this.invalid_offset2, len)
+	}
+
+	invalidate(offset, len) {
+		let o1 = max(0, offset || 0)
+		len = max(0, or(len, 1/0))
+		let o2 = min(o1 + len, this.capacity)
+		o1 = min(or(this.invalid_offset1,  1/0), o1)
+		o2 = max(or(this.invalid_offset2, -1/0), o2)
+		this.invalid = true
+		this.invalid_offset1 = o1
+		this.invalid_offset2 = o2
+		this._len = max(o2, this._len)
+		return this
+	}
+
+}
+
+property(dyn_arr_class, 'len',
+	function() { return this._len },
+	function(len) { this._set_len(len) }
+)
+
+function dyn_arr(arr_type, init_cap, n_components) {
+	return new dyn_arr_class(arr_type, init_cap, n_components)
+}
+
+{
+let dyn_arr_func = function(arr_type) {
+	return function(init_cap, n_components) {
+		return new dyn_arr_class(arr_type, init_cap, n_components)
+	}
+}
+
+dyn_f32arr = dyn_arr_func(Float32Array)
+dyn_i8arr  = dyn_arr_func(Int8Array)
+dyn_u8arr  = dyn_arr_func(Uint8Array)
+dyn_i16arr = dyn_arr_func(Int16Array)
+dyn_u16arr = dyn_arr_func(Uint16Array)
+dyn_i32arr = dyn_arr_func(Int32Array)
+dyn_u32arr = dyn_arr_func(Uint32Array)
+}
+
 // events --------------------------------------------------------------------
 
 function events_mixin(o) {

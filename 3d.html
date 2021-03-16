@@ -51,7 +51,7 @@ gl.module('selected_face.fs', `
 
 function face_program(gl) {
 	return gl.program('face', `
-		#include base.vs
+		#include mesh.vs
 		#include phong.vs
 		#include selected_face.vs
 		void main() {
@@ -59,7 +59,7 @@ function face_program(gl) {
 			do_selected_face();
 		}
 	`, `
-		#include base.fs
+		#include mesh.fs
 		#include phong.fs
 		#include selected_face.fs
 		void main() {
@@ -135,11 +135,11 @@ function scale_texture(tex) {
 	for (let face of faces) {
 		for (let i = 0; i < face.tris.length; i++) {
 			let uv = face.uv_at(face.tris[i], face.uvm, tex.uv)
-			uvs_dbuf.set(pi, uv)
+			uv.to_array(uvs, 2*pi)
 			pi++
 		}
 	}
-	uvs_dbuf.invalidate()
+	uvs_dbuf.buffer.upload(uvs)
 }
 
 let    points_dbuf = gl.dyn_v3_buffer(points)
@@ -147,8 +147,8 @@ let triangles_dbuf = gl.dyn_v3_buffer(triangles)
 let   normals_dbuf = gl.dyn_v3_buffer(normals)
 let       uvs_dbuf = gl.dyn_v2_buffer(uvs)
 let  selected_dbuf = gl.dyn_u8_buffer(selected)
-let  face_ids_dbuf = gl.dyn_f32_buffer(face_ids)
-let  inst_ids_dbuf = gl.dyn_f32_instance_buffer(inst_ids)
+let  face_ids_dbuf = gl.dyn_u32_buffer(face_ids)
+let  inst_ids_dbuf = gl.dyn_u32_instance_buffer(inst_ids)
 
 let inst_mat1 = mat4()
 			.translate(0, .5, 0)
@@ -176,7 +176,7 @@ let view_proj = mat4f32()
 let inv_proj  = mat4()
 let inv_view  = mat4()
 
-let view_pos    = v3(3, 3, 10)
+let view_pos    = v3(3, 1, 10)
 let view_target = v3(0, 0, 0)
 let view_up     = v3(0, 1, 0)
 
@@ -249,21 +249,21 @@ let tq
 function draw_faces(sdm_vao) {
 
 	if (sdm_vao) {
-		sdm_vao.set_attr('pos'  , triangles_dbuf.buffer())
-		sdm_vao.set_attr('model', inst_mat_dbuf.buffer())
-		sdm_vao.set_attr('face_id', face_ids_dbuf.buffer())
-		sdm_vao.set_attr('inst_id', inst_ids_dbuf.buffer())
+		sdm_vao.set_attr('pos'  , triangles_dbuf.buffer)
+		sdm_vao.set_attr('model', inst_mat_dbuf.buffer)
+		sdm_vao.set_attr('face_id', face_ids_dbuf.buffer)
+		sdm_vao.set_attr('inst_id', inst_ids_dbuf.buffer)
 		sdm_vao.use()
 	} else {
 		face_vao.set_uni ('ambient_strength' , 0.1)
 		face_vao.set_uni ('specular_strength', .2)
 		face_vao.set_uni ('shininess'        , 1 << 5) // keep this a pow2.
 		face_vao.set_uni ('diffuse_map'      , tex1)
-		face_vao.set_attr('pos'              , triangles_dbuf.buffer())
-		face_vao.set_attr('normal'           , normals_dbuf.buffer())
-		face_vao.set_attr('uv'               , uvs_dbuf.buffer())
-		face_vao.set_attr('selected'         , selected_dbuf.buffer())
-		face_vao.set_attr('model'            , inst_mat_dbuf.buffer())
+		face_vao.set_attr('pos'              , triangles_dbuf.buffer)
+		face_vao.set_attr('normal'           , normals_dbuf.buffer)
+		face_vao.set_attr('uv'               , uvs_dbuf.buffer)
+		face_vao.set_attr('selected'         , selected_dbuf.buffer)
+		face_vao.set_attr('model'            , inst_mat_dbuf.buffer)
 		face_vao.use()
 	}
 
@@ -288,9 +288,9 @@ function draw_dashed_lines() {
 	vao.set_uni ('color' , 1, 0, 1, 1)
 	vao.set_uni ('dash'  , 2)
 	vao.set_uni ('gap'   , 4)
-	vao.set_attr('model' , inst_mat_dbuf.buffer())
-	vao.set_attr('pos'   , points_dbuf.buffer())
-	vao.set_index(line_pis_buf.buffer())
+	vao.set_attr('model' , inst_mat_dbuf.buffer)
+	vao.set_attr('pos'   , points_dbuf.buffer)
+	vao.set_index(line_pis_buf.buffer)
 	vao.use()
 	gl.draw_lines()
 	vao.unuse()
@@ -304,13 +304,11 @@ function draw_fat_lines() {
 		line3(v3(0, 0, 0), v3(1, 0, 0)),
 	])
 	vao.set_uni('color', 0, 0, 0, 1)
-	vao.use()
 	vao.draw()
-	vao.unuse()
 }
 
 function draw_lines() {
-	//draw_dashed_lines()
+	draw_dashed_lines()
 	//draw_fat_lines()
 }
 
@@ -325,7 +323,7 @@ function start_frame() {
 		.reset()
 		.translate(0, .5, 0)
 		.rotate(-20 + rad(20*rot), 0, 1, 0)
-	inst_mat_dbuf.set(0, inst_mat1)
+	inst_mat_dbuf.buffer.upload(inst_mat1, 0)
 
 	//view_pos.x = sin(rot/10) * radius
 	//view_pos.y = sin(rot/10) * radius
@@ -344,7 +342,12 @@ let renderer = gl.renderer({
 
 let face_id_renderer = gl.face_id_renderer()
 
+let skybox = gl.skybox()
+
 function draw_all(sdm_vao) {
+
+	if (!sdm_vao)
+		skybox.draw()
 	draw_faces(sdm_vao)
 	draw_lines(sdm_vao)
 }
@@ -352,7 +355,7 @@ function draw_all(sdm_vao) {
 function animate() {
 	start_frame()
 	renderer.render(draw_all)
-	face_id_renderer.render(draw_faces)
+	face_id_renderer.invalid = true
 	//start_frame()
 	//gl.clear_all(1, 1, 1)
 	//draw_faces()
@@ -360,6 +363,10 @@ function animate() {
 }
 
 canvas.on('pointermove', function(ev, mx, my) {
+	if (face_id_renderer.invalid) {
+		face_id_renderer.render(draw_faces)
+		face_id_renderer.invalid = false
+	}
 	let r = this.rect()
 	mx -= r.x
 	my -= r.y

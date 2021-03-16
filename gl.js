@@ -3,82 +3,90 @@
 	WebGL 2 wrapper.
 	Written by Cosmin Apreutesei.
 
-Programs
+	Programs
 
-	gl.module(name, code)
-	gl.program(name, vs_code, fs_code) -> pr
+		gl.module(name, code)
+		gl.program(name, vs_code, fs_code) -> pr
 
-VBOs
+	VBOs
 
-	gl.[dyn_]<type>_buffer(data|capacity, [instance_divisor], [normalize]) -> [d]b
-		type: f32|u8|u16|u32|i8|i16|i32|v2|v3|v4|mat3|mat4
-	gl.[dyn_]mat4_instance_buffer(data|capacity) -> [d]b
-	gl.[dyn_]index_buffer(data|capacity, [u8arr|u16arr|u32arr]) -> [d]b
+		gl.[dyn_]<type>_buffer(data|capacity, [instance_divisor], [normalize]) -> [d]b
+			type: f32|u8|u16|u32|i8|i16|i32|v2|v3|v4|mat3|mat4
+		gl.[dyn_]mat4_instance_buffer(data|capacity) -> [d]b
+		gl.[dyn_]index_buffer(data|capacity, [u8arr|u16arr|u32arr]) -> [d]b
 
-	b.update(data, offset, len)
+		b.upload(in_arr, [offset=0], [len], [in_offset=0])
+		b.download(out_arr, [offset=0], [len], [out_offset=0])
+		b.set(in_buffer, [offset=0], [len], [in_offset=0])
+		b.n_components
+		b.instance_divisor
+		b.normalize
+		b.capacity
+		b.len
+		b.len = len
 
-	db.grow(data | capacity[, clear])
-	db.grow_type(array_type)
-	db.invalidate([offset, len])
-	db.buffer() -> b
+		db.grow(data | capacity)
+		db.grow_type(arr_type)
+		db.invalidate([offset, len])
+		db.buffer() -> b
 
-VAOs
+	VAOs
 
-	pr.vao() -> vao
-	vao.set_attr(name, b)
-	vao.set_uni(name, val...)
-	vao.set_uni(name, tex, [texture_unit=0])
-	gl.set_uni(name, ...)
-	vao.set_index(b)
-	vao.use()
+		pr.vao() -> vao
+		vao.set_attr(name, b)
+		vao.set_uni(name, val...)
+		vao.set_uni(name, tex, [texture_unit=0])
+		gl.set_uni(name, ...)
+		vao.set_index(b)
+		vao.use()
 
-Textures
+	Textures
 
-	gl.texture() -> tex
-	tex.set_rgba(w, h, pixels)
-	tex.set_depth(w, h, [f32])
-	tex.set_image(image, [pixel_scale])
-	tex.load(url, [pixel_scale], [on_load])
+		gl.texture() -> tex
+		tex.set_rgba(w, h, pixels)
+		tex.set_depth(w, h, [f32])
+		tex.set_image(image, [pixel_scale])
+		tex.load(url, [pixel_scale], [on_load])
 
-RBOs
+	RBOs
 
-	gl.rbo() -> rbo
-	rbo.set_rgba(w, h, [n_samples|multisampling])
-	rbo.set_depth(w, h, [f32], [n_samples|multisampling])
+		gl.rbo() -> rbo
+		rbo.set_rgba(w, h, [n_samples|multisampling])
+		rbo.set_depth(w, h, [f32], [n_samples|multisampling])
 
-FBOs
+	FBOs
 
-	gl.fbo() -> fbo
-	fbo.bind('read', 'none|back|color', [color_unit=0])
-	fbo.bind(['draw'], [ 'none'|'back'|'color'|['none'|'back'|'color',...] ])
-	fbo.attach(tex|rbo, 'color|depth|depth_stencil', [color_unit])
-	fbo.clear_color(color_unit, r, g, b, [a=1])
-	fbo.clear_depth_stencil([depth=1], [stencil=0])
-	gl.read_pixels(attachment, color_unit, [buf], [x, y, w, h])
-	gl.blit(
-		[src_fbo], 'back|color', [color_unit],
-		[dst_fbo], [ 'none'|'back'|'color'|['none'|'back'|'color',...] ],
-		['color depth stencil'], ['nearest|linear'],
-		[sx0], [sy0], [sx1], [sy1],
-		[dx0], [dy0], [dx1], [dy1])
+		gl.fbo() -> fbo
+		fbo.bind('read', 'none|back|color', [color_unit=0])
+		fbo.bind(['draw'], [ 'none'|'back'|'color'|['none'|'back'|'color',...] ])
+		fbo.attach(tex|rbo, 'color|depth|depth_stencil', [color_unit])
+		fbo.clear_color(color_unit, r, g, b, [a=1])
+		fbo.clear_depth_stencil([depth=1], [stencil=0])
+		gl.read_pixels(attachment, color_unit, [buf], [x, y, w, h])
+		gl.blit(
+			[src_fbo], 'back|color', [color_unit],
+			[dst_fbo], [ 'none'|'back'|'color'|['none'|'back'|'color',...] ],
+			['color depth stencil'], ['nearest|linear'],
+			[sx0], [sy0], [sx1], [sy1],
+			[dx0], [dy0], [dx1], [dy1])
 
-Clearing & freeing
+	Clearing & freeing
 
-	gl.clear_all(r, g, b, [a=1], [depth=1])
-	pr|db|b|vao|fbo.free()
+		gl.clear_all(r, g, b, [a=1], [depth=1])
+		pr|db|b|vao|fbo.free()
 
-Space conversions
+	Space conversions
 
-	gl.world_to_screen(p, inv_view, proj, [out_v2+]) -> out_v2+
-	gl.screen_to_clip(x, y, z, [out_v4]) -> out_v4
-	gl.screen_to_view(x, y, z, inv_proj, [out_v4]) -> out_v4
-	gl.screen_to_world(mx, my, inv_proj, inv_view, [out_v4]) -> out_v4
+		gl.world_to_screen(p, inv_view, proj, [out_v2+]) -> out_v2+
+		gl.screen_to_clip(x, y, z, [out_v4]) -> out_v4
+		gl.screen_to_view(x, y, z, inv_proj, [out_v4]) -> out_v4
+		gl.screen_to_world(mx, my, inv_proj, inv_view, [out_v4]) -> out_v4
 
 */
 
 {
 
-// gl context and extensions -------------------------------------------------
+// clearing ------------------------------------------------------------------
 
 let gl = {DEBUG: true}
 
@@ -218,9 +226,18 @@ gl.program = function(name, vs_code, fs_code) {
 prog.use = function() {
 	let gl = this.gl
 	if (gl.active_program != this) {
+
 		gl.useProgram(this)
 		gl.active_program = this
+
+		if (gl.uniforms) { // ... set global uniforms.
+			for (let name in gl.uniforms) {
+				let u = gl.uniforms[name]
+				this.set_uni(name, ...u.args)
+			}
+		}
 	}
+	return this
 }
 
 prog.unuse = function() {
@@ -249,11 +266,17 @@ prog.free = function() {
 
 let vao = {}
 
+gl.vao = function() {
+	let gl = this
+	let vao = gl.createVertexArray()
+	vao.gl = gl
+	return vao
+}
+
 prog.vao = function() {
 	let gl = this.gl
-	let vao = gl.createVertexArray()
+	let vao = gl.vao()
 	vao.program = this
-	vao.gl = gl
 	if (!this.vaos)
 		this.vaos = []
 	this.vaos.push(vao)
@@ -263,7 +286,7 @@ prog.vao = function() {
 vao.bind = function() {
 	let gl = this.gl
 	if (this != gl.active_vao) {
-		assert(!this.active_program || this.active_program == this.program,
+		assert(!gl.active_program || !this.program || gl.active_program == this.program,
 			'different active program')
 		gl.bindVertexArray(this)
 		gl.active_vao = this
@@ -279,18 +302,18 @@ vao.unbind = function() {
 
 vao.use = function() {
 	let gl = this.gl
-	let pr = this.program
+	let pr
+	if (this.program) {
+		pr = this.program
+		pr.use()
+	} else {
+		pr = gl.active_program
+		assert(pr, 'no active program for shared VAO')
+	}
 	this.bind()
-	pr.use()
 	if (this.uniforms) { // VAOs can also hold uniforms (act like UBOs).
 		for (let name in this.uniforms) {
 			let u = this.uniforms[name]
-			pr.set_uni(name, ...u.args)
-		}
-	}
-	if (gl.uniforms) { // ... and we can also have global uniforms.
-		for (let name in gl.uniforms) {
-			let u = gl.uniforms[name]
 			pr.set_uni(name, ...u.args)
 		}
 	}
@@ -310,15 +333,20 @@ vao.set_uni = function(name, ...args) {
 	return this
 }
 
-vao.set_attr = function(name, b) {
+vao.set_attr = function(name, b, stride, offset) {
 	let gl = this.gl
-	this.bind()
 	let t = attr(this, 'buffers')
 	let b0 = t[name]
 	if (b0 != b) {
-		let loc = this.program.attr_location(name)
+		let loc = isstr(name) ? this.program.attr_location(name) : name
 		if (loc == null)
 			return this
+		let bound = gl.active_vao == this
+		assert(bound || !gl.active_vao)
+		if (!bound)
+			this.bind()
+		stride = stride || 0
+		offset = offset || 0
 		gl.bindBuffer(gl.ARRAY_BUFFER, b)
 		if (b.n_components == 16 && b.gl_type == gl.FLOAT) { // mat4
 			assert(!b.normalize)
@@ -350,24 +378,31 @@ vao.set_attr = function(name, b) {
 			gl.enableVertexAttribArray(loc+1)
 			gl.enableVertexAttribArray(loc+2)
 		} else {
-			gl.vertexAttribPointer(loc, b.n_components, b.gl_type, b.normalize, 0, 0)
+			if (b.gl_type == gl.INT || b.gl_type == gl.UNSIGNED_INT) {
+				assert(!b.normalize)
+				gl.vertexAttribIPointer(loc, b.n_components, b.gl_type, stride, offset)
+			} else {
+				gl.vertexAttribPointer(loc, b.n_components, b.gl_type, b.normalize, stride, offset)
+			}
 			if (b.instance_divisor != null)
 				gl.vertexAttribDivisor(loc, b.instance_divisor)
 			gl.enableVertexAttribArray(loc)
 		}
+		if (!bound)
+			this.unbind()
 		t[name] = b
 	}
 
 	if (b.instance_divisor != null) {
 		let n0 = this.instance_count
-		let n1 = b.length / b.n_components
+		let n1 = b.len
 		if (n0 == null)
 			this.instance_count = n1
 		else
 			assert(n1 == n0, 'different instance count for {0}: {1}, was {2}', name, n1, n0)
 	} else {
 		let n0 = this.vertex_count
-		let n1 = b.length / b.n_components
+		let n1 = b.len
 		if (n0 == null)
 			this.vertex_count = n1
 		else
@@ -394,39 +429,66 @@ vao.free = function() {
 
 // VBOs ----------------------------------------------------------------------
 
-gl.buffer = function(data_or_cap, array_type, n_components, instance_divisor, normalize, for_index) {
+gl.buffer = function(data_or_cap, arr_type, n_components, instance_divisor, normalize, for_index) {
 	assert(instance_divisor == null || instance_divisor == 1, 'NYI')
 	let gl = this
 	let b = gl.createBuffer()
-	let capacity = isnum(data_or_cap) ? data_or_cap : data_or_cap.length
+	let cap, len, arg
+	if (isnum(data_or_cap)) {
+		cap = data_or_cap
+		len = 0
+		assert(arr_type, 'array type required')
+		assert(n_components != null)
+		arg = cap * n_components * arr_type.BYTES_PER_ELEMENT
+	} else {
+		arg = data_or_cap
+		if (isarray(arg)) {
+			assert(arr_type, 'array type required')
+			arg = new arr_type(arg)
+		} else {
+			arr_type = arr_type || arg.constructor
+			assert(arg instanceof arr_type)
+		}
+		if (n_components     == null) n_components     = assert(arg.n_components)
+		if (for_index        == null) for_index        = arg.for_index
+		if (instance_divisor == null) instance_divisor = arg.instance_divisor
+		cap = arg.length / n_components
+		len = cap
+		assert(cap == floor(cap), 'source array length not multiple of {0}', n_components)
+	}
 	b.gl_target = for_index && gl.ELEMENT_ARRAY_BUFFER || gl.ARRAY_BUFFER
-	if (isarray(data_or_cap))
-		data_or_cap = new array_type(data_or_cap) // allow js arrays too...
 	gl.bindBuffer(b.gl_target, b)
-	gl.bufferData(b.gl_target, data_or_cap, gl.STATIC_DRAW)
-	b.capacity = capacity
-	b.length = isnum(data_or_cap) ? 0 : capacity
-	array_type = array_type || data_or_cap.constructor
+	gl.bufferData(b.gl_target, arg, gl.STATIC_DRAW)
+	b.capacity = cap
+	b._len = len
 	b.gl_type =
-		   array_type ==  f32arr && gl.FLOAT
-		|| array_type ==   u8arr && gl.UNSIGNED_BYTE
-		|| array_type ==  u16arr && gl.UNSIGNED_SHORT
-		|| array_type ==  u32arr && gl.UNSIGNED_INT
-		|| array_type ==   i8arr && gl.BYTE
-		|| array_type ==  i16arr && gl.SHORT
-		|| array_type ==  i32arr && gl.INT
-		|| assert(false, 'unsupported array type {0}', array_type.name)
-	b.array_type = array_type
+		   arr_type ==  f32arr && gl.FLOAT
+		|| arr_type ==   u8arr && gl.UNSIGNED_BYTE
+		|| arr_type ==  u16arr && gl.UNSIGNED_SHORT
+		|| arr_type ==  u32arr && gl.UNSIGNED_INT
+		|| arr_type ==   i8arr && gl.BYTE
+		|| arr_type ==  i16arr && gl.SHORT
+		|| arr_type ==  i32arr && gl.INT
+		|| assert(false, 'unsupported array type {0}', arr_type.name)
+	b.arr_type = arr_type
 	b.gl = gl
-	b.n_components = n_components
+	b.n_components = n_components || 1
 	b.instance_divisor = instance_divisor
 	b.normalize = normalize || false
 	return b
 }
 
-let buffer_func = function(array_type, n_components) {
+property(WebGLBuffer, 'len',
+	function() { return this._len },
+	function(len) {
+		assert(len <= this.capacity, 'buffer len exceeds capacity')
+		this._len = len
+	}
+)
+
+let buffer_func = function(arr_type, n_components) {
 	return function buffer(data_or_cap, instance_divisor, normalize) {
-		return this.buffer(data_or_cap, array_type, n_components, instance_divisor, normalize)
+		return this.buffer(data_or_cap, arr_type, n_components, instance_divisor, normalize)
 	}
 }
 gl.f32_buffer  = buffer_func(f32arr,  1)
@@ -441,14 +503,12 @@ gl.v3_buffer   = buffer_func(f32arr,  3)
 gl.v4_buffer   = buffer_func(f32arr,  4)
 gl.mat3_buffer = buffer_func(f32arr,  9)
 gl.mat4_buffer = buffer_func(f32arr, 16)
-gl.mat4_instance_buffer = function(data_or_cap) {
-	return this.mat4_buffer(data_or_cap, 1)
-}
-gl.f32_instance_buffer = function(data_or_cap) {
-	return this.f32_buffer(data_or_cap, 1)
-}
+gl.mat4_instance_buffer = function(data_or_cap) { return this.mat4_buffer(data_or_cap, 1) }
+gl.i32_instance_buffer  = function(data_or_cap) { return this.i32_buffer(data_or_cap, 1) }
+gl.u32_instance_buffer  = function(data_or_cap) { return this.u32_buffer(data_or_cap, 1) }
+gl.f32_instance_buffer  = function(data_or_cap) { return this.f32_buffer(data_or_cap, 1) }
 
-gl.index_array_type = function(data_or_max_idx) {
+gl.index_arr_type = function(data_or_max_idx) {
 	let max_idx = data_or_max_idx
 	if (isarray(data_or_max_idx)) {
 		max_idx = 0
@@ -458,159 +518,154 @@ gl.index_array_type = function(data_or_max_idx) {
 	return max_idx > 65535 && u32arr || max_idx > 255 && u16arr || u8arr
 }
 
-gl.index_buffer = function(data_or_cap, array_type) {
-	if (!array_type) {
+gl.index_buffer = function(data_or_cap, arr_type) {
+	if (!arr_type) {
 		assert(isarray(data_or_cap), 'array type required')
-		array_type = gl.index_array_type(data_or_cap)
+		arr_type = gl.index_arr_type(data_or_cap)
 	}
-	return this.buffer(data_or_cap, array_type, 1, null, false, true)
+	return this.buffer(data_or_cap, arr_type, 1, null, false, true)
 }
 
 let buf = {}
 
-buf.update = function(data, offset, len) {
-	let b = this
+buf.arr = function(data_or_len) {
+	if (data_or_len == null)
+		data_or_len = this.len
+	if (isnum(data_or_len))
+		data_or_len = data_or_len * this.n_components
+	return new this.arr_type(data_or_len)
+}
+
+buf.upload = function(in_arr, offset, len, in_offset) {
 	let gl = this.gl
+	let nc = this.n_components
+	if (isarray(in_arr))
+		in_arr = new this.arr_type(in_arr)
+	else
+		assert(in_arr instanceof this.arr_type)
 	offset = offset || 0
-	len = len != null ? len : data.length
-	gl.bindBuffer(b.gl_target, b)
-	let bpe = data.BYTES_PER_ELEMENT
-	gl.bufferSubData(b.gl_target, offset * bpe, data, offset, len)
-	b.length = max(b.length, offset + len)
+	in_offset = in_offset || 0
+	if (len == null)
+		len = in_arr.length / nc - in_offset
+
+	let bpe = in_arr.BYTES_PER_ELEMENT
+	gl.bindBuffer(gl.COPY_READ_BUFFER, this)
+	gl.bufferSubData(gl.COPY_READ_BUFFER, offset * nc * bpe, in_arr, in_offset * nc, len * nc)
+
+	this._len = max(this._len, offset + len)
+
+	return this
+}
+
+buf.download = function(out_arr, offset, len, out_offset) {
+	let gl = this
+	let nc = this.n_components
+	assert(out_arr instanceof this.arr_type)
+	offset = offset || 0
+	out_offset = out_offset || 0
+	if (len == null)
+		len = out_arr.length / nc - out_offset
+
+	let bpe = out_arr.BYTES_PER_ELEMENT
+	gl.bindBuffer(gl.COPY_READ_BUFFER, this)
+	gl.getBufferSubData(gl.COPY_READ_BUFFER, offset * nc * bpe, out_arr, out_offset * nc, len * nc)
+
+	return out_arr
+}
+
+buf.set = function(in_buf, offset, len, in_offset) {
+	let gl = this.gl
+	let nc = this.n_components
+	assert(in_buf.gl_type == this.gl_type)
+	assert(in_buf.n_components == nc)
+	offset = offset || 0
+	in_offset = in_offset || 0
+	if (len == null)
+		len = in_buf.len
+
+	gl.bindBuffer(gl.COPY_READ_BUFFER, in_buf)
+	gl.bindBuffer(gl.COPY_WRITE_BUFFER, this)
+	let bpe = this.BYTES_PER_ELEMENT
+	gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER,
+		in_offset * nc * bpe,
+		offset * nc * bpe,
+		len * nc * bpe)
+
+	this._len = max(this._len, offset + len)
+
 	return this
 }
 
 buf.free = function() {
 	this.gl.deleteBuffer(this)
-	this.free = noop
 }
 
-gl.dyn_buffer = function(array_type, data_or_cap,
-	n_components, instance_divisor, normalize, for_index
-) {
-	let gl = this
-	let db = {length: 0, gl: gl}
-	let b = null
-	let invalid
-	let invalid_o1
-	let invalid_o2
+gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, normalize, for_index) {
 
-	db.grow_type = function(array_type1) {
-		if (array_type1 == array_type || array_type1.BYTES_PER_ELEMENT <= array_type.BYTES_PER_ELEMENT)
-			return
-		array_type = array_type1
-		if (db.array)
-			db.array = new array_type(db.array)
-		if (b) {
-			b.free()
-			b = null
-		}
+	n_components = n_components || 1
+
+	let gl = this
+	let db = {
+		gl: gl,
+		arr_type: arr_type,
+		n_components: n_components,
+		instance_divisor: instance_divisor,
+		normalize: normalize,
+		buffer: null,
 	}
 
-	// NOTE: the `capacity` arg is couting vertices, not elements.
-	db.grow = function(data_or_cap, clear) {
-		let a = db.array
-		let cap0 = a ? a.length : 0
-		let cap
-		if (!isnum(data_or_cap)) { // (re)init
-			cap = data_or_cap.length
-			let data = data_or_cap
-			if (isarray(data)) {
-				data = new array_type(data_or_cap)
-				if (a && !clear)
-					data.set(db.array)
-			} else {
-				assert(data instanceof array_type,
-					'type mismatch {0}, expected {1}', data.constructor.name, array_type)
-			}
-			db.array = data
-			db.length = cap
-			invalid = true
-			invalid_o1 = 0
-			invalid_o2 = cap
-		} else {
-			cap = data_or_cap * n_components
-			if (clear)
-				db.length = 0
-			if (cap0 < cap) { // grow
-				cap = a ? nextpow2(cap) : cap // first time make it fit.
-				db.array = new array_type(cap)
-				if (a && !clear)
-					db.array.set(a)
-			}
+	db.grow_type = function(arr_type1) {
+		if (arr_type1.BYTES_PER_ELEMENT <= arr_type.BYTES_PER_ELEMENT)
+			return
+		if (this.buffer) {
+			let a0 = this.buffer.download(this.buffer.arr())
+			this.buffer.free()
+			let a1 = new arr_type1(this.len)
+			for (let i = 0, n = a0.length * n_components; i < n; i++)
+				a1[i] = a0[i]
+			this.buffer = gl.buffer(a0, arr_type1, n_components, instance_divisor, normalize, for_index)
 		}
-		if (b && cap0 < cap) { // too small
-			b.free()
-			b = null
+		arr_type = arr_type1
+		this.arr_type = arr_type1
+	}
+
+	db.grow = function(cap, pow2) {
+		if (!this.buffer || this.buffer.capacity < cap) {
+			if (pow2 !== false)
+				cap = nextpow2(cap)
+			let b0 = this.buffer
+			let b1 = gl.buffer(cap, arr_type, n_components, instance_divisor, normalize, for_index)
+			if (b0) {
+				b1.set(b0)
+				b0.free()
+			}
+			this.buffer = b1
 		}
-		return db
+		return this
 	}
 
 	db.free = function() {
-		if (!b) return
-		b.free()
-		b = null
-	}
-
-	db.buffer = function() {
-		if (!b) {
-			b = gl.buffer(db.array, array_type, n_components, instance_divisor, normalize, for_index)
-		} else if (invalid) {
-			b.update(db.array, invalid_o1, invalid_o2 - invalid_o1)
-		}
-		b.length = db.length
-		invalid = false
-		invalid_o1 = null
-		invalid_o2 = null
-		return b
-	}
-
-	// NOTE: `offset` and `len` args are counting vertices, not elements.
-	db.invalidate = function(offset, len) {
-		let o1 = or(offset, 0) * n_components
-		assert(o1 >= 0, 'out of range')
-		len = or(len, 1/0) * n_components
-		let cap = db.array.length
-		let o2 = min(o1 + len, cap)
-		o1 = min(or(invalid_o1,  1/0), o1)
-		o2 = max(or(invalid_o2, -1/0), o2)
-		invalid = true
-		invalid_o1 = o1
-		invalid_o2 = o2
-		db.length = max(o2, db.length)
-		return db
-	}
-
-	if (n_components) {
-
-		db.get = function get(i, out) {
-			assert(i >= 0, 'out of range')
-			assert(db.length >= n_components * (i + 1), 'out of range')
-			out.from_array(this.array, n_components * i)
-			return out
-		}
-
-		db.set = function set(i, v) {
-			assert(i >= 0, 'out of range')
-			db.grow(i + 1)
-			v.to_array(this.array, n_components * i)
-			db.invalidate(i, 1)
-			return db
-		}
-
+		this.buffer.free()
+		this.buffer = null
 	}
 
 	if (data_or_cap != null)
-		db.grow(data_or_cap)
-
-	db.n_components = n_components
+		if (isnum(data_or_cap)) {
+			let cap = data_or_cap
+			db.grow(cap)
+		} else {
+			let data = data_or_cap
+			let len = data.length / n_components
+			assert(len == floor(len), 'source array length not multiple of {0}', n_components)
+			db.buffer = gl.buffer(data, arr_type, n_components, instance_divisor, normalize, for_index)
+		}
 
 	return db
 }
 
-let dyn_buffer_func = function(array_type, n_components) {
+let dyn_buffer_func = function(arr_type, n_components) {
 	return function dyn_buffer(data_or_cap, instance_divisor, normalize) {
-		return this.dyn_buffer(array_type, data_or_cap, n_components, instance_divisor, normalize)
+		return this.dyn_buffer(arr_type, data_or_cap, n_components, instance_divisor, normalize)
 	}
 }
 gl.dyn_f32_buffer  = dyn_buffer_func(f32arr,  1)
@@ -625,20 +680,18 @@ gl.dyn_v3_buffer   = dyn_buffer_func(f32arr,  3)
 gl.dyn_v4_buffer   = dyn_buffer_func(f32arr,  4)
 gl.dyn_mat3_buffer = dyn_buffer_func(f32arr,  9)
 gl.dyn_mat4_buffer = dyn_buffer_func(f32arr, 16)
-gl.dyn_mat4_instance_buffer = function(data_or_cap) {
-	return this.dyn_mat4_buffer(data_or_cap, 1)
-}
-gl.dyn_f32_instance_buffer = function(data_or_cap) {
-	return this.dyn_f32_buffer(data_or_cap, 1)
-}
+gl.dyn_mat4_instance_buffer = function(data_or_cap) { return this.dyn_mat4_buffer(data_or_cap, 1) }
+gl.dyn_i32_instance_buffer  = function(data_or_cap) { return this.dyn_i32_buffer(data_or_cap, 1) }
+gl.dyn_u32_instance_buffer  = function(data_or_cap) { return this.dyn_u32_buffer(data_or_cap, 1) }
+gl.dyn_f32_instance_buffer  = function(data_or_cap) { return this.dyn_f32_buffer(data_or_cap, 1) }
 
-gl.dyn_index_buffer = function(data_or_cap, array_type) {
+gl.dyn_index_buffer = function(data_or_cap, arr_type) {
 	let gl = this
-	if (!array_type) {
+	if (!arr_type) {
 		assert(isarray(data_or_cap), 'array type required')
-		array_type = gl.index_array_type(data_or_cap)
+		arr_type = gl.index_arr_type(data_or_cap)
 	}
-	return this.dyn_buffer(array_type, data_or_cap, 1, null, false, true)
+	return this.dyn_buffer(arr_type, data_or_cap, 1, null, false, true)
 }
 
 // setting uniforms and attributes and drawing -------------------------------
@@ -800,9 +853,9 @@ gl.draw = function(gl_mode) {
 	let inst_n = vao.instance_count
 	if (b) { // indexed drawing.
 		if (inst_n != null) {
-			gl.drawElementsInstanced(gl_mode, b.length, b.gl_type, 0, inst_n)
+			gl.drawElementsInstanced(gl_mode, b.len, b.gl_type, 0, inst_n)
 		} else {
-			gl.drawElements(gl_mode, b.length, b.gl_type, 0)
+			gl.drawElements(gl_mode, b.len, b.gl_type, 0)
 		}
 	} else {
 		if (inst_n != null) {
@@ -1241,7 +1294,7 @@ gl.screen_to_world = function(mx, my, inv_proj, inv_view, out) {
 
 // based on tutorials from learnopengl.com.
 
-gl.module('base.vs', `
+gl.module('mesh.vs', `
 
 	#version 300 es
 
@@ -1261,7 +1314,7 @@ gl.module('base.vs', `
 
 `)
 
-gl.module('base.fs', `
+gl.module('mesh.fs', `
 
 	#version 300 es
 
@@ -1279,7 +1332,7 @@ gl.module('base.fs', `
 
 gl.module('phong.vs', `
 
-	#include base.vs
+	#include mesh.vs
 
 	uniform mat4 sdm_view_proj;
 
@@ -1300,7 +1353,7 @@ gl.module('phong.vs', `
 
 gl.module('phong.fs', `
 
-	#include base.fs
+	#include mesh.fs
 
 	uniform vec3 sunlight_pos;
 	uniform vec3 sunlight_color;
@@ -1464,7 +1517,7 @@ gl.renderer = function(r) {
 gl.dashed_line_program = function() {
 	return this.program('dashed_line', `
 
-		#include base.vs
+		#include mesh.vs
 
 		out vec4 frag_p1;
 		flat out vec4 frag_p2; // because GL_LAST_VERTEX_CONVENTION.
@@ -1478,7 +1531,7 @@ gl.dashed_line_program = function() {
 
 	`, `
 
-		#include base.fs
+		#include mesh.fs
 
 		uniform vec4 color;
 		uniform float dash;
@@ -1503,7 +1556,7 @@ gl.dashed_line_program = function() {
 
 gl.module('fat_line.vs', `
 
-	#include base.vs
+	#include mesh.vs
 
 	in vec3 q;
 	in float dir;
@@ -1529,7 +1582,7 @@ gl.module('fat_line.vs', `
 
 gl.module('fat_line.fs', `
 
-	#include base.fs
+	#include mesh.fs
 
 	uniform vec4 color;
 
@@ -1541,6 +1594,7 @@ gl.module('fat_line.fs', `
 
 gl.fat_line_vao = function() {
 	let gl = this
+
 	let pr = gl.program('fat_line', `
 		#include fat_line.vs
 		void main() {
@@ -1552,6 +1606,7 @@ gl.fat_line_vao = function() {
 			do_fat_line();
 		}
 	`)
+
 	let vao = pr.vao()
 	let pb = gl.dyn_v3_buffer() // 4 points per line.
 	let qb = gl.dyn_v3_buffer() // 4 "other-line-endpoint" points per line.
@@ -1565,7 +1620,7 @@ gl.fat_line_vao = function() {
 		pb.grow(vertex_count)
 		qb.grow(vertex_count)
 		db.grow(vertex_count)
-		ib.grow_type(gl.index_array_type(index_count))
+		ib.grow_type(gl.index_arr_type(index_count))
 		ib.grow(index_count)
 
 		let ps = pb.array
@@ -1664,13 +1719,61 @@ gl.fat_line_vao = function() {
 	return vao
 }
 
-gl.skydome = function(opt) {
+// parametric geometry generators --------------------------------------------
+
+{
+	let pos_template = new f32arr([
+		0, 1, 0,  1, 1, 0,  1, 0, 0,  1, 0, 0,  0, 0, 0,  0, 1, 0,
+		1, 1, 1,  0, 1, 1,  0, 0, 1,  0, 0, 1,  1, 0, 1,  1, 1, 1,
+		1, 1, 0,  0, 1, 0,  0, 1, 1,  0, 1, 1,  1, 1, 1,  1, 1, 0,
+		1, 0, 0,  1, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 0,  1, 0, 0,
+		0, 1, 1,  0, 1, 0,  0, 0, 0,  0, 0, 0,  0, 0, 1,  0, 1, 1,
+		1, 1, 0,  1, 1, 1,  1, 0, 1,  1, 0, 1,  1, 0, 0,  1, 1, 0,
+	])
+	let normal = new f32arr([
+		 0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,
+		 0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,
+		 0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,
+	 	 0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,
+		-1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0, -1,  0,  0,
+		 1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,  1,  0,  0,
+	])
+	normal.n_components = 3
+	let len = 6 * 3 * 2
+	let pos = new f32arr(len * 3)
+	gl.box_geometry = function() {
+
+		let pos = new f32arr(pos_template.length)
+		pos.n_components = 3
+
+		let e = {pos: pos, normal: normal, len: len}
+
+		e.set = function(xd, yd, zd) {
+			let x = xd / 2
+			let y = yd / 2
+			let z = zd / 2
+			for (let i = 0; i < len * 3; i += 3) {
+				pos[i+0] = (pos_template[i+0] * 2 - 1) * x
+				pos[i+1] = (pos_template[i+1] * 2 - 1) * y
+				pos[i+2] = (pos_template[i+2] * 2 - 1) * z
+			}
+			return this
+		}
+
+		return e
+	}
+}
+
+// skybox --------------------------------------------------------------------
+
+gl.skybox = function(e) {
 
 	let gl = this
+	e = e || {}
 
-	let pr = gl.program('skydome', `
+	let pr = gl.program('skybox', `
 
-		#include base.vs
+		#include mesh.vs
 
 		out vec3 frag_model_pos;
 
@@ -1682,12 +1785,11 @@ gl.skydome = function(opt) {
 
 	`, `
 
-		#include base.fs
+		#include mesh.fs
 
 		uniform vec3 sky_color;
 		uniform vec3 horizon_color;
 		uniform vec3 ground_color;
-		uniform float offset;
 		uniform float exponent;
 
 		in vec3 frag_model_pos;
@@ -1704,30 +1806,35 @@ gl.skydome = function(opt) {
 
 	`)
 
+	let geo = gl.box_geometry().set(1, 1, 1)
 	let vao = pr.vao()
-	vao.set_uni('sky_color', opt.sky_color)
-	vao.set_uni('horizon_color', opt.horizon_color)
-	vao.set_uni('ground_color', opt.ground_color)
+	let pos_buf = gl.buffer(geo.pos)
+	e.matrix = e.matrix || mat4f32().scale(1e9)
+	inst_buf = gl.mat4_instance_buffer(e.matrix)
+	vao.set_attr('pos', pos_buf)
+	vao.set_attr('model', inst_buf)
 
-	// TODO...
-	let d = 2 * pe.max_distance
-	let geo = new THREE.BoxBufferGeometry(d, d, d)
-	let mat = new THREE.ShaderMaterial({
-		uniforms       : uniforms,
-		vertexShader   : vshader,
-		fragmentShader : fshader,
-		side: THREE.BackSide,
-	})
+	e.update = function() {
+		vao.set_uni('sky_color', e.sky_color || v3().from_rgb(0xccddff))
+		vao.set_uni('horizon_color', e.horizon_color || v3().from_rgb(0xffffff))
+		vao.set_uni('ground_color', e.ground_color || v3().from_rgb(0xe0dddd))
+		vao.set_uni('exponent', or(e.exponent, .5))
+		inst_buf.upload(e.matrix, 0)
+	}
 
-	let e = new THREE.Mesh(geo, mat)
-	e.name = 'skydome'
+	e.draw = function() {
+		vao.use()
+		gl.draw_triangles()
+		vao.unuse()
+	}
 
-	return pr
+	e.update()
+
+	return e
 }
 
 // render-based hit testing --------------------------------------------------
 
-// NITE: supports up-to 2^16 instances of 2^16 vertices.
 gl.face_id_renderer = function(r) {
 
 	let gl = this
@@ -1735,27 +1842,27 @@ gl.face_id_renderer = function(r) {
 	r = r || {}
 
 	let pr = gl.program('face_id', `
-		#include base.vs
-		in float face_id;
-		in float inst_id;
-		flat out int frag_face_id;
-		flat out int frag_inst_id;
+		#include mesh.vs
+		in uint face_id;
+		in uint inst_id;
+		flat out uint frag_face_id;
+		flat out uint frag_inst_id;
 		void main() {
 			gl_Position = mvp_pos();
-			frag_face_id = int(face_id); // max 2^23 integers.
-			frag_inst_id = int(inst_id); // max 2^23 integers.
+			frag_face_id = face_id;
+			frag_inst_id = inst_id;
 		}
 	`, `
-		#include base.fs
-		flat in int frag_face_id;
-		flat in int frag_inst_id;
+		#include mesh.fs
+		flat in uint frag_face_id;
+		flat in uint frag_inst_id;
 		layout (location = 1) out vec4 frag_color1;
-		vec4 to_color(int id) {
+		vec4 to_color(uint id) {
 			return vec4(
-				float((id >> 24) & 0xff) / 255.0,
-				float((id >> 16) & 0xff) / 255.0,
-				float((id >>  8) & 0xff) / 255.0,
-				float((id      ) & 0xff) / 255.0
+				float((id >> 24) & 0xffu) / 255.0,
+				float((id >> 16) & 0xffu) / 255.0,
+				float((id >>  8) & 0xffu) / 255.0,
+				float((id      ) & 0xffu) / 255.0
 			);
 		}
 		void main() {
@@ -1785,7 +1892,7 @@ gl.face_id_renderer = function(r) {
 			inst_id_arr = new u8arr(w * h * 4)
 			depth_map.set_depth(w, h, true)
 		}
-		fbo.bind()
+		fbo.bind('draw', ['color', 'color'])
 		fbo.attach(face_id_map, 'color', 0)
 		fbo.attach(inst_id_map, 'color', 1)
 		fbo.attach(depth_map)
@@ -1794,9 +1901,6 @@ gl.face_id_renderer = function(r) {
 		fbo.unbind()
 		fbo.read_pixels('color', 0, face_id_arr)
 		fbo.read_pixels('color', 1, inst_id_arr)
-		for (let e of inst_id_arr)
-			if (e != 0)
-				print(e)
 	}
 
 	function read(arr, x, y) {
@@ -1844,14 +1948,14 @@ gl.texture_quad = function(tex, imat) {
 	let model = gl.mat4_instance_buffer(imat)
 
 	let pr = gl.program('texture_quad_prop', `
-		#include base.vs
+		#include mesh.vs
 		out vec2 frag_uv;
 		void main() {
 			frag_uv = uv;
 			gl_Position = mvp_pos();
 		}
 	`, `
-		#include base.fs
+		#include mesh.fs
 		in vec2 frag_uv;
 		void main() {
 			frag_color = vec4(vec3(texture(diffuse_map, frag_uv).r), 1.0);
