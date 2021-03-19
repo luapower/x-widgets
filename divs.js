@@ -350,7 +350,7 @@ callers.pointerdown = function(ev, f) {
 	return ret
 }
 
-method(Element, 'capture_pointer', function(ev, move, up) {
+method(EventTarget, 'capture_pointer', function(ev, move, up) {
 	move = or(move, return_false)
 	up   = or(up  , return_false)
 	function wrap_move(ev, mx, my) {
@@ -517,13 +517,11 @@ let fireup = function(name, ...args) {
 	return this.dispatchEvent(e)
 }
 
-for (let e of [Window, Document, Element]) {
-	method(e, 'on'     , on)
-	method(e, 'off'    , off)
-	method(e, 'once'   , once)
-	method(e, 'fire'   , fire)
-	method(e, 'fireup' , fireup)
-}
+method(EventTarget, 'on'     , on)
+method(EventTarget, 'off'    , off)
+method(EventTarget, 'once'   , once)
+method(EventTarget, 'fire'   , fire)
+method(EventTarget, 'fireup' , fireup)
 
 function on_dom_load(fn) {
 	if (document.readyState === 'loading')

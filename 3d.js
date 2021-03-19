@@ -7,60 +7,57 @@
 
 	v2 [x, y]
 		* add sub mul div
-		set assign sets clone equals from_array to_array
+		set(x,y|v2|v3|v4) assign sets clone equals from[_v2|_v3|_v4]_array to[_v2]_array
 		len len2 set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
-		transform(mat3)
+		transform(mat3) rotate
 
 	v3 [x, y, z]
-		* add sub mul div cross
-		set assign sets clone equals from_array to_array from_rgb from_rgba from_hsl
+		* add sub mul div cross zero one
+		set(x,y,z|v2,z|v3|v4|mat4) assign sets clone equals
+		from[_v3|_v4]_array to[_v3]_array from_rgb from_rgba from_hsl
 		len len2 set_len normalize
 		add adds sub subs negate mul muls div divs min max dot cross
 		angle_to distance_to distance2_to
-		transform(mat3|mat4|quaternion)
+		transform(mat3|mat4|quaternion) rotate
 
 	v4 [x, y, z, w]
 		* add sub mul div
-		set assign sets clone equals from_array to_array from_rgb from_rgba from_hsl
+		set assign sets clone equals from[_v4]_array to[_v4]_array from_rgb from_rgba from_hsl
 		len len2 set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
 		transform(mat4)
 
 	mat3, mat3f32 [e11, e21, e31, e12, e22, e32, e13, e23, e33]
 		* mul
-		set assign reset clone equals from_array to_array
+		set(mat3|mat4) assign reset clone equals from[_mat3]_array to[_mat3]_array
 		transpose det invert
 		mul premul muls scale rotate translate
 
 	mat4, mat4f32 [e11, e21, e31, e41, e12, e22, e32, e42, e13, e23, e33, e43, e14, e24, e34, e44]
 		* mul
-		set assign reset clone equals from_array to_array
+		set(mat3|mat4|v3|quat) assign reset clone equals from[_mat4]_array to[_mat4]_array
 		transpose det invert
 		mul premul muls scale set_position translate rotate
-		frustum perspective ortho look_at
+		frustum perspective ortho look_to compose rotation
 
 	quat [x, y, z, w]
-		set assign reset clone equals from_array to_array
+		set assign reset clone equals from[_quat]_array to[_quat]_array
 		set_from_axis_angle set_from_rotation_matrix set_from_unit_vectors
 		len2 len normalize rotate_towards conjugate invert
 		angle_to dot mul premul slerp
 
-	plane {constant:, normal:}
+	plane[3] {constant:, normal:}
 		set assign clone equals normalize negate
 		set_from_normal_and_coplanar_point set_from_coplanar_points set_from_poly
-		distance_to_point distance_to_sphere project_point
-		intersect_line intersects_line intersects_box intersects_sphere
+		distance_to_point project_point
+		intersect_line intersects_line
 		complanar_point transform translate
 
 	triangle3 [a, b, c]
 		* normal barycoord contains_point uv is_front_facing
-		set assign clone equals from_array
+		set assign clone equals from[_triangle3]_array to[_triangle3]_array
 		area midpoint normal plane barycoord uv contains_point is_front_facing intersects_box
-
-	box3
-
-	sphere
 
 	poly3
 		% point_count get_point
@@ -69,23 +66,32 @@
 	line3 [p0, p1]
 		set clone equals
 		center delta distance2 distance at
-		closest_point_to_point_t closest_point_to_point intersect_line
+		closest_point_to_point_t closest_point_to_point intersect_line intersect_plane intersects_plane
 		transform
 
+	camera[3]
+		viewport_w|h pos dir up perspective ortho dolly orbit
+		update proj view inv_view inv_proj view_proj
+		world_to_screen screen_to_clip screen_to_view screen_to_world
+		raycast
+
 */
+
+NEAR = 1e-5 // distance epsilon (tolerance)
+FAR  = 1e6  // skybox distance from center
 
 {
 
 // v2 ------------------------------------------------------------------------
 
-let v2c = class v extends Array {
+let v2_class = class v extends Array {
 
 	constructor(x, y) {
 		super(x || 0, y || 0)
 	}
 
 	set(x, y) {
-		if (isarray(x)) {
+		if (x.is_v2 || x.is_v3 || x.is_v4) {
 			let v = x
 			x = v[0]
 			y = v[1]
@@ -128,6 +134,12 @@ let v2c = class v extends Array {
 		a[i+1] = this[1]
 		return a
 	}
+
+	from_v2_array(a, i) { return this.from_array(a, 2 * i) }
+	from_v3_array(a, i) { return this.from_array(a, 3 * i) }
+	from_v4_array(a, i) { return this.from_array(a, 4 * i) }
+
+	to_v2_array(a, i) { return this.to_array(a, 2 * i) }
 
 	len2() {
 		return (
@@ -231,14 +243,27 @@ let v2c = class v extends Array {
 			assert(false)
 		return this
 	}
+
+	rotate(axis, angle) {
+		let cx = axis[0]
+		let cy = axis[1]
+		let c = cos(angle)
+		let s = sin(angle)
+		let x = this[0] - cx
+		let y = this[1] - cy
+		this[0] = x * c - y * s + cx
+		this[1] = x * s + y * c + cy
+		return this
+	}
+
 }
 
-v2c.prototype.is_v2 = true
+v2_class.prototype.is_v2 = true
 
-property(v2c, 'x', function() { return this[0] }, function(v) { this[0] = v })
-property(v2c, 'y', function() { return this[1] }, function(v) { this[1] = v })
+property(v2_class, 'x', function() { return this[0] }, function(v) { this[0] = v })
+property(v2_class, 'y', function() { return this[1] }, function(v) { this[1] = v })
 
-v2 = function v2(x, y) { return new v2c(x, y) }
+v2 = function v2(x, y) { return new v2_class(x, y) }
 
 v2.add = function add(a, b, s, out) {
 	s = or(s, 1)
@@ -291,7 +316,7 @@ let _set_hsl = function(self, h, s, L) {
 	self[2] = h2rgb(m1, m2, h-1/3)
 }
 
-let v3c = class v extends Array {
+let v3_class = class v extends Array {
 
 	constructor(x, y, z) {
 		super(x || 0, y || 0, z || 0)
@@ -303,11 +328,15 @@ let v3c = class v extends Array {
 			x = v[0]
 			y = v[1]
 			z = v[2]
-		} else if (x.is_v2) {
+		} else if (x.is_v2) { // (v2, z)
 			let v = x
 			z = or(y, 0)
 			x = v[0]
 			y = v[1]
+		} else if (x.is_mat4) {
+			x = e[12]
+			y = e[13]
+			z = e[14]
 		}
 		this[0] = x
 		this[1] = y
@@ -352,6 +381,11 @@ let v3c = class v extends Array {
 		a[i+2] = this[2]
 		return a
 	}
+
+	from_v3_array(a, i) { return this.from_array(a, 3 * i) }
+	from_v4_array(a, i) { return this.from_array(a, 4 * i) }
+
+	to_v3_array(a, i) { return this.to_array(a, 3 * i) }
 
 	from_rgb(s) {
 		this[0] = ((s >> 16) & 0xff) / 255
@@ -543,15 +577,20 @@ let v3c = class v extends Array {
 
 		return this
 	}
+
+	rotate(axis, angle) {
+		return this.transform(_q0.set_from_axis_angle(axis, angle))
+	}
+
 }
 
-v3c.prototype.is_v3 = true
+v3_class.prototype.is_v3 = true
 
-property(v3c, 'x', function() { return this[0] }, function(v) { this[0] = v })
-property(v3c, 'y', function() { return this[1] }, function(v) { this[1] = v })
-property(v3c, 'z', function() { return this[2] }, function(v) { this[2] = v })
+property(v3_class, 'x', function() { return this[0] }, function(v) { this[0] = v })
+property(v3_class, 'y', function() { return this[1] }, function(v) { this[1] = v })
+property(v3_class, 'z', function() { return this[2] }, function(v) { this[2] = v })
 
-v3 = function v3(x, y, z) { return new v3c(x, y, z) }
+v3 = function v3(x, y, z) { return new v3_class(x, y, z) }
 
 v3.cross = function(a, b, out) {
 	let ax = a[0]
@@ -595,6 +634,10 @@ v3.div = function div(a, b, out) {
 	return out
 }
 
+v3.zero = v3(0, 0, 0)
+v3.one  = v3(1, 1, 1)
+v3.up   = v3(0, 1, 0)
+
 // temporaries for plane, triangle3 and line3 methods.
 let _v0 = v3()
 let _v1 = v3()
@@ -606,7 +649,7 @@ let _v6 = v3()
 
 // v4 ------------------------------------------------------------------------
 
-let v4c = class v extends Array {
+let v4_class = class v extends Array {
 
 	constructor(x, y, z, w) {
 		super(x || 0, y || 0, z || 0, or(w, 1))
@@ -680,6 +723,10 @@ let v4c = class v extends Array {
 		a[i+3] = this[3]
 		return a
 	}
+
+	from_v4_array(a, i) { return this.from_array(a, 4 * i) }
+
+	to_v4_array(a, i) { return this.to_array(a, 4 * i) }
 
 	len2() {
 		return (
@@ -835,14 +882,14 @@ let v4c = class v extends Array {
 
 }
 
-v4c.prototype.is_v4 = true
+v4_class.prototype.is_v4 = true
 
-property(v4c, 'x', function() { return this[0] }, function(v) { this[0] = v })
-property(v4c, 'y', function() { return this[1] }, function(v) { this[1] = v })
-property(v4c, 'z', function() { return this[2] }, function(v) { this[2] = v })
-property(v4c, 'w', function() { return this[3] }, function(v) { this[3] = v })
+property(v4_class, 'x', function() { return this[0] }, function(v) { this[0] = v })
+property(v4_class, 'y', function() { return this[1] }, function(v) { this[1] = v })
+property(v4_class, 'z', function() { return this[2] }, function(v) { this[2] = v })
+property(v4_class, 'w', function() { return this[3] }, function(v) { this[3] = v })
 
-v4 = function v4(x, y, z, w) { return new v4c(x, y, z, w) }
+v4 = function v4(x, y, z, w) { return new v4_class(x, y, z, w) }
 
 v4.add = function add(a, v, s, out) {
 	s = or(s, 1)
@@ -881,7 +928,7 @@ v4.div = function div(a, v, out) {
 
 let mat3_type = function(super_class, super_args) {
 
-	let mat3c = class m extends super_class {
+	let mat3_class = class m extends super_class {
 
 		constructor() {
 			super(...super_args)
@@ -946,6 +993,10 @@ let mat3_type = function(super_class, super_args) {
 				a[ai + i] = this[i]
 			return a
 		}
+
+		from_mat3_array(a, i) { return this.from_array(a, 9 * i) }
+
+		to_mat3_array(a, i) { return this.to_array(a, 9 * i) }
 
 		transpose() {
 			let tmp
@@ -1071,19 +1122,19 @@ let mat3_type = function(super_class, super_args) {
 
 	}
 
-	mat3c.prototype.is_mat3 = true
+	mat3_class.prototype.is_mat3 = true
 
-	property(mat3c, 'e11', function() { return this[0] }, function(v) { this[0] = v })
-	property(mat3c, 'e21', function() { return this[1] }, function(v) { this[1] = v })
-	property(mat3c, 'e31', function() { return this[2] }, function(v) { this[2] = v })
-	property(mat3c, 'e12', function() { return this[3] }, function(v) { this[3] = v })
-	property(mat3c, 'e22', function() { return this[4] }, function(v) { this[4] = v })
-	property(mat3c, 'e32', function() { return this[5] }, function(v) { this[5] = v })
-	property(mat3c, 'e13', function() { return this[6] }, function(v) { this[6] = v })
-	property(mat3c, 'e23', function() { return this[7] }, function(v) { this[7] = v })
-	property(mat3c, 'e33', function() { return this[8] }, function(v) { this[8] = v })
+	property(mat3_class, 'e11', function() { return this[0] }, function(v) { this[0] = v })
+	property(mat3_class, 'e21', function() { return this[1] }, function(v) { this[1] = v })
+	property(mat3_class, 'e31', function() { return this[2] }, function(v) { this[2] = v })
+	property(mat3_class, 'e12', function() { return this[3] }, function(v) { this[3] = v })
+	property(mat3_class, 'e22', function() { return this[4] }, function(v) { this[4] = v })
+	property(mat3_class, 'e32', function() { return this[5] }, function(v) { this[5] = v })
+	property(mat3_class, 'e13', function() { return this[6] }, function(v) { this[6] = v })
+	property(mat3_class, 'e23', function() { return this[7] }, function(v) { this[7] = v })
+	property(mat3_class, 'e33', function() { return this[8] }, function(v) { this[8] = v })
 
-	let mat3 = function() { return new mat3c() }
+	let mat3 = function() { return new mat3_class() }
 
 	mat3.mul = function mul(a, b, out) {
 
@@ -1132,7 +1183,7 @@ mat3f32 = mat3_type(f32arr, [mat3_ident])
 
 let mat4_type = function(super_class, super_args) {
 
-	let mat4c = class m extends super_class {
+	let mat4_class = class m extends super_class {
 
 		constructor() {
 			super(...super_args)
@@ -1152,6 +1203,8 @@ let mat4_type = function(super_class, super_args) {
 					m[0], m[3], m[6], 0,
 					m[1], m[4], m[7], 0,
 					m[2], m[5], m[8], 1)
+			} else if (n11.is_quat) {
+				return this.compose(v3.zero, n11, v3.one)
 			} else {
 				this[ 0] = n11
 				this[ 1] = n21
@@ -1209,6 +1262,10 @@ let mat4_type = function(super_class, super_args) {
 				a[ai + i] = this[i]
 			return a
 		}
+
+		from_mat4_array(a, i) { return this.from_array(a, 16 * i) }
+
+		to_mat4_array(a, i) { return this.to_array(a, 16 * i) }
 
 		transpose() {
 			let t
@@ -1372,7 +1429,7 @@ let mat4_type = function(super_class, super_args) {
 		}
 
 		translate(x, y, z) {
-			if (isarray(x)) {
+			if (x.is_v3 || x.is_v4) {
 				let v = x
 				x = v[0]
 				y = v[1]
@@ -1386,15 +1443,12 @@ let mat4_type = function(super_class, super_args) {
 			return this
 		}
 
-		rotate(angle, x, y, z) {
-			if (x.is_v3 || x.is_v4) {
-				let p = x
-				x = p[0]
-				y = p[1]
-				z = p[2]
-			}
+		rotate(axis, angle) {
+			let x = axis[0]
+			let y = axis[1]
+			let z = axis[2]
 			let len = Math.hypot(x, y, z)
-			assert(len >= Number.EPSILON)
+			assert(len >= NEAR)
 			len = 1 / len
 			x *= len
 			y *= len
@@ -1516,16 +1570,9 @@ let mat4_type = function(super_class, super_args) {
 			return this
 		}
 
-		// NOTE: this only rotates the matrix, it does not translate it.
-		//
-		// To set up the camera view matrix, use:
-		//   view.translate(camera_pos).look_at(camera_pos, target_pos, up_pos).invert()
-		//
-		look_at(eye, target, up) {
-			let z = _v0.set(eye).sub(target)
-			if (!z.len2()) // eye and target coincide, move eye back by one.
-				z.z = 1
-			z.normalize()
+		// NOTE: dir is the opposite of the direction vector pointing towards the target!
+		look_at(dir, up) {
+			let z = _v0.set(dir).normalize()
 			let x = _v1.set(up).cross(z)
 			if (!x.len2()) { // up and z are parallel, diverge them a little.
 				if (abs(up.z) == 1)
@@ -1549,28 +1596,85 @@ let mat4_type = function(super_class, super_args) {
 			return this
 		}
 
+		compose(pos, quat, scale) {
+			let x = quat.x
+			let y = quat.y
+			let z = quat.z
+			let w = quat.w
+			let x2 = x + x
+			let y2 = y + y
+			let z2 = z + z
+			var xx = x * x2
+			let xy = x * y2
+			let xz = x * z2
+			let yy = y * y2
+			let yz = y * z2
+ 			let zz = z * z2
+			let wx = w * x2
+			let wy = w * y2
+			let wz = w * z2
+			let sx = scale.x
+			let sy = scale.y
+			let sz = scale.z
+			this[ 0] = (1 - (yy + zz)) * sx
+			this[ 1] = (xy + wz) * sx
+			this[ 2] = (xz - wy) * sx
+			this[ 3] = 0
+			this[ 4] = (xy - wz) * sy
+			this[ 5] = (1 - (xx + zz)) * sy
+			this[ 6] = (yz + wx) * sy
+			this[ 7] = 0
+			this[ 8] = (xz + wy) * sz
+			this[ 9] = (yz - wx) * sz
+			this[10] = (1 - (xx + yy)) * sz
+			this[11] = 0
+			this[12] = pos.x
+			this[13] = pos.y
+			this[14] = pos.z
+			this[15] = 1
+			return this
+		}
+
+		// http://www.gamedev.net/reference/articles/article1199.asp
+		rotation(axis, angle) {
+			let c = cos(angle)
+			let s = sin(angle)
+			let t = 1 - c
+			let x = axis.x
+			let y = axis.y
+			let z = axis.z
+			let tx = t * x
+			let ty = t * y
+			this.set(
+				tx * x + c    , tx * y - s * z, tx * z + s * y, 0,
+				tx * y + s * z, ty * y + c    , ty * z - s * x, 0,
+				tx * z - s * y, ty * z + s * x, t * z * z + c , 0,
+				0             ,              0,              0, 1)
+			return this
+		}
+
 	}
 
-	mat4c.prototype.is_mat4 = true
+	mat4_class.prototype.is_mat4 = true
 
-	property(mat4c, 'e11', function() { return this[ 0] }, function(v) { this[ 0] = v })
-	property(mat4c, 'e21', function() { return this[ 1] }, function(v) { this[ 1] = v })
-	property(mat4c, 'e31', function() { return this[ 2] }, function(v) { this[ 2] = v })
-	property(mat4c, 'e41', function() { return this[ 3] }, function(v) { this[ 3] = v })
-	property(mat4c, 'e12', function() { return this[ 4] }, function(v) { this[ 4] = v })
-	property(mat4c, 'e22', function() { return this[ 5] }, function(v) { this[ 5] = v })
-	property(mat4c, 'e32', function() { return this[ 6] }, function(v) { this[ 6] = v })
-	property(mat4c, 'e42', function() { return this[ 7] }, function(v) { this[ 7] = v })
-	property(mat4c, 'e13', function() { return this[ 8] }, function(v) { this[ 8] = v })
-	property(mat4c, 'e23', function() { return this[ 9] }, function(v) { this[ 9] = v })
-	property(mat4c, 'e33', function() { return this[10] }, function(v) { this[10] = v })
-	property(mat4c, 'e43', function() { return this[11] }, function(v) { this[11] = v })
-	property(mat4c, 'e14', function() { return this[12] }, function(v) { this[12] = v })
-	property(mat4c, 'e24', function() { return this[13] }, function(v) { this[13] = v })
-	property(mat4c, 'e34', function() { return this[14] }, function(v) { this[14] = v })
-	property(mat4c, 'e44', function() { return this[15] }, function(v) { this[15] = v })
+	property(mat4_class, 'e11', function() { return this[ 0] }, function(v) { this[ 0] = v })
+	property(mat4_class, 'e21', function() { return this[ 1] }, function(v) { this[ 1] = v })
+	property(mat4_class, 'e31', function() { return this[ 2] }, function(v) { this[ 2] = v })
+	property(mat4_class, 'e41', function() { return this[ 3] }, function(v) { this[ 3] = v })
+	property(mat4_class, 'e12', function() { return this[ 4] }, function(v) { this[ 4] = v })
+	property(mat4_class, 'e22', function() { return this[ 5] }, function(v) { this[ 5] = v })
+	property(mat4_class, 'e32', function() { return this[ 6] }, function(v) { this[ 6] = v })
+	property(mat4_class, 'e42', function() { return this[ 7] }, function(v) { this[ 7] = v })
+	property(mat4_class, 'e13', function() { return this[ 8] }, function(v) { this[ 8] = v })
+	property(mat4_class, 'e23', function() { return this[ 9] }, function(v) { this[ 9] = v })
+	property(mat4_class, 'e33', function() { return this[10] }, function(v) { this[10] = v })
+	property(mat4_class, 'e43', function() { return this[11] }, function(v) { this[11] = v })
+	property(mat4_class, 'e14', function() { return this[12] }, function(v) { this[12] = v })
+	property(mat4_class, 'e24', function() { return this[13] }, function(v) { this[13] = v })
+	property(mat4_class, 'e34', function() { return this[14] }, function(v) { this[14] = v })
+	property(mat4_class, 'e44', function() { return this[15] }, function(v) { this[15] = v })
 
-	let mat4 = function(elements) { return new mat4c(elements) }
+	let mat4 = function(elements) { return new mat4_class(elements) }
 
 	mat4.mul = function mul(a, b, out) {
 
@@ -1636,10 +1740,9 @@ let mat4_ident = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 mat4    = mat4_type(Array, mat4_ident)
 mat4f32 = mat4_type(f32arr, [mat4_ident])
 
-
 // quaternion ----------------------------------------------------------------
 
-let quatc = class q extends Array {
+let quat_class = class q extends Array {
 
 	constructor(x, y, z, w) {
 		super(x || 0, y || 0, z || 0, or(w, 1))
@@ -1697,6 +1800,10 @@ let quatc = class q extends Array {
 		a[i+3] = this[3]
 		return a
 	}
+
+	from_quat_array(a, i) { return this.from_array(a, 4 * i) }
+
+	to_quat_array(a, i) { return this.to_array(a, 4 * i) }
 
 	// http://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
 	// assumes axis is normalized
@@ -1866,7 +1973,7 @@ let quatc = class q extends Array {
 
 		let sqr_sin_half_angle = 1.0 - cos_half_angle * cos_half_angle
 
-		if (sqr_sin_half_angle <= Number.EPSILON) {
+		if (sqr_sin_half_angle <= NEAR) {
 			let s = 1 - t
 			this.w = s * w + t * this.w
 			this.x = s * x + t * this.x
@@ -1889,14 +1996,14 @@ let quatc = class q extends Array {
 	}
 }
 
-quatc.prototype.is_quat = true
+quat_class.prototype.is_quat = true
 
-property(quatc, 'x', function() { return this[0] }, function(v) { this[0] = v })
-property(quatc, 'y', function() { return this[1] }, function(v) { this[1] = v })
-property(quatc, 'z', function() { return this[2] }, function(v) { this[2] = v })
-property(quatc, 'w', function() { return this[3] }, function(v) { this[3] = v })
+property(quat_class, 'x', function() { return this[0] }, function(v) { this[0] = v })
+property(quat_class, 'y', function() { return this[1] }, function(v) { this[1] = v })
+property(quat_class, 'z', function() { return this[2] }, function(v) { this[2] = v })
+property(quat_class, 'w', function() { return this[3] }, function(v) { this[3] = v })
 
-quat = function(x, y, z, w) { return new quatc(x, y, z, w) }
+quat = function(x, y, z, w) { return new quat_class(x, y, z, w) }
 
 // from http://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/code/index.htm
 quat.mul = function mul(a, b, out) {
@@ -1915,11 +2022,13 @@ quat.mul = function mul(a, b, out) {
 	return out
 }
 
+let _q0 = quat()
+
 // plane ---------------------------------------------------------------------
 
 let _m3_1 = mat3()
 
-let planec = class plane {
+let plane_class = class plane {
 
 	constructor(normal, constant) {
 		this.normal = normal || v3(1, 0, 0)
@@ -1999,23 +2108,19 @@ let planec = class plane {
 		return this.normal.dot(p) + this.constant
 	}
 
-	distance_to_sphere(sphere) {
-		return this.distance_to_point(sphere.center) - sphere.radius
-	}
-
 	project_point(p, out) {
 		return out.set(this.normal).muls(-this.distance_to_point(p)).add(p)
 	}
 
 	intersect_line(line, strict, out) {
-		let direction = line.delta(_v1)
-		let denominator = this.normal.dot(direction)
-		if (denominator == 0)
+		let dir = line.delta(_v1)
+		let denom = this.normal.dot(dir)
+		if (abs(denom) < NEAR)
 			return // line is on the plane
-		let t = -(line.start.dot(this.normal) + this.constant) / denominator
-		let p = out.set(direction).muls(t).add(line.start)
+		let t = -(line[0].dot(this.normal) + this.constant) / denom
+		let p = (out || _v2).set(dir).muls(t).add(line[0])
 		if (strict && (t < 0 || t > 1))
-			return
+			return // intersection point is outside of the line segment.
 		p.t = t
 		return p
 	}
@@ -2023,17 +2128,12 @@ let planec = class plane {
 	// Note: this tests if a line intersects the plane, not whether it
 	// (or its end-points) are coplanar with it.
 	intersects_line(line) {
-		let d1 = this.distance_to_point(line.start)
-		let d2 = this.distance_to_point(line.end)
-		return d1 < 0 && d2 > 0 || d2 < 0 && d1 > 0
-	}
-
-	intersects_box(box) {
-		return box.intersects_plane(this)
-	}
-
-	intersects_sphere(sphere) {
-		return sphere.intersects_plane(this)
+		let d1 = this.distance_to_point(line[0])
+		let d2 = this.distance_to_point(line[1])
+		return (
+			(d1 < -NEAR && d2 > NEAR) ||
+			(d2 < -NEAR && d1 > NEAR)
+		)
 	}
 
 	coplanar_point(out) {
@@ -2055,13 +2155,14 @@ let planec = class plane {
 
 }
 
-planec.prototype.is_plane = true
+plane_class.prototype.is_plane = true
 
-plane = function(normal, constant) { return new planec(normal, constant) }
+plane = function(normal, constant) { return new plane_class(normal, constant) }
+plane3 = plane // so you can do `let plane = plane3()`.
 
 // triangle3 -----------------------------------------------------------------
 
-let tri3c = class triangle3 extends Array {
+let triangle3_class = class triangle3 extends Array {
 
 	constructor(a, b, c) {
 		super(a || v3(), b || v3(), c || v3())
@@ -2101,7 +2202,7 @@ let tri3c = class triangle3 extends Array {
 		)
 	}
 
-	set_from_array(a, i) {
+	from_array(a, i) {
 		this[0][0] = a[i+0]
 		this[0][1] = a[i+1]
 		this[0][2] = a[i+2]
@@ -2112,6 +2213,22 @@ let tri3c = class triangle3 extends Array {
 		this[2][1] = a[i+7]
 		this[2][2] = a[i+8]
 	}
+
+	to_array(a, i) {
+		a[i+0] = this[0][0]
+		a[i+1] = this[0][1]
+		a[i+2] = this[0][2]
+		a[i+3] = this[1][0]
+		a[i+4] = this[1][1]
+		a[i+5] = this[1][2]
+		a[i+6] = this[2][0]
+		a[i+7] = this[2][1]
+		a[i+8] = this[2][2]
+	}
+
+	from_triangle3_array(a, i) { return this.from_array(a, 9 * i) }
+
+	to_triangle3_array(a, i) { return this.to_array(a, 9 * i) }
 
 	area() {
 		_v0.set(this[2]).sub(this[1])
@@ -2124,7 +2241,7 @@ let tri3c = class triangle3 extends Array {
 	}
 
 	normal(out) {
-		return tri3.normal(this[0], this[1], this[2], out)
+		return triangle3.normal(this[0], this[1], this[2], out)
 	}
 
 	plane(out) {
@@ -2132,19 +2249,19 @@ let tri3c = class triangle3 extends Array {
 	}
 
 	barycoord(p, out) {
-		return tri3.barycoord(p, this[0], this[1], this[2], out)
+		return triangle3.barycoord(p, this[0], this[1], this[2], out)
 	}
 
 	uv(p, uv1, uv2, uv3, out) {
-		return tri3.uv(p, this[0], this[1], this[2], uv1, uv2, uv3, out)
+		return triangle3.uv(p, this[0], this[1], this[2], uv1, uv2, uv3, out)
 	}
 
 	contains_point(p) {
-		return tri3.contains_point(p, this[0], this[1], this[2])
+		return triangle3.contains_point(p, this[0], this[1], this[2])
 	}
 
 	is_front_facing(direction) {
-		return tri3.is_front_facing(this[0], this[1], this[2], direction)
+		return triangle3.is_front_facing(this[0], this[1], this[2], direction)
 	}
 
 	intersects_box(box) {
@@ -2153,9 +2270,9 @@ let tri3c = class triangle3 extends Array {
 
 }
 
-tri3c.prototype.is_triangle3 = true
+triangle3_class.prototype.is_triangle3 = true
 
-triangle3 = function(a, b, c) { return new tri3c(a, b, c) }
+triangle3 = function(a, b, c) { return new triangle3_class(a, b, c) }
 
 triangle3.normal = function normal(a, b, c, out) {
 	out.set(c).sub(b)
@@ -2207,273 +2324,6 @@ triangle3.is_front_facing = function is_front_facing(a, b, c, direction) {
 	return _v0.cross(_v1).dot(direction) < 0
 }
 
-// box3 ----------------------------------------------------------------------
-
-let box3_class = function(min, max) {
-	this.min = min || v3(+1/0, +1/0, +1/0)
-	this.max = max || v3(-1/0, -1/0, -1/0)
-}
-let box3p = box3_class.prototype
-box3 = function(min, max) { return new box3_class(min, max) }
-box3p.is_box3 = true
-
-box3p.set = function set(min, max) {
-	if (min.is_box3) {
-		let box = min
-		this.min.copy(box.min)
-		this.max.copy(box.max)
-	} else {
-		this.min.copy(min)
-		this.max.copy(max)
-	}
-	return this
-}
-
-box3p.clone = function clone() {
-	return new box3().set(this)
-}
-
-box3p.equals = function equals(box) {
-	return (
-		box.min.equals(this.min) &&
-		box.max.equals(this.max)
-	)
-}
-
-box3p.reset = function reset() {
-	this.min.x = this.min.y = this.min.z = +1/0
-	this.max.x = this.max.y = this.max.z = -1/0
-	return this
-}
-
-box3p.is_empty = function is_empty() {
-	// this is a more robust check for empty than ( volume <= 0 ) because volume can get positive with two negative axes
-	return this.max.x < this.min.x || this.max.y < this.min.y || this.max.z < this.min.z
-}
-
-box3p.center = function center(out) {
-	return this.is_empty() ? out.set(0, 0, 0) : out.set(this.min).add(this.max).muls(0.5)
-}
-
-box3p.size = function size(out) {
-	return this.is_empty() ? out.set(0, 0, 0) : out.set(this.max).sub(this.min)
-}
-
-box3p.expand_by_point = function expand_by_point(p) {
-	this.min.min(p)
-	this.max.max(p)
-	return this
-}
-
-box3p.expand_by_vector = function expand_by_vector(v) {
-	this.min.sub(v)
-	this.max.add(v)
-	return this
-}
-
-box3p.expand_by_scalar = function expand_by_scalar(s) {
-	this.min.adds(-s)
-	this.max.adds(s)
-	return this
-}
-
-box3p.expand_by_object = function expand_by_object(object) {
-	// Computes the world-axis-aligned bounding box of an object (including its children),
-	// accounting for both the object's, and children's, world transforms
-	object.updateWorldMatrix(false, false)
-	let geometry = object.geometry
-
-	if (geometry !== undefined) {
-		if (geometry.boundingBox === null) {
-			geometry.computeBoundingBox()
-		}
-
-		_box.copy(geometry.boundingBox)
-
-		_box.applyMatrix4(object.matrixWorld)
-
-		this.union(_box)
-	}
-
-	let children = object.children
-
-	for (let i = 0, l = children.length; i < l; i++) {
-		this.expandByObject(children[i])
-	}
-
-	return this
-}
-
-box3p.containsPoint = function containsPoint(point) {
-	return point.x < this.min.x || point.x > this.max.x || point.y < this.min.y || point.y > this.max.y || point.z < this.min.z || point.z > this.max.z ? false : true
-}
-
-box3p.containsBox = function containsBox(box) {
-	return this.min.x <= box.min.x && box.max.x <= this.max.x && this.min.y <= box.min.y && box.max.y <= this.max.y && this.min.z <= box.min.z && box.max.z <= this.max.z
-}
-
-box3p.getParameter = function getParameter(point, target) {
-	// This can potentially have a divide by zero if the box
-	// has a size dimension of 0.
-	if (target === undefined) {
-		console.warn('THREE.Box3: .getParameter() target is now required')
-		target = new Vector3()
-	}
-
-	return target.set((point.x - this.min.x) / (this.max.x - this.min.x), (point.y - this.min.y) / (this.max.y - this.min.y), (point.z - this.min.z) / (this.max.z - this.min.z))
-}
-
-box3p.intersectsBox = function intersectsBox(box) {
-	// using 6 splitting planes to rule out intersections.
-	return box.max.x < this.min.x || box.min.x > this.max.x || box.max.y < this.min.y || box.min.y > this.max.y || box.max.z < this.min.z || box.min.z > this.max.z ? false : true
-}
-
-box3p.intersectsSphere = function intersectsSphere(sphere) {
-	// Find the point on the AABB closest to the sphere center.
-	this.clampPoint(sphere.center, _vector$1) // If that point is inside the sphere, the AABB and sphere intersect.
-
-	return _vector$1.distanceToSquared(sphere.center) <= sphere.radius * sphere.radius
-}
-
-box3p.intersectsPlane = function intersectsPlane(pl) {
-	// We compute the minimum and maximum dot product values. If those values
-	// are on the same side (back or front) of the plane, then there is no intersection.
-	let min, max
-
-	if (pl.normal.x > 0) {
-		min = pl.normal.x * this.min.x
-		max = pl.normal.x * this.max.x
-	} else {
-		min = pl.normal.x * this.max.x
-		max = pl.normal.x * this.min.x
-	}
-
-	if (pl.normal.y > 0) {
-		min += pl.normal.y * this.min.y
-		max += pl.normal.y * this.max.y
-	} else {
-		min += pl.normal.y * this.max.y
-		max += pl.normal.y * this.min.y
-	}
-
-	if (pl.normal.z > 0) {
-		min += pl.normal.z * this.min.z
-		max += pl.normal.z * this.max.z
-	} else {
-		min += pl.normal.z * this.max.z
-		max += pl.normal.z * this.min.z
-	}
-
-	return min <= -pl.constant && max >= -pl.constant
-}
-
-box3p.intersectsTriangle = function intersectsTriangle(triangle) {
-	if (this.isEmpty()) {
-		return false
-	} // compute box center and extents
-	this.getCenter(_center)
-	v3.sub(_extents, this.max, _center)
-	_extents.subVectors(this.max, _center) // translate triangle to aabb origin
-	_v0.subVectors(triangle.a, _center)
-	_v1.subVectors(triangle.b, _center)
-	_v2.subVectors(triangle.c, _center) // compute edge vectors for triangle
-	_f0.subVectors(_v1, _v0)
-	_f1.subVectors(_v2, _v1)
-	_f2.subVectors(_v0, _v2)
-	// test against axes that are given by cross product combinations of the edges of the triangle and the edges of the aabb
-	// make an axis testing of each of the 3 sides of the aabb against each of the 3 sides of the triangle = 9 axis of separation
-	// axis_ij = u_i x f_j (u0, u1, u2 = face normals of aabb = x,y,z axes vectors since aabb is axis aligned)
-
-	let axes = [0, -_f0.z, _f0.y, 0, -_f1.z, _f1.y, 0, -_f2.z, _f2.y, _f0.z, 0, -_f0.x, _f1.z, 0, -_f1.x, _f2.z, 0, -_f2.x, -_f0.y, _f0.x, 0, -_f1.y, _f1.x, 0, -_f2.y, _f2.x, 0]
-
-	if (!satForAxes(axes, _v0, _v1, _v2, _extents)) {
-		return false
-	} // test 3 face normals from the aabb
-
-	axes = [1, 0, 0, 0, 1, 0, 0, 0, 1]
-
-	if (!satForAxes(axes, _v0, _v1, _v2, _extents)) {
-		return false
-	}
-	// finally testing the face normal of the triangle
-	// use already existing triangle edge vectors here
-
-	_triangleNormal.crossVectors(_f0, _f1)
-
-	axes = [_triangleNormal.x, _triangleNormal.y, _triangleNormal.z]
-	return satForAxes(axes, _v0, _v1, _v2, _extents)
-}
-
-box3p.clampPoint = function clampPoint(point, target) {
-	if (target === undefined) {
-		console.warn('THREE.Box3: .clampPoint() target is now required')
-		target = new Vector3()
-	}
-
-	return target.copy(point).clamp(this.min, this.max)
-}
-
-box3p.distanceToPoint = function distanceToPoint(point) {
-	let clampedPoint = _vector$1.copy(point).clamp(this.min, this.max)
-	return clampedPoint.sub(point).len()
-}
-
-box3p.getBoundingSphere = function getBoundingSphere(target) {
-	this.getCenter(target.center)
-	target.radius = this.getSize(_vector$1).len() * 0.5
-	return target
-}
-
-box3p.intersect = function intersect(box) {
-	this.min.max(box.min)
-	this.max.min(box.max) // ensure that if there is no overlap, the result is fully empty, not slightly empty with non-inf/+inf values that will cause subsequence intersects to erroneously return valid values.
-
-	if (this.isEmpty()) this.makeEmpty()
-	return this
-}
-
-box3p.union = function union(box) {
-	this.min.min(box.min)
-	this.max.max(box.max)
-	return this
-}
-
-box3p.applyMatrix4 = function applyMatrix4(matrix) {
-	// transform of empty box is an empty box.
-	if (this.isEmpty()) return this // NOTE: I am using a binary pattern to specify all 2^3 combinations below
-	_points[0].set(this.min.x, this.min.y, this.min.z).applyMatrix4(matrix) // 000
-	_points[1].set(this.min.x, this.min.y, this.max.z).applyMatrix4(matrix) // 001
-	_points[2].set(this.min.x, this.max.y, this.min.z).applyMatrix4(matrix) // 010
-	_points[3].set(this.min.x, this.max.y, this.max.z).applyMatrix4(matrix) // 011
-	_points[4].set(this.max.x, this.min.y, this.min.z).applyMatrix4(matrix) // 100
-	_points[5].set(this.max.x, this.min.y, this.max.z).applyMatrix4(matrix) // 101
-	_points[6].set(this.max.x, this.max.y, this.min.z).applyMatrix4(matrix) // 110
-	_points[7].set(this.max.x, this.max.y, this.max.z).applyMatrix4(matrix) // 111
-	this.setFromPoints(_points)
-	return this
-}
-
-box3p.translate = function translate(offset) {
-	this.min.add(offset)
-	this.max.add(offset)
-	return this
-}
-
-// box2 ----------------------------------------------------------------------
-
-box2 = function() {
-	let b = [1/0, 1/0, -1/0, -1/0]
-	b.is_box2 = true
-	return b
-}
-
-box2.add_point = function(x, y) {
-	this[0] = min(this[0], x)
-	this[1] = min(this[1], y)
-	this[2] = max(this[2], x)
-	this[3] = max(this[3], y)
-}
-
 // poly3 ---------------------------------------------------------------------
 
 let poly3_cons = function(_this, opt, elements) {
@@ -2482,7 +2332,7 @@ let poly3_cons = function(_this, opt, elements) {
 		assign(_this, assert(_this.modes[_this.mode]))
 }
 
-let poly3c = class poly3 extends Array {
+let poly3_class = class poly3 extends Array {
 
 	constructor(opt, elements) {
 		if (elements)
@@ -2498,13 +2348,13 @@ let poly3c = class poly3 extends Array {
 
 }
 
-let poly3p = poly3c.prototype
+let poly3p = poly3_class.prototype
 
 poly3p.is_poly3 = true
 
-poly3 = function(opt, elements) { return new poly3c(opt, elements) }
+poly3 = function(opt, elements) { return new poly3_class(opt, elements) }
 
-poly3.class = poly3c
+poly3.class = poly3_class
 
 poly3.subclass = function(methods) {
 	let cls = class poly3sub extends Array {
@@ -2516,7 +2366,7 @@ poly3.subclass = function(methods) {
 			poly3_cons(this, opt, elements)
 		}
 	}
-	assign(cls.prototype, poly3c.prototype, methods) // static inheritance (keep lookup chain short).
+	assign(cls.prototype, poly3_class.prototype, methods) // static inheritance (keep lookup chain short).
 	let cons = function(opt, elements) { return new cls(opt, elements) }
 	cons.class = cls
 	return cons
@@ -2582,7 +2432,7 @@ poly3p.project_xy = function() {
 	let p1 = v3()
 	let p2 = v3()
 	let p3 = v3()
-	poly3p.is_convex_quad = function is_convex_quad(EPSILON) {
+	poly3p.is_convex_quad = function is_convex_quad() {
 		if (this.point_count() != 4)
 			return false
 		this.get_point(0, p0)
@@ -2593,7 +2443,7 @@ poly3p.project_xy = function() {
 		let s1 = cross_sign(p1, p2, p3)
 		let s2 = cross_sign(p2, p3, p0)
 		let s3 = cross_sign(p3, p0, p1)
-		let sr = abs(s0) >= EPSILON ? s0 : s1 // one (and only one) of them can be zero.
+		let sr = abs(s0) >= NEAR ? s0 : s1 // one (and only one) of them can be zero.
 		return (
 			   (s0 == 0 || s0 == sr)
 			&& (s1 == 0 || s1 == sr)
@@ -2607,8 +2457,6 @@ poly3p.triangle_count = function() {
 	return 3 * (this.point_count() - 2)
 }
 
-poly3p.EPSILON = Number.EPSILON
-
 {
 	let ps = []
 	poly3p.triangulate = function(out) {
@@ -2618,7 +2466,7 @@ poly3p.EPSILON = Number.EPSILON
 			out[0] = 0
 			out[1] = 1
 			out[2] = 2
-		} else if (pn == 4 && this.is_convex_quad(this.EPSILON)) { // convex quad: most common case.
+		} else if (pn == 4 && this.is_convex_quad()) { // convex quad: most common case.
 			// triangle 1
 			out[0] = 2
 			out[1] = 3
@@ -2683,7 +2531,7 @@ poly3p.invalidate = function() {
 
 // line3 ---------------------------------------------------------------------
 
-let line3c = class line3 extends Array {
+let line3_class = class line3 extends Array {
 
 	constructor(p0, p1) {
 		super(p0 || v3(), p1 || v3())
@@ -2795,11 +2643,177 @@ let line3c = class line3 extends Array {
 		return out
 	}
 
+	intersect_plane(plane, strict, out) {
+		return plane.intersect_line(this, strict, out)
+	}
+
+	intersects_plane(plane) {
+		return plane.intersects_line(this)
+	}
+
 }
 
-line3c.prototype.is_line3 = true
+line3_class.prototype.is_line3 = true
 
-line3 = function(p1, p2) { return new line3c(p1, p2) }
+line3 = function(p1, p2) { return new line3_class(p1, p2) }
+
+// from https://www.iquilezles.org/www/articles/normals/normals.htm
+{
+	let p1 = v3()
+	let p2 = v3()
+	let p3 = v3()
+	let get_point_index_from_tpis = function(tpis, i) {
+		return tpis[i]
+	}
+	let get_point_from_points = function(points, pi, out) {
+		return out.from_v3_array(points, pi)
+	}
+	function compute_smooth_mesh_normals(opt) {
+		let points = opt.points
+		let tpis = opt.triangle_point_indices
+		let len = or(opt.len, tpis && tpis.length)
+		let get_point_index = opt.get_point_index || get_point_index_from_tpis
+		let get_point = opt.get_point || get_point_from_points
+		let normals = opt.normals || []
+		for (let i = 0; i < len; i += 3) {
+
+			let p1i = get_point_index(tpis, i+0)
+			let p2i = get_point_index(tpis, i+1)
+			let p3i = get_point_index(tpis, i+2)
+
+			get_point(points, p3i, p3)
+			get_point(points, p1i, p1).sub(p3)
+			get_point(points, p2i, p2).sub(p3)
+			let p = p1.cross(p2)
+
+			normals[3*p1i+0] += p.x
+			normals[3*p1i+1] += p.y
+			normals[3*p1i+2] += p.z
+
+			normals[3*p2i+0] += p.x
+			normals[3*p2i+1] += p.y
+			normals[3*p2i+2] += p.z
+
+			normals[3*p3i+0] += p.x
+			normals[3*p3i+1] += p.y
+			normals[3*p3i+2] += p.z
+		}
+
+		if (opt.normalize)
+			for (let i = 0, n = normals.length; i < n; i += 3) {
+				p1.from_array(normals, i)
+				p1.normalize()
+				p1.to_array(normals, i)
+			}
+		return normals
+	}
+}
+
+// camera --------------------------------------------------------------------
+
+function camera(e) {
+	e = e || {}
+
+	e.pos = e.pos || v3(3, 1, 10)
+	e.dir = e.dir || v3(0, 0, 1)
+	e.up  = e.up  || v3(0, 1, 0)
+
+	e.proj = mat4()
+	e.view = mat4()
+	e.inv_proj = mat4()
+	e.inv_view = mat4()
+	e.view_proj = mat4()
+
+	e.perspective = function(fovy, near, far) {
+		let aspect = e.viewport_w / e.viewport_h
+		e.proj.perspective(or(fovy, rad(60)), aspect, or(near, 0.01), far)
+		return this
+	}
+
+	e.ortho = function() {
+		e.proj.ortho(-10, 10, -10, 10, -1e4, 1e4)
+		return this
+	}
+
+	e.dolly = function(target, t) {
+		let d = e.pos.clone().sub(target)
+		let len = d.len() * t
+		if (abs(len) < NEAR) {
+			e.pos.set(target)
+		} else {
+			if (len < 0)
+				d.set_len(-len).negate()
+			else
+				d.set_len(len)
+			e.pos.set(target).add(d)
+		}
+		return this
+	}
+
+	let _v0 = v3()
+	let _v1 = v3()
+
+	e.orbit = function(target, ax, ay, az) {
+		let axis = _v0.set(e.dir).cross(v3.up, _v1)
+		e.dir.rotate(axis, ay)
+	}
+
+	e.update = function() {
+		e.inv_proj.set(e.proj).invert()
+		e.inv_view.reset().translate(e.pos).look_at(e.dir, e.up)
+		e.view.set(e.inv_view).invert()
+		mat4.mul(e.proj, e.view, e.view_proj)
+		return this
+	}
+
+	// space conversions from https://antongerdelan.net/opengl/raycasting.html
+
+	e.world_to_screen = function(p, out) {
+		out = out || v2()
+		out.set(p).transform(e.inv_view).transform(e.proj)
+		out[0] = round(( out[0] + 1) * e.viewport_w / 2)
+		out[1] = round((-out[1] + 1) * e.viewport_h / 2)
+		return out
+	}
+
+	e.screen_to_clip = function(x, y, z, out) {
+		out = out || v4()
+		let w = e.viewport_w
+		let h = e.viewport_h
+		out[0] = (2 * x) / w - 1
+		out[1] = 1 - (2 * y) / h
+		out[2] = z
+		out[3] = 1
+		return out
+	}
+
+	e.screen_to_view = function(x, y, z, out) {
+		let ray = e.screen_to_clip(x, y, z, out)
+		ray.transform(e.inv_proj) // clip space -> view space
+		ray.z = z
+		return ray
+	}
+
+	e.screen_to_world = function(mx, my, out) {
+		let ray = e.screen_to_view(mx, my, -1, out)
+		ray.w = 0 // it's a (non-translatable) direction, not a point.
+		ray.transform(e.inv_view) // view space -> world space
+		return ray.normalize()
+	}
+
+	let _v4_0 = v4()
+
+	e.raycast = function(mx, my, out) {
+		out = out || line3()
+		out[0].set(e.pos)
+		let ray = e.screen_to_world(mx, my, _v4_0)
+		out[1].set(e.pos).add(ray)
+		return out
+	}
+
+	return e
+}
+
+camera3 = camera // so you can do `let camera = camera3()`.
 
 } // module scope.
-
