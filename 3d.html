@@ -7,7 +7,7 @@
 <script src=3d.js></script>
 <script src=earcut.js></script>
 <script src=gl.js></script>
-<script src=skp_renderer.js></script>
+<script src=skp.js></script>
 </head>
 <body>
 <canvas style="border: 1px solid black" id=canvas width=640 height=640></canvas>
@@ -214,21 +214,22 @@ function canvas_resized() {
 
 canvas_resized()
 
-camera.pos.set(10, 10, 10)
-camera.dir.set(.4, .2, 1)
-camera.update()
+//camera.pos.set(10, 10, 10)
+//camera.dir.set(.4, .2, 1)
+//camera.update()
 
 function hit_test(mx, my) {
-	let ray = camera.raycast(mx, my)
+	let ray = camera.raycast(mx, my, line3())
 	let [inst_id, face_id] = face_id_renderer.hit_test(mx, my)
 	if (inst_id && face_id) {
 		let model = mat4().from_mat4_array(inst_mats, inst_id-1)
 		let inv_model = mat4().set(model).invert()
 		ray.transform(inv_model)
 		let face = faces[face_id-1]
-		let target = face.plane().intersect_line(ray)
-		target.transform(model)
-		return target
+		let target = face.plane().intersect_line(ray, null, v3())
+		return target && target.transform(model)
+	} else {
+		return ray.at(min(FAR / 10, camera.pos.len()), v3())
 	}
 }
 
@@ -239,20 +240,19 @@ canvas.on('pointerdown', function(ev, mx0, my0) {
 	let target = hit_test(mx0, my0)
 	if (!target)
 		return
-	let y0 = camera.pos.y
-	let dir0 = camera.dir.clone()
+	let cam0 = camera.clone()
 	return canvas.capture_pointer(ev, function(ev, mx, my) {
 		mx -= r.x
 		my -= r.y
 		let dx = mx - mx0
 		let dy = my - my0
+		camera.set(cam0)
 		if (ev.shiftKey) {
-			camera.pos.y = y0 + dy / 10
+			camera.pan(target, mx0, my0, mx, my)
 		} else {
-			camera.dir.set(dir0)
-			camera.orbit(target, 0, dy / 400 * PI, 0)
-			camera.update()
+			camera.orbit(target, dy / 200, dx / 200, 0)
 		}
+		camera.update()
 	})
 })
 
@@ -423,6 +423,8 @@ canvas.on('pointermove', function(ev, mx, my) {
 	mx -= r.x
 	my -= r.y
 	let [inst_id, face_id] = face_id_renderer.hit_test(mx, my)
+
+	//print(...camera.screen_to_view(mx, my, 1))
 })
 
 animate()

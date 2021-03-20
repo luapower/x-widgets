@@ -172,7 +172,7 @@ gl.renderer = function(r) {
 
 	r.update = function() {
 
-		sunlight_pos.set(r.sunlight_dir).set_len(1e3)
+		sunlight_pos.set(r.sunlight_dir).set_len(FAR)
 		sunlight_view.reset()
 			.translate(sunlight_pos)
 			.look_at(sunlight_pos, origin, up_dir)
@@ -290,7 +290,7 @@ gl.dashed_line_program = function() {
 		void main() {
 			vec2 p1 = (v_p1.xyz / v_p1.w).xy;
 			vec2 p2 = (v_p2.xyz / v_p2.w).xy;
-			float dist = length((p1 - p2) * viewport_size.xy / 2.0);
+			float dist = length((p1 - p2) * viewport_size.xy * 0.5);
 			if (fract(dist / (dash + gap)) > dash / (dash + gap))
 				discard;
 			frag_color = v_color;
@@ -584,7 +584,7 @@ gl.skybox = function(e) {
 	let cube_map_tex
 
 	e.update_view = function(view_pos) {
-		model.reset().set_position(view_pos).scale(1e6)
+		model.reset().set_position(view_pos).scale(FAR * 2)
 		inst_buf.upload(model, 0)
 	}
 

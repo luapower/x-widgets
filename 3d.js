@@ -78,7 +78,7 @@
 */
 
 NEAR = 1e-5 // distance epsilon (tolerance)
-FAR  = 1e6  // skybox distance from center
+FAR  = 1e3  // skybox distance from center
 
 {
 
@@ -634,9 +634,13 @@ v3.div = function div(a, b, out) {
 	return out
 }
 
-v3.zero = v3(0, 0, 0)
-v3.one  = v3(1, 1, 1)
-v3.up   = v3(0, 1, 0)
+v3.zero  = v3(0, 0, 0)
+v3.one   = v3(1, 1, 1)
+v3.up    = v3(0, 1, 0)
+v3.right = v3(1, 0, 0)
+v3.x_axis = v3.right
+v3.y_axis = v3.up
+v3.z_axis = v3(0, 0, 1)
 
 // temporaries for plane, triangle3 and line3 methods.
 let _v0 = v3()
@@ -644,8 +648,6 @@ let _v1 = v3()
 let _v2 = v3()
 let _v3 = v3()
 let _v4 = v3()
-let _v5 = v3()
-let _v6 = v3()
 
 // v4 ------------------------------------------------------------------------
 
@@ -2118,7 +2120,7 @@ let plane_class = class plane {
 		if (abs(denom) < NEAR)
 			return // line is on the plane
 		let t = -(line[0].dot(this.normal) + this.constant) / denom
-		let p = (out || _v2).set(dir).muls(t).add(line[0])
+		let p = out.set(dir).muls(t).add(line[0])
 		if (strict && (t < 0 || t > 1))
 			return // intersection point is outside of the line segment.
 		p.t = t
@@ -2374,11 +2376,11 @@ poly3.subclass = function(methods) {
 
 // point accessor stubs. replace in subclasses based on how the points are stored.
 poly3p.point_count = function point_count() { return this.length }
-poly3p.get_point = function get_point(i, out) { return (out || _v0).set(this[i]) }
+poly3p.get_point = function get_point(i, out) { return out.set(this[i]) }
 poly3p.modes = {
 	flat: {
 		point_count: function point_count() { return this.length / 3 },
-		get_point: function get_point(i, out) { return (out || _v0).from_array(this, 3*i) }
+		get_point: function get_point(i, out) { return out.from_array(this, 3*i) }
 	},
 }
 
@@ -2460,7 +2462,6 @@ poly3p.triangle_count = function() {
 {
 	let ps = []
 	poly3p.triangulate = function(out) {
-		out = out || []
 		let pn = this.point_count()
 		if (pn == 3) { // triangle: nothing to do, push points directly.
 			out[0] = 0
@@ -2514,7 +2515,6 @@ poly3p.triangle_count = function() {
 	}
 
 	poly3p.uvs = function(uvm, tex_uv, out) {
-		out = out || []
 		for (let i = 0; i < this.point_count(); i++) {
 			let uv = this.uv_at(i, uvm, tex_uv)
 			out[2*i+0] = uv[0]
@@ -2560,7 +2560,7 @@ let line3_class = class line3 extends Array {
 	}
 
 	delta(out) {
-		return v3.sub(this[0], this[1], out)
+		return v3.sub(this[1], this[0], out)
 	}
 
 	distance2() {
@@ -2711,6 +2711,9 @@ line3 = function(p1, p2) { return new line3_class(p1, p2) }
 
 // camera --------------------------------------------------------------------
 
+let _v4_0 = v4() // camera
+let _v4_1 = v4() // camera
+
 function camera(e) {
 	e = e || {}
 
@@ -2724,6 +2727,22 @@ function camera(e) {
 	e.inv_view = mat4()
 	e.view_proj = mat4()
 
+	e.set = function(c) {
+		e.pos.set(c.pos)
+		e.dir.set(c.dir)
+		e.up.set(c.up)
+		e.proj.set(c.proj)
+		e.view.set(c.view)
+		e.inv_proj.set(c.inv_proj)
+		e.inv_view.set(c.inv_view)
+		e.view_proj.set(c.view_proj)
+		return e
+	}
+
+	e.clone = function() {
+		return camera().set(e)
+	}
+
 	e.perspective = function(fovy, near, far) {
 		let aspect = e.viewport_w / e.viewport_h
 		e.proj.perspective(or(fovy, rad(60)), aspect, or(near, 0.01), far)
@@ -2731,7 +2750,7 @@ function camera(e) {
 	}
 
 	e.ortho = function() {
-		e.proj.ortho(-10, 10, -10, 10, -1e4, 1e4)
+		e.proj.ortho(-10, 10, -10, 10, -FAR, FAR)
 		return this
 	}
 
@@ -2750,12 +2769,31 @@ function camera(e) {
 		return this
 	}
 
-	let _v0 = v3()
-	let _v1 = v3()
-
 	e.orbit = function(target, ax, ay, az) {
-		let axis = _v0.set(e.dir).cross(v3.up, _v1)
-		e.dir.rotate(axis, ay)
+		let vdir = _v0.set(e.world_to_view(e.pos.clone().add(e.dir), _v4_0))
+		vdir.rotate(v3.x_axis, -ax)
+		vdir.rotate(v3.y_axis, -ay)
+		vdir.rotate(v3.z_axis, -az)
+		let dir = e.view_to_world(vdir, _v2).sub(e.pos)
+		e.dir.set(dir)
+		let vtarget = e.world_to_view(target, _v4_0)
+		let vpos = _v3.set(vtarget).negate()
+		vpos.rotate(v3.x_axis, -ax)
+		vpos.rotate(v3.y_axis, -ay)
+		vpos.rotate(v3.z_axis, -az)
+		vpos.add(vtarget)
+		let pos = e.view_to_world(vpos, _v4)
+		e.pos.set(pos)
+		return this
+	}
+
+	e.pan = function(target, x0, y0, x1, y1) {
+		let q = e.screen_to_view(x0, y0, 1, v4())
+		let t = e.screen_to_view(x1, y1, 1, v4()).sub(q)
+		let p = e.world_to_view(target, v4())
+		let s = t.muls(p.len() / q.len()).negate().transform(e.inv_view)
+		e.pos.add(s)
+		return this
 	}
 
 	e.update = function() {
@@ -2768,45 +2806,79 @@ function camera(e) {
 
 	// space conversions from https://antongerdelan.net/opengl/raycasting.html
 
-	e.world_to_screen = function(p, out) {
-		out = out || v2()
-		out.set(p).transform(e.inv_view).transform(e.proj)
-		out[0] = round(( out[0] + 1) * e.viewport_w / 2)
-		out[1] = round((-out[1] + 1) * e.viewport_h / 2)
+	e.world_to_view = function(p, out) {
+		assert(out.is_v4)
+		return out.set(p).transform(e.view)
+	}
+
+	e.view_to_clip = function(p, out) {
+		assert(out.is_v4)
+		return out.set(p).transform(e.proj)
+	}
+
+	e.clip_to_screen = function(p, out) {
+		assert(out.is_v2)
+		out[0] = round(( p[0] + 1) * e.viewport_w / 2)
+		out[1] = round((-p[1] + 1) * e.viewport_h / 2)
 		return out
 	}
 
+	e.world_to_clip = function(p, out) {
+		assert(out.is_v4)
+		return out.set(p).transform(e.view_proj)
+	}
+
+	e.world_to_screen = function(p, out) {
+		let cp = e.world_to_clip(p, _v4_0)
+		return e.clip_to_screen(cp, out)
+	}
+
+	// (0..w, 0..h, z) -> (-1..1, -1..1, z)
 	e.screen_to_clip = function(x, y, z, out) {
-		out = out || v4()
 		let w = e.viewport_w
 		let h = e.viewport_h
+		assert(out.is_v4)
 		out[0] = (2 * x) / w - 1
 		out[1] = 1 - (2 * y) / h
-		out[2] = z
+		out[2] = or(z, 1)
 		out[3] = 1
 		return out
 	}
 
-	e.screen_to_view = function(x, y, z, out) {
-		let ray = e.screen_to_clip(x, y, z, out)
-		ray.transform(e.inv_proj) // clip space -> view space
-		ray.z = z
-		return ray
+	// (-1..1, -1..1, 1..-1, 1) -> frustum space (z in 0..100, for a 0.01..inf frustrum)
+	e.clip_to_view = function(p, out) {
+		assert(out.is_v4)
+		return out.set(p).transform(e.inv_proj)
+	}
+
+	e.view_to_world = function(p, out) {
+		assert(out.is_v3)
+		return out.set(_v4_0.set(p).transform(e.inv_view))
+	}
+
+	// z_clip is 1..-1 (near..far planes)
+	e.screen_to_view = function(x, y, z_clip, out) {
+		assert(out.is_v4)
+		return e.screen_to_clip(x, y, or(z_clip, 1), out).transform(e.inv_proj)
+	}
+
+	e.clip_to_world = function(p, out) {
+		assert(out.is_v3)
+		return out.set(e.clip_to_view(p, _v4_0).transform(e.inv_view))
 	}
 
 	e.screen_to_world = function(mx, my, out) {
-		let ray = e.screen_to_view(mx, my, -1, out)
-		ray.w = 0 // it's a (non-translatable) direction, not a point.
-		ray.transform(e.inv_view) // view space -> world space
-		return ray.normalize()
+		assert(out.is_v3)
+		return out.set(e.screen_to_clip(mx, my, 1, _v4_0).transform(e.inv_proj).transform(e.inv_view))
 	}
 
-	let _v4_0 = v4()
-
+	// return a line of unit length from camera position pointing towards (mx, my).
+	// the line can be directly intersected with a plane, and its delta() is
+	// the ray's direction vector.
 	e.raycast = function(mx, my, out) {
-		out = out || line3()
+		let ray = e.screen_to_world(mx, my, _v0).normalize()
+		assert(out.is_line3)
 		out[0].set(e.pos)
-		let ray = e.screen_to_world(mx, my, _v4_0)
 		out[1].set(e.pos).add(ray)
 		return out
 	}

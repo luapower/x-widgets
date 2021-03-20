@@ -71,13 +71,6 @@
 		gl.clear_all(r, g, b, [a=1], [depth=1])
 		pr|db|b|vao|fbo.free()
 
-	Space conversions
-
-		gl.world_to_screen(p, inv_view, proj, [out_v2+]) -> out_v2+
-		gl.screen_to_clip(x, y, z, [out_v4]) -> out_v4
-		gl.screen_to_view(x, y, z, inv_proj, [out_v4]) -> out_v4
-		gl.screen_to_world(mx, my, inv_proj, inv_view, [out_v4]) -> out_v4
-
 */
 
 {
