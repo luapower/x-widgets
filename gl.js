@@ -13,18 +13,19 @@
 		gl.[dyn_]<type>_buffer(data|capacity, [instance_divisor], [normalize]) -> [d]b
 			type: f32|u8|u16|u32|i8|i16|i32|v2|v3|v4|mat3|mat4
 		gl.[dyn_]mat4_instance_buffer(data|capacity) -> [d]b
-		gl.[dyn_]index_buffer(data|capacity, [u8arr|u16arr|u32arr]) -> [d]b
+		gl.[dyn_]index_buffer(data|capacity, [u8arr|u16arr|u32arr|max_idx]) -> [d]b
 
 		b.upload(in_arr, [offset=0], [len], [in_offset=0])
 		b.download(out_arr, [offset=0], [len], [out_offset=0])
 		b.set(in_b, [offset=0], [len], [in_offset=0])
-		b.arr_type, b.gl_type, b.n_components, b.instance_divisor, b.normalize
-		b.capacity, b.len
+		b.arr([data|len]) -> a
+		b.capacity b.len
+		b.arr_type b.gl_type b.n_components b.instance_divisor b.normalize b.for_index
 
 		db.buffer
-		db.grow(data | capacity)
-		db.grow_type(arr_type)
-		db.invalidate([offset, len])
+		db.grow_type(arr|[...]|u8arr|u16arr|u32arr|max_idx)
+		db.capacity db.len
+		db.arr_type db.n_components db.instance_divisor db.normalize db.for_index
 
 	VAOs
 
@@ -73,7 +74,7 @@
 
 */
 
-{
+(function() {
 
 // clearing ------------------------------------------------------------------
 
@@ -429,34 +430,57 @@ vao.free = function() {
 
 // VBOs ----------------------------------------------------------------------
 
-gl.buffer = function(data_or_cap, arr_type, n_components, instance_divisor, normalize, for_index) {
+function check_arr_type(arr, arr_type) {
+	if (!arr_type)
+		return arr.constructor
+	assert(arr instanceof arr_type, 'different arr_type {0}, wanted {1}', arr.constructor.name, arr_type.name)
+	return arr_type
+}
+
+function check_arr_nc(arr, nc) {
+	let arr_nc = arr.n_components
+	nc = or(nc, arr_nc)
+	assert(nc != null, 'n_components required')
+	assert(or(arr_nc, nc) == nc, 'different n_components {0}, wanted {1}', arr_nc, nc)
+	return nc
+}
+
+function check_arr_len(nc, arr, len, arr_offset) {
+	if (len == null)
+		if (arr.len != null) // dyn_arr
+			len = arr.len - arr_offset
+	if (len == null) {
+		len = arr.length / nc - arr_offset
+		assert(len == floor(len), 'array length not multiple of {0}', nc)
+	}
+	return max(0, len)
+}
+
+gl.buffer = function(data_or_cap, arr_type, nc, instance_divisor, normalize, for_index) {
 	assert(instance_divisor == null || instance_divisor == 1, 'NYI')
 	let gl = this
 	let b = gl.createBuffer()
 	let cap, len, arg
-	if (isnum(data_or_cap)) {
+	if (isnum(data_or_cap)) { // capacity, arr_type, ...
+		assert(arr_type, 'arr_type required')
+		assert(nc != null, 'n_components required')
 		cap = data_or_cap
 		len = 0
-		assert(arr_type, 'array type required')
-		assert(n_components != null)
-		arg = cap * n_components * arr_type.BYTES_PER_ELEMENT
+		arg = cap * nc * arr_type.BYTES_PER_ELEMENT
 	} else {
 		arg = data_or_cap
-		if (isarray(arg)) {
-			assert(arr_type, 'array type required')
+		if (isarray(arg)) { // [elements, ...], arr_type, ...
+			assert(arr_type, 'arr_type required')
 			arg = new arr_type(arg)
-		} else {
-			arr_type = arr_type || arg.constructor
-			assert(arg instanceof arr_type)
+		} else { // arr, [arr_type], ...
+			arr_type = check_arr_type(arg, arr_type)
 		}
-		if (n_components     == null) n_components     = assert(arg.n_components)
-		if (for_index        == null) for_index        = arg.for_index
-		if (instance_divisor == null) instance_divisor = arg.instance_divisor
-		cap = arg.length / n_components
+		nc = check_arr_nc(arg, nc)
+		cap = check_arr_len(nc, arg, null, 0)
 		len = cap
-		assert(cap == floor(cap), 'source array length not multiple of {0}', n_components)
 	}
-	b.gl_target = for_index && gl.ELEMENT_ARRAY_BUFFER || gl.ARRAY_BUFFER
+	b.for_index = for_index
+	b.gl_target = for_index ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER
 	gl.bindBuffer(b.gl_target, b)
 	gl.bufferData(b.gl_target, arg, gl.STATIC_DRAW)
 	b.capacity = cap
@@ -469,10 +493,10 @@ gl.buffer = function(data_or_cap, arr_type, n_components, instance_divisor, norm
 		|| arr_type ==   i8arr && gl.BYTE
 		|| arr_type ==  i16arr && gl.SHORT
 		|| arr_type ==  i32arr && gl.INT
-		|| assert(false, 'unsupported array type {0}', arr_type.name)
+		|| assert(false, 'unsupported arr_type {0}', arr_type.name)
 	b.arr_type = arr_type
 	b.gl = gl
-	b.n_components = n_components || 1
+	b.n_components = nc
 	b.instance_divisor = instance_divisor
 	b.normalize = normalize || false
 	return b
@@ -481,7 +505,7 @@ gl.buffer = function(data_or_cap, arr_type, n_components, instance_divisor, norm
 property(WebGLBuffer, 'len',
 	function() { return this._len },
 	function(len) {
-		assert(len <= this.capacity, 'buffer len exceeds capacity')
+		assert(len <= this.capacity, 'len exceeds capacity')
 		this._len = len
 	}
 )
@@ -508,27 +532,12 @@ gl.i32_instance_buffer  = function(data_or_cap) { return this.i32_buffer(data_or
 gl.u32_instance_buffer  = function(data_or_cap) { return this.u32_buffer(data_or_cap, 1) }
 gl.f32_instance_buffer  = function(data_or_cap) { return this.f32_buffer(data_or_cap, 1) }
 
-gl.index_arr_type = function(data_or_max_idx, arr_type) {
-	if (arr_type)
-		return arr_type
-	if (data_or_max_idx.BYTES_PER_ELEMENT) // typed array
-		return data_or_max_idx.constructor
-	else if (data_or_max_idx.max_index != null) // hint given
-		return data_or_max_idx.max_index
-	let max_idx
-	if (isnum(data_or_max_idx)) {
-		max_idx = data_or_max_idx
-	} else if (isarray(data_or_max_idx)) {
-		max_idx = 0
-		for (let idx of data_or_max_idx)
-			max_idx = max(max_idx, idx)
-	} else
-		assert(false)
-	return max_idx > 65535 && u32arr || max_idx > 255 && u16arr || u8arr
+function index_arr_type(data_or_cap, arr_type_or_max_idx) {
+	return dyn_arr.index_arr_type(or(arr_type_or_max_idx, or(data_or_cap, 0)))
 }
 
-gl.index_buffer = function(data_or_cap, arr_type) {
-	arr_type = gl.index_arr_type(data_or_cap, arr_type)
+gl.index_buffer = function(data_or_cap, arr_type_or_max_idx) {
+	let arr_type = index_arr_type(data_or_cap, arr_type_or_max_idx)
 	return this.buffer(data_or_cap, arr_type, 1, null, false, true)
 }
 
@@ -537,24 +546,32 @@ let buf = WebGLBuffer.prototype
 buf.arr = function(data_or_len) {
 	if (data_or_len == null)
 		data_or_len = this.len
+	let nc = this.n_components
 	if (isnum(data_or_len))
-		data_or_len = data_or_len * this.n_components
-	return new this.arr_type(data_or_len)
+		data_or_len = data_or_len * nc
+	else
+		check_arr_nc(data_or_len, nc)
+	let arr = new this.arr_type(data_or_len)
+	arr.n_components = this.n_components
+	return arr
 }
 
 buf.upload = function(in_arr, offset, len, in_offset) {
 	let gl = this.gl
 	let nc = this.n_components
-	if (isarray(in_arr))
+	if (isarray(in_arr)) { // [...], ...
 		in_arr = new this.arr_type(in_arr)
-	else
-		assert(in_arr instanceof this.arr_type)
+	} else { // arr, ...
+		check_arr_type(in_arr, this.arr_type)
+	}
+	check_arr_nc(in_arr, nc)
 	offset = offset || 0
 	in_offset = in_offset || 0
-	if (len == null)
-		len = in_arr.length / nc - in_offset
-
+	assert(offset >= 0)
+	assert(in_offset >= 0)
+	len = check_arr_len(nc, in_arr, len, in_offset)
 	let bpe = in_arr.BYTES_PER_ELEMENT
+
 	gl.bindBuffer(gl.COPY_READ_BUFFER, this)
 	gl.bufferSubData(gl.COPY_READ_BUFFER, offset * nc * bpe, in_arr, in_offset * nc, len * nc)
 
@@ -566,13 +583,16 @@ buf.upload = function(in_arr, offset, len, in_offset) {
 buf.download = function(out_arr, offset, len, out_offset) {
 	let gl = this
 	let nc = this.n_components
-	assert(out_arr instanceof this.arr_type)
+	check_arr_type(out_arr, this.arr_type)
+	check_arr_nc(out_arr, nc)
 	offset = offset || 0
 	out_offset = out_offset || 0
+	assert(offset >= 0)
+	assert(out_offset >= 0)
 	if (len == null)
-		len = out_arr.length / nc - out_offset
-
+		len = this.len - offset // source dictates len, dest must accomodate.
 	let bpe = out_arr.BYTES_PER_ELEMENT
+
 	gl.bindBuffer(gl.COPY_READ_BUFFER, this)
 	gl.getBufferSubData(gl.COPY_READ_BUFFER, offset * nc * bpe, out_arr, out_offset * nc, len * nc)
 
@@ -617,10 +637,12 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 		n_components: n_components,
 		instance_divisor: instance_divisor,
 		normalize: normalize,
+		for_index: for_index,
 		buffer: null,
 	}
 
-	db.grow_type = function(arr_type1) {
+	db.grow_type = function(arg) {
+		let arr_type1 = dyn_arr.index_arr_type(arg)
 		if (arr_type1.BYTES_PER_ELEMENT <= arr_type.BYTES_PER_ELEMENT)
 			return
 		if (this.buffer) {
@@ -635,7 +657,8 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 		this.arr_type = arr_type1
 	}
 
-	db.grow = function(cap, pow2) {
+	db._grow = function(cap, pow2) {
+		cap = max(0, cap)
 		if (!this.buffer || this.buffer.capacity < cap) {
 			if (pow2 !== false)
 				cap = nextpow2(cap)
@@ -655,19 +678,29 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 		this.buffer = null
 	}
 
-	if (data_or_cap != null)
+	property(db, 'capacity',
+		function() { return db.buffer && db.buffer.capacity || 0 }
+	)
+
+	property(db, 'len',
+		function() { return db.buffer && db.buffer.len || 0 },
+		function(len) {
+			len = max(0, len)
+			db._grow(len).buffer.len = len
+		}
+	)
+
+	if (data_or_cap != null) {
 		if (isnum(data_or_cap)) {
 			let cap = data_or_cap
-			db.grow(cap)
+			db._grow(cap)
 		} else {
 			let data = data_or_cap
 			let len = data.length / n_components
 			assert(len == floor(len), 'source array length not multiple of {0}', n_components)
 			db.buffer = gl.buffer(data, arr_type, n_components, instance_divisor, normalize, for_index)
 		}
-
-	property(db, 'capacity', () => db.buffer && db.buffer.capacity || 0)
-	property(db, 'len', () => db.buffer && db.buffer.len || 0)
+	}
 
 	return db
 }
@@ -694,9 +727,8 @@ gl.dyn_i32_instance_buffer  = function(data_or_cap) { return this.dyn_i32_buffer
 gl.dyn_u32_instance_buffer  = function(data_or_cap) { return this.dyn_u32_buffer(data_or_cap, 1) }
 gl.dyn_f32_instance_buffer  = function(data_or_cap) { return this.dyn_f32_buffer(data_or_cap, 1) }
 
-gl.dyn_index_buffer = function(data_or_cap, arr_type) {
-	let gl = this
-	arr_type = gl.index_arr_type(data_or_cap, arr_type)
+gl.dyn_index_buffer = function(data_or_cap, arr_type_or_max_idx) {
+	let arr_type = index_arr_type(data_or_cap, arr_type_or_max_idx)
 	return this.dyn_buffer(arr_type, data_or_cap, 1, null, false, true)
 }
 
@@ -1323,4 +1355,4 @@ fbo.clear_depth_stencil = function(depth, stencil) {
 	gl.clearBufferfi(gl.DEPTH_STENCIL, 0, or(depth, 1), or(stencil, 0))
 }
 
-} // module scope.
+})() // module scope.

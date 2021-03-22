@@ -7,7 +7,7 @@
 <script src=3d.js></script>
 <script src=earcut.js></script>
 <script src=gl.js></script>
-<script src=skp.js></script>
+<script src=x-3d-renderer.js></script>
 </head>
 <body>
 <canvas style="border: 1px solid black" id=canvas width=640 height=640></canvas>
@@ -117,17 +117,16 @@ let _p = v3()
 
 let face_id = 1 // gotta start at 1...
 for (let face of faces) {
-	face.tris = []
-	face.triangulate(face.tris)
 	let no = face.plane().normal
 	let p0 = face.get_point(0, _p)
-	for (let i = 0, n = face.tris.length; i < n; i++) {
-		triangle_pis.push(face[face.tris[i]])
-		let p = face.get_point(face.tris[i])
+	let tris = face.triangles()
+	for (let i = 0, n = tris.length; i < n; i++) {
+		triangle_pis.push(face[tris[i]])
+		let p = face.get_point(tris[i])
 		triangles.push(p.x, p.y, p.z)
 		face_ids.push(face_id)
 		normals.push(no.x, no.y, no.z)
-		let uv = face.uv_at(face.tris[i], face.uvm, v2(1, 1))
+		let uv = face.uv_at(tris[i], face.uvm, v2(1, 1))
 		uvs.push(uv.x, uv.y)
 		selected.push((triangles.length - 4) % 12 >= 6 ? 1 : 0)
 	}
@@ -137,8 +136,8 @@ for (let face of faces) {
 function scale_texture(tex) {
 	let pi = 0
 	for (let face of faces) {
-		for (let i = 0; i < face.tris.length; i++) {
-			let uv = face.uv_at(face.tris[i], face.uvm, tex.uv)
+		for (let i = 0, tris = face.triangles(), n = tris.length; i < n; i++) {
+			let uv = face.uv_at(tris[i], face.uvm, tex.uv)
 			uv.to_array(uvs, 2*pi)
 			pi++
 		}
@@ -398,7 +397,6 @@ skybox = gl.skybox({
 })
 
 let axes = gl.axes()
-
 axes.upload_model(axes.add_instance(), mat4f32())
 
 function draw_all(sdm_vao) {

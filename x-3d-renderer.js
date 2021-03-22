@@ -1,13 +1,13 @@
 /*
 
-	WebGL 2 renderer for x-modeleditor.
+	WebGL 2 renderer for a 3D model editor.
 	Written by Cosmin Apreutesei.
 
 	Based on tutorials from learnopengl.com.
 
 */
 
-{
+(function() {
 
 let gl = WebGL2RenderingContext.prototype
 
@@ -358,22 +358,27 @@ gl.fat_line_vao = function() {
 	let pb = gl.dyn_v3_buffer() // 4 points per line.
 	let qb = gl.dyn_v3_buffer() // 4 "other-line-endpoint" points per line.
 	let db = gl.dyn_i8_buffer() // one direction sign per vertex.
-	let ib = gl.dyn_index_buffer(null, u8arr) // 1 quad = 2 triangles = 6 points per line.
+	let ib = gl.dyn_index_buffer() // 1 quad = 2 triangles = 6 points per line.
+
+	let pa = dyn_f32arr(null, 3)
+	let qa = dyn_f32arr(null, 3)
+	let da = dyn_f32arr(null, 1)
+	let ia = dyn_u32arr(null, 1)
 
 	vao.set_points = function(lines) {
 
 		let vertex_count = 4 * lines.length
 		let index_count  = 6 * lines.length
-		pb.grow(vertex_count)
-		qb.grow(vertex_count)
-		db.grow(vertex_count)
-		ib.grow_type(gl.index_arr_type(index_count))
-		ib.grow(index_count)
 
-		let ps = pb.array
-		let qs = qb.array
-		let ds = db.array
-		let is = ib.array
+		pa.len = vertex_count
+		qa.len = vertex_count
+		da.len = vertex_count
+		ia.len = index_count
+
+		let ps = pa.data
+		let qs = qa.data
+		let ds = da.data
+		let is = ia.data
 
 		let i = 0
 		let j = 0
@@ -438,10 +443,13 @@ gl.fat_line_vao = function() {
 			j += 6
 		}
 
-		pb.invalidate(0, i)
-		qb.invalidate(0, i)
-		db.invalidate(0, i)
-		ib.invalidate(0, j)
+		ib.grow_type(vertex_count-1)
+
+		pb.len = ps.len; pb.buffer.upload(ps)
+		qb.len = qs.len; qb.buffer.upload(qs)
+		db.len = bs.len; db.buffer.upload(ds)
+		ib.len = is.len; ib.buffer.upload(is)
+
 	}
 
 	vao.draw = function() {
@@ -863,11 +871,10 @@ gl.axes = function(opt) {
 	let model = gl.dyn_mat4_instance_buffer()
 
 	e.add_instance = function() {
-		let i = model.len
-		model.grow(i + 1)
+		model.len++
 		line_vao.set_attr('model', model.buffer)
 		dash_vao.set_attr('model', model.buffer)
-		return i
+		return model.len-1
 	}
 
 	e.upload_model = function(i, m) {
@@ -891,4 +898,4 @@ gl.axes = function(opt) {
 	return e
 }
 
-} // module scope.
+})() // module scope.

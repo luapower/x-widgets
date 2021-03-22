@@ -3,28 +3,29 @@
 	3D math lib.
 	Written by Cosmin Apreutesei.
 
-	Code from three.js and glMatrix, MIT License.
+	Code adapted from three.js and glMatrix, MIT License.
 
 	v2 [x, y]
 		* add sub mul div
 		set(x,y|v2|v3|v4) assign sets clone equals from[_v2|_v3|_v4]_array to[_v2]_array
-		len len2 set_len normalize
+		len[2] set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
+		distance[2]_to
 		transform(mat3) rotate
 
 	v3 [x, y, z]
 		* add sub mul div cross zero one
 		set(x,y,z|v2,z|v3|v4|mat4) assign sets clone equals
 		from[_v3|_v4]_array to[_v3]_array from_rgb from_rgba from_hsl
-		len len2 set_len normalize
+		len[2] set_len normalize
 		add adds sub subs negate mul muls div divs min max dot cross
-		angle_to distance_to distance2_to
+		angle_to distance[2]_to
 		transform(mat3|mat4|quaternion) rotate
 
 	v4 [x, y, z, w]
 		* add sub mul div
 		set assign sets clone equals from[_v4]_array to[_v4]_array from_rgb from_rgba from_hsl
-		len len2 set_len normalize
+		len[2] set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
 		transform(mat4)
 
@@ -44,15 +45,16 @@
 	quat [x, y, z, w]
 		set assign reset clone equals from[_quat]_array to[_quat]_array
 		set_from_axis_angle set_from_rotation_matrix set_from_unit_vectors
-		len2 len normalize rotate_towards conjugate invert
+		len[2] normalize rotate_towards conjugate invert
 		angle_to dot mul premul slerp
 
 	plane[3] {constant:, normal:}
-		set assign clone equals normalize negate
+		set assign clone equals
 		set_from_normal_and_coplanar_point set_from_coplanar_points set_from_poly
+		normalize negate
 		distance_to_point project_point
 		intersect_line intersects_line
-		complanar_point transform translate
+		complanar_point translate
 
 	triangle3 [a, b, c]
 		* normal barycoord contains_point uv is_front_facing
@@ -61,7 +63,7 @@
 
 	poly3
 		% point_count get_point
-		project_xy is_convex_quad triangulate
+		plane project_xy is_convex_quad triangle_count triangles triangle contains_point
 
 	line3 [p0, p1]
 		set clone equals
@@ -77,10 +79,10 @@
 
 */
 
+(function() {
+
 NEAR = 1e-5 // distance epsilon (tolerance)
 FAR  = 1e3  // skybox distance from center
-
-{
 
 // v2 ------------------------------------------------------------------------
 
@@ -232,6 +234,19 @@ let v2_class = class v extends Array {
 		)
 	}
 
+	distance2_to(v) {
+		let dx = this[0] - v[0]
+		let dy = this[1] - v[1]
+		return (
+			dx ** 2 +
+			dy ** 2
+		)
+	}
+
+	distance_to(v) {
+		return sqrt(this.distance2_to(v))
+	}
+
 	transform(arg) {
 		let x = this[0]
 		let y = this[1]
@@ -264,6 +279,7 @@ property(v2_class, 'x', function() { return this[0] }, function(v) { this[0] = v
 property(v2_class, 'y', function() { return this[1] }, function(v) { this[1] = v })
 
 v2 = function v2(x, y) { return new v2_class(x, y) }
+v2.class = v2_class
 
 v2.add = function add(a, b, s, out) {
 	s = or(s, 1)
@@ -293,7 +309,7 @@ v2.div = function div(a, b, out) {
 // v3 ------------------------------------------------------------------------
 
 // hsl is in (0..360, 0..1, 0..1); rgb is (0..1, 0..1, 0..1)
-let h2rgb = function(m1, m2, h) {
+function h2rgb(m1, m2, h) {
 	if (h < 0) h = h + 1
 	if (h > 1) h = h - 1
 	if (h * 6 < 1)
@@ -306,8 +322,7 @@ let h2rgb = function(m1, m2, h) {
 		return m1
 }
 
-
-let _set_hsl = function(self, h, s, L) {
+function set_hsl(self, h, s, L) {
 	h = h / 360
 	let m2 = L <= .5 ? L * (s + 1) : L + s - L * s
 	let m1 = L * 2 - m2
@@ -402,7 +417,7 @@ let v3_class = class v extends Array {
 	}
 
 	from_hsl(h, s, L) {
-		_set_hsl(this, h, s, L)
+		set_hsl(this, h, s, L)
 		return this
 	}
 
@@ -591,6 +606,7 @@ property(v3_class, 'y', function() { return this[1] }, function(v) { this[1] = v
 property(v3_class, 'z', function() { return this[2] }, function(v) { this[2] = v })
 
 v3 = function v3(x, y, z) { return new v3_class(x, y, z) }
+v3.class = v3_class
 
 v3.cross = function(a, b, out) {
 	let ax = a[0]
@@ -755,7 +771,7 @@ let v4_class = class v extends Array {
 	}
 
 	from_hsl(h, s, L, a) {
-		_set_hsl(this, h, s, L)
+		set_hsl(this, h, s, L)
 		this[3] = or(a, 1)
 		return this
 	}
@@ -892,6 +908,7 @@ property(v4_class, 'z', function() { return this[2] }, function(v) { this[2] = v
 property(v4_class, 'w', function() { return this[3] }, function(v) { this[3] = v })
 
 v4 = function v4(x, y, z, w) { return new v4_class(x, y, z, w) }
+v4.class = v4_class
 
 v4.add = function add(a, v, s, out) {
 	s = or(s, 1)
@@ -1137,6 +1154,7 @@ let mat3_type = function(super_class, super_args) {
 	property(mat3_class, 'e33', function() { return this[8] }, function(v) { this[8] = v })
 
 	let mat3 = function() { return new mat3_class() }
+	mat3.class = mat3_class
 
 	mat3.mul = function mul(a, b, out) {
 
@@ -1677,6 +1695,7 @@ let mat4_type = function(super_class, super_args) {
 	property(mat4_class, 'e44', function() { return this[15] }, function(v) { this[15] = v })
 
 	let mat4 = function(elements) { return new mat4_class(elements) }
+	mat4.class = mat4_class
 
 	mat4.mul = function mul(a, b, out) {
 
@@ -2006,6 +2025,8 @@ property(quat_class, 'z', function() { return this[2] }, function(v) { this[2] =
 property(quat_class, 'w', function() { return this[3] }, function(v) { this[3] = v })
 
 quat = function(x, y, z, w) { return new quat_class(x, y, z, w) }
+quat.class = quat_class
+quat3 = quat
 
 // from http://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/code/index.htm
 quat.mul = function mul(a, b, out) {
@@ -2024,7 +2045,7 @@ quat.mul = function mul(a, b, out) {
 	return out
 }
 
-let _q0 = quat()
+let _q0 = quat() // for v3
 
 // plane ---------------------------------------------------------------------
 
@@ -2142,14 +2163,6 @@ let plane_class = class plane {
 		return out.set(this.normal).muls(-this.constant)
 	}
 
-	transform(m, normal_mat) {
-		normal_mat = normal_mat || _m3_1.get_normal_matrix(m)
-		let ref_point = this.coplanar_point(_v1).transform(m)
-		let normal = this.normal.transform(normal_mat).normalize()
-		this.constant = -ref_point.dot(normal)
-		return this
-	}
-
 	translate(offset) {
 		this.constant -= offset.dot(this.normal)
 		return this
@@ -2160,6 +2173,7 @@ let plane_class = class plane {
 plane_class.prototype.is_plane = true
 
 plane = function(normal, constant) { return new plane_class(normal, constant) }
+plane.class = plane_class
 plane3 = plane // so you can do `let plane = plane3()`.
 
 // triangle3 -----------------------------------------------------------------
@@ -2275,6 +2289,7 @@ let triangle3_class = class triangle3 extends Array {
 triangle3_class.prototype.is_triangle3 = true
 
 triangle3 = function(a, b, c) { return new triangle3_class(a, b, c) }
+triangle3.class = triangle3_class
 
 triangle3.normal = function normal(a, b, c, out) {
 	out.set(c).sub(b)
@@ -2355,7 +2370,6 @@ let poly3p = poly3_class.prototype
 poly3p.is_poly3 = true
 
 poly3 = function(opt, elements) { return new poly3_class(opt, elements) }
-
 poly3.class = poly3_class
 
 poly3.subclass = function(methods) {
@@ -2385,29 +2399,40 @@ poly3p.modes = {
 }
 
 poly3p.plane = function() {
-	if (!this._plane) {
-		this._plane = plane()
-		this._plane.set_from_poly(this)
+	let pl = this._plane
+	if (!this._plane_valid) {
+		if (!pl) {
+			pl = plane()
+			this._plane = pl
+		}
+		pl.set_from_poly(this)
+		this._plane_valid = true
 	}
-	return this._plane
+	return pl
 }
 
-// project on the xy plane for triangulation which happens in 2D.
-let xy_normal = v3(0, 0, 1)
+// project poly3 on the xy plane resulting in a poly2 with the same interface
+// as a poly3. use the poly2 for triangulation and finding its regions.
 poly3p.project_xy = function() {
-	if (!this._project_xy) {
-		let xy_quat = quat().set_from_unit_vectors(this.plane().normal, xy_normal)
-		let pp = new this.__proto__.constructor(this)
+	let pp = this._project_xy
+	if (this._project_xy_valid)
+		return pp
+	let xy_quat = this._xy_quat
+	if (!pp) {
+ 		pp = new this.__proto__.constructor(this)
+		xy_quat = quat()
+		this._project_xy = pp
+		this._xy_quat = xy_quat
+		pp.is_projected = true
 		let point_count = this.point_count
 		let get_point = this.get_point
 		pp.get_point = function(i, _p) {
-			let p = get_point.call(this, i, _p)
-			p.transform(xy_quat)
-			return p
+			return get_point.call(this, i, _p).transform(xy_quat)
 		}
-		this._project_xy = pp
 	}
-	return this._project_xy
+	xy_quat.set_from_unit_vectors(this.plane().normal, v3.z_axis)
+	this._project_xy_valid = true
+	return pp
 }
 
 // check if a polygon is a convex quad (the most common case for trivial triangulation).
@@ -2460,74 +2485,263 @@ poly3p.triangle_count = function() {
 }
 
 {
-	let ps = []
-	poly3p.triangulate = function(out) {
-		let pn = this.point_count()
-		if (pn == 3) { // triangle: nothing to do, push points directly.
-			out[0] = 0
-			out[1] = 1
-			out[2] = 2
-		} else if (pn == 4 && this.is_convex_quad()) { // convex quad: most common case.
-			// triangle 1
-			out[0] = 2
-			out[1] = 3
-			out[2] = 0
-			// triangle 2
-			out[3] = 0
-			out[4] = 1
-			out[5] = 2
-		} else {
-			ps.length = pn * 2
-			let pp = this.project_xy()
-			for (let i = 0; i < pn; i++) {
-				let p = pp.get_point(i)
-				ps[2*i+0] = p.x
-				ps[2*i+1] = p.y
-			}
-			let tri_pis = earcut2(ps, null, 2)
-			assert(tri_pis.length == this.triangle_count())
-			if (isarray(out))
-				out.extend(tri_pis)
-			else // typed array
-				out.set(tri_pis)
+let ps = []
+poly3p.triangles = function() {
+	if (this._triangles_valid)
+		return this._triangles
+	let tri_count = this.triangle_count()
+	let out = this._triangles
+	let pn = this.point_count()
+	if (pn == 3) { // triangle: nothing to do, push points directly.
+		if (!out)
+			out = [0, 0, 0]
+		else if (out.length != 3)
+			out.length = 3
+		out[0] = 0
+		out[1] = 1
+		out[2] = 2
+	} else if (pn == 4 && this.is_convex_quad()) { // convex quad: most common case.
+		if (!out)
+			out = [0, 0, 0, 0, 0, 0]
+		else if (out.length != 6)
+			out.length = 6
+		// triangle 1
+		out[0] = 2
+		out[1] = 3
+		out[2] = 0
+		// triangle 2
+		out[3] = 0
+		out[4] = 1
+		out[5] = 2
+	} else {
+		ps.length = pn * 2
+		let pp = this.project_xy()
+		for (let i = 0; i < pn; i++) {
+			let p = pp.get_point(i)
+			ps[2*i+0] = p.x
+			ps[2*i+1] = p.y
 		}
-		return out
+		out = earcut2(ps, null, 2)
+		assert(out.length == tri_count)
 	}
+	this._triangles = out
+	this._triangles_valid = true
+	return out
+}
+}
+
+poly3p.triangle = function(ti, out) {
+	assert(out.is_triangle3)
+	let tris = this.triangles()
+	this.get_point(tris[3*ti+0], out[0])
+	this.get_point(tris[3*ti+1], out[1])
+	this.get_point(tris[3*ti+2], out[2])
+	return out
+}
+
+{
+let _tri = triangle3()
+poly3p.contains_point = function(p) {
+	for (let ti = 0, tn = this.triangle_count(); ti < tn; ti++)
+		if (this.triangle(ti, _tri).contains_point(p))
+			return true
+	return false
+}
 }
 
 // (tex_uv) are 1 / (texture's (u, v) in world space).
 {
-	let _p0 = v3()
-	let _p1 = v3()
-	let p = v2()
-	poly3p.uv_at = function(i, uvm, tex_uv) {
-		let pp = this.project_xy()
-		let p0 = pp.get_point(0, _p0)
-		let pi = pp.get_point(i, _p1)
-		pi.sub(p0)
-		p[0] = pi[0] * tex_uv[0]
-		p[1] = pi[1] * tex_uv[1]
-		let px = p.x
-		let py = p.y
-		if (uvm)
-			p.transform(uvm)
-		return p
-	}
+let _p0 = v3()
+let _p1 = v3()
+let p = v2()
+poly3p.uv_at = function(i, uvm, tex_uv) {
+	let pp = this.project_xy()
+	let p0 = pp.get_point(0, _p0)
+	let pi = pp.get_point(i, _p1)
+	pi.sub(p0)
+	p[0] = pi[0] * tex_uv[0]
+	p[1] = pi[1] * tex_uv[1]
+	let px = p.x
+	let py = p.y
+	if (uvm)
+		p.transform(uvm)
+	return p
+}
 
-	poly3p.uvs = function(uvm, tex_uv, out) {
-		for (let i = 0; i < this.point_count(); i++) {
-			let uv = this.uv_at(i, uvm, tex_uv)
-			out[2*i+0] = uv[0]
-			out[2*i+1] = uv[1]
+poly3p.uvs = function(uvm, tex_uv, out) {
+	for (let i = 0, n = this.point_count(); i < n; i++) {
+		let uv = this.uv_at(i, uvm, tex_uv)
+		out[2*i+0] = uv[0]
+		out[2*i+1] = uv[1]
+	}
+	return out
+}
+}
+
+poly3p.intersect_line = function(line, face) {
+	let plane = e.face_plane(face)
+	let d1 = plane.distanceToPoint(line.start)
+	let d2 = plane.distanceToPoint(line.end)
+	if ((d1 < -NEARD && d2 > NEARD) || (d2 < -NEARD && d1 > NEARD)) {
+		let int_p = plane.intersectLine(line, v3())
+		if (int_p) {
+			int_p.face = face
+			int_p.snap = 'line_plane_intersection'
+			return int_p
 		}
-		return out
 	}
 }
+
+{
+	let _p = v3()
+	let ht = []
+	poly3.intersect_line = function(line, line_start_in_front_of_plane) {
+		let p1, p2
+		if (line_start_in_front_of_plane) {
+			p1 = line.start
+			p2 = line.end
+		} else {
+			p1 = line.end
+			p2 = line.start
+		}
+		let line_dir = _p.copy(p2).sub(p1).setLength(1)
+	}
+}
+
 
 poly3p.invalidate = function() {
-	this._plane = null
-	this._project_xy = null
+	this._plane_valid = false
+	this._project_xy_valid = false
+	this._triangles_valid = false
 }
+
+/*
+// region-finding algorithm --------------------------------------------------
+
+// The algorithm below is O(n log n) and it's from the paper:
+//   "An optimal algorithm for extracting the regions of a plane graph"
+//   X.Y. Jiang and H. Bunke, 1992.
+
+// return a number from the range [0..4] which is monotonic
+// in the angle that the input vector makes against the x axis.
+function v2_pseudo_angle(dx, dy) {
+	let p = dx / (abs(dx) + abs(dy))  // -1..1 increasing with x
+	return dy < 0 ? 3 + p : 1 - p     //  2..4 or 0..2 increasing with x
+}
+
+poly3_class.regions = function() {
+
+	if (this._regions)
+		return this._regions
+
+	let pp = this.project_xy()
+
+	// phase 1: find all wedges.
+
+	// step 1+2: make pairs of directed edges from all the edges and compute
+	// their angle-to-horizontal so that they can be then sorted by that angle.
+	let edges = [] // [[p1i, p2i, angle], ...]
+	let p1 = v3()
+	let p2 = v3()
+	for (let i = 0, n = pp.point_count(); i < n; i++) {
+		let p1i = i
+		let p2i = (i+1) % n
+		pp.get_point(p1i, p1)
+		pp.get_point(p2i, p2)
+		edges.push(
+			[p1i, p2i, v2_pseudo_angle(p2[0] - p1[0], p2[1] - p1[1])],
+			[p2i, p1i, v2_pseudo_angle(p1[0] - p2[0], p1[1] - p2[1])])
+	}
+
+	// step 3: sort by edges by (p1, angle).
+	edges.sort(function(e1, e2) {
+		if (e1[0] == e2[0])
+			return e1[2] < e2[2] ? -1 : (e1[2] > e2[2] ? 1 : 0)
+		else
+			return e1[0] < e2[0] ? -1 : 1
+	})
+
+	// for (let e of edges) { print('e', e[0]+1, e[1]+1) }
+
+	// step 4: make wedges from edge groups formed by edges with the same p1.
+	let wedges = [] // [[p1i, p2i, p3i, used], ...]
+	let wedges_first_pi = edges[0][1]
+	for (let i = 0; i < edges.length; i++) {
+		let edge = edges[i]
+		let next_edge = edges[i+1]
+		let same_group = next_edge && edge[0] == next_edge[0]
+		if (same_group) {
+			wedges.push([edge[1], edge[0], next_edge[1], false])
+		} else {
+			wedges.push([edge[1], edge[0], wedges_first_pi, false])
+			wedges_first_pi = next_edge && next_edge[1]
+		}
+	}
+
+	// for (let w of wedges) { print('w', w[0]+1, w[1]+1, w[2]+1) }
+
+	// phase 2: group wedges into regions.
+
+	// step 1: sort wedges by (p1, p2) so we can binsearch them by the same key.
+	wedges.sort(function(w1, w2) {
+		if (w1[0] == w2[0])
+			return w1[1] < w2[1] ? -1 : (w1[1] > w2[1] ? 1 : 0)
+		else
+			return w1[0] < w2[0] ? -1 : 1
+	})
+
+	// for (let w of wedges) { print('w', w[0]+1, w[1]+1, w[2]+1) }
+
+	// step 2: mark all wedges as unused (already did on construction).
+	// step 3, 4, 5: find contiguous wedges and group them into regions.
+	// NOTE: the result also contans the outer region which goes clockwise
+	// while inner regions go anti-clockwise.
+	let regions = [] // [[p1i, p2i, ...], ...]
+	let k = [0, 0] // reusable (p1i, p2i) key for binsearch.
+	function cmp_wedges(w1, w2) { // binsearch comparator on wedge's (p1i, p2i).
+		return w1[0] == w2[0] ? w1[1] < w2[1] : w1[0] < w2[0]
+	}
+	for (let i = 0; i < wedges.length; i++) {
+		let w0 = wedges[i]
+		if (w0[3])
+			continue // skip wedges marked used
+		region = [w0[1]]
+		regions.push(region)
+		k[0] = w0[1]
+		k[1] = w0[2]
+		while (1) {
+			let i = wedges.binsearch(k, cmp_wedges)
+			let w = wedges[i]
+			region.push(w[1])
+			w[3] = true // mark used so we can skip it
+			if (w[1] == w0[0] && w[2] == w0[1]) // cycle complete.
+				break
+			k[0] = w[1]
+			k[1] = w[2]
+		}
+	}
+
+	// for (let r of regions) { print('r', r.map(i => i+1)) }
+
+	this._regions = regions
+	return regions
+}
+
+// TODO: redo this test with a poly3
+function test_plane_graph_regions() {
+	let points = [
+		v3(0, -5, 0),
+		v3(-10, 0, 0), v3(10, 0, 0), v3(-10, 5, 0), v3(10, 5, 0),
+		//v3(-5, 1, 0), v3(5,  1, 0), v3(-5, 4, 0), v3(5, 4, 0),
+		//v3(0, -1, 0), v3(1, -2, 0),
+	]
+	let get_point = function(i, out) { out.copy(points[i]); return out }
+	let lines  = [0,1, 0,2,  1,2, 1,3, 2,4, 3,4,  ] // 5,6, 5,7, 6,8, 7,8,  0,9, 9,10]
+	let rt = plane_graph_regions(v3(0, 0, 1), get_point, lines)
+	for (let r of rt) { print(r.map(i => i+1)) }
+}
+// test_plane_graph_regions()
+*/
 
 // line3 ---------------------------------------------------------------------
 
@@ -2668,7 +2882,7 @@ line3 = function(p1, p2) { return new line3_class(p1, p2) }
 	let get_point_from_points = function(points, pi, out) {
 		return out.from_v3_array(points, pi)
 	}
-	function compute_smooth_mesh_normals(opt) {
+	compute_smooth_mesh_normals = function(opt) {
 		let points = opt.points
 		let tpis = opt.triangle_point_indices
 		let len = or(opt.len, tpis && tpis.length)
@@ -2714,7 +2928,7 @@ line3 = function(p1, p2) { return new line3_class(p1, p2) }
 let _v4_0 = v4() // camera
 let _v4_1 = v4() // camera
 
-function camera(e) {
+camera = function(e) {
 	e = e || {}
 
 	e.pos = e.pos || v3(3, 1, 10)
@@ -2817,9 +3031,11 @@ function camera(e) {
 	}
 
 	e.clip_to_screen = function(p, out) {
-		assert(out.is_v2)
+		assert(out.is_v2 || out.is_v3)
 		out[0] = round(( p[0] + 1) * e.viewport_w / 2)
 		out[1] = round((-p[1] + 1) * e.viewport_h / 2)
+		if (out.is_v3)
+			out[2] = 0
 		return out
 	}
 
@@ -2883,9 +3099,22 @@ function camera(e) {
 		return out
 	}
 
+	let _v2_0 = v2()
+	let _v2_1 = v2()
+
+	e.screen_distance2 = function(p1, p2) {
+		let p = e.world_to_screen(p1, _v2_0)
+		let q = e.world_to_screen(p2, _v2_1)
+		return p.distance2(q)
+	}
+
+	e.screen_distance = function(p1, p2) {
+		return sqrt(e.distance2(p1, p2))
+	}
+
 	return e
 }
 
 camera3 = camera // so you can do `let camera = camera3()`.
 
-} // module scope.
+})() // module scope.

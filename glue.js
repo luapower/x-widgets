@@ -70,7 +70,11 @@
 		attr(t, k[, cons])
 		memoize(f)
 	typed arrays:
-		f32arr i8arr u8arr i16arr u16arr i32arr u32arr
+		[dyn_][f32|i8|u8|i16|u16|i32|u32]arr(arr|[...]|capacity, [n_components])
+			set(in_arr, [offset=0], [len], [in_offset=0])
+			get(out_arr, [offset=0], [len], [out_offset=0]) -> out_arr
+			invalidate([offset=0], [len])
+			grow_type(arr_type|max_index|[...]|arr)
 	events:
 		events_mixin(o)
 	timestamps:
@@ -432,12 +436,34 @@ u16arr = Uint16Array
 i32arr = Int32Array
 u32arr = Uint32Array
 
+function max_index_from_array(a) {
+	if (a.max_index != null) // hint
+		return a.max_index
+	let max_idx = 0
+	for (let idx of a)
+		max_idx = max(max_idx, idx)
+	return max_idx
+}
+
+function arr_type_from_max_index(max_idx) {
+	return max_idx > 65535 && u32arr || max_idx > 255 && u16arr || u8arr
+}
+
+// for inferring the data type of gl.ELEMENT_ARRAY_BUFFER VBOs.
+function index_arr_type(arg) {
+	if (isnum(arg)) // max_idx
+		return arr_type_from_max_index(arg)
+	if (isarray(arg)) // [...]
+		return arr_type_from_max_index(max_index_from_array(arg))
+	if (arg.BYTES_PER_ELEMENT) // arr | arr_type
+		return arg.constructor.prototype == arg.__proto__ ? arg.constructor : arg
+	return assert(arg, 'arr_type required')
+}
+
 class dyn_arr_class {
 
 	constructor(arr_type, init_data_or_cap, n_components) {
 		this.arr_type = arr_type
-		this.capacity = 0
-		this._len = 0
 		this.n_components = n_components || 1
 		this.inv_n_components = 1 / this.n_components
 		this.data = null
@@ -445,41 +471,48 @@ class dyn_arr_class {
 		this.invalid_offset1 = null
 		this.invalid_offset2 = null
 
-		if (init_data_or_cap != null)
+		if (init_data_or_cap != null) {
 			if (isnum(init_data_or_cap)) {
 				let cap = init_data_or_cap
-				this.grow(cap, false)
-			} else {
+				this._grow(cap, false)
+			} else if (init_data_or_cap) {
 				let data = init_data_or_cap
 				let data_len = data.length * this.inv_n_components
 				assert(data_len == floor(data_len),
 					'source array length not multiple of {0}', this.n_components)
 				this.data = data
-				this._len = data_len
+				this.data.len = data_len
 			}
+		}
 
 	}
 
-	grow(cap, pow2) {
-		if (this.capacity < cap) {
+	_grow(cap, pow2) {
+		cap = max(0, cap)
+		if (!this.data || this.capacity < cap) {
 			if (pow2 !== false)
 				cap = nextpow2(cap)
 			let data = new arr_type(cap * this.n_components)
+			data.n_components = this.n_components
+			data.len = this.len
 			if (this.data)
 				data.set(this.data)
 			this.data = data
-			this.capacity = cap
 		}
 		return this
 	}
 
-	grow_type(arr_type1) {
+	grow_type(arg) {
+		let arr_type1 = index_arr_type(arg)
 		if (arr_type1.BYTES_PER_ELEMENT <= this.arr_type.BYTES_PER_ELEMENT)
 			return
 		if (this.data) {
+			let this_len = this.len
 			let data1 = new arr_type1(this.capacity)
-			for (let i = 0, n = this._len * this.n_components; i < n; i++)
+			for (let i = 0, n = this_len * this.n_components; i < n; i++)
 				data1[i] = this.data[i]
+			data1.n_components = this.n_components
+			data1.len = this_len
 			this.data = data1
 		}
 		this.arr_type = arr_type1
@@ -500,7 +533,7 @@ class dyn_arr_class {
 		offset = offset || 0
 		assert(offset >= 0, 'offset out of range')
 
-		this._set_len(max(this._len, offset + len))
+		this._set_len(max(this.len, offset + len))
 		this.data.set(data, offset)
 		this.invalidate(offset, len)
 
@@ -509,12 +542,14 @@ class dyn_arr_class {
 
 	get(out, offset, len, out_offset) {
 
+		let this_len = this.len
+
 		// check/clamp/slice source.
 		offset = offset || 0
-		assert(offset >= 0 && offset <= this._len, 'offset out of range')
-		len = clamp(or(len, 1/0), 0, this._len - offset)
+		assert(offset >= 0 && offset <= this_len, 'offset out of range')
+		len = clamp(or(len, 1/0), 0, this_len - offset)
 		let data = this.data
-		if (offset != 0 || len != this._len)
+		if (offset != 0 || len != this_len)
 			data = data.subarray(offset * this.n_components, (offset + len) * this.n_components)
 
 		if (data)
@@ -525,8 +560,7 @@ class dyn_arr_class {
 
 	_set_len = function(len) {
 		len = max(0, len)
-		this.grow(len)
-		this._len = len
+		this._grow(len).data.len = len
 		if (this.invalid)
 			this.invalid_offset2 = max(this.invalid_offset2, len)
 	}
@@ -540,14 +574,19 @@ class dyn_arr_class {
 		this.invalid = true
 		this.invalid_offset1 = o1
 		this.invalid_offset2 = o2
-		this._len = max(o2, this._len)
+		if (this.data)
+			this.data.len = max(o2, this.len)
 		return this
 	}
 
 }
 
+property(dyn_arr_class, 'capacity',
+	function() { return this.data ? this.data.length * this.inv_n_components : 0 },
+)
+
 property(dyn_arr_class, 'len',
-	function() { return this._len },
+	function() { return this.data ? this.data.len : 0 },
 	function(len) { this._set_len(len) }
 )
 
@@ -555,20 +594,21 @@ function dyn_arr(arr_type, init_cap, n_components) {
 	return new dyn_arr_class(arr_type, init_cap, n_components)
 }
 
-{
-let dyn_arr_func = function(arr_type) {
-	return function(init_cap, n_components) {
-		return new dyn_arr_class(arr_type, init_cap, n_components)
-	}
-}
+dyn_arr.index_arr_type = index_arr_type
 
-dyn_f32arr = dyn_arr_func(Float32Array)
-dyn_i8arr  = dyn_arr_func(Int8Array)
-dyn_u8arr  = dyn_arr_func(Uint8Array)
-dyn_i16arr = dyn_arr_func(Int16Array)
-dyn_u16arr = dyn_arr_func(Uint16Array)
-dyn_i32arr = dyn_arr_func(Int32Array)
-dyn_u32arr = dyn_arr_func(Uint32Array)
+{
+	let dyn_arr_func = function(arr_type) {
+		return function(init_cap, n_components) {
+			return new dyn_arr_class(arr_type, init_cap, n_components)
+		}
+	}
+	dyn_f32arr = dyn_arr_func(Float32Array)
+	dyn_i8arr  = dyn_arr_func(Int8Array)
+	dyn_u8arr  = dyn_arr_func(Uint8Array)
+	dyn_i16arr = dyn_arr_func(Int16Array)
+	dyn_u16arr = dyn_arr_func(Uint16Array)
+	dyn_i32arr = dyn_arr_func(Int32Array)
+	dyn_u32arr = dyn_arr_func(Uint32Array)
 }
 
 // events --------------------------------------------------------------------
