@@ -18,94 +18,178 @@ component('x-modeleditor', function(e) {
 
 	let pe = e
 
+	e.x_axis_color = 0x990000
+	e.y_axis_color = 0x000099
+	e.z_axis_color = 0x006600
+
 	// canvas & webgl context -------------------------------------------------
 
-	e.canvas = tag('canvas')
-	focusable_widget(e, e.canvas)
-	e.canvas.attr('tabindex', -1)
-	e.canvas.attr('style', 'position: absolute')
-	e.add(e.canvas)
+	let canvas = tag('canvas')
+	focusable_widget(e, canvas)
+	canvas.attr('tabindex', -1)
+	e.add(canvas)
 
-	let gl = assert(e.canvas.getContext('webgl2'))
-	e.gl = gl
+	let gl = assert(canvas.getContext('webgl2'))
 
 	// props ------------------------------------------------------------------
 
-	let skybox = gl.skybox()
-	let axes = gl.axes()
-	axes.add_instance()
+	let skybox = gl.skybox({
+		images: {
+			posx: 'skybox/posx.jpg',
+			negx: 'skybox/negx.jpg',
+			posy: 'skybox/posy.jpg',
+			negy: 'skybox/negy.jpg',
+			posz: 'skybox/posz.jpg',
+			negz: 'skybox/negz.jpg',
+		},
+	})
+	skybox.on('load', render)
+	let axes_renderer = gl.axes_renderer()
+	axes_renderer.add_instance()
 
 	// camera -----------------------------------------------------------------
 
-	e.camera = camera()
+	let camera = camera3()
+	let min_distance = 0.001  // min line distance
+	let max_distance = 1e4    // max model total distance
 
-	e.fovy = 60
-	e.min_distance = 0.001  // min line distance
-	e.max_distance = 1e4    // max model total distance
+	function update_camera_proj() {
+		camera.viewport_w = canvas.width
+		camera.viewport_h = canvas.height
+		if (e.projection == 'ortho') {
+			camera.ortho(-10, 10, -10, 10, -1e2, 1e2)
+		} else {
+			camera.perspective(rad(e.fov),
+				min_distance * 100,
+				max_distance * 100)
+		}
+		gl.set_uni('proj', camera.proj)
+		update_camera()
+	}
 
-	e.camera.pos.set(2.3, 2.8, 3.7)
+	e.set_ortho = function(v) { update_camera_proj() }
+	e.set_fov   = function(v) { update_camera_proj() }
+	e.set_camera_pos = function(v) { camera.pos.set(v); update_camera() }
+	e.set_camera_dir = function(v) { camera.dir.set(v); update_camera() }
+	e.set_camera_up  = function(v) { camera .up.set(v); update_camera() }
+	e.set_shadows  = function(v) { renderer.enable_shadows = v; update_renderer() }
+
+	e.set_sunlight  = function(v) { update_sunlight_pos() }
+	e.set_time      = function(v) { update_sun_pos() }
+	e.set_north     = function(v) { update_sun_pos() }
+	e.set_latitude  = function(v) { update_sun_pos() }
+	e.set_longitude = function(v) { update_sun_pos() }
+
+	e.prop('projection' , {store: 'var', type: 'enum'  , enum_values: ['perspective', 'ortho'], default: 'perspective'})
+	e.prop('fov'        , {store: 'var', type: 'number', default: 60})
+	e.prop('camera_pos' , {store: 'var', type: 'v3', default: camera.pos})
+	e.prop('camera_dir' , {store: 'var', type: 'v3', default: camera.dir})
+	e.prop('camera_up'  , {store: 'var', type: 'v3', default: camera.up })
+	e.prop('shadows'    , {store: 'var', type: 'boolean', default: true})
+
+	e.prop('sunlight'   , {store: 'var', type: 'boolean', default: false})
+	e.prop('time'       , {store: 'var', type: 'datetime', default: time(2020, 8, 1, 12)})
+	e.prop('north'      , {store: 'var', type: 'number', default: 0})
+	e.prop('latitude'   , {store: 'var', type: 'number', default: 0})
+	e.prop('longitude'  , {store: 'var', type: 'number', default: 0})
+
+	let sun_pos = v3()
+	function update_sun_pos() {
+		// https://en.wikipedia.org/wiki/Position_of_the_Sun
+		// 1. calculate Sun's ecliptic coordinates (EL, b, R).
+		let julian_day = pe.time / 86400 + 2440587.5 // timestamp to Julian day.
+		let n = julian_day - 2451545 // number of days since 1 Jan 2000 at 12:00h GMT.
+		let L = rad((280.460 + .9856474 * n) % 360) // Sun's mean longitude
+		let g = rad((357.528 + .9856003 * n) % 360) // Sun's mean anomaly
+		let lam = L + rad(1.915) * sin(g) + rad(.020) * sin(2*g) // Sun's ecliptic longitude
+		let b = 0 // Sun's ecliptic latitude
+		let R = 1.00014 - rad(0.01671) * cos(g) - rad(0.00014) * cos(2*g) // Sun-Earth distance in AUs
+		// 2. transform to equatorial coordinates.
+		let e = rad((23.439 - 0.0000004 * n) % 360) // obliquity of the eliptic
+		let a = atan2(cos(e) * sin(lam), cos(lam)) // right ascension
+		let d = asin(sin(e) * sin(lam)) // declination
+		// 3. transform to horizontal coordinates.
+		// TODO:
+		// let phi =
+		// let LST =
+		// sun_pos.set_from_axis_angle()
+		if (e.sunlight)
+			update_sunlight_pos()
+	}
+	update_sun_pos()
+
+	function update_sunlight_pos() {
+		if (e.sunlight) {
+			renderer.sunlight_dir.set(sun_pos)
+		} else {
+			renderer.sunlight_dir.set(camera.pos)
+		}
+		renderer.update()
+		render()
+	}
 
 	function update_camera() {
-
 		camera.update()
-
+		fire_pointermove()
 		gl.set_uni('view_pos' , camera.pos)
 		gl.set_uni('view'     , camera.view)
 		gl.set_uni('view_proj', camera.view_proj)
-
 		skybox.update_view(camera.pos)
-
 		update_dot_positions()
+		if (!e.sunlight)
+			update_sunlight_pos()
+		render()
 	}
 
 	// rendering ---------------------------------------------------------------
 
-	{
-		let raf_id
-		let do_render = function() {
+	let renderer = gl.scene_renderer()
 
+	let draw_all = function(sdm_vao) {
+		if (!sdm_vao)
 			skybox.draw()
-			axes.draw()
-
-			raf_id = null
-		}
-
-		function render() {
-			if (!raf_id)
-				raf_id = raf(do_render)
-		}
+		axes_renderer.draw()
+		//draw_faces(sdm_vao)
+		//draw_lines(sdm_vao)
+		e.model.draw(sdm_vao)
 	}
 
-	function init() {
-
-		/*
-		e.xyplane = xyplane()
-		e.zyplane = zyplane()
-		e.xzplane = xzplane()
-		e.ref_planes = [e.xyplane, e.zyplane, e.xzplane]
-		*/
-
-		e.detect_resize()
-
-		function resized(r) {
-			e.camera.viewport_w = r.w
-			e.camera.viewport_h = r.h
-			e.camera.projection(e.fovy,
-				e.min_distance * 100,
-				e.max_distance * 100)
-			render()
-		}
-		e.on('resize', resized)
-
+	let raf_id
+	function do_render() {
+		renderer.render(draw_all)
+		//face_id_renderer.render(draw_faces)
+		raf_id = null
 	}
+
+	function render() {
+		if (!raf_id)
+			raf_id = raf(do_render)
+	}
+
+	/*
+	e.xyplane = xyplane()
+	e.zyplane = zyplane()
+	e.xzplane = xzplane()
+	ref_planes = [e.xyplane, e.zyplane, e.xzplane]
+	*/
+
+	e.detect_resize()
+
+	e.on('resize', function(r) {
+		canvas.width = r.w
+		canvas.height = r.h
+		gl.set_uni('viewport_size', r.w, r.h)
+		update_camera_proj()
+	})
+
 	// screen-projected distances for hit testing -----------------------------
 
-	e.snap_distance   = 20  // max pixel distance for snapping
-	e.select_distance =  6  // max pixel distance for selecting
+	let snap_distance   = 20  // max pixel distance for snapping
+	let select_distance =  6  // max pixel distance for selecting
 
 	e.hit_d = null // current hit distance, one of the above depending on tool.
 
-	let canvas_p2p_distance2 = e.camera.screen_distance2
+	let canvas_p2p_distance2 = camera.screen_distance2
 
 	// cursor -----------------------------------------------------------------
 
@@ -114,10 +198,12 @@ component('x-modeleditor', function(e) {
 		let cursor_y = {line: 25}
 		let cursor
 		e.property('cursor', () => cursor, function(name) {
+			if (cursor == name)
+				return
 			cursor = name
 			let x = cursor_x[name] || 0
 			let y = cursor_y[name] || 0
-			e.canvas.style.cursor = 'url(cursor_'+name+'.png) '+x+' '+y+', auto'
+			e.style.cursor = 'url(cursor_'+name+'.png) '+x+' '+y+', auto'
 		})
 	}
 
@@ -152,8 +238,8 @@ component('x-modeleditor', function(e) {
 			tooltip.hide()
 			if (s) {
 				tooltip.set(s)
-				tooltip.x = e.mouse.x
-				tooltip.y = e.mouse.y
+				tooltip.x = mouse.x
+				tooltip.y = mouse.y
 				show_tooltip_after(.2)
 			} else {
 				show_tooltip_after(false)
@@ -202,7 +288,7 @@ component('x-modeleditor', function(e) {
 
 		}
 
-		let geo = new THREE.BufferGeometry().setFromPoints([line.start, line.end])
+		let geo = new THREE.BufferGeometry().setFromPoints([line[0], line[1]])
 
 		e = new THREE.LineSegments(geo, mat)
 		e.line = line
@@ -222,16 +308,16 @@ component('x-modeleditor', function(e) {
 
 		e.update = function() {
 			let pb = geo.attributes.position
-			let p1 = e.line.start
-			let p2 = e.line.end
+			let p1 = e.line[0]
+			let p2 = e.line[1]
 			pb.setXYZ(0, p1.x, p1.y, p1.z)
 			pb.setXYZ(1, p2.x, p2.y, p2.z)
 			pb.needsUpdate = true
 		}
 
 		e.update_endpoints = function(p1, p2) {
-			e.line.start.copy(p1)
-			e.line.end.copy(p2)
+			e.line[0].copy(p1)
+			e.line[1].copy(p2)
 			e.update()
 			e.visible = true
 		}
@@ -255,9 +341,9 @@ component('x-modeleditor', function(e) {
 
 		let p = v3()
 		e.update = function() {
-			p.copy(e.point).project(pe.camera)
-			let x = round(( p.x + 1) * pe.canvas.width  / 2)
-			let y = round((-p.y + 1) * pe.canvas.height / 2)
+			p.copy(e.point).project(camera)
+			let x = round(( p.x + 1) * canvas.width  / 2)
+			let y = round((-p.y + 1) * canvas.height / 2)
 			e.x = x
 			e.y = y
 			e.attr('snap', e.point.snap)
@@ -312,7 +398,7 @@ component('x-modeleditor', function(e) {
 			e.vector = v3()
 			e.update = function() {
 				let len = e.vector.length()
-				e.line.line.end.z = len
+				e.line.line[1].z = len
 				e.cone.position.z = len
 				e.line.update()
 				let p = e.position.clone()
@@ -396,20 +482,20 @@ component('x-modeleditor', function(e) {
 				int_p.line_snap = null
 				int_p.tooltip = null
 
-				let p1 = axis_position.project_to_canvas(pe.camera, _p1)
-				let p2 = _p2.copy(axis_position).add(main_axis).project_to_canvas(pe.camera, _p2)
-				let hit = point2_hit_line2(pe.mouse, p1, p2, int_p)
+				let p1 = axis_position.project_to_canvas(camera, _p1)
+				let p2 = _p2.copy(axis_position).add(main_axis).project_to_canvas(camera, _p2)
+				let hit = point2_hit_line2(mouse, p1, p2, int_p)
 				if (!hit)
 					return
-				let ds = _p1.set(pe.mouse.x, pe.mouse.y, 0).distanceToSquared(int_p)
+				let ds = _p1.set(mouse.x, mouse.y, 0).distanceToSquared(int_p)
 				if (ds > pe.hit_d ** 2)
 					return
 
 				// get hit point in 3D space by raycasting to int_p.
 
 				update_raycaster(int_p)
-				_line1.copy(pe.mouse_ray)
-				update_raycaster(pe.mouse)
+				_line1.copy(mouse.ray)
+				update_raycaster(mouse)
 
 				_p3.copy(axis_position)
 				_p4.copy(axis_position).add(main_axis)
@@ -418,7 +504,7 @@ component('x-modeleditor', function(e) {
 				if (!int_line)
 					return
 
-				int_p.copy(int_line.end)
+				int_p.copy(int_line[1])
 				int_p.ds = ds
 				int_p.line_snap = main_axis_snap
 				int_p.tooltip = main_axis_snap_tooltip
@@ -439,14 +525,14 @@ component('x-modeleditor', function(e) {
 		let int_line = line3()
 		let main_axis_line = line3()
 		e.main_axis_hit_line = function(axis_position, line, int_p) {
-			main_axis_line.start.copy(axis_position)
-			main_axis_line.end.copy(axis_position).add(main_axis)
+			main_axis_line[0].copy(axis_position)
+			main_axis_line[1].copy(axis_position).add(main_axis)
 			if (!main_axis_line.intersectLine(line, false, int_line))
 				return
-			let ds = int_line.start.distanceToSquared(int_line.end)
+			let ds = int_line[0].distanceToSquared(int_line[1])
 			if (ds > NEARD ** 2)
 				return
-			int_p.copy(int_line.end)
+			int_p.copy(int_line[1])
 			int_p.line_snap = main_axis_snap
 			return true
 		}
@@ -495,7 +581,7 @@ component('x-modeleditor', function(e) {
 		}
 		function mouse_hit_axes(axis_position) {
 			let i = 0
-			for (let plane of e.ref_planes)
+			for (let plane of ref_planes)
 				plane.mouse_hit_main_axis(axis_position, ps[i++])
 			ps.sort(cmp_ps)
 			return ps[0].line_snap ? ps[0] : null
@@ -510,7 +596,7 @@ component('x-modeleditor', function(e) {
 		function axes_hit_line(axes_origin, p, line) {
 			let min_ds = 1/0
 			let min_int_p
-			for (let plane of e.ref_planes) {
+			for (let plane of ref_planes) {
 				if (plane.main_axis_hit_line(axes_origin, line, int_p)) {
 					let ds = sqrt(canvas_p2p_distance2(p, int_p))
 					if (ds <= e.hit_d ** 2 && ds <= min_ds) {
@@ -524,7 +610,7 @@ component('x-modeleditor', function(e) {
 	}
 
 	function check_point_on_axes(p, axes_origin) {
-		for (let plane of e.ref_planes)
+		for (let plane of ref_planes)
 			if (plane.point_along_main_axis(p, axes_origin))
 				return true
 	}
@@ -533,6 +619,7 @@ component('x-modeleditor', function(e) {
 
 	e.components = {} // {name->group}
 	e.model = editable_3d_model({})
+	e.model.init_view(gl)
 	e.model.editor = e
 
 	// direct-manipulation tools ==============================================
@@ -543,28 +630,23 @@ component('x-modeleditor', function(e) {
 
 	tools.orbit = {}
 
-	function update_controls() {
-		e.controls.update()
-		e.camera.updateProjectionMatrix()
-		e.camera.getWorldDirection(e.dirlight.position)
-		e.dirlight.position.negate()
-	}
-
-	tools.orbit.bind = function(on) {
-		if (on && !e.controls) {
-			e.controls = new THREE.OrbitControls(e.camera, e.canvas)
-			e.controls.minDistance = e.min_distance * 10
-			e.controls.maxDistance = e.max_distance / 100
-		}
-		e.controls.enabled = on
-		update_controls()
-	}
-
-	tools.orbit.pointermove = function() {
-		if (!e.mouse.left)
-			return
-		update_controls()
-		return true
+	tools.orbit.pointerdown = function(capture) {
+		let cam0 = camera.clone()
+		let mx0 = mouse.x
+		let my0 = mouse.y
+		return capture(function() {
+			let mx = mouse.x
+			let my = mouse.y
+			camera.set(cam0)
+			if (e.shift) {
+				camera.pan(mouse.point, mx0, my0, mx, my)
+			} else {
+				let dx = mx - mx0
+				let dy = my - my0
+				camera.orbit(mouse.point, dy / 200, dx / 200, 0)
+			}
+			update_camera()
+		})
 	}
 
 	// current point hit-testing and snapping ---------------------------------
@@ -592,7 +674,7 @@ component('x-modeleditor', function(e) {
 
 			let p0 = e.raycaster.ray.origin
 			let ray = line3(p0, e.raycaster.ray.direction.clone().setLength(2 * e.max_distance).add(p0))
-			let plane = e.model.face_plane(p.face)
+			let plane = p.face.plane()
 
 			// preliminary line filter before hit-testing.
 			// this can filter a lot or very little depending on context.
@@ -611,11 +693,12 @@ component('x-modeleditor', function(e) {
 			// filters out lines that are marked as intersecting the face plane
 			// but are not intersecting the face mesh itself.
 			function is_intersecting_line_valid(int_p, line) {
-				if (line.intersects_face_plane)
+				if (line.intersects_face_plane) {
 					let plane_int_p = e.model.line_intersect_face_plane(line, p.face)
 					if (!p.face.contains_point(plane_int_p)) { //  e.model.line_intersects_face(line, p.face, line.intersects_face_plane == 1)) {
 						return false
 					}
+				}
 			}
 
 			let p1 = e.model.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true,
@@ -686,35 +769,37 @@ component('x-modeleditor', function(e) {
 
 	tools.line = {}
 
+	let cur_point, cur_line, ref_point, ref_line
+
 	tools.line.bind = function(on) {
 		if (on) {
 			let endp = v3()
-			e.cur_point = e.dot(endp)
-			e.cur_point.visible = false
+			cur_point = e.dot(endp)
+			cur_point.visible = false
 
-			e.cur_line = e.line('cur_line', line3(v3(), endp))
-			e.cur_line.color = black
-			e.cur_line.visible = false
+			cur_line = e.line('cur_line', line3(v3(), endp))
+			cur_line.color = black
+			cur_line.visible = false
 
-			e.ref_point = e.dot()
-			e.ref_point.point.snap = 'ref_point'
-			e.ref_point.visible = false
+			ref_point = e.dot()
+			ref_point.point.snap = 'ref_point'
+			ref_point.visible = false
 
-			e.ref_line = e.line('ref_line', line3(), true)
-			e.ref_line.visible = false
+			ref_line = e.line('ref_line', line3(), true)
+			ref_line.visible = false
 		} else {
-			e.cur_point = e.cur_point.free()
-			e.cur_line  = e.cur_line.free()
-			e.ref_point = e.ref_point.free()
-			e.ref_line  = e.ref_line.free()
+			cur_point = cur_point.free()
+			cur_line  = cur_line.free()
+			ref_point = ref_point.free()
+			ref_line  = ref_line.free()
 		}
 	}
 
 	tools.line.cancel = function() {
 		e.tooltip = ''
-		e.cur_line.visible = false
-		e.ref_point.visible = false
-		e.ref_line.visible = false
+		cur_line.visible = false
+		ref_point.visible = false
+		ref_line.visible = false
 	}
 
 	let snap_tooltips = {
@@ -729,22 +814,22 @@ component('x-modeleditor', function(e) {
 	}
 
 	let line_snap_colors = {
-		y_axis: y_axis_color,
-		x_axis: x_axis_color,
-		z_axis: z_axis_color,
+		y_axis: e.y_axis_color,
+		x_axis: e.x_axis_color,
+		z_axis: e.z_axis_color,
 		line_point_intersection: ref_color,
 	}
 
 	let future_ref_point = v3()
 	let ref_point_update_after = timer(function() {
-		e.ref_point.update_point(future_ref_point)
+		ref_point.update_point(future_ref_point)
 	})
 
 	tools.line.pointermove = function() {
 
-		let cline = e.cur_line.line
-		let p1 = cline.start
-		let p2 = cline.end
+		let cline = cur_line.line
+		let p1 = cline[0]
+		let p2 = cline[1]
 		p2.i = null
 		p2.face = null
 		p2.li = null
@@ -752,35 +837,35 @@ component('x-modeleditor', function(e) {
 		p2.line_snap = null
 		p2.tooltip = null
 
-		e.ref_line.snap = null
-		e.ref_line.visible = false
+		ref_line.snap = null
+		ref_line.visible = false
 
 		ref_point_update_after(false)
 
-		e.hit_d = e.snap_distance
-		let p = mouse_hit_model(e.cur_line.visible ? p1 : null, true)
+		e.hit_d = snap_distance
+		let p = mouse_hit_model(cur_line.visible ? p1 : null, true)
 
 		if (p) {
 
 			// change the ref point.
 			if ((p.snap == 'point' || p.snap == 'line_middle')
-				&& (p.i == null || !e.cur_line.visible || p.i != cline.start.i)
+				&& (p.i == null || !cur_line.visible || p.i != cline[0].i)
 			) {
 				assign(future_ref_point, p)
 				ref_point_update_after(.5)
 			}
 
-			if (!e.cur_line.visible) { // moving the start point
+			if (!cur_line.visible) { // moving the start point
 
 				if (!p.snap) { // free-moving point.
 
 					// snap point to axes originating at the ref point.
-					if (e.ref_point.visible) {
-						let axes_int_p = mouse_hit_axes(e.ref_point.point)
+					if (ref_point.visible) {
+						let axes_int_p = mouse_hit_axes(ref_point.point)
 						if (axes_int_p) {
 							p = axes_int_p
-							e.ref_line.snap = p.line_snap
-							e.ref_line.update_endpoints(e.ref_point.point, p)
+							ref_line.snap = p.line_snap
+							ref_line.update_endpoints(ref_point.point, p)
 						}
 					}
 
@@ -797,15 +882,15 @@ component('x-modeleditor', function(e) {
 					// so there's still one degree of freedom to lose to point-snapping.
 
 					// snap point to axes originating at the ref point.
-					if (e.ref_point.visible) {
+					if (ref_point.visible) {
 						assign(p2, p)
 						let p_line_snap = p.line_snap
-						let axes_int_p = axes_hit_line(e.ref_point.point, p, cline)
+						let axes_int_p = axes_hit_line(ref_point.point, p, cline)
 						if (axes_int_p && canvas_p2p_distance2(axes_int_p, p) <= e.hit_d ** 2) {
 							assign(p, axes_int_p)
-							e.ref_line.snap = axes_int_p.line_snap
+							ref_line.snap = axes_int_p.line_snap
 							p.line_snap = p_line_snap
-							e.ref_line.update_endpoints(e.ref_point.point, p)
+							ref_line.update_endpoints(ref_point.point, p)
 						}
 
 					}
@@ -822,37 +907,37 @@ component('x-modeleditor', function(e) {
 
 		p = p2
 
-		e.cur_point.visible = !!p.snap
+		cur_point.visible = !!p.snap
 		e.tooltip = snap_tooltips[p.snap || p.line_snap] || p.tooltip
-		e.cur_point.snap = p2.snap
-		e.cur_line.color = or(line_snap_colors[p2.line_snap], black)
-		e.ref_line.color = or(line_snap_colors[e.ref_line.snap], black)
+		cur_point.snap = p2.snap
+		cur_line.color = or(line_snap_colors[p2.line_snap], black)
+		ref_line.color = or(line_snap_colors[ref_line.snap], black)
 
-		e.cur_point.update()
-		e.cur_line.update()
-		e.ref_line.update()
+		cur_point.update()
+		cur_line.update()
+		ref_line.update()
 
-		return true
+		render()
 	}
 
 	tools.line.pointerdown = function() {
 		e.tooltip = ''
-		let cline = e.cur_line.line
-		if (e.cur_line.visible) {
-			let closing = cline.end.i != null || cline.end.li != null
+		let cline = cur_line.line
+		if (cur_line.visible) {
+			let closing = cline[1].i != null || cline[1].li != null
 			e.model.draw_line(cline)
 			e.model.update()
-			e.ref_point.visible = false
+			ref_point.visible = false
 			if (closing) {
 				tools.line.cancel()
 			} else {
-				cline.start.copy(cline.end)
-				cline.start.i = cline.end.i
+				cline[0].copy(cline[1])
+				cline[0].i = cline[1].i
 			}
 		} else {
-			if (cline.start.i != null && e.ref_point.point.i == cline.start.i)
-				e.ref_point.visible = false
-			e.cur_line.visible = true
+			if (cline[0].i != null && ref_point.point.i == cline[0].i)
+				ref_point.visible = false
+			cur_line.visible = true
 		}
 	}
 
@@ -891,9 +976,9 @@ component('x-modeleditor', function(e) {
 					e.model.select_all(false)
 					e.model.update()
 				}
-				let hit_face_changed = (hit_p && hit_p.face) !== (p && p.face)
 				hit_p = p
-				return hit_face_changed
+				if ((hit_p && hit_p.face) !== (p && p.face)) // hit face changed
+					render()
 			}
 		}
 
@@ -904,9 +989,9 @@ component('x-modeleditor', function(e) {
 				start()
 			let p = mouse_hit_model()
 			if (!p || !pull.can_hit(p)) {
-				let int_line = e.mouse_ray.intersectLine(pull.dir, false, _line)
+				let int_line = mouse.ray.intersectLine(pull.dir, false, _line)
 				if (int_line)
-					p = int_line.start
+					p = int_line[0]
 
 			}
 			if (p)
@@ -975,7 +1060,7 @@ component('x-modeleditor', function(e) {
 		tools.select.click = function(nclicks) {
 			if (nclicks > 3)
 				return
-			e.hit_d = e.select_distance
+			e.hit_d = select_distance
 			p = mouse_hit_model()
 			if (!p && nclicks == 1 && !mode) {
 				e.model.select_all(false)
@@ -1014,34 +1099,58 @@ component('x-modeleditor', function(e) {
 			e.cursor = tool.cursor || name
 			if (tool.bind) {
 				tool.bind(true)
-				fire_pointermove(true)
+				fire_pointermove()
+				render()
 			}
 		})
 	}
 
 	// mouse handling ---------------------------------------------------------
 
-	e.mouse = v2()
-	e.mouse_ray = line3()
-	e.raycaster = new THREE.Raycaster()
+	let mouse = v2()
+	mouse.ray = line3()
+	mouse.point = v3()
+
+	let face_id_renderer = gl.face_id_renderer()
 
 	{
-		let _p = v2()
-		function update_raycaster(p) {
-			_p.x =  (p.x / e.canvas.width ) * 2 - 1
-			_p.y = -(p.y / e.canvas.height) * 2 + 1
-			e.raycaster.setFromCamera(_p, e.camera)
-			e.mouse_ray.start.copy(e.raycaster.ray.origin)
-			e.mouse_ray.end.copy(e.raycaster.ray.origin).add(e.raycaster.ray.direction)
-		}
-
-		function update_mouse(ev, mx, my, left_down) {
-			e.mouse.x = mx
-			e.mouse.y = my
+		let _m0 = mat4()
+		let _m1 = mat4()
+		let _p0 = v3()
+		let _p1 = v3()
+		let _ray = line3()
+		let hit = {}
+		function update_mouse(ev, mx, my, left_down, no_pointermove) {
+			let r = e.rect()
+			mx -= r.x
+			my -= r.y
+			mouse.x = mx
+			mouse.y = my
 			if (left_down != null)
-				e.mouse.left = left_down
+				mouse.left = left_down
 			update_keys(ev)
-			update_raycaster(e.mouse)
+			camera.raycast(mx, my, mouse.ray)
+			let inst_model, inst_point, face
+			if (face_id_renderer.hit_test(mx, my, hit)) {
+				let model = e.model.instance_matrix(hit.inst_id, _m0)
+				let inv_model = _m1.set(model).invert()
+				let ray = _ray.set(mouse.ray).transform(inv_model)
+				let face = e.model.face(hit.face_id)
+				inst_point = face.plane().intersect_line(ray, null, _p0)
+				if (inst_point) {
+					mouse.point.set(inst_point).transform(model)
+					inst_model = model
+				}
+			} else {
+				mouse.ray.at(min(FAR / 10, camera.pos.len()), mouse.point)
+			}
+			mouse.inst_id = hit.inst_id
+			mouse.inst_model = inst_model
+			mouse.inst_point = inst_point
+			mouse.face = face
+
+			if (no_pointermove)
+				fire_pointermove()
 		}
 	}
 
@@ -1051,43 +1160,44 @@ component('x-modeleditor', function(e) {
 		e.alt   = ev.altKey
 	}
 
-	function fire_pointermove(do_render) {
+	function fire_pointermove() {
 		if (tool.pointermove)
-			do_render = or(tool.pointermove(), do_render)
-		if (do_render)
-			render()
+			tool.pointermove()
 	}
 
 	e.on('pointermove', function(ev, mx, my) {
 		update_mouse(ev, mx, my)
-		fire_pointermove()
 	})
 
 	e.on('pointerdown', function(ev, mx, my) {
 		update_mouse(ev, mx, my, true)
 		if (tool.pointerdown) {
-			fire_pointermove(false)
+			let captured
 			function capture(move, up) {
 				let movewrap = move && function(ev, mx, my) {
-					update_mouse(ev, mx, my)
+					update_mouse(ev, mx, my, null, true)
 					return move()
 				}
 				let upwrap = up && function(ev, mx, my) {
-					update_mouse(ev, mx, my, false)
+					update_mouse(ev, mx, my, false, true)
 					return up()
 				}
-				return e.capture_pointer(ev, movewrap, upwrap)
+				captured = e.capture_pointer(ev, movewrap, upwrap)
 			}
 			tool.pointerdown(capture)
-			fire_pointermove(true)
-		} else {
 			fire_pointermove()
+			render()
+			return captured
 		}
 	})
 
 	e.on('pointerup', function(ev, mx, my) {
 		update_mouse(ev, mx, my, false)
-		fire_pointermove()
+		if (tool.pointerup) {
+			tool.pointerup()
+			fire_pointermove()
+			render()
+		}
 	})
 
 	e.on('pointerleave', function(ev) {
@@ -1098,34 +1208,15 @@ component('x-modeleditor', function(e) {
 		update_mouse(ev, mx, my)
 		if (tool.click) {
 			tool.click(nclicks)
-			fire_pointermove(true)
-		} else {
 			fire_pointermove()
+			render()
 		}
 	})
 
-	e.canvas.on('wheel', function(ev, delta, mx, my) {
+	e.on('wheel', function(ev, dy, mx, my) {
 		update_mouse(ev, mx, my)
-		e.controls.enableZoom = false
-		let factor = 1
-		let ndc_mx =  (mx / e.canvas.width ) * 2 - 1
-		let ndc_my = -(my / e.canvas.height) * 2 + 1
-		let v = v3(ndc_mx, ndc_my, 0.5)
-		v.unproject(e.camera)
-		v.sub(e.camera.position)
-		v.setLength(factor)
-		if (delta < 0) {
-			e.camera.position.add(v)
-			e.controls.target.add(v)
-		} else {
-			e.camera.position.sub(v)
-			e.controls.target.sub(v)
-		}
-		e.controls.update()
-		e.camera.updateProjectionMatrix()
-		e.camera.getWorldDirection(e.dirlight.position)
-		e.dirlight.position.negate()
-		fire_pointermove(true)
+		camera.dolly(mouse.point, 1 + 0.2 * (dy / 100))
+		update_camera()
 		return false
 	})
 
@@ -1226,8 +1317,9 @@ component('x-modeleditor', function(e) {
 
 	// init -------------------------------------------------------------------
 
-	init()
 	draw_test_cube()
+
 	e.tool = 'orbit'
+	render()
 
 })

@@ -115,7 +115,7 @@ let inst_ids = []
 
 let _p = v3()
 
-let face_id = 1 // gotta start at 1...
+let face_id = 0
 for (let face of faces) {
 	let no = face.plane().normal
 	let p0 = face.get_point(0, _p)
@@ -160,7 +160,7 @@ let inst_mats = [
 ]
 
 for (let i = 0; i < inst_mats.length / 16; i++)
-	inst_ids[i] = i+1
+	inst_ids[i] = i
 
 let    points_dbuf = gl.dyn_v3_buffer(points)
 let triangles_dbuf = gl.dyn_v3_buffer(triangles)
@@ -219,12 +219,12 @@ canvas_resized()
 
 function hit_test(mx, my) {
 	let ray = camera.raycast(mx, my, line3())
-	let [inst_id, face_id] = face_id_renderer.hit_test(mx, my)
-	if (inst_id && face_id) {
-		let model = mat4().from_mat4_array(inst_mats, inst_id-1)
+	let hit = {}
+	if (face_id_renderer.hit_test(mx, my, hit)) {
+		let model = mat4().from_mat4_array(inst_mats, hit.inst_id)
 		let inv_model = mat4().set(model).invert()
 		ray.transform(inv_model)
-		let face = faces[face_id-1]
+		let face = faces[hit.face_id]
 		let target = face.plane().intersect_line(ray, null, v3())
 		return target && target.transform(model)
 	} else {
@@ -274,7 +274,7 @@ document.on('keydown', function(key) {
 
 let face_vao = face_program(gl).vao()
 let dashed_line_vao = gl.dashed_line_program().vao()
-let fat_line_vao = gl.fat_line_vao()
+let fat_lines = gl.fat_lines()
 
 let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
 
@@ -332,19 +332,18 @@ function draw_dashed_lines() {
 }
 
 function draw_fat_lines() {
-	let vao = fat_line_vao
-	vao.set_points([
-		line3(v3(0, 0, 0), v3(0, 0, 1)),
+	fat_lines.set_points([
+		line3(v3(0, 0, 0), v3(10, 10, 10)),
 		line3(v3(0, 0, 0), v3(0, 1, 0)),
 		line3(v3(0, 0, 0), v3(1, 0, 0)),
 	])
-	vao.set_uni('color', 0, 0, 0, 1)
-	vao.draw()
+	fat_lines.color.set(0, 0, 1)
+	fat_lines.draw()
 }
 
 function draw_lines() {
 	draw_dashed_lines()
-	//draw_fat_lines()
+	draw_fat_lines()
 }
 
 let rot = 0
@@ -371,7 +370,7 @@ function start_frame() {
 	//pos_dbuf.invalidate(0, 1)
 }
 
-let renderer = gl.renderer({
+let renderer = gl.scene_renderer({
 	sunlight_dir: v3.up.clone(),
 	enable_shadows: true,
 })
@@ -396,15 +395,20 @@ skybox = gl.skybox({
 	},
 })
 
-let axes = gl.axes()
+let axes = gl.axes_renderer()
 axes.upload_model(axes.add_instance(), mat4f32())
 
-function draw_all(sdm_vao) {
-	if (!sdm_vao)
+let vao_set = gl.vao_set()
+
+function draw_all(prog) {
+	if (!prog) {
 		skybox.draw()
-	axes.draw()
-	draw_faces(sdm_vao)
-	draw_lines(sdm_vao)
+		axes.draw()
+	}
+	let vao = prog && vao_set.vao(prog)
+	draw_faces(vao)
+	if (!prog)
+		draw_lines()
 }
 
 function animate() {
@@ -412,7 +416,7 @@ function animate() {
 	renderer.sunlight_dir.set(camera.dir)
 	renderer.update()
 	renderer.render(draw_all)
-	face_id_renderer.render(draw_faces)
+	face_id_renderer.render(draw_all)
 	raf(animate)
 }
 
@@ -420,9 +424,9 @@ canvas.on('pointermove', function(ev, mx, my) {
 	let r = this.rect()
 	mx -= r.x
 	my -= r.y
-	let [inst_id, face_id] = face_id_renderer.hit_test(mx, my)
-
-	//print(...camera.screen_to_view(mx, my, 1))
+	let hit = {}
+	face_id_renderer.hit_test(mx, my, hit)
+	//print(hit)
 })
 
 animate()

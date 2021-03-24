@@ -10,37 +10,43 @@
 
 	VBOs
 
-		gl.[dyn_]<type>_buffer(data|capacity, [instance_divisor], [normalize]) -> [d]b
+		gl.[dyn_][arr_]<type>_[instance_]buffer(data|capacity, [normalize]) -> [d][a]b
 			type: f32|u8|u16|u32|i8|i16|i32|v2|v3|v4|mat3|mat4
-		gl.[dyn_]mat4_instance_buffer(data|capacity) -> [d]b
-		gl.[dyn_]index_buffer(data|capacity, [u8arr|u16arr|u32arr|max_idx]) -> [d]b
+		gl.[dyn_][arr_]index_buffer(data|capacity, [type|max_idx]) -> [d][a]b
+			type: u8|u16|u32
 
 		b.upload(in_arr, [offset=0], [len], [in_offset=0])
 		b.download(out_arr, [offset=0], [len], [out_offset=0])
 		b.set(in_b, [offset=0], [len], [in_offset=0])
 		b.arr([data|len]) -> a
-		b.capacity b.len
+		b.len
 		b.arr_type b.gl_type b.n_components b.instance_divisor b.normalize b.for_index
 
 		db.buffer
 		db.grow_type(arr|[...]|u8arr|u16arr|u32arr|max_idx)
-		db.capacity db.len
+		db.len
+		db.arr_type db.n_components db.instance_divisor db.normalize db.for_index
+
+		dab.dyn_arr
+		dab.dyn_buffer
 		db.arr_type db.n_components db.instance_divisor db.normalize db.for_index
 
 	VAOs
 
 		pr.vao() -> vao
+		vao.use()
 		vao.set_attr(name, b)
 		vao.set_uni(name, val...)
 		vao.set_uni(name, tex, [texture_unit=0])
 		gl.set_uni(name, ...)
 		vao.set_index(b)
-		vao.use()
+		vao.unuse()
 
 	Textures
 
 		gl.texture(['cubemap']) -> tex
 		tex.set_rgba(w, h, pixels, [side])
+		tex.set_u32(w, h, values, [side])
 		tex.set_depth(w, h, [f32])
 		tex.set_image(image, [pixel_scale], [side])
 		tex.load(url, [pixel_scale], [on_load])
@@ -86,10 +92,12 @@ gl.clear_all = function(r, g, b, a, depth) {
 		// NOTE: not using gl.clear(gl.COLOR_BUFFER_BIT) on a FBO because that
 		// clears _all_ color buffers, which we don't want (we do clear the
 		// secondary color buffers separately with a different value).
-		gl.draw_fbo.clear_color(0, r, g, b, a)
+		if (r != null)
+			gl.draw_fbo.clear_color(0, r, g, b, a)
 		gl.draw_fbo.clear_depth_stencil(depth)
 	} else {
-		gl.clearColor(r, g, b, or(a, 1))
+		if (r != null)
+			gl.clearColor(r, g, b, or(a, 1))
 		gl.clearDepth(or(depth, 1))
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	}
@@ -169,7 +177,7 @@ let prog = WebGLProgram.prototype
 gl.program = function(name, vs_code, fs_code) {
 	let gl = this
 
-	let pr = attr(gl, 'programs')[name]
+	let pr = attr(gl, 'programs')[assert(isstr(name), 'program name required')]
 	if (pr) {
 		assert(pr.vs.code == vs_code)
 		assert(pr.fs.code == fs_code)
@@ -428,6 +436,25 @@ vao.free = function() {
 	this.free = noop
 }
 
+gl.vao_set = function() {
+	let vaos = {}
+	let e = {}
+	e.vao = function(prog) {
+		let vao = vaos[prog.name]
+		if (!vao) {
+			vao = prog.vao()
+			vaos[prog.name] = vao
+		}
+		return vao
+	}
+	e.free = function() {
+		for (let prog_name in vaos)
+			vaos[prog_name].free()
+		vaos = null
+	}
+	return e
+}
+
 // VBOs ----------------------------------------------------------------------
 
 function check_arr_type(arr, arr_type) {
@@ -481,8 +508,6 @@ gl.buffer = function(data_or_cap, arr_type, nc, instance_divisor, normalize, for
 	}
 	b.for_index = for_index
 	b.gl_target = for_index ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER
-	gl.bindBuffer(b.gl_target, b)
-	gl.bufferData(b.gl_target, arg, gl.STATIC_DRAW)
 	b.capacity = cap
 	b._len = len
 	b.gl_type =
@@ -499,6 +524,10 @@ gl.buffer = function(data_or_cap, arr_type, nc, instance_divisor, normalize, for
 	b.n_components = nc
 	b.instance_divisor = instance_divisor
 	b.normalize = normalize || false
+
+	gl.bindBuffer(b.gl_target, b)
+	gl.bufferData(b.gl_target, arg, gl.STATIC_DRAW)
+
 	return b
 }
 
@@ -509,28 +538,6 @@ property(WebGLBuffer, 'len',
 		this._len = len
 	}
 )
-
-let buffer_func = function(arr_type, n_components) {
-	return function buffer(data_or_cap, instance_divisor, normalize) {
-		return this.buffer(data_or_cap, arr_type, n_components, instance_divisor, normalize)
-	}
-}
-gl.f32_buffer  = buffer_func(f32arr,  1)
-gl.u8_buffer   = buffer_func(u8arr ,  1)
-gl.u16_buffer  = buffer_func(u16arr,  1)
-gl.u32_buffer  = buffer_func(u32arr,  1)
-gl.i8_buffer   = buffer_func(i8arr ,  1)
-gl.i16_buffer  = buffer_func(i16arr,  1)
-gl.i32_buffer  = buffer_func(i32arr,  1)
-gl.v2_buffer   = buffer_func(f32arr,  2)
-gl.v3_buffer   = buffer_func(f32arr,  3)
-gl.v4_buffer   = buffer_func(f32arr,  4)
-gl.mat3_buffer = buffer_func(f32arr,  9)
-gl.mat4_buffer = buffer_func(f32arr, 16)
-gl.mat4_instance_buffer = function(data_or_cap) { return this.mat4_buffer(data_or_cap, 1) }
-gl.i32_instance_buffer  = function(data_or_cap) { return this.i32_buffer(data_or_cap, 1) }
-gl.u32_instance_buffer  = function(data_or_cap) { return this.u32_buffer(data_or_cap, 1) }
-gl.f32_instance_buffer  = function(data_or_cap) { return this.f32_buffer(data_or_cap, 1) }
 
 function index_arr_type(data_or_cap, arr_type_or_max_idx) {
 	return dyn_arr.index_arr_type(or(arr_type_or_max_idx, or(data_or_cap, 0)))
@@ -602,16 +609,18 @@ buf.download = function(out_arr, offset, len, out_offset) {
 buf.set = function(in_buf, offset, len, in_offset) {
 	let gl = this.gl
 	let nc = this.n_components
-	assert(in_buf.gl_type == this.gl_type)
-	assert(in_buf.n_components == nc)
+	check_arr_type(in_buf, this.arr_type)
+	check_arr_nc(in_buf, nc)
 	offset = offset || 0
 	in_offset = in_offset || 0
+	assert(offset >= 0)
+	assert(out_offset >= 0)
 	if (len == null)
-		len = in_buf.len
+		len = in_buf.len - in_offset
+	let bpe = this.BYTES_PER_ELEMENT
 
 	gl.bindBuffer(gl.COPY_READ_BUFFER, in_buf)
 	gl.bindBuffer(gl.COPY_WRITE_BUFFER, this)
-	let bpe = this.BYTES_PER_ELEMENT
 	gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER,
 		in_offset * nc * bpe,
 		offset * nc * bpe,
@@ -678,12 +687,10 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 		this.buffer = null
 	}
 
-	property(db, 'capacity',
-		function() { return db.buffer && db.buffer.capacity || 0 }
-	)
-
 	property(db, 'len',
-		function() { return db.buffer && db.buffer.len || 0 },
+		function() {
+			return db.buffer && db.buffer.len || 0
+		},
 		function(len) {
 			len = max(0, len)
 			db._grow(len).buffer.len = len
@@ -705,31 +712,115 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 	return db
 }
 
-let dyn_buffer_func = function(arr_type, n_components) {
-	return function dyn_buffer(data_or_cap, instance_divisor, normalize) {
-		return this.dyn_buffer(arr_type, data_or_cap, n_components, instance_divisor, normalize)
-	}
-}
-gl.dyn_f32_buffer  = dyn_buffer_func(f32arr,  1)
-gl.dyn_u8_buffer   = dyn_buffer_func(u8arr ,  1)
-gl.dyn_u16_buffer  = dyn_buffer_func(u16arr,  1)
-gl.dyn_u32_buffer  = dyn_buffer_func(u32arr,  1)
-gl.dyn_i8_buffer   = dyn_buffer_func(i8arr ,  1)
-gl.dyn_i16_buffer  = dyn_buffer_func(i16arr,  1)
-gl.dyn_i32_buffer  = dyn_buffer_func(i32arr,  1)
-gl.dyn_v2_buffer   = dyn_buffer_func(f32arr,  2)
-gl.dyn_v3_buffer   = dyn_buffer_func(f32arr,  3)
-gl.dyn_v4_buffer   = dyn_buffer_func(f32arr,  4)
-gl.dyn_mat3_buffer = dyn_buffer_func(f32arr,  9)
-gl.dyn_mat4_buffer = dyn_buffer_func(f32arr, 16)
-gl.dyn_mat4_instance_buffer = function(data_or_cap) { return this.dyn_mat4_buffer(data_or_cap, 1) }
-gl.dyn_i32_instance_buffer  = function(data_or_cap) { return this.dyn_i32_buffer(data_or_cap, 1) }
-gl.dyn_u32_instance_buffer  = function(data_or_cap) { return this.dyn_u32_buffer(data_or_cap, 1) }
-gl.dyn_f32_instance_buffer  = function(data_or_cap) { return this.dyn_f32_buffer(data_or_cap, 1) }
-
 gl.dyn_index_buffer = function(data_or_cap, arr_type_or_max_idx) {
 	let arr_type = index_arr_type(data_or_cap, arr_type_or_max_idx)
 	return this.dyn_buffer(arr_type, data_or_cap, 1, null, false, true)
+}
+
+gl.dyn_arr_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, normalize, for_index) {
+	let dab = {}
+	let db = this.dyn_buffer(arr_type, data_or_cap, n_components, instance_divisor, normalize, for_index)
+	let da = dyn_arr(arr_type, data_or_cap, n_components)
+
+	property(dab, 'len',
+		function() { return db.len },
+		function(len) { da.len = len }
+	)
+
+	dab.grow_type = function(arg) {
+		da.grow_type(arg)
+		db.grow_type(arg)
+		return this
+	}
+
+	dab.set = function(in_arr, offset, len, in_offset) {
+		da.set(in_arr, offset, len, in_offset)
+		return this
+	}
+
+	dab.get = function(out_arr, offset, len, out_offset) {
+		return da.get(out_arr, offset, len, out_offset)
+	}
+
+	dab.invalidate = function(offset, len) {
+		da.invalidate(offset, len)
+		return this
+	}
+
+	dab.upload = function() {
+		if (!da.invalid)
+			return
+		db.len = da.len
+		db.buffer.upload(da.array, da.invalid_offset1, da.invalid_offset2 - da.invalid_offset1)
+		da.validate()
+		return this
+	}
+
+	property(dab, 'array', () => da.array)
+	property(dab, 'buffer', () => db.buffer)
+
+	return dab
+}
+
+gl.dyn_arr_index_buffer = function(data_or_cap, arr_type_or_max_idx) {
+	let arr_type = index_arr_type(data_or_cap, arr_type_or_max_idx)
+	return this.dyn_arr_buffer(arr_type, data_or_cap, 1, null, false, true)
+}
+
+// generate gl.*_buffer() APIs.
+let buffer_types = {
+	f32  : [f32arr,  1],
+	u8   : [u8arr ,  1],
+	u16  : [u16arr,  1],
+	u32  : [u32arr,  1],
+	i8   : [i8arr ,  1],
+	i16  : [i16arr,  1],
+	i32  : [i32arr,  1],
+	v2   : [f32arr,  2],
+	v3   : [f32arr,  3],
+	v4   : [f32arr,  4],
+	mat3 : [f32arr,  9],
+	mat4 : [f32arr, 16],
+}
+for (let prefix in buffer_types) {
+	let [arr_type, n_components] = buffer_types[prefix]
+	gl[prefix+'_buffer'] = function buffer(data_or_cap, normalize) {
+		return this.buffer(data_or_cap, arr_type, n_components, null, normalize)
+	}
+	gl[prefix+'_instance_buffer'] = function instance_buffer(data_or_cap, normalize) {
+		return this.buffer(data_or_cap, arr_type, n_components, 1, normalize)
+	}
+	gl['dyn_'+prefix+'_buffer'] = function dyn_buffer(data_or_cap, normalize) {
+		return this.dyn_buffer(arr_type, data_or_cap, n_components, null, normalize)
+	}
+	gl['dyn_'+prefix+'_instance_buffer'] = function dyn_instance_buffer(data_or_cap, normalize) {
+		return this.dyn_buffer(arr_type, data_or_cap, n_components, 1, normalize)
+	}
+	gl['dyn_arr_'+prefix+'_buffer'] = function dyn_arr_buffer(data_or_cap, normalize) {
+		return this.dyn_arr_buffer(arr_type, data_or_cap, n_components, null, normalize)
+	}
+	gl['dyn_arr_'+prefix+'_instance_buffer'] = function dyn_arr_instance_buffer(data_or_cap, normalize) {
+		return this.dyn_arr_buffer(arr_type, data_or_cap, n_components, 1, normalize)
+	}
+}
+
+// generate gl.*_index_buffer() APIs.
+let index_buffer_types = {
+	u8  : u8arr,
+	u16 : u16arr,
+	u32 : u32arr,
+}
+for (let prefix in index_buffer_types) {
+	let arr_type = index_buffer_types[prefix]
+	gl[prefix+'_index_buffer'] = function index_buffer(data_or_cap) {
+		return this.index_buffer(data_or_cap, arr_type)
+	}
+	gl['dyn_'+prefix+'_index_buffer'] = function dyn_index_buffer(data_or_cap) {
+		return this.dyn_index_buffer(data_or_cap, arr_type)
+	}
+	gl['dyn_arr_'+prefix+'_index_buffer'] = function dyn_arr_index_buffer(data_or_cap) {
+		return this.dyn_arr_index_buffer(data_or_cap, arr_type)
+	}
 }
 
 // setting uniforms and attributes and drawing -------------------------------
@@ -958,6 +1049,7 @@ tex.set_depth = function(w, h, f32) {
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 	this.w = w
 	this.h = h
+	this.format = 'depth'
 	this.attach = 'depth'
 	return this
 }
@@ -993,6 +1085,18 @@ tex.set_rgba = function(w, h, pixels, side) {
 	gl.texImage2D(tex_side_target(this, side), 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
 	this.w = w
 	this.h = h
+	this.format = 'rgba'
+	this.attach = 'color'
+	return this
+}
+
+tex.set_u32 = function(w, h, pixels, side) {
+	let gl = this.gl
+	this.bind()
+	gl.texImage2D(tex_side_target(this, side), 0, gl.R32UI, w, h, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, pixels)
+	this.w = w
+	this.h = h
+	this.format = 'u32'
 	this.attach = 'color'
 	return this
 }
@@ -1023,6 +1127,7 @@ tex.set_image = function(image, pixel_scale, side) {
 	}
 	this.w = w
 	this.h = h
+	this.format = 'rgba'
 	this.attach = 'color'
 	return this
 }
@@ -1270,9 +1375,24 @@ fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 		assert(w != null)
 		assert(h != null)
 	}
-	if (!buf)
-		buf = new u8arr(w * h * 4)
-	gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf)
+	let tex = assert(this.attachment(attachment, color_unit))
+	if (tex.format == 'rgba') {
+		if (!buf) {
+			buf = new u8arr(w * h * 4)
+		} else {
+			check_arr_type(buf, u8arr)
+		}
+		gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf)
+	} else if (tex.format == 'u32') {
+		if (!buf) {
+			buf = new u32arr(w * h)
+		} else {
+			check_arr_type(buf, u32arr)
+		}
+		gl.readPixels(0, 0, w, h, gl.RED_INTEGER, gl.UNSIGNED_INT, buf)
+	} else {
+		assert(false, 'read_pixels NYI for {0} format', tex.format)
+	}
 	fbo.unbind()
 	return buf
 }
@@ -1303,16 +1423,20 @@ fbo.free = function() {
 	this.gl.deleteFramebuffer(this)
 }
 
+fbo.attachment = function(target, color_unit) {
+	return this.attachments && this.attachments[target + (color_unit || 0)]
+}
+
+let fbo_att = {
+	color: gl.COLOR_ATTACHMENT0,
+	depth: gl.DEPTH_ATTACHMENT,
+	depth_stencil: gl.DEPTH_STENCIL_ATTACHMENT,
+}
 fbo.attach = function(tex_or_rbo, target, color_unit) {
 	let gl = this.gl
-	let fbo_att = {
-		color: gl.COLOR_ATTACHMENT0,
-		depth: gl.DEPTH_ATTACHMENT,
-		depth_stencil: gl.DEPTH_STENCIL_ATTACHMENT,
-	}
 	target = target || tex_or_rbo.attach
 	color_unit = color_unit || 0
-	let gl_attach = assert(fbo_att[target]) + color_unit
+	let gl_attach = assert(fbo_att[target], 'invalid attachment target {0}', target) + color_unit
 	if (tex_or_rbo instanceof WebGLRenderbuffer) {
 		let rbo = tex_or_rbo
 		rbo.bind()
@@ -1338,15 +1462,24 @@ fbo.attach = function(tex_or_rbo, target, color_unit) {
 	return this
 }
 
-let _c = new f32arr([0, 0, 0, 0])
+let _c = new f32arr(4)
+let _u = new u32arr(4)
 fbo.clear_color = function(color_unit, r, g, b, a) {
 	let gl = this.gl
 	assert(gl.draw_fbo == this, 'not the draw fbo')
-	_c[0] = r
-	_c[1] = g
-	_c[2] = b
-	_c[3] = or(a, 1)
-	gl.clearBufferfv(gl.COLOR, color_unit, _c)
+	let tex = assert(this.attachment('color', color_unit))
+	if (tex.format == 'rgba') {
+		_c[0] = r
+		_c[1] = g
+		_c[2] = b
+		_c[3] = or(a, 1)
+		gl.clearBufferfv(gl.COLOR, color_unit, _c)
+	} else if (tex.format == 'u32') {
+		_u[0] = r
+		gl.clearBufferuiv(gl.COLOR, color_unit, _u)
+	} else {
+		assert(false, 'clear_color NYI for {0} format', tex.format)
+	}
 }
 
 fbo.clear_depth_stencil = function(depth, stencil) {

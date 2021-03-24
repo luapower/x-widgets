@@ -2036,12 +2036,12 @@ function nav_widget(e) {
 
 	// get/set cell vals and cell & row state ---------------------------------
 
-	e.cell_val          = (row, col) => row[fld(col).val_index]
-	e.cell_input_val    = (row, col) => e.cell_state(row, fld(col), 'input_val'   , row[fld(col).val_index])
-	e.cell_old_val      = (row, col) => e.cell_state(row, fld(col), 'old_val'     , row[fld(col).val_index])
-	e.cell_prev_val     = (row, col) => e.cell_state(row, fld(col), 'prev_val'    , row[fld(col).val_index])
-	e.cell_errors       = (row, col) => e.cell_state(row, fld(col), 'errors')
-	e.cell_modified     = (row, col) => e.cell_state(row, fld(col), 'modified', false)
+	e.cell_val       = (row, col) => row[fld(col).val_index]
+	e.cell_input_val = (row, col) => e.cell_state(row, fld(col), 'input_val'   , row[fld(col).val_index])
+	e.cell_old_val   = (row, col) => e.cell_state(row, fld(col), 'old_val'     , row[fld(col).val_index])
+	e.cell_prev_val  = (row, col) => e.cell_state(row, fld(col), 'prev_val'    , row[fld(col).val_index])
+	e.cell_errors    = (row, col) => e.cell_state(row, fld(col), 'errors')
+	e.cell_modified  = (row, col) => e.cell_state(row, fld(col), 'modified', false)
 
 	e.cell_vals = function(row, cols) {
 		let fields = flds(cols)

@@ -190,6 +190,11 @@ tan = Math.tan
 rad = deg => deg * (PI / 180)
 deg = rad => rad * (180 / PI)
 
+asin  = Math.asin
+acos  = Math.acos
+atan  = Math.atan
+atan2 = Math.atan2
+
 // callback stubs ------------------------------------------------------------
 
 function noop() {}
@@ -462,26 +467,26 @@ function index_arr_type(arg) {
 
 class dyn_arr_class {
 
-	constructor(arr_type, init_data_or_cap, n_components) {
+	constructor(arr_type, data_or_cap, n_components) {
 		this.arr_type = arr_type
 		this.n_components = n_components || 1
 		this.inv_n_components = 1 / this.n_components
-		this.data = null
+		this.array = null
 		this.invalid = false
 		this.invalid_offset1 = null
 		this.invalid_offset2 = null
 
-		if (init_data_or_cap != null) {
-			if (isnum(init_data_or_cap)) {
-				let cap = init_data_or_cap
+		if (data_or_cap != null) {
+			if (isnum(data_or_cap)) {
+				let cap = data_or_cap
 				this._grow(cap, false)
-			} else if (init_data_or_cap) {
-				let data = init_data_or_cap
+			} else if (data_or_cap) {
+				let data = data_or_cap
 				let data_len = data.length * this.inv_n_components
 				assert(data_len == floor(data_len),
 					'source array length not multiple of {0}', this.n_components)
-				this.data = data
-				this.data.len = data_len
+				this.array = data
+				this.array.len = data_len
 			}
 		}
 
@@ -489,15 +494,15 @@ class dyn_arr_class {
 
 	_grow(cap, pow2) {
 		cap = max(0, cap)
-		if (!this.data || this.capacity < cap) {
+		if (!this.array || this.capacity < cap) {
 			if (pow2 !== false)
 				cap = nextpow2(cap)
-			let data = new arr_type(cap * this.n_components)
-			data.n_components = this.n_components
-			data.len = this.len
-			if (this.data)
-				data.set(this.data)
-			this.data = data
+			let array = new this.arr_type(cap * this.n_components)
+			array.n_components = this.n_components
+			array.len = this.len
+			if (this.array)
+				array.set(this.array)
+			this.array = array
 		}
 		return this
 	}
@@ -506,14 +511,14 @@ class dyn_arr_class {
 		let arr_type1 = index_arr_type(arg)
 		if (arr_type1.BYTES_PER_ELEMENT <= this.arr_type.BYTES_PER_ELEMENT)
 			return
-		if (this.data) {
+		if (this.array) {
 			let this_len = this.len
-			let data1 = new arr_type1(this.capacity)
+			let array1 = new arr_type1(this.capacity)
 			for (let i = 0, n = this_len * this.n_components; i < n; i++)
-				data1[i] = this.data[i]
-			data1.n_components = this.n_components
-			data1.len = this_len
-			this.data = data1
+				array1[i] = this.array[i]
+			array1.n_components = this.n_components
+			array1.len = this_len
+			this.array = array1
 		}
 		this.arr_type = arr_type1
 		return this
@@ -534,7 +539,7 @@ class dyn_arr_class {
 		assert(offset >= 0, 'offset out of range')
 
 		this._set_len(max(this.len, offset + len))
-		this.data.set(data, offset)
+		this.array.set(data, offset)
 		this.invalidate(offset, len)
 
 		return this
@@ -548,7 +553,7 @@ class dyn_arr_class {
 		offset = offset || 0
 		assert(offset >= 0 && offset <= this_len, 'offset out of range')
 		len = clamp(or(len, 1/0), 0, this_len - offset)
-		let data = this.data
+		let data = this.array
 		if (offset != 0 || len != this_len)
 			data = data.subarray(offset * this.n_components, (offset + len) * this.n_components)
 
@@ -560,46 +565,52 @@ class dyn_arr_class {
 
 	_set_len = function(len) {
 		len = max(0, len)
-		this._grow(len).data.len = len
-		if (this.invalid)
-			this.invalid_offset2 = max(this.invalid_offset2, len)
+		this._grow(len).array.len = len
+		if (this.invalid) {
+			this.invalid_offset1 = min(this.invalid_offset1, len)
+			this.invalid_offset2 = min(this.invalid_offset2, len)
+		}
 	}
 
 	invalidate(offset, len) {
 		let o1 = max(0, offset || 0)
 		len = max(0, or(len, 1/0))
-		let o2 = min(o1 + len, this.capacity)
+		let o2 = min(o1 + len, this.len)
 		o1 = min(or(this.invalid_offset1,  1/0), o1)
 		o2 = max(or(this.invalid_offset2, -1/0), o2)
 		this.invalid = true
 		this.invalid_offset1 = o1
 		this.invalid_offset2 = o2
-		if (this.data)
-			this.data.len = max(o2, this.len)
 		return this
+	}
+
+	validate() {
+		this.invalid = false
+		this.invalid_offset1 = null
+		this.invalid_offset2 = null
 	}
 
 }
 
 property(dyn_arr_class, 'capacity',
-	function() { return this.data ? this.data.length * this.inv_n_components : 0 },
+	function() { return this.array ? this.array.length * this.inv_n_components : 0 },
 )
 
 property(dyn_arr_class, 'len',
-	function() { return this.data ? this.data.len : 0 },
+	function() { return this.array ? this.array.len : 0 },
 	function(len) { this._set_len(len) }
 )
 
-function dyn_arr(arr_type, init_cap, n_components) {
-	return new dyn_arr_class(arr_type, init_cap, n_components)
+function dyn_arr(arr_type, data_or_cap, n_components) {
+	return new dyn_arr_class(arr_type, data_or_cap, n_components)
 }
 
 dyn_arr.index_arr_type = index_arr_type
 
 {
 	let dyn_arr_func = function(arr_type) {
-		return function(init_cap, n_components) {
-			return new dyn_arr_class(arr_type, init_cap, n_components)
+		return function(data_or_cap, n_components) {
+			return new dyn_arr_class(arr_type, data_or_cap, n_components)
 		}
 	}
 	dyn_f32arr = dyn_arr_func(Float32Array)

@@ -650,10 +650,11 @@ v3.div = function div(a, b, out) {
 	return out
 }
 
-v3.zero  = v3(0, 0, 0)
-v3.one   = v3(1, 1, 1)
-v3.up    = v3(0, 1, 0)
-v3.right = v3(1, 0, 0)
+v3.zero   = v3()
+v3.origin = v3.zero
+v3.one    = v3(1, 1, 1)
+v3.up     = v3(0, 1, 0)
+v3.right  = v3(1, 0, 0)
 v3.x_axis = v3.right
 v3.y_axis = v3.up
 v3.z_axis = v3(0, 0, 1)
@@ -2517,9 +2518,9 @@ poly3p.triangles = function() {
 		ps.length = pn * 2
 		let pp = this.project_xy()
 		for (let i = 0; i < pn; i++) {
-			let p = pp.get_point(i)
-			ps[2*i+0] = p.x
-			ps[2*i+1] = p.y
+			let p = pp.get_point(i, _v0)
+			ps[2*i+0] = p[0]
+			ps[2*i+1] = p[1]
 		}
 		out = earcut2(ps, null, 2)
 		assert(out.length == tri_count)

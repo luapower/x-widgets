@@ -130,25 +130,25 @@ gl.module('phong.fs', `
 
 `)
 
-gl.renderer = function(r) {
+gl.scene_renderer = function(r) {
 
 	let gl = this
 
 	r = r || {}
 
 	r.background_color = r.background_color || v4(1, 1, 1, 1)
-	r.sunlight_dir = r.sunlight_dir || v3(1, 1, 0)
-	r.sunlight_color = r.sunlight_color || v3(1, 1, 1)
-	r.diffuse_color = r.diffuse_color || v4(1, 1, 1, 1)
-	r.sdm_proj = r.sdm_proj || mat4().ortho(-10, 10, -10, 10, -1e4, 1e4)
+	r.sunlight_dir     = r.sunlight_dir || v3(1, 1, 0)
+	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
+	r.diffuse_color    = r.diffuse_color || v4(1, 1, 1, 1)
+	r.sdm_proj         = r.sdm_proj || mat4().ortho(-10, 10, -10, 10, -1e4, 1e4)
 
 	let sunlight_view = mat4()
 	let sdm_view_proj = mat4()
-	let origin = v3(0, 0, 0)
+	let origin = v3.origin
 	let up_dir = v3.up
 	let sunlight_pos = v3()
 
-	let sdm_pr = gl.program('sdm', `
+	let sdm_prog = gl.program('shadow_map', `
 		#version 300 es
 		uniform mat4 sdm_view_proj;
 		in vec3 pos;
@@ -164,7 +164,6 @@ gl.renderer = function(r) {
 		}
 	`)
 
-	let sdm_vao = sdm_pr.vao()
 	let sdm_tex = gl.texture()
 	let sdm_fbo = gl.fbo()
 
@@ -216,7 +215,7 @@ gl.renderer = function(r) {
 			gl.clearDepth(1)
 			gl.cullFace(gl.FRONT) // to get rid of peter paning.
 			gl.clear(gl.DEPTH_BUFFER_BIT)
-			draw(sdm_vao)
+			draw(sdm_prog)
 			sdm_fbo.unbind()
 		}
 
@@ -233,25 +232,228 @@ gl.renderer = function(r) {
 	return r
 }
 
-// solid line rendering ------------------------------------------------------
+// render-based hit testing --------------------------------------------------
 
-gl.line_program = function() {
-	return this.program('line', `
+gl.face_id_renderer = function(r) {
+
+	let gl = this
+
+	r = r || {}
+
+	let face_id_prog = gl.program('face_id', `
+
 		#include mesh.vs
-		uniform vec3 base_color;
-		in vec3 color;
-		flat out vec4 v_color;
+
+		in uint face_id;
+		in uint inst_id;
+
+		flat out uint v_face_id;
+		flat out uint v_inst_id;
+
 		void main() {
 			gl_Position = mvp_pos();
+			v_face_id = face_id;
+			v_inst_id = inst_id;
+		}
+
+	`, `
+
+		#version 300 es
+
+		precision highp float;
+		precision highp int;
+
+		flat in uint v_face_id;
+		flat in uint v_inst_id;
+
+		layout (location = 0) out uint frag_color0;
+		layout (location = 1) out uint frag_color1;
+
+		void main() {
+			frag_color0 = v_face_id;
+			frag_color1 = v_inst_id;
+		}
+
+	`)
+
+	let w, h
+	let face_id_map = gl.texture()
+	let inst_id_map = gl.texture()
+	let depth_map = gl.rbo()
+	let fbo = gl.fbo()
+	let face_id_arr
+	let inst_id_arr
+
+	r.render = function(draw) {
+		let w1 = gl.canvas.cw
+		let h1 = gl.canvas.ch
+		if (w1 != w || h1 != h) {
+			w = w1
+			h = h1
+			face_id_map.set_u32(w, h); face_id_arr = new u32arr(w * h)
+			inst_id_map.set_u32(w, h); inst_id_arr = new u32arr(w * h)
+			depth_map.set_depth(w, h, true)
+		}
+		fbo.bind('draw', ['color', 'color'])
+		fbo.attach(face_id_map, 'color', 0)
+		fbo.attach(inst_id_map, 'color', 1)
+		fbo.attach(depth_map)
+		fbo.clear_color(0, 0xffffffff)
+		fbo.clear_color(1, 0xffffffff)
+		gl.clear_all()
+		draw(face_id_prog)
+		fbo.unbind()
+		fbo.read_pixels('color', 0, face_id_arr)
+		fbo.read_pixels('color', 1, inst_id_arr)
+	}
+
+	r.hit_test = function(x, y, out) {
+		out.inst_id = null
+		out.face_id = null
+		if (!face_id_arr)
+			return
+		if (x < 0 || x >= w || y < 0 || y >= h)
+			return
+		y = (h-1) - y // textures are read upside down...
+		let face_id = face_id_arr[y * w + x]
+		let inst_id = inst_id_arr[y * w + x]
+		if (face_id == 0xffffffff || inst_id == 0xffffffff)
+			return
+		out.inst_id = inst_id
+		out.face_id = face_id
+		return true
+	}
+
+	return r
+
+}
+
+// face rendering ------------------------------------------------------------
+
+gl.module('selected_face.vs', `
+
+	in float selected;
+	flat out float frag_selected;
+
+	void do_selected_face() {
+		frag_selected = selected;
+	}
+
+`)
+
+gl.module('selected_face.fs', `
+
+	flat in float frag_selected;
+
+	void do_selected_face() {
+		if (frag_selected == 1.0) {
+			float x = mod(gl_FragCoord.x, 4.0);
+			float y = mod(gl_FragCoord.y, 8.0);
+			if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
+				 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
+				frag_color = vec4(0.0, 0.0, .8, 1.0);
+		}
+	}
+
+`)
+
+gl.faces_renderer = function() {
+	let gl = this
+	let e = {
+		ambient_strength: 0.1,
+		specular_strength: .2,
+		shininess: 5,
+		polygon_offset: .0001,
+	}
+
+	let face_prog = gl.program('face', `
+		#include phong.vs
+		#include selected_face.vs
+		void main() {
+			do_phong();
+			do_selected_face();
+		}
+	`, `
+		#include phong.fs
+		#include selected_face.fs
+		void main() {
+			do_phong();
+			do_selected_face();
+		}
+	`)
+
+	let face_vao = face_prog.vao()
+	let vao_set = gl.vao_set()
+
+	e.draw = function(prog) {
+		if (prog) {
+			let vao = vao_set.vao(prog)
+			vao.set_attr('pos'     , e.pos)
+			vao.set_attr('model'   , e.model)
+			vao.set_attr('face_id' , e.face_id)
+			vao.set_attr('inst_id' , e.inst_id)
+			vao.set_index(e.index)
+			vao.use()
+		} else {
+			face_vao.set_uni ('ambient_strength' , e.ambient_strength)
+			face_vao.set_uni ('specular_strength', e.specular_strength)
+			face_vao.set_uni ('shininess'        , 1 << e.shininess) // keep this a pow2.
+			face_vao.set_uni ('diffuse_map'      , e.diffuse_map)
+			face_vao.set_attr('pos'              , e.pos)
+			face_vao.set_attr('normal'           , e.normal)
+			face_vao.set_attr('uv'               , e.uv)
+			face_vao.set_attr('selected'         , e.selected)
+			face_vao.set_attr('model'            , e.model)
+			face_vao.set_index(e.index)
+			face_vao.use()
+		}
+		gl.polygonOffset(e.polygon_offset, 0)
+		gl.draw_triangles()
+		gl.polygonOffset(0, 0)
+		gl.active_vao.unuse()
+	}
+
+	e.free = function() {
+		face_vao.free()
+		vao_set.free()
+	}
+
+	return e
+}
+
+// solid line rendering ------------------------------------------------------
+
+gl.solid_line_program = function() {
+	return this.program('solid_line', `
+
+		#include mesh.vs
+
+		uniform vec3 base_color;
+		uniform float point_size;
+		in vec3 color;
+		flat out vec4 v_color;
+
+		void main() {
+			gl_Position = mvp_pos();
+			gl_PointSize = point_size;
 			v_color = vec4(base_color + color, 1.0);
 		}
 	`, `
+
 		#include mesh.fs
-		flat in vec4 v_color; // because GL_LAST_VERTEX_CONVENTION.
+
+		flat in vec4 v_color;
+
 		void main() {
 			frag_color = v_color;
 		}
 	`)
+}
+
+// solid point rendering -----------------------------------------------------
+
+gl.solid_point_program = function() {
+	return this.solid_line_program()
 }
 
 // dashed line rendering -----------------------------------------------------
@@ -299,62 +501,50 @@ gl.dashed_line_program = function() {
 	`)
 }
 
-// fat line rendering --------------------------------------------------------
+// fat lines prop ------------------------------------------------------------
 
-gl.module('fat_line.vs', `
-
-	#include mesh.vs
-
-	in vec3 q;
-	in float dir;
-
-	void do_fat_line() {
-
-		// line points in NDC.
-		vec4 dp = view_proj * vec4(pos, 1.0);
-		vec4 dq = view_proj * vec4(q, 1.0);
-		dp /= dp.w;
-		dq /= dq.w;
-
-		// line normal in screen space.
-		float dx = dq.x - dp.x;
-		float dy = dq.y - dp.y;
-		vec2 n = normalize(vec2(-dy, dx) * dir) / viewport_size * dp.w * 2.0;
-
-		gl_Position = dp + vec4(n, 0.0, 0.0);
-
-	}
-
-`)
-
-gl.module('fat_line.fs', `
-
-	#include mesh.fs
-
-	uniform vec4 color;
-
-	void do_fat_line() {
-		frag_color = color;
-	}
-
-`)
-
-gl.fat_line_vao = function() {
+gl.fat_lines = function() {
 	let gl = this
+	let e = {}
 
-	let pr = gl.program('fat_line', `
-		#include fat_line.vs
+	let fat_line_prog = gl.program('fat_line', `
+
+		#include mesh.vs
+
+		in vec3 q;
+		in float dir;
+
 		void main() {
-			do_fat_line();
+
+			// line points in NDC.
+			vec4 dp = view_proj * vec4(pos, 1.0);
+			vec4 dq = view_proj * vec4(q, 1.0);
+			dp /= dp.w;
+			dq /= dq.w;
+
+			// line normal in screen space.
+			float dx = dq.x - dp.x;
+			float dy = dq.y - dp.y;
+			vec2 n = normalize(vec2(-dy, dx) * dir) / viewport_size * dp.w * 2.0;
+
+			gl_Position = dp + vec4(n, 0.0, 0.0);
+
 		}
+
 	`, `
-		#include fat_line.fs
+
+		#include mesh.fs
+
+		uniform vec3 color;
+
 		void main() {
-			do_fat_line();
+			frag_color = vec4(color, 1.0);
 		}
+
 	`)
 
-	let vao = pr.vao()
+	let vao = fat_line_prog.vao()
+
 	let pb = gl.dyn_v3_buffer() // 4 points per line.
 	let qb = gl.dyn_v3_buffer() // 4 "other-line-endpoint" points per line.
 	let db = gl.dyn_i8_buffer() // one direction sign per vertex.
@@ -362,34 +552,38 @@ gl.fat_line_vao = function() {
 
 	let pa = dyn_f32arr(null, 3)
 	let qa = dyn_f32arr(null, 3)
-	let da = dyn_f32arr(null, 1)
-	let ia = dyn_u32arr(null, 1)
+	let da = dyn_i8arr(null, 1)
+	let ia = dyn_u8arr(null, 1)
 
-	vao.set_points = function(lines) {
+	e.color = v3()
+
+	e.set_points = function(lines) {
 
 		let vertex_count = 4 * lines.length
 		let index_count  = 6 * lines.length
+
+		ia.grow_type(vertex_count-1)
 
 		pa.len = vertex_count
 		qa.len = vertex_count
 		da.len = vertex_count
 		ia.len = index_count
 
-		let ps = pa.data
-		let qs = qa.data
-		let ds = da.data
-		let is = ia.data
+		let ps = pa.array
+		let qs = qa.array
+		let ds = da.array
+		let is = ia.array
 
 		let i = 0
 		let j = 0
 		for (let line of lines) {
 
-			let p1x = line[0].x
-			let p1y = line[0].y
-			let p1z = line[0].z
-			let p2x = line[1].x
-			let p2y = line[1].y
-			let p2z = line[1].z
+			let p1x = line[0][0]
+			let p1y = line[0][1]
+			let p1z = line[0][2]
+			let p2x = line[1][0]
+			let p2y = line[1][1]
+			let p2z = line[1][2]
 
 			// each line has 4 points: (p1, p1, p2, p2).
 			ps[3*(i+0)+0] = p1x
@@ -447,31 +641,31 @@ gl.fat_line_vao = function() {
 
 		pb.len = ps.len; pb.buffer.upload(ps)
 		qb.len = qs.len; qb.buffer.upload(qs)
-		db.len = bs.len; db.buffer.upload(ds)
+		db.len = ds.len; db.buffer.upload(ds)
 		ib.len = is.len; ib.buffer.upload(is)
 
 	}
 
-	vao.draw = function() {
+	e.draw = function() {
 		vao.use()
-		vao.set_attr('pos', pb.buffer())
-		vao.set_attr('q'  , qb.buffer())
-		vao.set_attr('dir', db.buffer())
-		vao.set_index(ib.buffer())
-		this.gl.draw_triangles()
+		vao.set_uni('color', e.color)
+		vao.set_attr('pos', pb.buffer)
+		vao.set_attr('q'  , qb.buffer)
+		vao.set_attr('dir', db.buffer)
+		vao.set_index(ib.buffer)
+		gl.draw_triangles()
 		vao.unuse()
 	}
 
-	let free
-	vao.free = function() {
-		free.call(this)
+	e.free = function() {
+		vao.free()
 		pb.free()
 		qb.free()
 		db.free()
 		ib.free()
 	}
 
-	return vao
+	return e
 }
 
 // parametric geometry generators --------------------------------------------
@@ -510,6 +704,7 @@ gl.fat_line_vao = function() {
 	normal.n_components = 3
 	let len = 6 * 3 * 2
 	let pos = new f32arr(len * 3)
+
 	gl.box_geometry = function() {
 
 		let pos = new f32arr(pos_template.length)
@@ -537,12 +732,13 @@ gl.fat_line_vao = function() {
 
 // skybox prop ---------------------------------------------------------------
 
-gl.skybox = function(e) {
+gl.skybox = function(opt) {
 
 	let gl = this
-	e = e || {}
+	let e = {}
+	events_mixin(e)
 
-	let pr = gl.program('skybox', `
+	let prog = gl.program('skybox', `
 
 		#include mesh.vs
 
@@ -580,7 +776,7 @@ gl.skybox = function(e) {
 	`)
 
 	let geo = gl.box_geometry().set(1, 1, 1)
-	let vao = pr.vao()
+	let vao = prog.vao()
 	let pos_buf = gl.buffer(geo.pos)
 	let model = mat4f32().scale(FAR)
 	let inst_buf = gl.mat4_instance_buffer(model)
@@ -597,16 +793,19 @@ gl.skybox = function(e) {
 	}
 
 	e.update = function() {
-		vao.set_uni('sky_color', e.sky_color || v3().from_rgb(0xccddff))
-		vao.set_uni('horizon_color', e.horizon_color || v3().from_rgb(0xffffff))
-		vao.set_uni('ground_color', e.ground_color || v3().from_rgb(0xe0dddd))
+
+		vao.set_uni('sky_color', e.sky_color || 0xccddff)
+		vao.set_uni('horizon_color', e.horizon_color || 0xffffff)
+		vao.set_uni('ground_color', e.ground_color || 0xe0dddd)
 		vao.set_uni('exponent', or(e.exponent, 1))
 
 		let n_loaded
 		let on_load = function() {
 			n_loaded++
-			if (n_loaded == 6)
+			if (n_loaded == 6) {
 				vao.set_uni('use_difuse_cube_map', true)
+				e.fire('load')
+			}
 		}
 		if (e.images && !e.loaded) {
 			e.loaded = true
@@ -633,103 +832,10 @@ gl.skybox = function(e) {
 		vao.unuse()
 	}
 
+	assign(e, opt)
 	e.update()
 
 	return e
-}
-
-// render-based hit testing --------------------------------------------------
-
-// NOTE: zero is not a valid id with this method!
-gl.face_id_renderer = function(r) {
-
-	let gl = this
-
-	r = r || {}
-
-	let pr = gl.program('face_id', `
-		#include mesh.vs
-		in uint face_id;
-		in uint inst_id;
-		flat out uint v_face_id;
-		flat out uint v_inst_id;
-		void main() {
-			gl_Position = mvp_pos();
-			v_face_id = face_id;
-			v_inst_id = inst_id;
-		}
-	`, `
-		#include mesh.fs
-		flat in uint v_face_id;
-		flat in uint v_inst_id;
-		layout (location = 1) out vec4 frag_color1;
-		vec4 to_color(uint id) {
-			return vec4(
-				float((id >> 24) & 0xffu) / 255.0,
-				float((id >> 16) & 0xffu) / 255.0,
-				float((id >>  8) & 0xffu) / 255.0,
-				float((id      ) & 0xffu) / 255.0
-			);
-		}
-		void main() {
-			frag_color  = to_color(v_face_id);
-			frag_color1 = to_color(v_inst_id);
-		}
-	`)
-
-	let w, h
-	let vao = pr.vao()
-	let face_id_map = gl.texture()
-	let inst_id_map = gl.texture()
-	let depth_map = gl.rbo()
-	let fbo = gl.fbo()
-	let face_id_arr
-	let inst_id_arr
-
-	r.render = function(draw) {
-		let w1 = gl.canvas.cw
-		let h1 = gl.canvas.ch
-		if (w1 != w || h1 != h) {
-			w = w1
-			h = h1
-			face_id_map.set_rgba(w, h)
-			face_id_arr = new u8arr(w * h * 4)
-			inst_id_map.set_rgba(w, h)
-			inst_id_arr = new u8arr(w * h * 4)
-			depth_map.set_depth(w, h, true)
-		}
-		fbo.bind('draw', ['color', 'color'])
-		fbo.attach(face_id_map, 'color', 0)
-		fbo.attach(inst_id_map, 'color', 1)
-		fbo.attach(depth_map)
-		gl.clear_all(0, 0, 0, 0)
-		draw(vao)
-		fbo.unbind()
-		fbo.read_pixels('color', 0, face_id_arr)
-		fbo.read_pixels('color', 1, inst_id_arr)
-	}
-
-	function read(arr, x, y) {
-		let r = arr[4 * (y * w + x) + 0]
-		let g = arr[4 * (y * w + x) + 1]
-		let b = arr[4 * (y * w + x) + 2]
-		let a = arr[4 * (y * w + x) + 3]
-		return (r << 24) | (g << 16) | (b << 8) | a
-	}
-
-	r.hit_test = function(x, y) {
-		if (!face_id_arr)
-			return [0, 0]
-		x = clamp(x, 0, w-1)
-		y = clamp(y, 0, h-1)
-		y = (h-1) - y // textures are read upside down...
-		let face_id = read(face_id_arr, x, y)
-		let inst_id = read(inst_id_arr, x, y)
-		return [inst_id, face_id]
-	}
-
-	return r
-
 }
 
 // texture quad prop ---------------------------------------------------------
@@ -799,31 +905,25 @@ gl.texture_quad = function(tex, imat) {
 	return quad
 }
 
-// dots prop -----------------------------------------------------------------
+// points renderer -----------------------------------------------------------
 
-gl.dots = function(e) {
+gl.points_renderer = function() {
 	let gl = this
-	e = e || {}
+	let e = {
+		base_color: 0x000000,
+	}
 
-	e.pos_arr = e.pos_arr || dyn_f32arr()
-	e.pos_dbuf = e.dyn_v3_buffer()
-
-	let pr = gl.program('dot', `
-		#include mesh.vs
-		void main() {
-			gl_Position = mvp_pos();
-			gl_PointSize = 10.0;
-		}
-	`, `
-		#include mesh.fs
-		void main() {
-			frag_color = diffuse_color;
-		}
-	`)
+	let vao = gl.solid_point_program().vao()
 
 	e.draw = function() {
-
+		vao.use()
+		vao.set_uni('base_color', e.base_color)
+		vao.set_attr('color', e.color)
+		vao.set_attr('pos', e.pos)
+		vao.set_attr('model', e.model)
+		vao.set_index(e.index)
 		gl.draw_points()
+		vao.unuse()
 	}
 
 	return e
@@ -831,7 +931,7 @@ gl.dots = function(e) {
 
 // axes prop -----------------------------------------------------------------
 
-gl.axes = function(opt) {
+gl.axes_renderer = function(opt) {
 	let gl = this
 	let e = assign({
 		dash: 1,
@@ -841,7 +941,7 @@ gl.axes = function(opt) {
 		z_color: 0x006600,
 	}, opt)
 
-	let line_vao = gl.line_program().vao()
+	let line_vao = gl.solid_line_program().vao()
 	let dash_vao = gl.dashed_line_program().vao()
 
 	let pos_poz = [
@@ -871,10 +971,12 @@ gl.axes = function(opt) {
 	let model = gl.dyn_mat4_instance_buffer()
 
 	e.add_instance = function() {
-		model.len++
+		let i = model.len
+		model.len = i+1
+		e.upload_model(i, mat4f32())
 		line_vao.set_attr('model', model.buffer)
 		dash_vao.set_attr('model', model.buffer)
-		return model.len-1
+		return i
 	}
 
 	e.upload_model = function(i, m) {
