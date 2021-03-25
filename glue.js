@@ -19,7 +19,7 @@
 		min(x, y) max(x, y)
 		sqrt(x)
 		random()
-		PI sin(x) cos(x) tan(x) rad(x) deg(x)
+		PI sin(x) cos(x) tan(x) rad deg
 		clamp(x, x0, x1)
 		sign(x)
 		strict_sign(x)
@@ -80,7 +80,6 @@
 	timestamps:
 		time()
 		time(y, m, d, H, M, s, ms)
-		time(seconds)
 		time(date_str)
 		day   (ts[, offset])
 		month (ts[, offset])
@@ -183,12 +182,12 @@ function nextpow2(x) {
 }
 
 
-PI = Math.PI
+PI  = Math.PI
 sin = Math.sin
 cos = Math.cos
 tan = Math.tan
-rad = deg => deg * (PI / 180)
-deg = rad => rad * (180 / PI)
+rad = PI / 180
+deg = 180 / PI
 
 asin  = Math.asin
 acos  = Math.acos
@@ -669,9 +668,28 @@ function events_mixin(o) {
 
 // timestamps ----------------------------------------------------------------
 
-time = (...args) => (new Date(...args)).valueOf() / 1000
-
 _d = new Date() // public temporary date object.
+
+// NOTE: months start at 1, and seconds can be fractionary.
+function time(y, m, d, H, M, s) {
+	if (isnum(y)) {
+		_d.setFullYear(y)
+		_d.setMonth(or(m, 1) - 1)
+		_d.setDate(or(d, 1))
+		_d.setHours(H || 0)
+		_d.setMinutes(M || 0)
+		s = s || 0
+		_d.setSeconds(s)
+		_d.setMilliseconds((s - floor(s)) * 1000)
+		return _d.valueOf() / 1000
+	} else if (isstr(y)) {
+		return Date.parse(y) / 1000
+	} else if (y == null) {
+		return Date.now() / 1000
+	} else {
+		assert(false)
+	}
+}
 
 // get the time at the start of the day of a given time, plus/minus a number of days.
 function day(t, offset) {
@@ -727,7 +745,7 @@ function days(dt) {
 }
 
 function year_of      (t) { _d.setTime(t * 1000); return _d.getFullYear() }
-function month_of     (t) { _d.setTime(t * 1000); return _d.getMonth() }
+function month_of     (t) { _d.setTime(t * 1000); return _d.getMonth() + 1 }
 function month_day_of (t) { _d.setTime(t * 1000); return _d.getDay() }
 
 locale = navigator.language
@@ -797,7 +815,7 @@ function week_start_offset() {
 
 // point at a specified angle on a circle.
 function point_around(cx, cy, r, angle) {
-	angle = rad(angle)
+	angle = rad * angle
 	return [
 		cx + cos(angle) * r,
 		cy + sin(angle) * r

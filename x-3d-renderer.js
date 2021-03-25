@@ -69,7 +69,7 @@ gl.module('phong.vs', `
 	void do_phong() {
 		v_pos = vec3(model * vec4(pos, 1.0));
 		v_pos_sdm_view_proj = sdm_view_proj * vec4(v_pos, 1.0);
-		v_normal = inverse(transpose(mat3(model))) * normal;
+		v_normal = inverse(transpose(mat3(model))) * normal; /* model must be affine! */
 		v_uv = uv;
 		gl_Position = view_proj * vec4(v_pos, 1.0);
 	}
@@ -95,6 +95,7 @@ gl.module('phong.fs', `
 		float ambient = ambient_strength;
 
 		vec3 normal = normalize(v_normal);
+
 		vec3 light_dir = normalize(sunlight_pos - v_pos);
 		float diffuse = max(dot(normal, light_dir), 0.0);
 
@@ -328,12 +329,18 @@ gl.face_id_renderer = function(r) {
 
 }
 
+// instance buffers ----------------------------------------------------------
+
+gl.instance_buffer = function() {
+	//
+}
+
 // face rendering ------------------------------------------------------------
 
 gl.module('selected_face.vs', `
 
-	in float selected;
-	flat out float frag_selected;
+	in int selected;
+	flat out int frag_selected;
 
 	void do_selected_face() {
 		frag_selected = selected;
@@ -343,10 +350,10 @@ gl.module('selected_face.vs', `
 
 gl.module('selected_face.fs', `
 
-	flat in float frag_selected;
+	flat in int frag_selected;
 
 	void do_selected_face() {
-		if (frag_selected == 1.0) {
+		if (frag_selected == 1) {
 			float x = mod(gl_FragCoord.x, 4.0);
 			float y = mod(gl_FragCoord.y, 8.0);
 			if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
@@ -358,7 +365,9 @@ gl.module('selected_face.fs', `
 `)
 
 gl.faces_renderer = function() {
+
 	let gl = this
+
 	let e = {
 		ambient_strength: 0.1,
 		specular_strength: .2,
@@ -366,7 +375,7 @@ gl.faces_renderer = function() {
 		polygon_offset: .0001,
 	}
 
-	let face_prog = gl.program('face', `
+	let prog = gl.program('face', `
 		#include phong.vs
 		#include selected_face.vs
 		void main() {
@@ -382,39 +391,105 @@ gl.faces_renderer = function() {
 		}
 	`)
 
-	let face_vao = face_prog.vao()
+	e.is_face_valid = function(face) {
+		return face.valid && !face.mesh
+	}
+
+	let vao = prog.vao()
+
+	let draw_ranges = []
+
+	let davb = gl.dyn_arr_vertex_buffer({
+		pos      : 'v3',
+		normal   : 'v3',
+		uv       : 'v2',
+		selected : 'i32',
+		face_id  : 'u32',
+	})
+
+	let _v0 = v3()
+
+	e.update = function(materials) {
+
+		let pn = 0
+		for (let mat of materials)
+			for (let face of mat.faces)
+				if (e.is_face_valid(face))
+					pn += face.triangles().length
+
+	   davb.len = pn
+
+		let pos      = davb.pos      .array
+		let normal   = davb.normal   .array
+		let uv       = davb.uv       .array
+		let selected = davb.selected .array
+		let face_id  = davb.face_id  .array
+
+		let offset = 0
+		for (let mat of materials) {
+			let offset0 = offset
+			let total = 0
+			for (let face of mat.faces) {
+				if (e.is_face_valid(face)) {
+					let tris = face.triangles()
+					let tris_len = tris.length
+					let n = face.plane().normal
+					for (let i = offset, j = offset + tris_len; i < j; i++) {
+						let pi = tris[i - offset]
+						let p = face.get_point(pi, _v0)
+						let uv = face.uv_at(pi, face.uvm, mat.uv)
+						pos[3*i+0] = p[0]
+						pos[3*i+1] = p[1]
+						pos[3*i+2] = p[2]
+						normal[3*i+0] = n[0]
+						normal[3*i+1] = n[1]
+						normal[3*i+2] = n[2]
+						uv[2*i+0] = uv[0]
+						uv[2*i+1] = uv[1]
+						selected[i] = face.selected
+						face_id[i] = face.id
+					}
+					offset += tris_len
+					total += tris_len
+				}
+			}
+			draw_ranges.push([mat, offset0, total])
+		}
+
+		davb.upload()
+
+	}
+
 	let vao_set = gl.vao_set()
 
 	e.draw = function(prog) {
+		gl.polygonOffset(e.polygon_offset, 0)
 		if (prog) {
 			let vao = vao_set.vao(prog)
-			vao.set_attr('pos'     , e.pos)
-			vao.set_attr('model'   , e.model)
-			vao.set_attr('face_id' , e.face_id)
-			vao.set_attr('inst_id' , e.inst_id)
-			vao.set_index(e.index)
 			vao.use()
+			vao.set_attrs(davb)
+			vao.set_attr('model'  , e.model)
+			vao.set_attr('inst_id', e.inst_id)
+			gl.draw_triangles()
+			vao.unuse()
 		} else {
-			face_vao.set_uni ('ambient_strength' , e.ambient_strength)
-			face_vao.set_uni ('specular_strength', e.specular_strength)
-			face_vao.set_uni ('shininess'        , 1 << e.shininess) // keep this a pow2.
-			face_vao.set_uni ('diffuse_map'      , e.diffuse_map)
-			face_vao.set_attr('pos'              , e.pos)
-			face_vao.set_attr('normal'           , e.normal)
-			face_vao.set_attr('uv'               , e.uv)
-			face_vao.set_attr('selected'         , e.selected)
-			face_vao.set_attr('model'            , e.model)
-			face_vao.set_index(e.index)
-			face_vao.use()
+			vao.use()
+			vao.set_attrs(davb)
+			vao.set_attr('model', e.model)
+			for (let [mat, offset, len] of draw_ranges) {
+				vao.set_uni('ambient_strength' , or(mat.ambient_strength, e.ambient_strength))
+				vao.set_uni('specular_strength', or(mat.specular_strength, e.specular_strength))
+				vao.set_uni('shininess'        , 1 << or(mat.shininess, e.shininess)) // keep this a pow2.
+				vao.set_uni('diffuse_map'      , mat.diffuse_map)
+				gl.draw_triangles(offset, len)
+			}
+			vao.unuse()
 		}
-		gl.polygonOffset(e.polygon_offset, 0)
-		gl.draw_triangles()
 		gl.polygonOffset(0, 0)
-		gl.active_vao.unuse()
 	}
 
 	e.free = function() {
-		face_vao.free()
+		vao.free()
 		vao_set.free()
 	}
 
@@ -435,9 +510,9 @@ gl.solid_line_program = function() {
 
 		void main() {
 			gl_Position = mvp_pos();
-			gl_PointSize = point_size;
 			v_color = vec4(base_color + color, 1.0);
 		}
+
 	`, `
 
 		#include mesh.fs
@@ -447,13 +522,76 @@ gl.solid_line_program = function() {
 		void main() {
 			frag_color = v_color;
 		}
+
 	`)
 }
 
 // solid point rendering -----------------------------------------------------
 
 gl.solid_point_program = function() {
-	return this.solid_line_program()
+	return this.program('solid_point', `
+
+		#include mesh.vs
+
+		uniform vec3 base_color;
+		uniform float point_size;
+		in vec3 color;
+		flat out vec4 v_color;
+
+		void main() {
+			gl_Position = mvp_pos();
+			gl_PointSize = point_size;
+			v_color = vec4(base_color + color, 1.0);
+		}
+
+	`, `
+
+		#include mesh.fs
+
+		flat in vec4 v_color;
+
+		void main() {
+			frag_color = v_color;
+		}
+
+	`)
+}
+
+gl.points_renderer = function() {
+	let gl = this
+	let e = {
+		base_color : 0x000000,
+		point_size : 4,
+	}
+
+	let vao = gl.solid_point_program().vao()
+
+	e.draw = function(prog) {
+		if (prog)
+			return // no shadows or hit testing.
+
+		vao.use()
+
+		vao.set_uni('point_size', e.point_size)
+		vao.set_attr('pos', e.pos)
+		vao.set_attr('model', e.model)
+		vao.set_index(e.index)
+
+		if (!prog) {
+			vao.set_uni('base_color', e.base_color)
+			vao.set_attr('color', e.color)
+		}
+
+		gl.draw_points()
+
+		vao.unuse()
+	}
+
+	e.free = function() {
+		vao.free()
+	}
+
+	return e
 }
 
 // dashed line rendering -----------------------------------------------------
@@ -503,11 +641,13 @@ gl.dashed_line_program = function() {
 
 // fat lines prop ------------------------------------------------------------
 
-gl.fat_lines = function() {
+gl.fat_lines_renderer = function() {
 	let gl = this
-	let e = {}
+	let e = {
+		color: v3(),
+	}
 
-	let fat_line_prog = gl.program('fat_line', `
+	let prog = gl.program('fat_line', `
 
 		#include mesh.vs
 
@@ -543,36 +683,23 @@ gl.fat_lines = function() {
 
 	`)
 
-	let vao = fat_line_prog.vao()
+	let davb = gl.dyn_arr_vertex_buffer({pos: 'v3', q: 'v3', dir: 'i8'})
+	let ib = gl.dyn_arr_index_buffer()
 
-	let pb = gl.dyn_v3_buffer() // 4 points per line.
-	let qb = gl.dyn_v3_buffer() // 4 "other-line-endpoint" points per line.
-	let db = gl.dyn_i8_buffer() // one direction sign per vertex.
-	let ib = gl.dyn_index_buffer() // 1 quad = 2 triangles = 6 points per line.
-
-	let pa = dyn_f32arr(null, 3)
-	let qa = dyn_f32arr(null, 3)
-	let da = dyn_i8arr(null, 1)
-	let ia = dyn_u8arr(null, 1)
-
-	e.color = v3()
-
-	e.set_points = function(lines) {
+	e.update = function(lines) {
 
 		let vertex_count = 4 * lines.length
 		let index_count  = 6 * lines.length
 
-		ia.grow_type(vertex_count-1)
+		ib.grow_type(vertex_count-1)
 
-		pa.len = vertex_count
-		qa.len = vertex_count
-		da.len = vertex_count
-		ia.len = index_count
+		davb.len = vertex_count
+		ib.len = index_count
 
-		let ps = pa.array
-		let qs = qa.array
-		let ds = da.array
-		let is = ia.array
+		let ps = davb.pos.array
+		let qs = davb.q.array
+		let ds = davb.dir.array
+		let is = ib.array
 
 		let i = 0
 		let j = 0
@@ -637,21 +764,17 @@ gl.fat_lines = function() {
 			j += 6
 		}
 
-		ib.grow_type(vertex_count-1)
-
-		pb.len = ps.len; pb.buffer.upload(ps)
-		qb.len = qs.len; qb.buffer.upload(qs)
-		db.len = ds.len; db.buffer.upload(ds)
-		ib.len = is.len; ib.buffer.upload(is)
-
+		davb.upload()
+		ib.upload()
 	}
+
+	let vao = prog.vao()
 
 	e.draw = function() {
 		vao.use()
-		vao.set_uni('color', e.color)
-		vao.set_attr('pos', pb.buffer)
-		vao.set_attr('q'  , qb.buffer)
-		vao.set_attr('dir', db.buffer)
+		vao.set_uni ('color', e.color)
+		vao.set_attrs(davb)
+		vao.set_attr('model', e.model)
 		vao.set_index(ib.buffer)
 		gl.draw_triangles()
 		vao.unuse()
@@ -659,6 +782,7 @@ gl.fat_lines = function() {
 
 	e.free = function() {
 		vao.free()
+		davb.free()
 		pb.free()
 		qb.free()
 		db.free()
@@ -905,30 +1029,6 @@ gl.texture_quad = function(tex, imat) {
 	return quad
 }
 
-// points renderer -----------------------------------------------------------
-
-gl.points_renderer = function() {
-	let gl = this
-	let e = {
-		base_color: 0x000000,
-	}
-
-	let vao = gl.solid_point_program().vao()
-
-	e.draw = function() {
-		vao.use()
-		vao.set_uni('base_color', e.base_color)
-		vao.set_attr('color', e.color)
-		vao.set_attr('pos', e.pos)
-		vao.set_attr('model', e.model)
-		vao.set_index(e.index)
-		gl.draw_points()
-		vao.unuse()
-	}
-
-	return e
-}
-
 // axes prop -----------------------------------------------------------------
 
 gl.axes_renderer = function(opt) {
@@ -1000,4 +1100,4 @@ gl.axes_renderer = function(opt) {
 	return e
 }
 
-})() // module scope.
+}()) // module scope.

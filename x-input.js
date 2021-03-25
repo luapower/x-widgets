@@ -1705,7 +1705,7 @@ component('x-calendar', function(e) {
 
 	e.sel_month = list_dropdown({
 		classes: 'x-calendar-sel-month',
-		items: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+		items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
 		field: {format: format_month},
 		val_col: 0,
 		display_col: 0,
@@ -1814,7 +1814,7 @@ component('x-calendar', function(e) {
 	e.sel_month.on('val_changed', function(v, ev) {
 		if (ev && ev.input) {
 			_d.setTime(as_ts(e.input_val) * 1000)
-			_d.setMonth(this.val)
+			_d.setMonth(this.val - 1)
 			set_ts(_d.valueOf() / 1000)
 		}
 	})
@@ -1861,7 +1861,7 @@ component('x-calendar', function(e) {
 			if (shift)
 				_d.setFullYear(year_of(t) + m)
 			else
-				_d.setMonth(month_of(t) + m)
+				_d.setMonth(month_of(t) + m - 1)
 			set_ts(_d.valueOf() / 1000)
 			return false
 		}
@@ -2582,7 +2582,7 @@ component('x-chart', function(e) {
 
 		if (rotate) {
 			cx.translate(w, 0)
-			cx.rotate(rad(90))
+			cx.rotate(rad * 90)
 			;[w, h] = [h, w]
 		}
 
@@ -2613,7 +2613,7 @@ component('x-chart', function(e) {
 				let x = round(xg.x + text_h / 2)
 				let y = h + m.width
 				cx.translate(x, y)
-				cx.rotate(rad(-90))
+				cx.rotate(rad * -90)
 			} else {
 				let x = xg.x - m.width / 2
 				let y = round(h)
@@ -2640,7 +2640,7 @@ component('x-chart', function(e) {
 				let px = -5
 				let py = round(y + m.width / 2)
 				cx.translate(px, py)
-				cx.rotate(rad(-90))
+				cx.rotate(rad * -90)
 			} else {
 				let px = -m.width - 10
 				let py = round(y + text_h / 2)

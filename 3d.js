@@ -306,6 +306,9 @@ v2.div = function div(a, b, out) {
 	return out
 }
 
+v2.origin = v2()
+v2.zero = v2.origin
+
 // v3 ------------------------------------------------------------------------
 
 // hsl is in (0..360, 0..1, 0..1); rgb is (0..1, 0..1, 0..1)
@@ -650,8 +653,8 @@ v3.div = function div(a, b, out) {
 	return out
 }
 
-v3.zero   = v3()
-v3.origin = v3.zero
+v3.origin  = v3()
+v3.zero   = v3.origin
 v3.one    = v3(1, 1, 1)
 v3.up     = v3(0, 1, 0)
 v3.right  = v3(1, 0, 0)
@@ -944,6 +947,8 @@ v4.div = function div(a, v, out) {
 	return out
 }
 
+v4.origin = v4()
+
 // mat3 ----------------------------------------------------------------------
 
 let mat3_type = function(super_class, super_args) {
@@ -1199,6 +1204,9 @@ let mat3_type = function(super_class, super_args) {
 let mat3_ident = [1, 0, 0, 0, 1, 0, 0, 0, 1]
 mat3    = mat3_type(Array, mat3_ident)
 mat3f32 = mat3_type(f32arr, [mat3_ident])
+
+mat3.identity = mat3()
+mat3f32.identity = mat3f32()
 
 // mat4 ----------------------------------------------------------------------
 
@@ -1761,6 +1769,9 @@ let mat4_type = function(super_class, super_args) {
 let mat4_ident = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 mat4    = mat4_type(Array, mat4_ident)
 mat4f32 = mat4_type(f32arr, [mat4_ident])
+
+mat4.identity = mat4()
+mat4f32.identity = mat4f32()
 
 // quaternion ----------------------------------------------------------------
 
@@ -2960,7 +2971,7 @@ camera = function(e) {
 
 	e.perspective = function(fovy, near, far) {
 		let aspect = e.viewport_w / e.viewport_h
-		e.proj.perspective(or(fovy, rad(60)), aspect, or(near, 0.01), far)
+		e.proj.perspective(or(fovy, rad * 60), aspect, or(near, 0.01), far)
 		return this
 	}
 
@@ -3118,4 +3129,4 @@ camera = function(e) {
 
 camera3 = camera // so you can do `let camera = camera3()`.
 
-})() // module scope.
+}()) // module scope.

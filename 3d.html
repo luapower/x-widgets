@@ -7,6 +7,7 @@
 <script src=3d.js></script>
 <script src=earcut.js></script>
 <script src=gl.js></script>
+<script src=suncalc.js></script>
 <script src=x-3d-renderer.js></script>
 </head>
 <body>
@@ -21,33 +22,6 @@ canvas.on('webglcontextlost', function() {
 let gl = canvas.getContext('webgl2', {
 	//antialias: false, // MSAA FBOs can't be blitted to a MSAA canvas.
 })
-
-gl.module('selected_face.vs', `
-
-	in float selected;
-	flat out float frag_selected;
-
-	void do_selected_face() {
-		frag_selected = selected;
-	}
-
-`)
-
-gl.module('selected_face.fs', `
-
-	flat in float frag_selected;
-
-	void do_selected_face() {
-		if (frag_selected == 1.0) {
-			float x = mod(gl_FragCoord.x, 4.0);
-			float y = mod(gl_FragCoord.y, 8.0);
-			if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
-				 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
-				frag_color = vec4(0.0, 0.0, .8, 1.0);
-		}
-	}
-
-`)
 
 // face material -------------------------------------------------------------
 
@@ -97,43 +71,18 @@ face3 = poly3.subclass({
 
 
 let faces = [
-	face3({uvm: mat3().translate(.1, .1).scale(1)}, [1, 0, 3, 2]),
-	face3({uvm: mat3().scale(1).invert()}, [4, 5, 6, 7]),
-	face3({uvm: mat3().scale(1).invert()}, [7, 6, 2, 3]), //[6, 2, 3],
-	face3({uvm: mat3().scale(1).invert()}, [4, 0, 1, 5]),
-	face3({uvm: mat3().scale(1).invert()}, [0, 4, 7, 3]),
-	face3({uvm: mat3().scale(1).invert()}, [5, 1, 2, 6]),
+	face3({valid: true, id: 0, uvm: mat3().translate(.1, .1).scale(1)}, [1, 0, 3, 2]),
+	face3({valid: true, id: 1, uvm: mat3().scale(1).invert()}, [4, 5, 6, 7]),
+	face3({valid: true, id: 2, uvm: mat3().scale(1).invert()}, [7, 6, 2, 3]), //[6, 2, 3],
+	face3({valid: true, id: 3, uvm: mat3().scale(1).invert()}, [4, 0, 1, 5]),
+	face3({valid: true, id: 4, uvm: mat3().scale(1).invert()}, [0, 4, 7, 3]),
+	face3({valid: true, id: 5, uvm: mat3().scale(1).invert()}, [5, 1, 2, 6]),
 ]
 
-let triangles = []
-let triangle_pis = []
-let normals = []
-let uvs = []
-let selected = []
-let face_ids = []
 let inst_ids = []
 
-let _p = v3()
-
-let face_id = 0
-for (let face of faces) {
-	let no = face.plane().normal
-	let p0 = face.get_point(0, _p)
-	let tris = face.triangles()
-	for (let i = 0, n = tris.length; i < n; i++) {
-		triangle_pis.push(face[tris[i]])
-		let p = face.get_point(tris[i])
-		triangles.push(p.x, p.y, p.z)
-		face_ids.push(face_id)
-		normals.push(no.x, no.y, no.z)
-		let uv = face.uv_at(tris[i], face.uvm, v2(1, 1))
-		uvs.push(uv.x, uv.y)
-		selected.push((triangles.length - 4) % 12 >= 6 ? 1 : 0)
-	}
-	face_id++
-}
-
 function scale_texture(tex) {
+	return
 	let pi = 0
 	for (let face of faces) {
 		for (let i = 0, tris = face.triangles(), n = tris.length; i < n; i++) {
@@ -163,14 +112,8 @@ for (let i = 0; i < inst_mats.length / 16; i++)
 	inst_ids[i] = i
 
 let    points_dbuf = gl.dyn_v3_buffer(points)
-let triangles_dbuf = gl.dyn_v3_buffer(triangles)
-let   normals_dbuf = gl.dyn_v3_buffer(normals)
-let       uvs_dbuf = gl.dyn_v2_buffer(uvs)
-let  selected_dbuf = gl.dyn_u8_buffer(selected)
-let  face_ids_dbuf = gl.dyn_u32_buffer(face_ids)
-let  inst_ids_dbuf = gl.dyn_u32_instance_buffer(inst_ids)
-
 let inst_mat_dbuf = gl.dyn_mat4_instance_buffer(inst_mats)
+let inst_id_dbuf = gl.dyn_u32_instance_buffer(inst_ids)
 
 let lines = [
 	0, 1,  1, 2,  2, 3,  3, 0,
@@ -272,50 +215,38 @@ document.on('keydown', function(key) {
 
 // materials & textures
 
-let face_vao = face_program(gl).vao()
+let points_r = gl.points_renderer()
+let faces_r = gl.faces_renderer()
 let dashed_line_vao = gl.dashed_line_program().vao()
-let fat_lines = gl.fat_lines()
+let fat_lines_r = gl.fat_lines_renderer()
 
 let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
 
 // rendering
 
-let tq
-function draw_faces(sdm_vao) {
+faces_r.update([
+	{
+		diffuse_map: tex1,
+		faces: faces,
+		uv: v2(1, 1),
+	},
+])
+faces_r.inst_id = inst_id_dbuf.buffer
+faces_r.model = inst_mat_dbuf.buffer
 
-	if (sdm_vao) {
-		sdm_vao.set_attr('pos'  , triangles_dbuf.buffer)
-		sdm_vao.set_attr('model', inst_mat_dbuf.buffer)
-		sdm_vao.set_attr('face_id', face_ids_dbuf.buffer)
-		sdm_vao.set_attr('inst_id', inst_ids_dbuf.buffer)
-		sdm_vao.use()
-	} else {
-		face_vao.set_uni ('ambient_strength' , 0.1)
-		face_vao.set_uni ('specular_strength', .2)
-		face_vao.set_uni ('shininess'        , 1 << 5) // keep this a pow2.
-		face_vao.set_uni ('diffuse_map'      , tex1)
-		face_vao.set_attr('pos'              , triangles_dbuf.buffer)
-		face_vao.set_attr('normal'           , normals_dbuf.buffer)
-		face_vao.set_attr('uv'               , uvs_dbuf.buffer)
-		face_vao.set_attr('selected'         , selected_dbuf.buffer)
-		face_vao.set_attr('model'            , inst_mat_dbuf.buffer)
-		face_vao.use()
-	}
+fat_lines_r.update([
+	line3(v3(0, 0, 0), v3(10, 10, 10)),
+	line3(v3(0, 0, 0), v3(0, 1, 0)),
+	line3(v3(0, 0, 0), v3(1, 0, 0)),
+])
+fat_lines_r.color.set(0, 0, 1)
+fat_lines_r.inst_id = inst_id_dbuf.buffer
+fat_lines_r.model = inst_mat_dbuf.buffer
 
-	gl.polygonOffset(.0001, 0)
-	gl.draw_triangles()
-	gl.polygonOffset(0, 0)
-
-	gl.active_vao.unuse()
-
-	if (0) {
-		depth_map.uv = v2(2, 2)
-		assert(!gl.active_fbo)
-		tq = tq || gl.texture_quad(depth_map)
-		tq.model.reset().scale(5).translate(0, 0, -1)
-		tq.update_model()
-		tq.draw()
-	}
+function draw_points(prog) {
+	points_r.pos = points_dbuf.buffer
+	points_r.model = inst_mat_dbuf.buffer
+	points_r.draw(prog)
 }
 
 function draw_dashed_lines() {
@@ -331,19 +262,9 @@ function draw_dashed_lines() {
 	vao.unuse()
 }
 
-function draw_fat_lines() {
-	fat_lines.set_points([
-		line3(v3(0, 0, 0), v3(10, 10, 10)),
-		line3(v3(0, 0, 0), v3(0, 1, 0)),
-		line3(v3(0, 0, 0), v3(1, 0, 0)),
-	])
-	fat_lines.color.set(0, 0, 1)
-	fat_lines.draw()
-}
-
 function draw_lines() {
 	draw_dashed_lines()
-	draw_fat_lines()
+	fat_lines_r.draw()
 }
 
 let rot = 0
@@ -356,7 +277,7 @@ function start_frame() {
 	inst_mat1
 		.reset()
 		.translate(0, 3, 0)
-		.rotate(v3.up, -20 + rad(20*rot))
+		.rotate(v3.up, -20 + rad * 20 * rot)
 	inst_mat_dbuf.buffer.upload(inst_mat1, 0)
 
 	//camera.dir.x = sin(rot/10) * radius
@@ -398,15 +319,13 @@ skybox = gl.skybox({
 let axes = gl.axes_renderer()
 axes.upload_model(axes.add_instance(), mat4f32())
 
-let vao_set = gl.vao_set()
-
 function draw_all(prog) {
 	if (!prog) {
 		skybox.draw()
 		axes.draw()
 	}
-	let vao = prog && vao_set.vao(prog)
-	draw_faces(vao)
+	draw_points(prog)
+	//faces_r.draw(prog)
 	if (!prog)
 		draw_lines()
 }
@@ -426,7 +345,7 @@ canvas.on('pointermove', function(ev, mx, my) {
 	my -= r.y
 	let hit = {}
 	face_id_renderer.hit_test(mx, my, hit)
-	//print(hit)
+	print(hit)
 })
 
 animate()

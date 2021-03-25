@@ -342,7 +342,6 @@ editable_3d_model = function(e) {
 		face.id = id
 		face.material = face.material || materials[0]
 		face.material.faces.push(face)
-		face.triangles = []
 		faces.add(face)
 		if (DEBUG)
 			print('add_face', id, face.join(','), face.lis.join(','))
@@ -403,7 +402,7 @@ editable_3d_model = function(e) {
 			print('insert_edge', face.id, '@'+ei, 'pi='+pi, '@'+line_ei, 'li='+li, 'before_pi='+face[ei])
 		face.insert(ei, pi)
 		face.lis.insert(line_ei, li)
-		face.triangle_coords = null
+		face.invalidate()
 	}
 
 	e.each_line_face = function(li, f) {
@@ -1572,4 +1571,4 @@ editable_3d_model = function(e) {
 	return e
 }
 
-})() // module scope.
+}()) // module scope.

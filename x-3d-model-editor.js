@@ -59,7 +59,7 @@ component('x-modeleditor', function(e) {
 		if (e.projection == 'ortho') {
 			camera.ortho(-10, 10, -10, 10, -1e2, 1e2)
 		} else {
-			camera.perspective(rad(e.fov),
+			camera.perspective(rad * e.fov,
 				min_distance * 100,
 				max_distance * 100)
 		}
@@ -88,31 +88,17 @@ component('x-modeleditor', function(e) {
 	e.prop('shadows'    , {store: 'var', type: 'boolean', default: true})
 
 	e.prop('sunlight'   , {store: 'var', type: 'boolean', default: false})
-	e.prop('time'       , {store: 'var', type: 'datetime', default: time(2020, 8, 1, 12)})
+	e.prop('time'       , {store: 'var', type: 'datetime', default: 1596272400})
 	e.prop('north'      , {store: 'var', type: 'number', default: 0})
-	e.prop('latitude'   , {store: 'var', type: 'number', default: 0})
-	e.prop('longitude'  , {store: 'var', type: 'number', default: 0})
+	e.prop('latitude'   , {store: 'var', type: 'number', default: 44.42314})
+	e.prop('longitude'  , {store: 'var', type: 'number', default: 26.35673})
 
 	let sun_pos = v3()
 	function update_sun_pos() {
-		// https://en.wikipedia.org/wiki/Position_of_the_Sun
-		// 1. calculate Sun's ecliptic coordinates (EL, b, R).
-		let julian_day = pe.time / 86400 + 2440587.5 // timestamp to Julian day.
-		let n = julian_day - 2451545 // number of days since 1 Jan 2000 at 12:00h GMT.
-		let L = rad((280.460 + .9856474 * n) % 360) // Sun's mean longitude
-		let g = rad((357.528 + .9856003 * n) % 360) // Sun's mean anomaly
-		let lam = L + rad(1.915) * sin(g) + rad(.020) * sin(2*g) // Sun's ecliptic longitude
-		let b = 0 // Sun's ecliptic latitude
-		let R = 1.00014 - rad(0.01671) * cos(g) - rad(0.00014) * cos(2*g) // Sun-Earth distance in AUs
-		// 2. transform to equatorial coordinates.
-		let e = rad((23.439 - 0.0000004 * n) % 360) // obliquity of the eliptic
-		let a = atan2(cos(e) * sin(lam), cos(lam)) // right ascension
-		let d = asin(sin(e) * sin(lam)) // declination
-		// 3. transform to horizontal coordinates.
-		// TODO:
-		// let phi =
-		// let LST =
-		// sun_pos.set_from_axis_angle()
+		let {azimuth, altitude} = suncalc.sun_position(e.time, e.latitude, e.longitude)
+		sun_pos.set(v3.z_axis)
+			.rotate(v3.x_axis, -altitude)
+			.rotate(v3.y_axis, -azimuth + rad * e.north)
 		if (e.sunlight)
 			update_sunlight_pos()
 	}
