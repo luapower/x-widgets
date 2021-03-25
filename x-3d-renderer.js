@@ -32,7 +32,7 @@ gl.module('mesh.vs', `
 	out vec3 v_normal;
 	out vec2 v_uv;
 
-	vec4 mvp_pos() {
+	vec4 mvp(vec3 pos) {
 		return view_proj * model * vec4(pos, 1.0);
 	}
 
@@ -252,7 +252,7 @@ gl.face_id_renderer = function(r) {
 		flat out uint v_inst_id;
 
 		void main() {
-			gl_Position = mvp_pos();
+			gl_Position = mvp(pos);
 			v_face_id = face_id;
 			v_inst_id = inst_id;
 		}
@@ -337,33 +337,6 @@ gl.instance_buffer = function() {
 
 // face rendering ------------------------------------------------------------
 
-gl.module('selected_face.vs', `
-
-	in int selected;
-	flat out int frag_selected;
-
-	void do_selected_face() {
-		frag_selected = selected;
-	}
-
-`)
-
-gl.module('selected_face.fs', `
-
-	flat in int frag_selected;
-
-	void do_selected_face() {
-		if (frag_selected == 1) {
-			float x = mod(gl_FragCoord.x, 4.0);
-			float y = mod(gl_FragCoord.y, 8.0);
-			if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
-				 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
-				frag_color = vec4(0.0, 0.0, .8, 1.0);
-		}
-	}
-
-`)
-
 gl.faces_renderer = function() {
 
 	let gl = this
@@ -376,19 +349,36 @@ gl.faces_renderer = function() {
 	}
 
 	let prog = gl.program('face', `
+
 		#include phong.vs
-		#include selected_face.vs
+
+		in int selected;
+		flat out int frag_selected;
+
 		void main() {
 			do_phong();
-			do_selected_face();
+			frag_selected = selected;
 		}
+
 	`, `
+
 		#include phong.fs
-		#include selected_face.fs
+
+		flat in int frag_selected;
+
 		void main() {
+
 			do_phong();
-			do_selected_face();
+
+			if (frag_selected == 1) {
+				float x = mod(gl_FragCoord.x, 4.0);
+				float y = mod(gl_FragCoord.y, 8.0);
+				if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
+					 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
+					frag_color = vec4(0.0, 0.0, .8, 1.0);
+			}
 		}
+
 	`)
 
 	e.is_face_valid = function(face) {
@@ -496,20 +486,25 @@ gl.faces_renderer = function() {
 	return e
 }
 
-// solid line rendering ------------------------------------------------------
+// solid lines rendering -----------------------------------------------------
 
-gl.solid_line_program = function() {
-	return this.program('solid_line', `
+gl.solid_lines_renderer = function() {
+
+	let gl = this
+	let e = {
+		base_color: 0x000000,
+	}
+
+	let prog = this.program('solid_line', `
 
 		#include mesh.vs
 
 		uniform vec3 base_color;
-		uniform float point_size;
 		in vec3 color;
 		flat out vec4 v_color;
 
 		void main() {
-			gl_Position = mvp_pos();
+			gl_Position = mvp(pos);
 			v_color = vec4(base_color + color, 1.0);
 		}
 
@@ -524,12 +519,41 @@ gl.solid_line_program = function() {
 		}
 
 	`)
+
+	let vao = prog.vao()
+
+	e.draw = function(prog) {
+		if (prog)
+			return // no shadows or hit-testing.
+		vao.use()
+		vao.set_attr('pos', e.pos)
+		vao.set_attr('model', e.model)
+		vao.set_index(e.index)
+		vao.set_uni('base_color', e.base_color)
+		vao.set_attr('color', e.color)
+		gl.draw_lines()
+		vao.unuse()
+	}
+
+	e.free = function() {
+		vao.free()
+	}
+
+	return e
+
 }
 
 // solid point rendering -----------------------------------------------------
 
-gl.solid_point_program = function() {
-	return this.program('solid_point', `
+gl.points_renderer = function() {
+
+	let gl = this
+	let e = {
+		base_color : 0x000000,
+		point_size : 4,
+	}
+
+	let prog = this.program('solid_point', `
 
 		#include mesh.vs
 
@@ -539,7 +563,7 @@ gl.solid_point_program = function() {
 		flat out vec4 v_color;
 
 		void main() {
-			gl_Position = mvp_pos();
+			gl_Position = mvp(pos);
 			gl_PointSize = point_size;
 			v_color = vec4(base_color + color, 1.0);
 		}
@@ -555,35 +579,20 @@ gl.solid_point_program = function() {
 		}
 
 	`)
-}
 
-gl.points_renderer = function() {
-	let gl = this
-	let e = {
-		base_color : 0x000000,
-		point_size : 4,
-	}
-
-	let vao = gl.solid_point_program().vao()
+	let vao = prog.vao()
 
 	e.draw = function(prog) {
 		if (prog)
 			return // no shadows or hit testing.
-
 		vao.use()
-
 		vao.set_uni('point_size', e.point_size)
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
 		vao.set_index(e.index)
-
-		if (!prog) {
-			vao.set_uni('base_color', e.base_color)
-			vao.set_attr('color', e.color)
-		}
-
+		vao.set_uni('base_color', e.base_color)
+		vao.set_attr('color', e.color)
 		gl.draw_points()
-
 		vao.unuse()
 	}
 
@@ -594,22 +603,30 @@ gl.points_renderer = function() {
 	return e
 }
 
-// dashed line rendering -----------------------------------------------------
+// dashed lines rendering ----------------------------------------------------
 
-// works with gl.LINES drawing mode.
-gl.dashed_line_program = function() {
-	return this.program('dashed_line', `
+gl.dashed_lines_renderer = function() {
+
+	let gl = this
+	let e = {
+		base_color: 0x000000,
+		dash: 1,
+		gap: 3,
+	}
+
+	// works with gl.LINES drawing mode.
+	let prog = this.program('dashed_line', `
 
 		#include mesh.vs
 
 		uniform vec3 base_color;
 		in vec3 color;
 		out vec4 v_p1;
-		flat out vec4 v_p2; // because GL_LAST_VERTEX_CONVENTION.
+		flat out vec4 v_p2; // because gl.LAST_VERTEX_CONVENTION.
 		flat out vec4 v_color;
 
 		void main() {
-			vec4 p = mvp_pos();
+			vec4 p = mvp(pos);
 			v_p1 = p;
 			v_p2 = p;
 			v_color = vec4(base_color + color, 1.0);
@@ -637,11 +654,36 @@ gl.dashed_line_program = function() {
 		}
 
 	`)
+
+	let vao = prog.vao()
+
+	e.draw = function(prog) {
+		if (prog)
+			return // no shadows or hit-testing.
+		vao.use()
+		vao.set_uni('dash', e.dash)
+		vao.set_uni('gap', e.gap)
+		vao.set_attr('pos', e.pos)
+		vao.set_attr('model', e.model)
+		vao.set_index(e.index)
+		vao.set_uni('base_color', e.base_color)
+		vao.set_attr('color', e.color)
+		gl.draw_lines()
+		vao.unuse()
+	}
+
+	e.free = function() {
+		vao.free()
+	}
+
+	return e
+
 }
 
-// fat lines prop ------------------------------------------------------------
+// fat lines rendering -------------------------------------------------------
 
 gl.fat_lines_renderer = function() {
+
 	let gl = this
 	let e = {
 		color: v3(),
@@ -651,23 +693,38 @@ gl.fat_lines_renderer = function() {
 
 		#include mesh.vs
 
+		uniform float clip_near;
+
 		in vec3 q;
 		in float dir;
+
+		vec4 shorten_line(vec4 p1, vec4 p2, float cut_w) {
+			float t = (cut_w - p2.w) / (p1.w - p2.w);
+			return mix(p2, p1, t);
+		}
 
 		void main() {
 
 			// line points in NDC.
-			vec4 dp = view_proj * vec4(pos, 1.0);
-			vec4 dq = view_proj * vec4(q, 1.0);
-			dp /= dp.w;
-			dq /= dq.w;
+			vec4 p1 = mvp(pos);
+			vec4 p2 = mvp(q);
+
+			// cut the line at near-plane if one of its end-points has w < 0.
+			float cut_w = clip_near * .5;
+			if (p1.w < cut_w && p2.w > cut_w) {
+				p1 = shorten_line(p1, p2, cut_w);
+			} else if (p2.w < cut_w && p1.w > cut_w) {
+				p2 = shorten_line(p2, p1, cut_w);
+			}
 
 			// line normal in screen space.
-			float dx = dq.x - dp.x;
-			float dy = dq.y - dp.y;
-			vec2 n = normalize(vec2(-dy, dx) * dir) / viewport_size * dp.w * 2.0;
+			vec2 s1 = p1.xy / p1.w;
+			vec2 s2 = p2.xy / p2.w;
+			float nx = s2.x - s1.x;
+			float ny = s1.y - s2.y;
+			vec2 n = normalize(vec2(ny, nx) * dir) / viewport_size * 2.0 * p1.w;
 
-			gl_Position = dp + vec4(n, 0.0, 0.0);
+			gl_Position = p1 + vec4(n, 0.0, 0.0);
 
 		}
 
@@ -770,7 +827,9 @@ gl.fat_lines_renderer = function() {
 
 	let vao = prog.vao()
 
-	e.draw = function() {
+	e.draw = function(prog) {
+		if (prog)
+			return // no shadows or hit-testing
 		vao.use()
 		vao.set_uni ('color', e.color)
 		vao.set_attrs(davb)
@@ -870,7 +929,7 @@ gl.skybox = function(opt) {
 
 		void main() {
 			v_model_pos = pos.xyz;
-			gl_Position = mvp_pos();
+			gl_Position = mvp(pos);
 		}
 
 	`, `
@@ -950,7 +1009,9 @@ gl.skybox = function(opt) {
 
 	}
 
-	e.draw = function() {
+	e.draw = function(prog) {
+		if (prog)
+			return // no shadows or hit-testing
 		vao.use()
 		gl.draw_triangles()
 		vao.unuse()
@@ -988,7 +1049,7 @@ gl.texture_quad = function(tex, imat) {
 		out vec2 v_uv;
 		void main() {
 			v_uv = uv;
-			gl_Position = mvp_pos();
+			gl_Position = mvp(pos);
 		}
 	`, `
 		#include mesh.fs
@@ -1034,15 +1095,13 @@ gl.texture_quad = function(tex, imat) {
 gl.axes_renderer = function(opt) {
 	let gl = this
 	let e = assign({
-		dash: 1,
-		gap: 3,
 		x_color: 0x990000,
 		y_color: 0x000099,
 		z_color: 0x006600,
 	}, opt)
 
-	let line_vao = gl.solid_line_program().vao()
-	let dash_vao = gl.dashed_line_program().vao()
+	let lines_r = gl.solid_lines_renderer()
+	let dashed_r  = gl.dashed_lines_renderer()
 
 	let pos_poz = [
 		...v3.zero, ...v3(FAR,   0,   0),
@@ -1074,8 +1133,8 @@ gl.axes_renderer = function(opt) {
 		let i = model.len
 		model.len = i+1
 		e.upload_model(i, mat4f32())
-		line_vao.set_attr('model', model.buffer)
-		dash_vao.set_attr('model', model.buffer)
+		lines_r.model = model.buffer
+		dashed_r.model = model.buffer
 		return i
 	}
 
@@ -1083,18 +1142,19 @@ gl.axes_renderer = function(opt) {
 		model.buffer.upload(m, i)
 	}
 
-	line_vao.set_attr('pos', pos_poz)
-	line_vao.set_attr('color', color)
+	lines_r.pos = pos_poz
+	lines_r.color = color
 
-	dash_vao.set_attr('pos', pos_neg)
-	dash_vao.set_attr('color', color)
+	dashed_r.pos = pos_neg
+	dashed_r.color = color
 
-	dash_vao.set_uni('dash', e.dash)
-	dash_vao.set_uni('gap' , e.gap)
-
-	e.draw = function() {
-		line_vao.use(); gl.draw_lines(); line_vao.unuse()
-		dash_vao.use(); gl.draw_lines(); dash_vao.unuse()
+	e.draw = function(prog) {
+		if (prog)
+			return // no shadows or hit-testing.
+		dashed_r.dash = e.dash
+		dashed_r.gap = e.gap
+		lines_r.draw(prog)
+		dashed_r.draw(prog)
 	}
 
 	return e

@@ -59,9 +59,10 @@ component('x-modeleditor', function(e) {
 		if (e.projection == 'ortho') {
 			camera.ortho(-10, 10, -10, 10, -1e2, 1e2)
 		} else {
-			camera.perspective(rad * e.fov,
-				min_distance * 100,
-				max_distance * 100)
+			camera.fov = e.fov
+			camera.near = min_distance * 100
+			camera.far  = max_distance * 100
+			camera.perspective()
 		}
 		gl.set_uni('proj', camera.proj)
 		update_camera()

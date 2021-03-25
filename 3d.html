@@ -115,10 +115,15 @@ let    points_dbuf = gl.dyn_v3_buffer(points)
 let inst_mat_dbuf = gl.dyn_mat4_instance_buffer(inst_mats)
 let inst_id_dbuf = gl.dyn_u32_instance_buffer(inst_ids)
 
-let lines = [
+let solid_lines = [
+	4, 5,  5, 6,  6, 7,  7, 4,
+]
+let solid_line_pis_buf = gl.dyn_index_buffer(solid_lines)
+
+let dashed_lines = [
 	0, 1,  1, 2,  2, 3,  3, 0,
 ]
-let line_pis_buf = gl.dyn_index_buffer(lines)
+let dashed_line_pis_buf = gl.dyn_index_buffer(dashed_lines)
 
 let camera = camera3()
 
@@ -129,6 +134,7 @@ function update_camera() {
 	gl.set_uni('view_pos', camera.pos)
 	gl.set_uni('view', camera.view)
 	gl.set_uni('view_proj', camera.view_proj)
+	gl.set_uni('clip_near', camera.near)
 
 	if (skybox)
 		skybox.update_view(camera.pos)
@@ -217,7 +223,8 @@ document.on('keydown', function(key) {
 
 let points_r = gl.points_renderer()
 let faces_r = gl.faces_renderer()
-let dashed_line_vao = gl.dashed_line_program().vao()
+let solid_lines_r = gl.solid_lines_renderer()
+let dashed_lines_r = gl.dashed_lines_renderer()
 let fat_lines_r = gl.fat_lines_renderer()
 
 let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
@@ -234,6 +241,15 @@ faces_r.update([
 faces_r.inst_id = inst_id_dbuf.buffer
 faces_r.model = inst_mat_dbuf.buffer
 
+solid_lines_r.model = inst_mat_dbuf.buffer
+solid_lines_r.pos = points_dbuf.buffer
+solid_lines_r.index = solid_line_pis_buf.buffer
+
+dashed_lines_r.base_color = v3(0, 0, 1)
+dashed_lines_r.model = inst_mat_dbuf.buffer
+dashed_lines_r.pos = points_dbuf.buffer
+dashed_lines_r.index  = dashed_line_pis_buf.buffer
+
 fat_lines_r.update([
 	line3(v3(0, 0, 0), v3(10, 10, 10)),
 	line3(v3(0, 0, 0), v3(0, 1, 0)),
@@ -242,30 +258,6 @@ fat_lines_r.update([
 fat_lines_r.color.set(0, 0, 1)
 fat_lines_r.inst_id = inst_id_dbuf.buffer
 fat_lines_r.model = inst_mat_dbuf.buffer
-
-function draw_points(prog) {
-	points_r.pos = points_dbuf.buffer
-	points_r.model = inst_mat_dbuf.buffer
-	points_r.draw(prog)
-}
-
-function draw_dashed_lines() {
-	let vao = dashed_line_vao
-	vao.set_uni ('color' , 1, 0, 1, 1)
-	vao.set_uni ('dash'  , 2)
-	vao.set_uni ('gap'   , 4)
-	vao.set_attr('model' , inst_mat_dbuf.buffer)
-	vao.set_attr('pos'   , points_dbuf.buffer)
-	vao.set_index(line_pis_buf.buffer)
-	vao.use()
-	gl.draw_lines()
-	vao.unuse()
-}
-
-function draw_lines() {
-	draw_dashed_lines()
-	fat_lines_r.draw()
-}
 
 let rot = 0
 
@@ -320,14 +312,15 @@ let axes = gl.axes_renderer()
 axes.upload_model(axes.add_instance(), mat4f32())
 
 function draw_all(prog) {
-	if (!prog) {
-		skybox.draw()
-		axes.draw()
-	}
-	draw_points(prog)
-	//faces_r.draw(prog)
-	if (!prog)
-		draw_lines()
+	skybox.draw(prog)
+	axes.draw(prog)
+	points_r.pos = points_dbuf.buffer
+	points_r.model = inst_mat_dbuf.buffer
+	points_r.draw(prog)
+	faces_r.draw(prog)
+	solid_lines_r.draw(prog)
+	dashed_lines_r.draw(prog)
+	fat_lines_r.draw(prog)
 }
 
 function animate() {
@@ -345,7 +338,7 @@ canvas.on('pointermove', function(ev, mx, my) {
 	my -= r.y
 	let hit = {}
 	face_id_renderer.hit_test(mx, my, hit)
-	print(hit)
+	//print(hit)
 })
 
 animate()

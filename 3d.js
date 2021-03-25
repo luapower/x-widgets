@@ -2943,9 +2943,12 @@ let _v4_1 = v4() // camera
 camera = function(e) {
 	e = e || {}
 
-	e.pos = e.pos || v3(3, 1, 10)
-	e.dir = e.dir || v3(0, 0, 1)
-	e.up  = e.up  || v3(0, 1, 0)
+	e.pos  = e.pos || v3(3, 1, 10)
+	e.dir  = e.dir || v3(0, 0, 1)
+	e.up   = e.up  || v3(0, 1, 0)
+
+	e.fov  = e.fov || 60
+	e.near = e.near || 0.01
 
 	e.proj = mat4()
 	e.view = mat4()
@@ -2969,9 +2972,9 @@ camera = function(e) {
 		return camera().set(e)
 	}
 
-	e.perspective = function(fovy, near, far) {
+	e.perspective = function() {
 		let aspect = e.viewport_w / e.viewport_h
-		e.proj.perspective(or(fovy, rad * 60), aspect, or(near, 0.01), far)
+		e.proj.perspective(rad * e.fov, aspect, e.near, e.far)
 		return this
 	}
 
