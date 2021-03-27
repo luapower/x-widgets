@@ -47,7 +47,7 @@ gl.module('mesh.fs', `
 
 	uniform vec3 view_pos;
 	uniform vec2 viewport_size;
-	uniform vec4 diffuse_color;
+	uniform vec3 diffuse_color;
 	uniform sampler2D diffuse_map;
 
 	in vec3 v_pos;
@@ -125,7 +125,7 @@ gl.module('phong.fs', `
 
 		float light = (ambient + (1.0 - shadow) * (diffuse + specular));
 
-		frag_color = vec4(light * sunlight_color, 1.0) * diffuse_color * texture(diffuse_map, v_uv);
+		frag_color = vec4(light * sunlight_color, 1.0) * (vec4(diffuse_color, 1.0) + texture(diffuse_map, v_uv));
 
 	}
 
@@ -140,7 +140,7 @@ gl.scene_renderer = function(r) {
 	r.background_color = r.background_color || v4(1, 1, 1, 1)
 	r.sunlight_dir     = r.sunlight_dir || v3(1, 1, 0)
 	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
-	r.diffuse_color    = r.diffuse_color || v4(1, 1, 1, 1)
+	r.diffuse_color    = r.diffuse_color || v3(1, 1, 1)
 	r.sdm_proj         = r.sdm_proj || mat4().ortho(-10, 10, -10, 10, -1e4, 1e4)
 
 	let sunlight_view = mat4()
@@ -373,17 +373,14 @@ gl.faces_renderer = function() {
 			if (frag_selected == 1) {
 				float x = mod(gl_FragCoord.x, 4.0);
 				float y = mod(gl_FragCoord.y, 8.0);
-				if ((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
+				frag_color =
+					((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
 					 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
-					frag_color = vec4(0.0, 0.0, .8, 1.0);
+					? vec4(0.0, 0.0, .8, 1.0) : frag_color;
 			}
 		}
 
 	`)
-
-	e.is_face_valid = function(face) {
-		return face.valid && !face.mesh
-	}
 
 	let vao = prog.vao()
 
@@ -397,56 +394,70 @@ gl.faces_renderer = function() {
 		face_id  : 'u32',
 	})
 
+	let index_dab = gl.dyn_arr_index_buffer()
+
 	let _v0 = v3()
 
 	e.update = function(materials) {
 
-		let pn = 0
-		for (let mat of materials)
-			for (let face of mat.faces)
-				if (e.is_face_valid(face))
-					pn += face.triangles().length
+		let pt_n = 0
+		let pi_n = 0
+		for (let mat of materials) {
+			for (let face of mat.faces) {
+				face.update_if_invalid()
+				if (!face.mesh) {
+					pt_n += face.length
+					pi_n += face.triangles().length
+				}
+			}
+		}
 
-	   davb.len = pn
+		davb.len = pt_n
+		index_dab.len = 0
+		index_dab.grow_type(pt_n)
+		index_dab.len = pi_n
 
 		let pos      = davb.pos      .array
 		let normal   = davb.normal   .array
 		let uv       = davb.uv       .array
 		let selected = davb.selected .array
 		let face_id  = davb.face_id  .array
+		let index    = index_dab     .array
 
-		let offset = 0
+		let j = 0
+		let k = 0
 		for (let mat of materials) {
-			let offset0 = offset
-			let total = 0
+			let k0 = k
 			for (let face of mat.faces) {
-				if (e.is_face_valid(face)) {
-					let tris = face.triangles()
-					let tris_len = tris.length
-					let n = face.plane().normal
-					for (let i = offset, j = offset + tris_len; i < j; i++) {
-						let pi = tris[i - offset]
-						let p = face.get_point(pi, _v0)
-						let uv = face.uv_at(pi, face.uvm, mat.uv)
-						pos[3*i+0] = p[0]
-						pos[3*i+1] = p[1]
-						pos[3*i+2] = p[2]
-						normal[3*i+0] = n[0]
-						normal[3*i+1] = n[1]
-						normal[3*i+2] = n[2]
-						uv[2*i+0] = uv[0]
-						uv[2*i+1] = uv[1]
-						selected[i] = face.selected
-						face_id[i] = face.id
+				if (!face.mesh) {
+					let np = face.plane().normal
+					let j0 = j
+					let i, n
+					for (i = 0, n = face.length; i < n; i++, j++) {
+						let p = face.get_point(i, _v0)
+						let uv = face.uv_at(i, face.uvm, mat.uv)
+						pos[3*j+0] = p[0]
+						pos[3*j+1] = p[1]
+						pos[3*j+2] = p[2]
+						normal[3*j+0] = np[0]
+						normal[3*j+1] = np[1]
+						normal[3*j+2] = np[2]
+						uv[2*j+0] = uv[0]
+						uv[2*j+1] = uv[1]
+						selected[j] = face.selected
+						face_id[j] = face.id
 					}
-					offset += tris_len
-					total += tris_len
+					let tris = face.triangles()
+					for (i = 0, n = tris.length; i < n; i++, k++) {
+						index[k] = j0 + tris[i]
+					}
 				}
 			}
-			draw_ranges.push([mat, offset0, total])
+			draw_ranges.push([mat, k0, k - k0])
 		}
 
 		davb.upload()
+		index_dab.upload()
 
 	}
 
@@ -458,6 +469,7 @@ gl.faces_renderer = function() {
 			let vao = vao_set.vao(prog)
 			vao.use()
 			vao.set_attrs(davb)
+			vao.set_index(index_dab.buffer)
 			vao.set_attr('model'  , e.model)
 			vao.set_attr('inst_id', e.inst_id)
 			gl.draw_triangles()
@@ -465,12 +477,14 @@ gl.faces_renderer = function() {
 		} else {
 			vao.use()
 			vao.set_attrs(davb)
+			vao.set_index(index_dab.buffer)
 			vao.set_attr('model', e.model)
 			for (let [mat, offset, len] of draw_ranges) {
 				vao.set_uni('ambient_strength' , or(mat.ambient_strength, e.ambient_strength))
 				vao.set_uni('specular_strength', or(mat.specular_strength, e.specular_strength))
 				vao.set_uni('shininess'        , 1 << or(mat.shininess, e.shininess)) // keep this a pow2.
-				vao.set_uni('diffuse_map'      , mat.diffuse_map)
+				vao.set_uni('diffuse_color', mat.diffuse_color)
+				vao.set_uni('diffuse_map'  , mat.diffuse_map)
 				gl.draw_triangles(offset, len)
 			}
 			vao.unuse()
@@ -695,7 +709,7 @@ gl.fat_lines_renderer = function() {
 
 		uniform float clip_near;
 
-		in vec3 q;
+		in vec3 q; // line's other end-point.
 		in float dir;
 
 		vec4 shorten_line(vec4 p1, vec4 p2, float cut_w) {
@@ -748,9 +762,10 @@ gl.fat_lines_renderer = function() {
 		let vertex_count = 4 * lines.length
 		let index_count  = 6 * lines.length
 
-		ib.grow_type(vertex_count-1)
-
 		davb.len = vertex_count
+
+		ib.len = 0
+		ib.grow_type(vertex_count-1)
 		ib.len = index_count
 
 		let ps = davb.pos.array
@@ -1101,7 +1116,7 @@ gl.axes_renderer = function(opt) {
 	}, opt)
 
 	let lines_r = gl.solid_lines_renderer()
-	let dashed_r  = gl.dashed_lines_renderer()
+	let dashed_r = gl.dashed_lines_renderer()
 
 	let pos_poz = [
 		...v3.zero, ...v3(FAR,   0,   0),
@@ -1149,10 +1164,6 @@ gl.axes_renderer = function(opt) {
 	dashed_r.color = color
 
 	e.draw = function(prog) {
-		if (prog)
-			return // no shadows or hit-testing.
-		dashed_r.dash = e.dash
-		dashed_r.gap = e.gap
 		lines_r.draw(prog)
 		dashed_r.draw(prog)
 	}

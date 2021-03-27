@@ -23,28 +23,6 @@ let gl = canvas.getContext('webgl2', {
 	//antialias: false, // MSAA FBOs can't be blitted to a MSAA canvas.
 })
 
-// face material -------------------------------------------------------------
-
-function face_program(gl) {
-	return gl.program('face', `
-		#include mesh.vs
-		#include phong.vs
-		#include selected_face.vs
-		void main() {
-			do_phong();
-			do_selected_face();
-		}
-	`, `
-		#include mesh.fs
-		#include phong.fs
-		#include selected_face.fs
-		void main() {
-			do_phong();
-			do_selected_face();
-		}
-	`)
-}
-
 // scene ---------------------------------------------------------------------
 
 // geometry
@@ -82,6 +60,7 @@ let faces = [
 let inst_ids = []
 
 function scale_texture(tex) {
+	print('here')
 	return
 	let pi = 0
 	for (let face of faces) {
@@ -169,7 +148,7 @@ canvas_resized()
 function hit_test(mx, my) {
 	let ray = camera.raycast(mx, my, line3())
 	let hit = {}
-	if (face_id_renderer.hit_test(mx, my, hit)) {
+	if (face_id_rr.hit_test(mx, my, hit)) {
 		let model = mat4().from_mat4_array(inst_mats, hit.inst_id)
 		let inv_model = mat4().set(model).invert()
 		ray.transform(inv_model)
@@ -221,43 +200,45 @@ document.on('keydown', function(key) {
 
 // materials & textures
 
-let points_r = gl.points_renderer()
-let faces_r = gl.faces_renderer()
-let solid_lines_r = gl.solid_lines_renderer()
-let dashed_lines_r = gl.dashed_lines_renderer()
-let fat_lines_r = gl.fat_lines_renderer()
+let points_rr = gl.points_renderer()
+let faces_rr = gl.faces_renderer()
+let solid_lines_rr = gl.solid_lines_renderer()
+let dashed_lines_rr = gl.dashed_lines_renderer()
+let fat_lines_rr = gl.fat_lines_renderer()
 
 let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
 
 // rendering
 
-faces_r.update([
-	{
-		diffuse_map: tex1,
-		faces: faces,
-		uv: v2(1, 1),
-	},
-])
-faces_r.inst_id = inst_id_dbuf.buffer
-faces_r.model = inst_mat_dbuf.buffer
+let materials = []
+materials.push({
+	diffuse_color: 0x000000,
+	diffuse_map: tex1,
+	faces: faces,
+	uv: v2(1, 1),
+})
 
-solid_lines_r.model = inst_mat_dbuf.buffer
-solid_lines_r.pos = points_dbuf.buffer
-solid_lines_r.index = solid_line_pis_buf.buffer
+faces_rr.update(materials)
+faces_rr.inst_id = inst_id_dbuf.buffer
+faces_rr.model = inst_mat_dbuf.buffer
 
-dashed_lines_r.base_color = v3(0, 0, 1)
-dashed_lines_r.model = inst_mat_dbuf.buffer
-dashed_lines_r.pos = points_dbuf.buffer
-dashed_lines_r.index  = dashed_line_pis_buf.buffer
+solid_lines_rr.model = inst_mat_dbuf.buffer
+solid_lines_rr.pos = points_dbuf.buffer
+solid_lines_rr.index = solid_line_pis_buf.buffer
 
-fat_lines_r.update([
+dashed_lines_rr.base_color = v3(0, 0, 1)
+dashed_lines_rr.model = inst_mat_dbuf.buffer
+dashed_lines_rr.pos = points_dbuf.buffer
+dashed_lines_rr.index  = dashed_line_pis_buf.buffer
+
+fat_lines_rr.update([
 	line3(v3(0, 0, 0), v3(10, 10, 10)),
 	line3(v3(0, 0, 0), v3(0, 1, 0)),
 	line3(v3(0, 0, 0), v3(1, 0, 0)),
 ])
-fat_lines_r.color.set(0, 0, 1)
-fat_lines_r.inst_id = inst_id_dbuf.buffer
-fat_lines_r.model = inst_mat_dbuf.buffer
+fat_lines_rr.color.set(0, 0, 1)
+fat_lines_rr.inst_id = inst_id_dbuf.buffer
+fat_lines_rr.model = inst_mat_dbuf.buffer
 
 let rot = 0
 
@@ -283,22 +264,15 @@ function start_frame() {
 	//pos_dbuf.invalidate(0, 1)
 }
 
-let renderer = gl.scene_renderer({
+let scene_rr = gl.scene_renderer({
 	sunlight_dir: v3.up.clone(),
 	enable_shadows: true,
 })
 
-let face_id_renderer = gl.face_id_renderer()
+let face_id_rr = gl.face_id_renderer()
 
 skybox = gl.skybox({
 	images: {
-		//right  : 'skybox/right.jpg',
-		//left   : 'skybox/left.jpg',
-		//top    : 'skybox/top.jpg',
-		//bottom : 'skybox/bottom.jpg',
-		//front  : 'skybox/front.jpg',
-		//back   : 'skybox/back.jpg',
-
 		posx: 'skybox/posx.jpg',
 		negx: 'skybox/negx.jpg',
 		posy: 'skybox/posy.jpg',
@@ -308,27 +282,27 @@ skybox = gl.skybox({
 	},
 })
 
-let axes = gl.axes_renderer()
-axes.upload_model(axes.add_instance(), mat4f32())
+let axes_rr = gl.axes_renderer()
+axes_rr.upload_model(axes_rr.add_instance(), mat4f32())
 
 function draw_all(prog) {
 	skybox.draw(prog)
-	axes.draw(prog)
-	points_r.pos = points_dbuf.buffer
-	points_r.model = inst_mat_dbuf.buffer
-	points_r.draw(prog)
-	faces_r.draw(prog)
-	solid_lines_r.draw(prog)
-	dashed_lines_r.draw(prog)
-	fat_lines_r.draw(prog)
+	axes_rr.draw(prog)
+	points_rr.pos = points_dbuf.buffer
+	points_rr.model = inst_mat_dbuf.buffer
+	points_rr.draw(prog)
+	faces_rr.draw(prog)
+	solid_lines_rr.draw(prog)
+	dashed_lines_rr.draw(prog)
+	fat_lines_rr.draw(prog)
 }
 
 function animate() {
 	start_frame()
-	renderer.sunlight_dir.set(camera.dir)
-	renderer.update()
-	renderer.render(draw_all)
-	face_id_renderer.render(draw_all)
+	scene_rr.sunlight_dir.set(camera.dir)
+	scene_rr.update()
+	scene_rr.render(draw_all)
+	face_id_rr.render(draw_all)
 	raf(animate)
 }
 
@@ -337,7 +311,7 @@ canvas.on('pointermove', function(ev, mx, my) {
 	mx -= r.x
 	my -= r.y
 	let hit = {}
-	face_id_renderer.hit_test(mx, my, hit)
+	face_id_rr.hit_test(mx, my, hit)
 	//print(hit)
 })
 

@@ -59,7 +59,7 @@ component('x-modeleditor', function(e) {
 		if (e.projection == 'ortho') {
 			camera.ortho(-10, 10, -10, 10, -1e2, 1e2)
 		} else {
-			camera.fov = e.fov
+			camera.fov  = e.fov
 			camera.near = min_distance * 100
 			camera.far  = max_distance * 100
 			camera.perspective()
@@ -234,7 +234,7 @@ component('x-modeleditor', function(e) {
 		})
 	}
 
-	// helper lines -----------------------------------------------------------
+	// colored fat helper lines -----------------------------------------------
 
 	e.line = function(name, line, dotted, color) {
 
@@ -315,7 +315,7 @@ component('x-modeleditor', function(e) {
 
 	}
 
-	// helper dots ------------------------------------------------------------
+	// html-rendered helper dots ----------------------------------------------
 
 	e.dot = function(point, text, text_class) {
 
@@ -605,7 +605,7 @@ component('x-modeleditor', function(e) {
 	// model ------------------------------------------------------------------
 
 	e.components = {} // {name->group}
-	e.model = editable_3d_model({})
+	e.model = editable_3d_model()
 	e.model.init_view(gl)
 	e.model.editor = e
 
@@ -1258,8 +1258,8 @@ component('x-modeleditor', function(e) {
 
 	function draw_test_cube() {
 
-		let mat1 = e.model.add_material({color: 0xff9900})
-		let mat2 = e.model.add_material({color: 0x0099ff})
+		let mat1 = e.model.add_material({diffuse_color: 0xff9900})
+		let mat2 = e.model.add_material({diffuse_color: 0x0099ff})
 
 		let m = {
 			points: [

@@ -2359,6 +2359,7 @@ let poly3_cons = function(_this, opt, elements) {
 	assign(_this, opt)
 	if (_this.mode)
 		assign(_this, assert(_this.modes[_this.mode]))
+	_this.invalid = true
 }
 
 let poly3_class = class poly3 extends Array {
@@ -2385,7 +2386,7 @@ poly3 = function(opt, elements) { return new poly3_class(opt, elements) }
 poly3.class = poly3_class
 
 poly3.subclass = function(methods) {
-	let cls = class poly3sub extends Array {
+	let cls = class poly3 extends Array {
 		constructor(opt, elements) {
 			if (elements)
 				super(...elements)
@@ -2410,30 +2411,23 @@ poly3p.modes = {
 	},
 }
 
+poly3p._update_plane = function() {
+	let pl = this._plane || plane()
+	this._plane = pl
+	pl.set_from_poly(this)
+}
 poly3p.plane = function() {
-	let pl = this._plane
-	if (!this._plane_valid) {
-		if (!pl) {
-			pl = plane()
-			this._plane = pl
-		}
-		pl.set_from_poly(this)
-		this._plane_valid = true
-	}
-	return pl
+	return this.update_if_invalid()._plane
 }
 
 // project poly3 on the xy plane resulting in a poly2 with the same interface
 // as a poly3. use the poly2 for triangulation and finding its regions.
-poly3p.project_xy = function() {
-	let pp = this._project_xy
-	if (this._project_xy_valid)
-		return pp
-	let xy_quat = this._xy_quat
+poly3p._update_pp = function() {
+	let pp = this._pp
 	if (!pp) {
- 		pp = new this.__proto__.constructor(this)
-		xy_quat = quat()
-		this._project_xy = pp
+		pp = new this.__proto__.constructor(this)
+		this._pp = pp
+		let xy_quat = quat()
 		this._xy_quat = xy_quat
 		pp.is_projected = true
 		let point_count = this.point_count
@@ -2442,9 +2436,10 @@ poly3p.project_xy = function() {
 			return get_point.call(this, i, _p).transform(xy_quat)
 		}
 	}
-	xy_quat.set_from_unit_vectors(this.plane().normal, v3.z_axis)
-	this._project_xy_valid = true
-	return pp
+	this._xy_quat.set_from_unit_vectors(this._plane.normal, v3.z_axis)
+}
+poly3p.project_xy = function() {
+	return this.update_if_invalid()._pp
 }
 
 // check if a polygon is a convex quad (the most common case for trivial triangulation).
@@ -2498,9 +2493,7 @@ poly3p.triangle_count = function() {
 
 {
 let ps = []
-poly3p.triangles = function() {
-	if (this._triangles_valid)
-		return this._triangles
+poly3p._update_triangles = function() {
 	let tri_count = this.triangle_count()
 	let out = this._triangles
 	let pn = this.point_count()
@@ -2537,9 +2530,11 @@ poly3p.triangles = function() {
 		assert(out.length == tri_count)
 	}
 	this._triangles = out
-	this._triangles_valid = true
-	return out
 }
+}
+
+poly3p.triangles = function() {
+	return this.update_if_invalid()._triangles
 }
 
 poly3p.triangle = function(ti, out) {
@@ -2570,11 +2565,7 @@ poly3p.uv_at = function(i, uvm, tex_uv) {
 	let pp = this.project_xy()
 	let p0 = pp.get_point(0, _p0)
 	let pi = pp.get_point(i, _p1)
-	pi.sub(p0)
-	p[0] = pi[0] * tex_uv[0]
-	p[1] = pi[1] * tex_uv[1]
-	let px = p.x
-	let py = p.y
+	pi.sub(p0).mul(tex_uv)
 	if (uvm)
 		p.transform(uvm)
 	return p
@@ -2620,11 +2611,23 @@ poly3p.intersect_line = function(line, face) {
 	}
 }
 
+poly3p.update_if_invalid = function() {
+	if (this.invalid)
+		this.update()
+	return this
+}
+
+poly3p.update = function() {
+	this._update_plane()
+	this._update_pp()
+	this._update_triangles()
+	this.invalid = false
+	return this
+}
 
 poly3p.invalidate = function() {
-	this._plane_valid = false
-	this._project_xy_valid = false
-	this._triangles_valid = false
+	this.invalid = true
+	return this
 }
 
 /*

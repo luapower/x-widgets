@@ -24,6 +24,8 @@ function real_p2p_distance2(p1, p2) { // stub
 
 editable_3d_model = function(e) {
 
+	e = e || {}
+
 	// undo/redo stacks -------------------------------------------------------
 
 	{
@@ -303,8 +305,11 @@ editable_3d_model = function(e) {
 	}
 
 	e.add_material = function(opt) {
-		let mat = {}
-		mat.faces = []
+		let mat = assign({
+			diffuse_color: 0xffffff,
+			uv: v2(1, 1),
+			faces: [],
+		}, opt)
 		let mi = materials.push(mat) - 1
 		mat.mi = mi
 		return mat
@@ -1046,7 +1051,7 @@ editable_3d_model = function(e) {
 				// replace point in pulled face.
 				old_points[ei] = old_pi
 				pull.face[ei] = new_pi
-				face_points_changed(pull.face)
+				pull.face.invalidate()
 
 				// update the endpoint of pulled face edges that are connected to this point.
 				let next_ei = ei
@@ -1116,8 +1121,8 @@ editable_3d_model = function(e) {
 					e.move_point(pi, _p.x, _p.y, _p.z)
 				}
 				for (let face of shape_changing_faces)
-					face_points_changed(face)
-				face_points_changed(pull.face)
+					face.invalidate()
+				pull.face.invalidate()
 
 			}
 		}
@@ -1147,8 +1152,8 @@ editable_3d_model = function(e) {
 	let sel_inv_edge_lis_dab  // index buffer for selected invisible face edges (blue dashed lines).
 	let inst_mat_dab          // instance matrices.
 
-	let points_renderer
-	let faces_renderer
+	let points_rr
+	let faces_rr
 
 	e.init_view = function(gl) {
 
@@ -1160,8 +1165,8 @@ editable_3d_model = function(e) {
 		sel_inv_edge_lis_dab = gl.dyn_arr_u32_index_buffer()
 		inst_mat_dab         = gl.dyn_arr_mat4_instance_buffer()
 
-		points_renderer = gl.points_renderer()
-		faces_renderer  = gl.faces_renderer()
+		points_rr = gl.points_renderer()
+		faces_rr  = gl.faces_renderer()
 
 	}
 
@@ -1327,196 +1332,7 @@ editable_3d_model = function(e) {
 	)
 	*/
 
-	e.add_material({color: white})
-
-	function face_points_changed(face) {
-		face.invalidate()
-	}
-
-	function flat_faces_mesh() {
-
-		let geo = new THREE.InstancedBufferGeometry()
-		let mat = materials[0]
-		let mesh = new THREE.Mesh(geo, materials)
-		mesh.name = 'flat_faces'
-		mesh.castShadow = false
-		mesh.receiveShadow = false
-		mesh.frustumCulled = false
-
-		e.group.add(mesh)
-
-		let pb, nb, sb
-
-		function update() {
-
-			let pn = 0
-			for (let face of faces)
-				if (face.valid && !face.mesh)
-					pn += face.triangles.length
-
-			if (!pb || pb.count < pn) {
-				let capacity = nextpow2(pn)
-				pb =  point_buffer(capacity)
-				nb =  point_buffer(capacity)
-				sb = uint32_buffer(capacity)
-				geo.setAttribute('position', pb)
-				geo.setAttribute('normal'  , nb)
-				geo.setAttribute('selected', sb)
-			}
-
-			let offset = 0
-			let mi = 0
-			geo.clearGroups()
-
-			for (let mat of materials) {
-				let offset0 = offset
-				let total = 0
-				for (let face of mat.faces) {
-					if (face.valid && !face.mesh) {
-						let t = face.triangles
-						let len = t.length
-						for (let i = 0; i < len; i++) {
-							let p = e.get_point(t[i])
-							pb.array[3*(offset+i)+0] = p.x
-							pb.array[3*(offset+i)+1] = p.y
-							pb.array[3*(offset+i)+2] = p.z
-						}
-						let n = face.plane.normal
-						for (let i = offset, j = offset + len; i < j; i++) {
-							nb.array[3*i+0] = n.x
-							nb.array[3*i+1] = n.y
-							nb.array[3*i+2] = n.z
-						}
-						sb.array.fill(face.selected, offset, offset + len)
-						offset += len
-						total += len
-					}
-				}
-				geo.addGroup(offset0, total, mi)
-				mi++
-			}
-
-			pb.updateRange.count = 3 * pn
-			nb.updateRange.count = 3 * pn
-			sb.updateRange.count = pn
-
-			pb.needsUpdate = true
-			nb.needsUpdate = true
-			sb.needsUpdate = true
-
-			geo.setDrawRange(0, pn)
-
-			geo.setAttribute('instance_matrix', inst_mat_buf)
-			geo.instanceCount = e.instance_count()
-
-			/*
-			if (DEBUG) {
-				if (face.normals_helper)
-					e.group.remove(face.normals_helper)
-				if (face.valid) {
-					face.normals_helper = new THREE.VertexNormalsHelper(mesh, 2, 0x00ff00, 1)
-					face.normals_helper.layers.set(1)
-					e.group.add(face.normals_helper)
-				}
-			}
-
-			if (DEBUG) {
-				if (face.debug_dot)
-					face.debug_dot.free()
-				face.debug_dot = e.editor.dot(face.center(), face.id+':'+face[0], 'face')
-			}
-			*/
-
-		}
-
-		return update
-	}
-
-	function smooth_faces_mesh() {
-
-		let geo = new THREE.InstancedBufferGeometry()
-		let mat = materials[0]
-		let mesh = new THREE.Mesh(geo, materials)
-		mesh.name = 'smooth_faces'
-		mesh.castShadow = false
-		mesh.receiveShadow = false
-		mesh.frustumCulled = false
-
-		e.group.add(mesh)
-
-		let ib, sb
-
-		function update() {
-
-			let pn = 0
-			for (let face of faces)
-				if (face.valid && face.mesh)
-					pn += face.triangles.length
-
-			geo.setAttribute('position', points_buf)
-			geo.setAttribute('normal'  , normals_buf)
-
-			if (!sb || sb.count < pn) {
-				let capacity = nextpow2(pn)
-				ib =  index_buffer(capacity)
-				sb = uint32_buffer(capacity)
-				geo.setIndex(ib)
-				geo.setAttribute('selected', sb)
-			}
-
-			let offset = 0
-			let mi = 0
-			geo.clearGroups()
-
-			for (let mat of materials) {
-				let offset0 = offset
-				let total = 0
-				for (let face of mat.faces) {
-					if (face.valid && face.mesh) {
-						let len = face.triangles.length
-						ib.array.set(face.triangles, offset, offset + len)
-						sb.array.fill(face.selected, offset, offset + len)
-						offset += len
-						total += len
-					}
-				}
-				geo.addGroup(offset0, total, mi)
-				mi++
-			}
-
-			ib.updateRange.count = pn
-			sb.updateRange.count = pn
-
-			ib.needsUpdate = true
-			sb.needsUpdate = true
-
-			geo.setDrawRange(0, pn)
-
-			geo.setAttribute('instance_matrix', inst_mat_buf)
-			geo.instanceCount = e.instance_count()
-
-			/*
-			if (DEBUG) {
-				if (face.normals_helper)
-					e.group.remove(face.normals_helper)
-				if (face.valid) {
-					face.normals_helper = new THREE.VertexNormalsHelper(mesh, 2, 0x00ff00, 1)
-					face.normals_helper.layers.set(1)
-					e.group.add(face.normals_helper)
-				}
-			}
-
-			if (DEBUG) {
-				if (face.debug_dot)
-					face.debug_dot.free()
-				face.debug_dot = e.editor.dot(face.center(), face.id+':'+face[0], 'face')
-			}
-			*/
-
-		}
-
-		return update
-	}
+	e.add_material({diffuse_color: 0xffffff})
 
 	e.update = function() {
 
@@ -1531,20 +1347,19 @@ editable_3d_model = function(e) {
 		//let [vis_edges_buf, inv_edges_buf] = upload_edge_lis()
 		let inst_mat_buf = upload_inst_mat()
 
-		points_renderer.pos = points_buf
-		points_renderer.index = used_pis_buf
-		points_renderer.model = inst_mat_buf
+		points_rr.pos = points_buf
+		points_rr.index = used_pis_buf
+		points_rr.model = inst_mat_buf
 
-		faces_renderer.pos = points_buf
-		faces_renderer.index = used_pis_buf
-		faces_renderer.model = inst_mat_buf
+		faces_rr.update(materials)
+		faces_rr.model = inst_mat_buf
 
 	}
 
-	e.draw = function(vao) {
+	e.draw = function(prog) {
 
-		points_renderer.draw(vao)
-		faces_renderer.draw(vao)
+		points_rr.draw(prog)
+		faces_rr.draw(prog)
 
 		/*
 		upload_vis_edges_mesh()

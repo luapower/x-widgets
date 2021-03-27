@@ -706,12 +706,18 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 		if (arr_type1.BYTES_PER_ELEMENT <= arr_type.BYTES_PER_ELEMENT)
 			return
 		if (this.buffer) {
-			let a0 = this.buffer.download(this.buffer.arr())
+			let a1
+			if (this.len > 0) {
+				let a0 = this.buffer.download(this.buffer.arr())
+				let a1 = new arr_type1(this.len)
+				for (let i = 0, n = a0.length * n_components; i < n; i++)
+					a1[i] = a0[i]
+			}
+			let cap = this.buffer.capacity
 			this.buffer.free()
-			let a1 = new arr_type1(this.len)
-			for (let i = 0, n = a0.length * n_components; i < n; i++)
-				a1[i] = a0[i]
-			this.buffer = gl.buffer(a0, arr_type1, n_components, instance_divisor, normalize, for_index)
+			this.buffer = gl.buffer(cap, arr_type1, n_components, instance_divisor, normalize, for_index)
+			if (a1)
+				this.buffer.upload(a1)
 			this.buffer_replaced(this.buffer)
 		}
 		arr_type = arr_type1
@@ -1101,27 +1107,27 @@ gl.set_uni = function(name, ...args) {
 	return this
 }
 
-gl.draw = function(gl_mode, vertex_offset, vertex_count) {
+gl.draw = function(gl_mode, offset, count) {
 	let gl = this
 	let vao = gl.active_vao
 	let ib = vao.index_buffer
 	let n_inst = vao.instance_count
-	if (ib) { // indexed drawing: no VBO range drawing.
-		assert(vertex_offset == null)
-		assert(vertex_count == null)
+	offset = offset || 0
+	if (ib) {
+		if (count == null)
+			count = ib.len
 		if (n_inst != null) {
-			gl.drawElementsInstanced(gl_mode, ib.len, ib.gl_type, 0, n_inst)
+			gl.drawElementsInstanced(gl_mode, count, ib.gl_type, offset, n_inst)
 		} else {
-			gl.drawElements(gl_mode, ib.len, ib.gl_type, 0)
+			gl.drawElements(gl_mode, count, ib.gl_type, offset)
 		}
 	} else {
-		vertex_offset = vertex_offset || 0
-		if (vertex_count == null)
-			vertex_count = vao.vertex_count
+		if (count == null)
+			count = vao.vertex_count
 		if (n_inst != null) {
-			gl.drawArraysInstanced(gl_mode, vertex_offset, vertex_count, n_inst)
+			gl.drawArraysInstanced(gl_mode, offset, count, n_inst)
 		} else {
-			gl.drawArrays(gl_mode, vertex_offset, vertex_count)
+			gl.drawArrays(gl_mode, offset, count)
 		}
 	}
 	return this
