@@ -32,6 +32,7 @@
 		return_true
 		return_false
 		return_arg
+		assert_false
 	error handling:
 		print()
 		warn()
@@ -56,7 +57,7 @@
 		a.extend(a1)
 		a.insert(i, v)
 		a.remove(i) -> v
-		a.remove_value(v) -> v
+		a.remove_value(v) -> i
 		a.remove_values(cond)
 		a.last
 		a.binsearch(v, cmp, i1, i2)
@@ -334,9 +335,9 @@ method(Array, 'remove', function(i) {
 
 method(Array, 'remove_value', function(v) {
 	let i = this.indexOf(v)
-	if (i == -1) return
-	this.splice(i, 1)
-	return v
+	if (i != -1)
+		this.splice(i, 1)
+	return i
 })
 
 method(Array, 'remove_values', function(cond) {

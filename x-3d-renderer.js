@@ -397,13 +397,14 @@ gl.faces_renderer = function() {
 	let index_dab = gl.dyn_arr_index_buffer()
 
 	let _v0 = v3()
+	let _uv = v2()
 
 	e.update = function(materials) {
 
 		let pt_n = 0
 		let pi_n = 0
-		for (let mat of materials) {
-			for (let face of mat.faces) {
+		for (let [mat, faces] of materials) {
+			for (let face of faces) {
 				face.update_if_invalid()
 				if (!face.mesh) {
 					pt_n += face.length
@@ -426,16 +427,17 @@ gl.faces_renderer = function() {
 
 		let j = 0
 		let k = 0
-		for (let mat of materials) {
+		draw_ranges.length = 0
+		for (let [mat, faces] of materials) {
 			let k0 = k
-			for (let face of mat.faces) {
+			for (let face of faces) {
 				if (!face.mesh) {
 					let np = face.plane().normal
 					let j0 = j
 					let i, n
 					for (i = 0, n = face.length; i < n; i++, j++) {
 						let p = face.get_point(i, _v0)
-						let uv = face.uv_at(i, face.uvm, mat.uv)
+						let uv = face.uv_at(i, face.uvm, mat.uv, _uv)
 						pos[3*j+0] = p[0]
 						pos[3*j+1] = p[1]
 						pos[3*j+2] = p[2]

@@ -63,7 +63,7 @@
 
 	poly3
 		% point_count get_point
-		plane project_xy is_convex_quad triangle_count triangles triangle contains_point
+		plane xy_quat is_convex_quad triangle_count triangles triangle contains_point
 
 	line3 [p0, p1]
 		set clone equals
@@ -2420,26 +2420,14 @@ poly3p.plane = function() {
 	return this.update_if_invalid()._plane
 }
 
-// project poly3 on the xy plane resulting in a poly2 with the same interface
-// as a poly3. use the poly2 for triangulation and finding its regions.
-poly3p._update_pp = function() {
-	let pp = this._pp
-	if (!pp) {
-		pp = new this.__proto__.constructor(this)
-		this._pp = pp
-		let xy_quat = quat()
-		this._xy_quat = xy_quat
-		pp.is_projected = true
-		let point_count = this.point_count
-		let get_point = this.get_point
-		pp.get_point = function(i, _p) {
-			return get_point.call(this, i, _p).transform(xy_quat)
-		}
-	}
+// xy_quat projects points on the xy plane for in-plane calculations.
+poly3p._update_xy_quat = function() {
+	if (!this._xy_quat)
+		this._xy_quat = quat()
 	this._xy_quat.set_from_unit_vectors(this._plane.normal, v3.z_axis)
 }
-poly3p.project_xy = function() {
-	return this.update_if_invalid()._pp
+poly3p.xy_quat = function() {
+	return this.update_if_invalid()._xy_quat
 }
 
 // check if a polygon is a convex quad (the most common case for trivial triangulation).
@@ -2520,9 +2508,9 @@ poly3p._update_triangles = function() {
 		out[5] = 2
 	} else {
 		ps.length = pn * 2
-		let pp = this.project_xy()
+		let xy_quat = this.xy_quat()
 		for (let i = 0; i < pn; i++) {
-			let p = pp.get_point(i, _v0)
+			let p = this.get_point(i, _v0).transform(xy_quat)
 			ps[2*i+0] = p[0]
 			ps[2*i+1] = p[1]
 		}
@@ -2557,28 +2545,25 @@ poly3p.contains_point = function(p) {
 }
 
 // (tex_uv) are 1 / (texture's (u, v) in world space).
-{
-let _p0 = v3()
-let _p1 = v3()
-let p = v2()
-poly3p.uv_at = function(i, uvm, tex_uv) {
-	let pp = this.project_xy()
-	let p0 = pp.get_point(0, _p0)
-	let pi = pp.get_point(i, _p1)
+poly3p.uv_at = function(i, uvm, tex_uv, out) {
+	let xy_quat = this.xy_quat()
+	let p0 = this.get_point(0, _v0).transform(xy_quat)
+	let pi = this.get_point(i, _v1).transform(xy_quat)
 	pi.sub(p0).mul(tex_uv)
 	if (uvm)
-		p.transform(uvm)
-	return p
+		pi.transform(uvm)
+	out[0] = pi[0]
+	out[1] = pi[1]
+	return out
 }
 
 poly3p.uvs = function(uvm, tex_uv, out) {
 	for (let i = 0, n = this.point_count(); i < n; i++) {
-		let uv = this.uv_at(i, uvm, tex_uv)
+		let uv = this.uv_at(i, uvm, tex_uv, _v1)
 		out[2*i+0] = uv[0]
 		out[2*i+1] = uv[1]
 	}
 	return out
-}
 }
 
 poly3p.intersect_line = function(line, face) {
@@ -2619,7 +2604,7 @@ poly3p.update_if_invalid = function() {
 
 poly3p.update = function() {
 	this._update_plane()
-	this._update_pp()
+	this._update_xy_quat()
 	this._update_triangles()
 	this.invalid = false
 	return this

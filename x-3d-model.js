@@ -22,9 +22,122 @@ function real_p2p_distance2(p1, p2) { // stub
 	return p1.distance2(p2)
 }
 
-editable_3d_model = function(e) {
+function set_xyz(a, pi, x, y, z) {
+	a[3*pi+0] = x
+	a[3*pi+1] = y
+	a[3*pi+2] = z
+}
+
+model3 = function(e) {
 
 	e = e || {}
+	let gl = e.gl
+
+	// component instance tree ------------------------------------------------
+
+	{
+		let instances = map() // {comp -> [inst1,..., dab: ]}
+		let root_rel_mat
+
+		function instantiate(rel_mat, parent_rel_mat) {
+			let comp = rel_mat.comp
+			attr(instances, comp, Array).push(rel_mat)
+			if (parent_rel_mat)
+				attr(parent_rel_mat, 'children', Array).push(rel_mat)
+			for (let child_rel_mat of comp.children)
+				instantiate(child_rel_mat, rel_mat)
+			return rel_mat
+		}
+
+		function child_added(parent_comp, rel_mat) {
+			for (let parent_rel_mat of instances.get(parent_comp))
+				instantiate(rel_mat, parent_rel_mat)
+		}
+
+		function child_removed(parent_comp, rel_mat) {
+			for (let parent_rel_mat of instances.get(parent_comp))
+				parent_rel_mat.children.remove_value(rel_mat)
+		}
+
+		function child_changed(rel_mat) {
+			//
+		}
+
+		let _m = mat4()
+
+		function update_instance_matrix(rel_mat, parent_rel_mat) {
+			let rel_mats = attr(instances, rel_mat.comp, Array)
+			let i = rel_mats.dab.len
+			rel_mats.dab.len = i + 1
+			_m.set(rel_mat).mul(parent_rel_mat).to_mat4_array(rel_mats.dab.array, i)
+			if (rel_mat.children)
+				for (let child_rel_mat of rel_mat.children)
+					update_instance_matrix(child_rel_mat, rel_mat)
+		}
+
+		function update_instance_matrices() {
+
+			for (let rel_mats of instances.values())
+				if (rel_mats.dab)
+					rel_mats.dab.len = 0
+				else
+					rel_mats.dab = gl.dyn_arr_mat4_instance_buffer()
+
+			update_instance_matrix(root_rel_mat, mat4.identity)
+
+			for (let rel_mats of instances.values())
+				rel_mats.dab.upload()
+
+		}
+
+		function draw(prog) {
+			for (let [comp, rel_mats] of instances)
+				comp.draw(prog, rel_mats.dab.buffer)
+		}
+
+		function free() {
+			for (let rel_mats of instances.values())
+				if (rel_mats.dab) {
+					rel_mats.dab.free()
+					rel_mats.dab = null
+				}
+		}
+
+		function init_root() {
+			e.root = e.root || model3_component({model: e})
+			root_rel_mat = mat4()
+			root_rel_mat.comp = e.root
+			instantiate(root_rel_mat)
+			update_instance_matrices()
+		}
+
+		e.child_added = child_added
+		e.child_removed = child_removed
+		e.child_changed = child_changed
+		e.draw = draw
+		e.free = free
+
+	}
+
+	// materials --------------------------------------------------------------
+
+	{
+		let materials = []
+
+		function add_material(opt) {
+			let mat = assign({
+				diffuse_color: 0xffffff,
+				uv: v2(1, 1),
+			}, opt)
+			materials.push(mat)
+			return mat
+		}
+
+		e.add_material = add_material
+
+		e.default_material = add_material({diffuse_color: 0xffffff})
+
+	}
 
 	// undo/redo stacks -------------------------------------------------------
 
@@ -42,7 +155,7 @@ editable_3d_model = function(e) {
 			undo_stack.push(...args, args.length, f)
 		}
 
-		function _undo(stack, start) {
+		function undo_from(stack, start) {
 			start_undo()
 			while (stack.length >= start) {
 				let f = stack.pop()
@@ -59,89 +172,80 @@ editable_3d_model = function(e) {
 				return
 			undo_groups = redo_groups
 			undo_stack  = redo_stack
-			_undo(stack, start)
+			undo_from(stack, start)
 			undo_groups = groups
 			undo_stack  = stack
 		}
 
 		function redo() {
-			_undo(redo_stack, redo_groups.pop())
+			undo_from(redo_stack, redo_groups.pop())
 		}
+
+		e.start_undo = start_undo
+		e.undo = undo
+		e.redo = redo
+		e.push_undo = push_undo
 	}
 
-	// model ------------------------------------------------------------------
+	init_root()
+
+	return e
+
+}
+
+model3_component = function(e) {
+
+	e = e || {}
+
+	let model = assert(e.model)
+	let gl = e.model.gl
+	let push_undo = model.push_undo
+
+	// model (as in MVC and as in 3D model) -----------------------------------
 
 	let points    = [] // [(x, y, z), ...]
-	let normals   = [] // [(x, y, z), ...]
 	let free_pis  = [] // [p1i,...]; freelist of point indices.
 	let prc       = [] // [rc1,...]; ref counts of points.
 	let lines     = [] // [(p1i, p2i, rc, sm, op), ...]; rc=refcount, sm=smoothness, op=opacity.
 	let free_lis  = [] // [l1i,...]; freelist of line indices.
 	let faces     = set() // {poly3[p1i, p2i, ..., lis: [line1i,...], selected:, material:, ]}
 	let meshes    = set() // {{face},...}; meshes are sets of all faces connected by smooth lines.
-	let materials = []    // [mat1,...]
-	let inst_mat  = [] // [mat4_1, ...]; instance position/scale/rotation matrices.
+	let materials = map() // {material->[face1,...]}
 
-	let child_models = [] // [model1, ...]
-	let child_mats   = [] // [mat1, ...]
+	let children  = [] // [mat1,...]
 
-	// model-to-view info.
-	let points_changed    // time to reload points_buf.
-	let normals_changed   // time to reload normals_buf.
+	// model-to-view info (as in MVC).
+	let points_changed          // time to reload points_buf.
 	let used_points_changed     // time to reload the used_pis_buf.
 	let used_lines_changed      // time to reload *_edge_lis_buf.
 	let edge_line_count = 0     // number of face edge lines.
 	let nonedge_line_count = 0  // number of standalone lines.
-	let inst_mat_changed
-
-	if (DEBUG) {
-		window.materials = materials
-		window.faces = faces
-		window.lines = lines
-	}
 
 	// low-level model editing API that:
 	// - records undo ops in the undo stack.
 	// - updates and/or invalidates any affected view buffers.
 
-	e.point_count = () => prc.length
+	let point_count = () => prc.length
 
 	{
-		let p = v3()
-		function get_point(pi, out) {
-			out = out || p
-			out.x = points[3*pi+0]
-			out.y = points[3*pi+1]
-			out.z = points[3*pi+2]
-			out.i = pi
-			return out
-		}
-		e.get_point = get_point
-	}
+	let p = v3()
+	function get_point(pi, out) {
+		out = out || p
+		out[0] = points[3*pi+0]
+		out[1] = points[3*pi+1]
+		out[2] = points[3*pi+2]
+		out.i = pi
+		return out
+	}}
 
-	let face3 = poly3.subclass({
-		is_face3: true,
-		get_point: function(ei, out) {
-			return get_point(this[ei], out)
-		},
-	})
-
-	function set_xyz(a, pi, x, y, z) {
-		a[3*pi+0] = x
-		a[3*pi+1] = y
-		a[3*pi+2] = z
-	}
-
-	e.add_point = function(x, y, z, need_pi) {
+	function add_point(x, y, z, need_pi) {
 
 		let pi = free_pis.pop()
 		if (pi == null) {
 			points.push(x, y, z)
-			normals.push(0, 0, 0)
 			pi = prc.length
 		} else {
 			set_xyz(points, pi, x, y, z)
-			set_xyz(normals, 0, 0, 0)
 		}
 		prc[pi] = 0
 
@@ -166,8 +270,8 @@ editable_3d_model = function(e) {
 			free_pis.push(pi)
 			used_points_changed = true
 
-			let p = e.get_point(pi)
-			push_undo(e.add_point, p.x, p.y, p.z, pi)
+			let p = get_point(pi)
+			push_undo(add_point, p.x, p.y, p.z, pi)
 
 		}
 
@@ -188,35 +292,34 @@ editable_3d_model = function(e) {
 		// if (DEBUG) print('ref_point', pi, prc[pi])
 	}
 
-	e.move_point = function(pi, x, y, z) {
-		let p = e.get_point(pi)
+	function move_point(pi, x, y, z) {
+		let p = get_point(pi)
 		set_xyz(points, pi, x, y, z)
 		upload_point(pi, x, y, z)
-		push_undo(e.move_point, pi, x0, y0, z0)
+		push_undo(move_point, pi, x0, y0, z0)
 	}
 
-	e.line_count = () => lines.length / 5
+	let line_count = () => lines.length / 5
 
 	{
-		let line = line3()
-		e.get_line = function(li, out) {
-			out = out || line
-			let p1i = lines[5*li+0]
-			let p2i = lines[5*li+1]
-			e.get_point(p1i, out[0])
-			e.get_point(p2i, out[1])
-			out.i = li
-			return out
-		}
-	}
+	let line = line3()
+	function get_line(li, out) {
+		out = out || line
+		let p1i = lines[5*li+0]
+		let p2i = lines[5*li+1]
+		get_point(p1i, out[0])
+		get_point(p2i, out[1])
+		out.i = li
+		return out
+	}}
 
-	e.each_line = function(f) {
-		for (let li = 0, n = e.line_count(); li < n; li++)
+	function each_line(f) {
+		for (let li = 0, n = line_count(); li < n; li++)
 			if (lines[5*li+2]) // ref count: used.
-				f(e.get_line(li))
+				f(get_line(li))
 	}
 
-	e.add_line = function(p1i, p2i, need_li) {
+	function add_line(p1i, p2i, need_li) {
 
 		let li = free_lis.pop()
 		if (li == null) {
@@ -238,7 +341,7 @@ editable_3d_model = function(e) {
 		ref_point(p1i)
 		ref_point(p2i)
 
-		push_undo(e.unref_line, li)
+		push_undo(unref_line, li)
 
 		if (DEBUG)
 			print('add_line', li, p1i+','+p2i)
@@ -246,7 +349,7 @@ editable_3d_model = function(e) {
 		return li
 	}
 
-	e.unref_line = function(li) {
+	function unref_line(li) {
 
 		let rc = --lines[5*li+2]
 		assert(rc >= 0)
@@ -264,7 +367,7 @@ editable_3d_model = function(e) {
 
 			free_lis.push(li)
 
-			push_undo(e.add_line, p1i, p2i, li)
+			push_undo(add_line, p1i, p2i, li)
 
 			if (DEBUG)
 				print('remove_line', li)
@@ -286,7 +389,7 @@ editable_3d_model = function(e) {
 		// if (DEBUG) print('unref_line', li, lines[5*li+2])
 	}
 
-	let ref_line = function(li) {
+	function ref_line(li) {
 
 		let rc0 = lines[5*li+2]++
 
@@ -299,24 +402,20 @@ editable_3d_model = function(e) {
 			edge_line_count++
 		}
 
-		push_undo(e.unref_line, li)
+		push_undo(unref_line, li)
 
 		// if (DEBUG) print('ref_line', li, lines[5*li+2])
 	}
 
-	e.add_material = function(opt) {
-		let mat = assign({
-			diffuse_color: 0xffffff,
-			uv: v2(1, 1),
-			faces: [],
-		}, opt)
-		let mi = materials.push(mat) - 1
-		mat.mi = mi
-		return mat
-	}
+	let face3 = poly3.subclass({
+		is_face3: true,
+		get_point: function(ei, out) {
+			return get_point(this[ei], out)
+		},
+	})
 
-	e.get_edge = function(face, ei, out) {
-		out = e.get_line(face.lis[ei], out)
+	function get_edge(face, ei, out) {
+		out = get_line(face.lis[ei], out)
 		out.ei = ei // edge index.
 		if (out[1].i == face[ei]) { // fix edge endpoints order.
 			let p1 = out[0]
@@ -327,9 +426,9 @@ editable_3d_model = function(e) {
 		return out
 	}
 
-	e.each_edge = function(face, f) {
+	function each_edge(face, f) {
 		for (let ei = 0, n = face.length; ei < n; ei++)
-			f(e.get_edge(face, ei))
+			f(get_edge(face, ei))
 	}
 
 	let next_face_id = 0
@@ -345,8 +444,8 @@ editable_3d_model = function(e) {
 			for (let li of face.lis)
 				ref_line(li)
 		face.id = id
-		face.material = face.material || materials[0]
-		face.material.faces.push(face)
+		face.material = face.material || model.default_material
+		attr(materials, face.material, Array).push(face)
 		faces.add(face)
 		if (DEBUG)
 			print('add_face', id, face.join(','), face.lis.join(','))
@@ -356,15 +455,15 @@ editable_3d_model = function(e) {
 	function remove_face(face) {
 		faces.delete(face)
 		for (let li of face.lis)
-			e.unref_line(li)
+			unref_line(li)
 		for (let pi of face)
 			unref_point(pi)
-		face.material.faces.remove_value(face)
+		materials.get(face.material).remove_value(face)
 		if (DEBUG)
 			print('remove_face', face.id)
 	}
 
-	e.set_material = function(face, mat) {
+	function set_material(face, mat) {
 		face.material.faces.remove_value(face)
 		face.material = mat
 		mat.faces.push(face)
@@ -374,7 +473,7 @@ editable_3d_model = function(e) {
 
 	function ref_or_add_line(p1i, p2i) {
 		let found_li
-		for (let li = 0, n = e.line_count(); li < n; li++) {
+		for (let li = 0, n = line_count(); li < n; li++) {
 			let _p1i = lines[5*li+0]
 			let _p2i = lines[5*li+1]
 			if ((_p1i == p1i && _p2i == p2i) || (_p1i == p2i && _p2i == p1i)) {
@@ -382,7 +481,7 @@ editable_3d_model = function(e) {
 				break
 			}
 		}
-		let li = found_li != null ? found_li : e.add_line(p1i, p2i)
+		let li = found_li != null ? found_li : add_line(p1i, p2i)
 		ref_line(li)
 		return li
 	}
@@ -410,99 +509,97 @@ editable_3d_model = function(e) {
 		face.invalidate()
 	}
 
-	e.each_line_face = function(li, f) {
+	function each_line_face(li, f) {
 		for (let face of faces)
 			if (face.lis.includes(li))
 				f(face)
 	}
 
 	{
-		let common_meshes = set()
-		let nomesh_faces = []
+	let common_meshes = set()
+	let nomesh_faces = []
+	function set_line_smoothness(li, sm) {
 
-		e.set_line_smoothness = function(li, sm) {
+		let sm0 = lines[5*li+3]
+		if (sm == sm0)
+			return
 
-			let sm0 = lines[5*li+3]
-			if (sm == sm0)
-				return
+		push_undo(set_line_smoothness, li, sm0)
 
-			push_undo(e.set_line_smoothness, li, sm0)
+		if (!sm0 == !sm) // smoothness category hasn't changed.
+			return
 
-			if (!sm0 == !sm) // smoothness category hasn't changed.
-				return
+		lines[5*li+3] = sm
 
-			lines[5*li+3] = sm
+		if (sm > 0) { // line has gotten smooth.
 
-			if (sm > 0) { // line has gotten smooth.
+			each_line_face(li, function(face) {
+				if (face.mesh)
+					common_meshes.add(face.mesh)
+				else
+					nomesh_faces.push(face)
+			})
 
-				e.each_line_face(li, function(face) {
-					if (face.mesh)
-						common_meshes.add(face.mesh)
-					else
-						nomesh_faces.push(face)
-				})
+			let target_mesh
 
-				let target_mesh
-
-				if (common_meshes.size == 0) {
-					// none of the faces are part of a mesh, so make one.
-					let mesh = set()
-					meshes.add(mesh)
-					common_meshes.add(mesh)
-					target_mesh = mesh
-				} else {
-					// merge all meshes into the first one and remove the rest.
-					for (let mesh of common_meshes) {
-						if (!target_mesh) {
-							target_mesh = mesh
-						} else {
-							for (let face of mesh) {
-								target_mesh.add(face)
-								face.mesh = target_mesh
-							}
-							meshes.delete(mesh)
+			if (common_meshes.size == 0) {
+				// none of the faces are part of a mesh, so make one.
+				let mesh = set()
+				meshes.add(mesh)
+				common_meshes.add(mesh)
+				target_mesh = mesh
+			} else {
+				// merge all meshes into the first one and remove the rest.
+				for (let mesh of common_meshes) {
+					if (!target_mesh) {
+						target_mesh = mesh
+					} else {
+						for (let face of mesh) {
+							target_mesh.add(face)
+							face.mesh = target_mesh
 						}
+						meshes.delete(mesh)
 					}
 				}
-
-				// add flat faces to the target mesh.
-				for (let face of nomesh_faces) {
-					target_mesh.add(face)
-					face.mesh = target_mesh
-				}
-
-				target_mesh.normals_valid = false
-
-			} else { // line has gotten non-smooth.
-
-				// remove faces containing `li` from their smooth mesh.
-				let target_mesh
-				e.each_line_face(li, function(face) {
-					assert(!target_mesh || target_mesh == mesh) // one mesh only.
-					target_mesh = face.mesh
-					// TODO: this is not right.
-					face.mesh.delete(face)
-					face.mesh = null
-				})
-
-				// remove the mesh if it became empty.
-				if (target_mesh.size == 0)
-					meshes.delete(target_mesh)
-
 			}
 
-			common_meshes.clear()
-			nomesh_faces.length = 0
-		}
-	}
+			// add flat faces to the target mesh.
+			for (let face of nomesh_faces) {
+				target_mesh.add(face)
+				face.mesh = target_mesh
+			}
 
-	e.set_line_opacity = function(li, op) {
+			target_mesh.normals_valid = false
+
+		} else { // line has gotten non-smooth.
+
+			// remove faces containing `li` from their smooth mesh.
+			let target_mesh
+			each_line_face(li, function(face) {
+				assert(!target_mesh || target_mesh == mesh) // one mesh only.
+				target_mesh = face.mesh
+				// TODO: this is not right.
+				face.mesh.delete(face)
+				face.mesh = null
+			})
+
+			// remove the mesh if it became empty.
+			if (target_mesh.size == 0)
+				meshes.delete(target_mesh)
+
+		}
+
+		common_meshes.clear()
+		nomesh_faces.length = 0
+	}}
+
+	function set_line_opacity(li, op) {
 
 		let op0 = lines[5*li+4]
 		if (op == op0)
 			return
 
-		push_undo(e.set_line_opacity, li, op0)
+		push_undo(set_line_opacity, li, op0)
 
 		if (!op0 == !op) // opacity category hasn't changed.
 			return
@@ -512,12 +609,53 @@ editable_3d_model = function(e) {
 
 	}
 
+	// children
+
+	function add_child(comp, mat) {
+		assert(mat.is_mat4)
+		assert(comp.model == model)
+		map.comp = comp
+		children.push(mat)
+		model.child_added(e, mat)
+		if (DEBUG)
+			print('add_child', mat)
+		return mat
+	}
+
+	function remove_child(mat) {
+		assert(children.remove_value(mat) != -1)
+		model.child_removed(e, mat)
+	}
+
+	// public API
+
+	e.point_count     = point_count
+	e.get_point       = get_point
+
+	e.line_count      = line_count
+	e.get_line        = get_line
+	e.each_line       = each_line
+	e.add_line        = add_line
+	e.unref_line      = unref_line
+	e.set_line_smoothness = set_line_smoothness
+	e.set_line_opacity = set_line_opacity
+
+	e.set_material    = set_material
+
+	e.get_edge        = get_edge
+	e.each_edge       = each_edge
+	e.each_line_face  = each_line_face
+
+	e.children        = children
+	e.add_child       = add_child
+	e.remove_child    = remove_child
+
 	e.set = function(t) {
 
 		points.length = 0
 		if (t.points)
 			for (let i = 0, n = t.points.length; i < n; i += 3)
-				e.add_point(
+				add_point(
 					t.points[i+0],
 					t.points[i+1],
 					t.points[i+2]
@@ -533,22 +671,6 @@ editable_3d_model = function(e) {
 			for (let face of t.faces)
 				add_face(face)
 
-	}
-
-	e.instance_count = () => inst_mat.length / 16
-
-	e.instance_matrix = function(i, out) {
-		assert(out.is_mat4)
-		out.from_mat4_array(inst_mat, i)
-		out.i = i
-		return out
-	}
-
-	e.add_instance = function(m) {
-		m.to_array(inst_mat, inst_mat.length)
-		inst_mat_changed = true
-		if (DEBUG)
-			print('add_instance', m.join(','))
 	}
 
 	// face plane -------------------------------------------------------------
@@ -569,7 +691,7 @@ editable_3d_model = function(e) {
 
 	// hit testing & snapping -------------------------------------------------
 
-	e.line_intersect_face_plane = function(line, face) {
+	function line_intersect_face_plane(line, face) {
 		let plane = face.plane()
 		let d1 = plane.distance_to_point(line[0])
 		let d2 = plane.distance_to_point(line[1])
@@ -585,7 +707,7 @@ editable_3d_model = function(e) {
 
 	// return the line from target line to its closest point
 	// with the point index in line[1].i.
-	e.line_hit_points = function(target_line, max_d, p2p_distance2, f) {
+	function line_hit_points(target_line, max_d, p2p_distance2, f) {
 		let min_ds = 1/0
 		let int_line = line3()
 		let min_int_line
@@ -593,10 +715,10 @@ editable_3d_model = function(e) {
 		let p2 = int_line[1]
 		let i1 = target_line[0].i
 		let i2 = target_line[1].i
-		for (let i = 0, n = e.point_count(); i < n; i++) {
+		for (let i = 0, n = point_count(); i < n; i++) {
 			if (i == i1 || i == i2) // don't hit target line's endpoints
 				continue
-			e.get_point(i, p2)
+			get_point(i, p2)
 			target_line.closestPointToPoint(p2, true, p1)
 			let ds = p2p_distance2(p1, p2)
 			if (ds <= max_d ** 2) {
@@ -614,7 +736,7 @@ editable_3d_model = function(e) {
 		return min_int_line
 	}
 
-	e.snap_point_on_line = function(p, line, max_d, p2p_distance2, plane_int_p, axes_int_p) {
+	function snap_point_on_line(p, line, max_d, p2p_distance2, plane_int_p, axes_int_p) {
 
 		p.i = null
 		p.li = line.i
@@ -646,13 +768,13 @@ editable_3d_model = function(e) {
 	}
 
 	// return the point on closest line from target point.
-	e.point_hit_lines = function(p, max_d, p2p_distance2, f, each_line) {
+	function point_hit_lines(p, max_d, p2p_distance2, f, each_line_f) {
 		let min_ds = 1/0
 		let line = line3()
 		let int_p = v3()
 		let min_int_p
-		each_line = each_line || e.each_line
-		each_line(function(line) {
+		each_line_f = each_line_f || each_line
+		each_line_f(function(line) {
 			line.closestPointToPoint(p, true, int_p)
 			let ds = p2p_distance2(p, int_p)
 			if (ds <= max_d ** 2) {
@@ -668,19 +790,19 @@ editable_3d_model = function(e) {
 	}
 
 	// return the point on closest face line from target point.
-	e.point_hit_edges = function(p, face, max_d, p2p_distance2, f) {
-		return e.point_hit_lines(p, max_d, p2p_distance2, f, f => e.each_edge(face, f))
+	function point_hit_edge(p, face, max_d, p2p_distance2, f) {
+		return point_hit_lines(p, max_d, p2p_distance2, f, f => each_edge(face, f))
 	}
 
 	// return the projected point on closest line from target line.
-	e.line_hit_lines = function(target_line, max_d, p2p_distance2, clamp, f, each_line, is_line_valid) {
+	function line_hit_lines(target_line, max_d, p2p_distance2, clamp, f, each_line_f, is_line_valid) {
 		let min_ds = 1/0
 		let line = line3()
 		let int_line = line3()
 		let min_int_p
-		each_line = each_line || e.each_line
+		each_line_f = each_line_f || each_line
 		is_line_valid = is_line_valid || return_true
-		each_line(function(line) {
+		each_line_f(function(line) {
 			if (is_line_valid(line)) {
 				let p1i = line[0].i
 				let p2i = line[1].i
@@ -712,20 +834,26 @@ editable_3d_model = function(e) {
 		return min_int_p
 	}
 
+	e.line_intersect_face_plane = line_intersect_face_plane
+	e.line_hit_points = line_hit_points
+	e.snap_point_on_line = snap_point_on_line
+	e.point_hit_lines = point_hit_lines
+	e.point_hit_edge = point_hit_edge
+	e.line_hit_lines = line_hit_lines
+
 	// selection --------------------------------------------------------------
 
 	e.sel_lines = set() // {l1i,...}
 	let sel_lines_changed
 
 	{
-		let _line = line3()
-		e.each_selected_line = function(f) {
-			for (let li in e.sel_lines) {
-				e.get_line(li, _line)
-				f(_line)
-			}
+	let _line = line3()
+	e.each_selected_line = function(f) {
+		for (let li in e.sel_lines) {
+			get_line(li, _line)
+			f(_line)
 		}
-	}
+	}}
 
 	function select_all_lines(sel) {
 		if (sel)
@@ -1043,7 +1171,7 @@ editable_3d_model = function(e) {
 				let old_pi = pull.face[ei]
 
 				// create pp side edge at `ei`.
-				let p = e.get_point(old_pi, _p)
+				let p = get_point(old_pi, _p)
 				let new_pi = add_point(p)
 				let li = add_line(old_pi, new_pi)
 				new_pp_edge[ei] = li
@@ -1105,7 +1233,7 @@ editable_3d_model = function(e) {
 		}
 
 		{
-			let initial_ps = pull.face.map(pi => e.get_point(pi))
+			let initial_ps = pull.face.map(pi => get_point(pi))
 
 			let delta = v3()
 			let _p = v3()
@@ -1145,34 +1273,34 @@ editable_3d_model = function(e) {
 	// view --------------------------------------------------------------------
 
 	let points_dab            // common point coordinates buffer for points, edges and smooth meshes.
-	let normals_dab           // normal buffer for the normals of smooth meshes.
 	let used_pis_dab          // index buffer for points.
 	let vis_edge_lis_dab      // index buffer for face edges (black thin lines).
 	let inv_edge_lis_dab      // index buffer for invisible face edges (black dashed lines).
 	let sel_inv_edge_lis_dab  // index buffer for selected invisible face edges (blue dashed lines).
-	let inst_mat_dab          // instance matrices.
+	let models_dab            // instance matrices.
 
 	let points_rr
 	let faces_rr
 
-	e.init_view = function(gl) {
-
+	if (gl) {
 		points_dab           = gl.dyn_arr_v3_buffer()
-		normals_dab          = gl.dyn_arr_v3_buffer()
 		used_pis_dab         = gl.dyn_arr_u32_index_buffer()
 		vis_edge_lis_dab     = gl.dyn_arr_u32_index_buffer()
 		inv_edge_lis_dab     = gl.dyn_arr_u32_index_buffer()
 		sel_inv_edge_lis_dab = gl.dyn_arr_u32_index_buffer()
-		inst_mat_dab         = gl.dyn_arr_mat4_instance_buffer()
+		models_dab           = gl.dyn_arr_mat4_instance_buffer()
 
 		points_rr = gl.points_renderer()
 		faces_rr  = gl.faces_renderer()
+	}
 
+	e.free = function() {
+		// TODO:
 	}
 
 	let _pa = new f32arr(3)
 	function upload_point(pi, x, y, z) {
-		let pn = e.point_count()
+		let pn = point_count()
 		if (points_dab && points_dab.len >= pn) {
 			_pa[0] = x
 			_pa[1] = y
@@ -1185,22 +1313,15 @@ editable_3d_model = function(e) {
 
 	function upload_points() {
 		if (!points_changed)
-			return
-		points_dab.len = e.point_count()
+			return points_dab.buffer
+		points_dab.len = point_count()
 		return points_dab.set(points).upload().buffer
-	}
-
-	function upload_normals() {
-		if (!normals_changed)
-			return
-		normals_dab.len = e.point_count()
-		return normals_dab.set(normals).upload().buffer
 	}
 
 	function upload_used_pis() {
 		if (!used_points_changed)
-			return
-		let pn = e.point_count()
+			return used_pis_dab.buffer
+		let pn = point_count()
 		used_pis_dab.len = pn
 		let i = 0
 		let is = used_pis_dab.array
@@ -1219,14 +1340,14 @@ editable_3d_model = function(e) {
 	}
 
 	function upload_edge_lis() {
+		let vdab = vis_edge_lis_dab
+		let idab = inv_edge_lis_dab
+
 		if (!used_lines_changed)
-			return
+			return [vdab.buffer, idab.buffer]
 
 		let vln = edge_line_count
 		let iln = e.show_invisible_lines ? vln : 0
-
-		let vdab = vis_edge_lis_dab
-		let idab = inv_edge_lis_dab
 
 		vdab.len = vln
 		idab.len = iln
@@ -1273,13 +1394,6 @@ editable_3d_model = function(e) {
 			b.used_count = i
 		}
 
-	}
-
-	function upload_inst_mat() {
-		if (!inst_mat_changed)
-			return
-		inst_mat_dab.len = e.instance_count()
-		return inst_mat_dab.set(inst_mat).upload().buffer
 	}
 
 	/*
@@ -1332,31 +1446,20 @@ editable_3d_model = function(e) {
 	)
 	*/
 
-	e.add_material({diffuse_color: 0xffffff})
+	//function upload_models = function
 
-	e.update = function() {
-
-		// for (let face of faces)
-		// 	update_face_triangles(face)
-		// for (let mesh of meshes)
-		// 	update_mesh_normals(mesh)
+	function draw(prog, models_buf) {
 
 		let points_buf = upload_points()
-		let normals_buf = upload_normals()
 		let used_pis_buf = upload_used_pis()
 		//let [vis_edges_buf, inv_edges_buf] = upload_edge_lis()
-		let inst_mat_buf = upload_inst_mat()
 
 		points_rr.pos = points_buf
 		points_rr.index = used_pis_buf
-		points_rr.model = inst_mat_buf
+		points_rr.model = models_buf
 
 		faces_rr.update(materials)
-		faces_rr.model = inst_mat_buf
-
-	}
-
-	e.draw = function(prog) {
+		faces_rr.model = models_buf
 
 		points_rr.draw(prog)
 		faces_rr.draw(prog)
@@ -1371,17 +1474,19 @@ editable_3d_model = function(e) {
 		upload_flat_faces_mesh()
 		upload_smooth_faces_mesh()
 
-		inst_mat_changed = false
+		*/
+
 		points_changed = false
-		normals_changed = false
 		used_points_changed = false
 		used_lines_changed = false
 		sel_lines_changed = false
 
 		if (DEBUG)
 			print('update')
-		*/
+
 	}
+
+	e.draw = draw
 
 	return e
 }

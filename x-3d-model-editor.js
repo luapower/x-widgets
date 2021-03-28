@@ -86,7 +86,7 @@ component('x-modeleditor', function(e) {
 	e.prop('camera_pos' , {store: 'var', type: 'v3', default: camera.pos})
 	e.prop('camera_dir' , {store: 'var', type: 'v3', default: camera.dir})
 	e.prop('camera_up'  , {store: 'var', type: 'v3', default: camera.up })
-	e.prop('shadows'    , {store: 'var', type: 'boolean', default: true})
+	e.prop('shadows'    , {store: 'var', type: 'boolean', default: false})
 
 	e.prop('sunlight'   , {store: 'var', type: 'boolean', default: false})
 	e.prop('time'       , {store: 'var', type: 'datetime', default: 1596272400})
@@ -130,21 +130,20 @@ component('x-modeleditor', function(e) {
 
 	// rendering ---------------------------------------------------------------
 
-	let renderer = gl.scene_renderer()
+	let renderer = gl.scene_renderer({
+		enable_shadows: e.shadows,
+	})
 
-	let draw_all = function(sdm_vao) {
-		if (!sdm_vao)
+	let draw_all = function(prog) {
+		if (!prog)
 			skybox.draw()
 		axes_renderer.draw()
-		//draw_faces(sdm_vao)
-		//draw_lines(sdm_vao)
-		e.model.draw(sdm_vao)
+		e.model.draw(prog)
 	}
 
 	let raf_id
 	function do_render() {
 		renderer.render(draw_all)
-		//face_id_renderer.render(draw_faces)
 		raf_id = null
 	}
 
@@ -605,8 +604,7 @@ component('x-modeleditor', function(e) {
 	// model ------------------------------------------------------------------
 
 	e.components = {} // {name->group}
-	e.model = editable_3d_model()
-	e.model.init_view(gl)
+	e.model = model3({gl: gl})
 	e.model.editor = e
 
 	// direct-manipulation tools ==============================================
@@ -1286,19 +1284,14 @@ component('x-modeleditor', function(e) {
 		m.faces[1].material = mat1
 		m.faces[2].material = mat2
 
-		e.model.set(m)
+		e.model.root.set(m)
 
-		e.model.set_line_smoothness(0, 1)
-		e.model.set_line_smoothness(2, 1)
-		e.model.set_line_opacity(0, 0)
-		e.model.set_line_opacity(2, 0)
+		e.model.root.set_line_smoothness(0, 1)
+		e.model.root.set_line_smoothness(2, 1)
+		e.model.root.set_line_opacity(0, 0)
+		e.model.root.set_line_opacity(2, 0)
 
 		//e.model.group.position.y = 1
-
-		e.model.add_instance(mat4())
-		e.model.add_instance(mat4())
-
-		e.model.update()
 
 	}
 

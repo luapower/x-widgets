@@ -1117,6 +1117,7 @@ gl.draw = function(gl_mode, offset, count) {
 		if (count == null)
 			count = ib.len
 		if (n_inst != null) {
+			// yes, we want gl.drawElementsInstancedBaseInstance(), I know...
 			gl.drawElementsInstanced(gl_mode, count, ib.gl_type, offset, n_inst)
 		} else {
 			gl.drawElements(gl_mode, count, ib.gl_type, offset)
