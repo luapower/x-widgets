@@ -2948,6 +2948,9 @@ camera = function(e) {
 		e.pos.set(c.pos)
 		e.dir.set(c.dir)
 		e.up.set(c.up)
+		e.fov = c.fov
+		e.near = c.near
+		e.far = c.far
 		e.proj.set(c.proj)
 		e.view.set(c.view)
 		e.inv_proj.set(c.inv_proj)

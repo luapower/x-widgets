@@ -619,16 +619,25 @@ component('x-modeleditor', function(e) {
 		let cam0 = camera.clone()
 		let mx0 = mouse.x
 		let my0 = mouse.y
+		let hit_point = v3().set(mouse.point)
+		let panning
 		return capture(function() {
 			let mx = mouse.x
 			let my = mouse.y
-			camera.set(cam0)
-			if (e.shift) {
-				camera.pan(mouse.point, mx0, my0, mx, my)
+			if (e.shift == !panning) {
+				cam0.set(camera)
+				mx0 = mx
+				my0 = my
+				panning = e.shift
 			} else {
-				let dx = mx - mx0
-				let dy = my - my0
-				camera.orbit(mouse.point, dy / 200, dx / 200, 0)
+				camera.set(cam0)
+			}
+			if (e.shift) {
+				camera.pan(hit_point, mx0, my0, mx, my)
+			} else {
+				let dx = (mx - mx0) / 150
+				let dy = (my - my0) / 150
+				camera.orbit(hit_point, dy, dx, 0)
 			}
 			update_camera()
 		})

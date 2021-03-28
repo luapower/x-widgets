@@ -195,8 +195,6 @@ model3 = function(e) {
 
 model3_component = function(e) {
 
-	e = e || {}
-
 	let model = assert(e.model)
 	let gl = e.model.gl
 	let push_undo = model.push_undo
