@@ -122,13 +122,16 @@ model3 = function(e) {
 	// materials --------------------------------------------------------------
 
 	{
-		let materials = []
+		let materials = [] //[{diffuse_color:, diffuse_map:, uv: , opacity: , faces: [face1,...]},...]
 
 		function add_material(opt) {
 			let mat = assign({
 				diffuse_color: 0xffffff,
 				uv: v2(1, 1),
+				opacity: 1,
+				faces: [],
 			}, opt)
+			mat.opacity = clamp(mat.opacity, 0, 1)
 			materials.push(mat)
 			return mat
 		}
@@ -209,7 +212,6 @@ model3_component = function(e) {
 	let free_lis  = [] // [l1i,...]; freelist of line indices.
 	let faces     = set() // {poly3[p1i, p2i, ..., lis: [line1i,...], selected:, material:, ]}
 	let meshes    = set() // {{face},...}; meshes are sets of all faces connected by smooth lines.
-	let materials = map() // {material->[face1,...]}
 
 	let children  = [] // [mat1,...]
 
@@ -407,23 +409,23 @@ model3_component = function(e) {
 		// if (DEBUG) print('ref_line', li, lines[5*li+2])
 	}
 
-	let face3 = poly3.subclass({
-		is_face3: true,
-		get_point: function(ei, out) {
-			return get_point(this[ei], out)
-		},
-		get_normal: function(ei, out) {
-			if (this.mesh)
-				return out.from_v3_array(normals, this[ei])
-			else
-				return this.plane().normal
-		},
-	})
+	let face = {is_face3: true}
 
-	function get_edge(face, ei, out) {
-		out = get_line(face.lis[ei], out)
+	face.get_point = function(ei, out) {
+		return get_point(this[ei], out)
+	}
+
+	face.get_normal = function(ei, out) {
+		if (this.mesh)
+			return out.from_v3_array(normals, this[ei])
+		else
+			return this.plane().normal
+	}
+
+	face.get_edge = function(ei, out) {
+		out = get_line(this.lis[ei], out)
 		out.ei = ei // edge index.
-		if (out[1].i == face[ei]) { // fix edge endpoints order.
+		if (out[1].i == this[ei]) { // fix edge endpoints order.
 			let p1 = out[0]
 			let p2 = out[1]
 			out[0] = p2
@@ -432,15 +434,26 @@ model3_component = function(e) {
 		return out
 	}
 
-	function each_edge(face, f) {
-		for (let ei = 0, n = face.length; ei < n; ei++)
-			f(get_edge(face, ei))
+	face.each_edge = function(f) {
+		for (let ei = 0, n = this.length; ei < n; ei++)
+			f(face.get_edge(ei))
 	}
+
+	face.is_flat = function() {
+		for (let li of face.lis)
+			if (lines[5*li+3])
+				return false
+		return true
+	}
+
+	let face3 = poly3.subclass(face)
 
 	let next_face_id = 0
 	function add_face(face) {
-		if (!face.is_face3)
+		if (!face.is_face3) {
 			face = face3(face)
+			face.points = points
+		}
 		let id = next_face_id++
 		for (let pi of face)
 			ref_point(pi)
@@ -451,7 +464,7 @@ model3_component = function(e) {
 				ref_line(li)
 		face.id = id
 		face.material = face.material || model.default_material
-		attr(materials, face.material, Array).push(face)
+		face.material.faces.push(face)
 		faces.add(face)
 		if (DEBUG)
 			print('add_face', id, face.join(','), face.lis.join(','))
@@ -464,7 +477,6 @@ model3_component = function(e) {
 			unref_line(li)
 		for (let pi of face)
 			unref_point(pi)
-		materials.get(face.material).remove_value(face)
 		if (DEBUG)
 			print('remove_face', face.id)
 	}
@@ -512,6 +524,8 @@ model3_component = function(e) {
 			print('insert_edge', face.id, '@'+ei, 'pi='+pi, '@'+line_ei, 'li='+li, 'before_pi='+face[ei])
 		face.insert(ei, pi)
 		face.lis.insert(line_ei, li)
+		if (face.mesh)
+			face.mesh.normals_valid = false
 		face.invalidate()
 	}
 
@@ -584,8 +598,8 @@ model3_component = function(e) {
 			each_line_face(li, function(face) {
 				assert(!target_mesh || target_mesh == mesh) // one mesh only.
 				target_mesh = face.mesh
-				// TODO: this is not right.
-				face.mesh.delete(face)
+				if (face.is_flat())
+					face.mesh.delete(face)
 				face.mesh = null
 			})
 
@@ -648,8 +662,6 @@ model3_component = function(e) {
 
 	e.set_material    = set_material
 
-	e.get_edge        = get_edge
-	e.each_edge       = each_edge
 	e.each_line_face  = each_line_face
 
 	e.children        = children
@@ -1424,25 +1436,22 @@ model3_component = function(e) {
 			blue_dashed_lines_rr.index = dab.buffer
 		}
 
-		for (let faces of meshes)
-			for (let face of faces)
-				for (let i = 0, teis = face.triangles(), n = teis.length; i < n; i++) {
-					let pi = face[teis[i]]
-					normals[3*pi+0] = 0
-					normals[3*pi+1] = 0
-					normals[3*pi+2] = 0
-				}
+		for (let mesh of meshes)
+			if (!mesh.normals_valid)
+				for (let face of mesh)
+					for (let i = 0, teis = face.triangles(), n = teis.length; i < n; i++) {
+						let pi = face[teis[i]]
+						normals[3*pi+0] = 0
+						normals[3*pi+1] = 0
+						normals[3*pi+2] = 0
+					}
 
-		for (let faces of meshes)
-			for (let face of faces)
-				compute_smooth_mesh_normals({
-					face: face,
-					points: points,
-					normals: normals,
-					triangles: face.triangles(),
-				})
+		for (let mesh of meshes)
+			if (!mesh.normals_valid)
+				for (let face of mesh)
+					face.compute_smooth_normals(normals)
 
-		faces_rr.update(materials)
+		faces_rr.update(faces)
 
 		if (points_changed || used_lines_changed)
 			black_fat_lines_rr.update(each_nonedge_line, nonedge_line_count)

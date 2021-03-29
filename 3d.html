@@ -38,23 +38,15 @@ let points = [
 	 0,  2,  2,
 ]
 
-{
-let _p = v3()
-face3 = poly3.subclass({
-	get_point: function(pi, p) {
-		return (p || _p).from_array(points, 3 * this[pi])
-	},
-})
-}
-
+face3 = poly3
 
 let faces = [
-	face3({valid: true, id: 0, uvm: mat3().translate(.1, .1).scale(1)}, [1, 0, 3, 2]),
-	face3({valid: true, id: 1, uvm: mat3().scale(1).invert()}, [4, 5, 6, 7]),
-	face3({valid: true, id: 2, uvm: mat3().scale(1).invert()}, [7, 6, 2, 3]), //[6, 2, 3],
-	face3({valid: true, id: 3, uvm: mat3().scale(1).invert()}, [4, 0, 1, 5]),
-	face3({valid: true, id: 4, uvm: mat3().scale(1).invert()}, [0, 4, 7, 3]),
-	face3({valid: true, id: 5, uvm: mat3().scale(1).invert()}, [5, 1, 2, 6]),
+	face3({points: points, valid: true, id: 0, uvm: mat3().translate(.1, .1).scale(1)}, [1, 0, 3, 2]),
+	face3({points: points, valid: true, id: 1, uvm: mat3().scale(1).invert()}, [4, 5, 6, 7]),
+	face3({points: points, valid: true, id: 2, uvm: mat3().scale(1).invert()}, [7, 6, 2, 3]), //[6, 2, 3],
+	face3({points: points, valid: true, id: 3, uvm: mat3().scale(1).invert()}, [4, 0, 1, 5]),
+	face3({points: points, valid: true, id: 4, uvm: mat3().scale(1).invert()}, [0, 4, 7, 3]),
+	face3({points: points, valid: true, id: 5, uvm: mat3().scale(1).invert()}, [5, 1, 2, 6]),
 ]
 
 let inst_ids = []

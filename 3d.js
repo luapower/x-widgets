@@ -2357,8 +2357,6 @@ triangle3.is_front_facing = function is_front_facing(a, b, c, direction) {
 
 let poly3_cons = function(_this, opt, elements) {
 	assign(_this, opt)
-	if (_this.mode)
-		assign(_this, assert(_this.modes[_this.mode]))
 	_this.invalid = true
 }
 
@@ -2402,13 +2400,11 @@ poly3.subclass = function(methods) {
 }
 
 // point accessor stubs. replace in subclasses based on how the points are stored.
-poly3p.point_count = function point_count() { return this.length }
-poly3p.get_point = function get_point(i, out) { return out.set(this[i]) }
-poly3p.modes = {
-	flat: {
-		point_count: function point_count() { return this.length / 3 },
-		get_point: function get_point(i, out) { return out.from_array(this, 3*i) }
-	},
+poly3p.point_count = function point_count() {
+	return this.length
+}
+poly3p.get_point = function get_point(i, out) {
+	return out.from_v3_array(this.points, this[i])
 }
 
 poly3p._update_plane = function() {
@@ -2527,12 +2523,56 @@ poly3p.triangles = function() {
 
 poly3p.triangle = function(ti, out) {
 	assert(out.is_triangle3)
-	let tris = this.triangles()
-	this.get_point(tris[3*ti+0], out[0])
-	this.get_point(tris[3*ti+1], out[1])
-	this.get_point(tris[3*ti+2], out[2])
+	let teis = this.triangles()
+	this.get_point(teis[3*ti+0], out[0])
+	this.get_point(teis[3*ti+1], out[1])
+	this.get_point(teis[3*ti+2], out[2])
 	return out
 }
+
+// from https://www.iquilezles.org/www/articles/normals/normals.htm
+{
+let p1 = v3()
+let p2 = v3()
+let p3 = v3()
+poly3p.compute_smooth_normals = function(normals, normalize) {
+
+	let teis = this.triangles()
+	let points = this.points
+	for (let i = 0, n = teis.length; i < n; i += 3) {
+
+		let p1i = this[teis[i+0]]
+		let p2i = this[teis[i+1]]
+		let p3i = this[teis[i+2]]
+
+		p3.from_array(points, 3*p3i)
+		p1.from_array(points, 3*p1i).sub(p3)
+		p2.from_array(points, 3*p2i).sub(p3)
+
+		let p = p1.cross(p2)
+
+		normals[3*p1i+0] += p.x
+		normals[3*p1i+1] += p.y
+		normals[3*p1i+2] += p.z
+
+		normals[3*p2i+0] += p.x
+		normals[3*p2i+1] += p.y
+		normals[3*p2i+2] += p.z
+
+		normals[3*p3i+0] += p.x
+		normals[3*p3i+1] += p.y
+		normals[3*p3i+2] += p.z
+	}
+
+	if (normalize)
+		for (let i = 0, n = normals.length; i < n; i += 3) {
+			p1.from_array(normals, i)
+			p1.normalize()
+			p1.to_array(normals, i)
+		}
+
+	return normals
+}}
 
 {
 let _tri = triangle3()
@@ -2871,64 +2911,11 @@ line3_class.prototype.is_line3 = true
 
 line3 = function(p1, p2) { return new line3_class(p1, p2) }
 
-// from https://www.iquilezles.org/www/articles/normals/normals.htm
-{
-	let p1 = v3()
-	let p2 = v3()
-	let p3 = v3()
-	let get_point_index_from_tpis = function(face, tpis, i) {
-		return face[tpis[i]]
-	}
-	let get_point_from_points = function(points, pi, out) {
-		return out.from_v3_array(points, pi)
-	}
-	compute_smooth_mesh_normals = function(opt) {
-		let points = opt.points
-		let tpis = opt.triangles
-		let len = or(opt.len, tpis && tpis.length)
-		let get_point_index = opt.get_point_index || get_point_index_from_tpis
-		let get_point = opt.get_point || get_point_from_points
-		let face = opt.face
-		let normals = opt.normals || []
-		for (let i = 0; i < len; i += 3) {
-
-			let p1i = get_point_index(face, tpis, i+0)
-			let p2i = get_point_index(face, tpis, i+1)
-			let p3i = get_point_index(face, tpis, i+2)
-
-			get_point(points, p3i, p3)
-			get_point(points, p1i, p1).sub(p3)
-			get_point(points, p2i, p2).sub(p3)
-			let p = p1.cross(p2)
-
-			normals[3*p1i+0] += p.x
-			normals[3*p1i+1] += p.y
-			normals[3*p1i+2] += p.z
-
-			normals[3*p2i+0] += p.x
-			normals[3*p2i+1] += p.y
-			normals[3*p2i+2] += p.z
-
-			normals[3*p3i+0] += p.x
-			normals[3*p3i+1] += p.y
-			normals[3*p3i+2] += p.z
-		}
-
-		if (opt.normalize)
-			for (let i = 0, n = normals.length; i < n; i += 3) {
-				p1.from_array(normals, i)
-				p1.normalize()
-				p1.to_array(normals, i)
-			}
-		return normals
-	}
-}
-
 // camera --------------------------------------------------------------------
 
-let _v4_0 = v4() // camera
-let _v4_1 = v4() // camera
-
+{
+let _v4_0 = v4()
+let _v4_1 = v4()
 camera = function(e) {
 	e = e || {}
 
@@ -3120,7 +3107,7 @@ camera = function(e) {
 	}
 
 	return e
-}
+}}
 
 camera3 = camera // so you can do `let camera = camera3()`.
 

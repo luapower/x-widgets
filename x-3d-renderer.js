@@ -400,36 +400,52 @@ gl.faces_renderer = function() {
 	let _v1 = v3()
 	let _uv = v2()
 
-	e.update = function(materials) {
+	let materials = []
+	let material_set = set()
 
+	function cmp_opacity(m1, m2) {
+		return (m2.opacity < 1) - (m1.opacity < 1)
+	}
+
+	e.update = function(faces) {
+
+		// gather materials in an array and sort them opaque-first.
+		materials.length = 0
+		material_set.clear()
+		for (let face of faces)
+			material_set.add(face.material)
+		for (let material of material_set)
+			materials.push(material)
+		materials.sort(cmp_opacity)
+
+		// get total vertex count and vertex index count.
 		let pt_n = 0
 		let pi_n = 0
-		for (let [mat, faces] of materials) {
-			for (let face of faces) {
-				face.update_if_invalid()
-				pt_n += face.length
-				pi_n += face.triangles().length
-			}
+		for (let face of faces) {
+			face.update_if_invalid()
+			pt_n += face.length
+			pi_n += face.triangles().length
 		}
 
+		// resize buffers and arrays to fit.
 		davb.len = pt_n
 		index_dab.len = 0
 		index_dab.grow_type(pt_n)
 		index_dab.len = pi_n
 
+		// populate the arrays.
 		let pos      = davb.pos      .array
 		let normal   = davb.normal   .array
 		let uv       = davb.uv       .array
 		let selected = davb.selected .array
 		let face_id  = davb.face_id  .array
 		let index    = index_dab     .array
-
 		let j = 0
 		let k = 0
 		draw_ranges.length = 0
-		for (let [mat, faces] of materials) {
+		for (let mat of materials) {
 			let k0 = k
-			for (let face of faces) {
+			for (let face of mat.faces) {
 				let j0 = j
 				let i, n
 				for (i = 0, n = face.length; i < n; i++, j++) {
@@ -455,6 +471,7 @@ gl.faces_renderer = function() {
 			draw_ranges.push([mat, k0, k - k0])
 		}
 
+		// upload all to the GPU.
 		davb.upload()
 		index_dab.upload()
 
