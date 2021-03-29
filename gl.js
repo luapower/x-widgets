@@ -726,7 +726,7 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 
 	db._grow = function(cap, pow2) {
 		cap = max(0, cap)
-		if (!this.buffer || this.buffer.capacity < cap) {
+		if ((this.buffer ? this.buffer.capacity : 0) < cap) {
 			if (pow2 !== false)
 				cap = nextpow2(cap)
 			let b0 = this.buffer
@@ -752,7 +752,9 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 		},
 		function(len) {
 			len = max(0, len)
-			db._grow(len).buffer.len = len
+			let buffer = db._grow(len).buffer
+			if (buffer)
+				buffer.len = len
 		}
 	)
 
@@ -812,7 +814,8 @@ gl.dyn_arr_buffer = function(arr_type, data_or_cap, n_components, instance_divis
 
 	dab.upload = function() {
 		db.len = da.len
-		db.buffer.upload(da.array)
+		if (db.buffer)
+			db.buffer.upload(da.array)
 		da.validate()
 		return this
 	}

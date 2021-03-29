@@ -2876,24 +2876,25 @@ line3 = function(p1, p2) { return new line3_class(p1, p2) }
 	let p1 = v3()
 	let p2 = v3()
 	let p3 = v3()
-	let get_point_index_from_tpis = function(tpis, i) {
-		return tpis[i]
+	let get_point_index_from_tpis = function(face, tpis, i) {
+		return face[tpis[i]]
 	}
 	let get_point_from_points = function(points, pi, out) {
 		return out.from_v3_array(points, pi)
 	}
 	compute_smooth_mesh_normals = function(opt) {
 		let points = opt.points
-		let tpis = opt.triangle_point_indices
+		let tpis = opt.triangles
 		let len = or(opt.len, tpis && tpis.length)
 		let get_point_index = opt.get_point_index || get_point_index_from_tpis
 		let get_point = opt.get_point || get_point_from_points
+		let face = opt.face
 		let normals = opt.normals || []
 		for (let i = 0; i < len; i += 3) {
 
-			let p1i = get_point_index(tpis, i+0)
-			let p2i = get_point_index(tpis, i+1)
-			let p3i = get_point_index(tpis, i+2)
+			let p1i = get_point_index(face, tpis, i+0)
+			let p2i = get_point_index(face, tpis, i+1)
+			let p3i = get_point_index(face, tpis, i+2)
 
 			get_point(points, p3i, p3)
 			get_point(points, p1i, p1).sub(p3)

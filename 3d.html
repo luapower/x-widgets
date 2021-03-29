@@ -210,13 +210,13 @@ let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
 
 // rendering
 
-let materials = []
-materials.push({
+let materials = map()
+materials.set({
 	diffuse_color: 0x000000,
 	diffuse_map: tex1,
 	faces: faces,
 	uv: v2(1, 1),
-})
+}, faces)
 
 faces_rr.update(materials)
 faces_rr.inst_id = inst_id_dbuf.buffer
@@ -231,12 +231,13 @@ dashed_lines_rr.model = inst_mat_dbuf.buffer
 dashed_lines_rr.pos = points_dbuf.buffer
 dashed_lines_rr.index  = dashed_line_pis_buf.buffer
 
-fat_lines_rr.update([
+let fat_lines = [
 	line3(v3(0, 0, 0), v3(10, 10, 10)),
 	line3(v3(0, 0, 0), v3(0, 1, 0)),
 	line3(v3(0, 0, 0), v3(1, 0, 0)),
-])
-fat_lines_rr.color.set(0, 0, 1)
+]
+fat_lines_rr.update((f) => fat_lines.forEach(f), fat_lines.length)
+fat_lines_rr.base_color = 0x0000ff
 fat_lines_rr.inst_id = inst_id_dbuf.buffer
 fat_lines_rr.model = inst_mat_dbuf.buffer
 

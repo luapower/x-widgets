@@ -494,7 +494,7 @@ class dyn_arr_class {
 
 	_grow(cap, pow2) {
 		cap = max(0, cap)
-		if (!this.array || this.capacity < cap) {
+		if (this.capacity < cap) {
 			if (pow2 !== false)
 				cap = nextpow2(cap)
 			let array = new this.arr_type(cap * this.n_components)
@@ -565,7 +565,9 @@ class dyn_arr_class {
 
 	_set_len = function(len) {
 		len = max(0, len)
-		this._grow(len).array.len = len
+		let arr = this._grow(len).array
+		if (arr)
+			arr.len = len
 		if (this.invalid) {
 			this.invalid_offset1 = min(this.invalid_offset1, len)
 			this.invalid_offset2 = min(this.invalid_offset2, len)

@@ -202,6 +202,7 @@ model3_component = function(e) {
 	// model (as in MVC and as in 3D model) -----------------------------------
 
 	let points    = [] // [(x, y, z), ...]
+	let normals   = [] // [(x, y, z), ...]; normals for smooth meshes.
 	let free_pis  = [] // [p1i,...]; freelist of point indices.
 	let prc       = [] // [rc1,...]; ref counts of points.
 	let lines     = [] // [(p1i, p2i, rc, sm, op), ...]; rc=refcount, sm=smoothness, op=opacity.
@@ -226,9 +227,9 @@ model3_component = function(e) {
 	let point_count = () => prc.length
 
 	{
-	let p = v3()
+	let _v0 = v3()
 	function get_point(pi, out) {
-		out = out || p
+		out = out || _v0
 		out[0] = points[3*pi+0]
 		out[1] = points[3*pi+1]
 		out[2] = points[3*pi+2]
@@ -241,6 +242,7 @@ model3_component = function(e) {
 		let pi = free_pis.pop()
 		if (pi == null) {
 			points.push(x, y, z)
+			normals.push(0, 0, 0)
 			pi = prc.length
 		} else {
 			set_xyz(points, pi, x, y, z)
@@ -409,6 +411,12 @@ model3_component = function(e) {
 		is_face3: true,
 		get_point: function(ei, out) {
 			return get_point(this[ei], out)
+		},
+		get_normal: function(ei, out) {
+			if (this.mesh)
+				return out.from_v3_array(normals, this[ei])
+			else
+				return this.plane().normal
 		},
 	})
 
@@ -650,7 +658,6 @@ model3_component = function(e) {
 
 	e.set = function(t) {
 
-		points.length = 0
 		if (t.points)
 			for (let i = 0, n = t.points.length; i < n; i += 3)
 				add_point(
@@ -659,15 +666,13 @@ model3_component = function(e) {
 					t.points[i+2]
 				)
 
-		lines.length = 0
-		if (t.lines)
-			for (let i = 0, n = t.lines.length; i < n; i += 2)
-				add_line(t.lines[i], t.lines[i+1])
-
-		faces.clear()
 		if (t.faces)
 			for (let face of t.faces)
 				add_face(face)
+
+		if (t.lines)
+			for (let i = 0, n = t.lines.length; i < n; i += 2)
+				add_line(t.lines[i], t.lines[i+1])
 
 	}
 
@@ -1270,30 +1275,34 @@ model3_component = function(e) {
 
 	// view --------------------------------------------------------------------
 
-	let points_dab            // common point coordinates buffer for points, edges and smooth meshes.
-	let used_pis_dab          // index buffer for points.
-	let vis_edge_lis_dab      // index buffer for face edges (black thin lines).
-	let inv_edge_lis_dab      // index buffer for invisible face edges (black dashed lines).
-	let sel_inv_edge_lis_dab  // index buffer for selected invisible face edges (blue dashed lines).
-	let models_dab            // instance matrices.
+	let points_dab           = gl && gl.dyn_arr_v3_buffer() // coords for points and lines
+	let used_pis_dab         = gl && gl.dyn_arr_u32_index_buffer() // points index buffer
+	let vis_edge_lis_dab     = gl && gl.dyn_arr_u32_index_buffer() // black thin lines
+	let inv_edge_lis_dab     = gl && gl.dyn_arr_u32_index_buffer() // black dashed lines
+	let sel_inv_edge_lis_dab = gl && gl.dyn_arr_u32_index_buffer() // blue dashed lines
 
-	let points_rr
-	let faces_rr
-
-	if (gl) {
-		points_dab           = gl.dyn_arr_v3_buffer()
-		used_pis_dab         = gl.dyn_arr_u32_index_buffer()
-		vis_edge_lis_dab     = gl.dyn_arr_u32_index_buffer()
-		inv_edge_lis_dab     = gl.dyn_arr_u32_index_buffer()
-		sel_inv_edge_lis_dab = gl.dyn_arr_u32_index_buffer()
-		models_dab           = gl.dyn_arr_mat4_instance_buffer()
-
-		points_rr = gl.points_renderer()
-		faces_rr  = gl.faces_renderer()
-	}
+	let points_rr             = gl.points_renderer()
+	let faces_rr              = gl.faces_renderer()
+	let black_thin_lines_rr   = gl.solid_lines_renderer()
+	let black_dashed_lines_rr = gl.dashed_lines_renderer({dash: 5, gap: 3})
+	let blue_dashed_lines_rr  = gl.dashed_lines_renderer({dash: 5, gap: 3, base_color: 0x0000ff})
+	let black_fat_lines_rr    = gl.fat_lines_renderer({})
+	let blue_fat_lines_rr     = gl.fat_lines_renderer({base_color: 0x0000ff})
 
 	e.free = function() {
-		// TODO:
+		points_dab            .free()
+		used_pis_dab          .free()
+		vis_edge_lis_dab      .free()
+		inv_edge_lis_dab      .free()
+		sel_inv_edge_lis_dab  .free()
+
+		points_rr             .free()
+		faces_rr              .free()
+		black_thin_lines_rr   .free()
+		black_dashed_lines_rr .free()
+		blue_dashed_lines_rr  .free()
+		black_fat_lines_rr    .free()
+		blue_fat_lines_rr     .free()
 	}
 
 	let _pa = new f32arr(3)
@@ -1309,27 +1318,6 @@ model3_component = function(e) {
 		}
 	}
 
-	function upload_points() {
-		if (!points_changed)
-			return points_dab.buffer
-		points_dab.len = point_count()
-		return points_dab.set(points).upload().buffer
-	}
-
-	function upload_used_pis() {
-		if (!used_points_changed)
-			return used_pis_dab.buffer
-		let pn = point_count()
-		used_pis_dab.len = pn
-		let i = 0
-		let is = used_pis_dab.array
-		for (let pi = 0; pi < pn; pi++)
-			if (prc[pi]) // is used
-				is[i++] = pi
-		used_pis_dab.len = i
-		return used_pis_dab.invalidate(0, i).upload().buffer
-	}
-
 	e.show_invisible_lines = true
 
 	e.toggle_invisible_lines = function() {
@@ -1337,147 +1325,151 @@ model3_component = function(e) {
 		used_lines_changed = true
 	}
 
-	function upload_edge_lis() {
-		let vdab = vis_edge_lis_dab
-		let idab = inv_edge_lis_dab
-
-		if (!used_lines_changed)
-			return [vdab.buffer, idab.buffer]
-
-		let vln = edge_line_count
-		let iln = e.show_invisible_lines ? vln : 0
-
-		vdab.len = vln
-		idab.len = iln
-
-		let vi = 0
-		let ii = 0
-		let vs = vdab.array
-		let is = iln && ib && idab.array
-		for (let i = 0, n = lines.length; i < n; i += 5) {
-			if (lines[i+2] >= 2) { // refcount: is edge
-				let p1i = lines[i+0]
-				let p2i = lines[i+1]
-				if (lines[i+4] > 0) { // opacity: is not invisible
-					vs[vi++] = p1i
-					vs[vi++] = p2i
-				} else if (is) {
-					is[ii++] = p1i
-					is[ii++] = p2i
-				}
-			}
-		}
-		let vb = vdab.invalidate(0, ).upload().buffer
-		let ib = idab.invalidate(0, ).upload().buffer
-		return [vb, ib]
-	}
-
-	function upload_sel_inv_edge_lis() {
-
-		let ln = e.show_invisible_lines ? e.sel_lines.size : 0
-		if (b) {
-			let i = 0
-			let is = b.array
-			for (let li in e.sel_lines) {
-				if (lines[5*li+4] == 0) { // opacity: is invisible.
-					let p1i = lines[5*li+0]
-					let p2i = lines[5*li+1]
-					is[i++] = p1i
-					is[i++] = p2i
-				}
-			}
-
-			b.updateRange.count = i
-			b.needsUpdate = true
-			b.used_count = i
-		}
-
-	}
-
-	/*
-	let upload_vis_edges_mesh = thin_lines_mesh(
-		'vis_edges',
-		() => vis_edge_lis_buf,
-		new THREE.LineBasicMaterial({color: black}),
-	)
-
-	let upload_inv_edges_mesh = thin_lines_mesh(
-		'inv_edges',
-		() => inv_edge_lis_buf,
-		dashed_line_material({color: black, dash: 5, gap: 3}),
-	)
-
-	let upload_sel_inv_edges_mesh = thin_lines_mesh(
-		'sel_inv_edges',
-		() => sel_inv_edge_lis_buf,
-		dashed_line_material({color: selected_color, dash: 3, gap: 3}),
-	)
-	*/
-
 	function each_nonedge_line(f) {
-		for (let i = 0, n = lines.length; i < n; i += 5)
-			if (lines[i+2] == 1) // is standalone.
-				f(li)
+		for (let li = 0, n = line_count(); li < n; li++)
+			if (lines[5*li+2] == 1) // rc: is standalone.
+				f(get_line(li))
 	}
 
 	function each_sel_vis_line(f) {
 		for (li of e.sel_lines)
-			if (lines[5*li+4] > 0) // is visible.
-				f(li)
+			if (lines[5*li+4] > 0) // opacity: is visible.
+				f(get_line(li))
 	}
-
-	/*
-	let update_nonedge_lines_mesh = fat_lines_mesh(
-		'fat_lines',
-		() => points_changed || used_lines_changed,
-		() => nonedge_line_count,
-		each_nonedge_line,
-		black
-	)
-
-	let upload_sel_vis_lines_mesh = fat_lines_mesh(
-		'sel_lines',
-		() => points_changed || sel_lines_changed,
-		() => e.sel_lines.size,
-		each_sel_vis_line,
-		selected_color
-	)
-	*/
-
-	//function upload_models = function
 
 	function draw(prog, models_buf) {
 
-		let points_buf = upload_points()
-		let used_pis_buf = upload_used_pis()
-		//let [vis_edges_buf, inv_edges_buf] = upload_edge_lis()
+		if (points_changed) {
+			points_dab.len = point_count()
+			points_dab.set(points).upload()
 
-		points_rr.pos = points_buf
-		points_rr.index = used_pis_buf
-		points_rr.model = models_buf
+			points_rr             .pos = points_dab.buffer
+			black_thin_lines_rr   .pos = points_dab.buffer
+			black_dashed_lines_rr .pos = points_dab.buffer
+			blue_dashed_lines_rr  .pos = points_dab.buffer
+		}
+
+		if (used_points_changed) {
+			let pn = point_count()
+			used_pis_dab.len = pn
+
+			let i = 0
+			let is = used_pis_dab.array
+			for (let pi = 0; pi < pn; pi++)
+				if (prc[pi]) // is used
+					is[i++] = pi
+
+			used_pis_dab.len = i
+			used_pis_dab.upload()
+
+			points_rr.index = used_pis_dab.buffer
+		}
+
+		if (used_lines_changed) {
+			let vln = edge_line_count
+			let iln = e.show_invisible_lines ? vln : 0
+
+			let vdab  = vis_edge_lis_dab
+			let idab  = inv_edge_lis_dab
+
+			vdab.len  = vln
+			idab.len  = iln
+
+			let vi = 0
+			let ii = 0
+			let vs = vdab.array
+			let is = idab.array
+			for (let i = 0, n = lines.length; i < n; i += 5) {
+				if (lines[i+2] >= 2) { // refcount: is edge
+					let p1i = lines[i+0]
+					let p2i = lines[i+1]
+					if (lines[i+4] > 0) { // opacity: is not invisible
+						vs[vi++] = p1i
+						vs[vi++] = p2i
+					} else if (is) {
+						is[ii++] = p1i
+						is[ii++] = p2i
+					}
+				}
+			}
+
+			vdab.len = vi
+			idab.len = ii
+
+			vdab.upload()
+			idab.upload()
+
+			black_thin_lines_rr   .index = vdab.buffer
+			black_dashed_lines_rr .index = idab.buffer
+		}
+
+		if (e.show_invisible_lines) {
+			let ln = e.show_invisible_lines ? e.sel_lines.size : 0
+			let dab = sel_inv_edge_lis_dab
+			dab.len = ln
+			let i = 0
+			let is = dab.array
+			if (is) {
+				for (let li in e.sel_lines) {
+					if (lines[5*li+4] == 0) { // opacity: is invisible.
+						let p1i = lines[5*li+0]
+						let p2i = lines[5*li+1]
+						is[i++] = p1i
+						is[i++] = p2i
+					}
+				}
+			}
+			dab.len = i
+
+			blue_dashed_lines_rr.index = dab.buffer
+		}
+
+		for (let faces of meshes)
+			for (let face of faces)
+				for (let i = 0, teis = face.triangles(), n = teis.length; i < n; i++) {
+					let pi = face[teis[i]]
+					normals[3*pi+0] = 0
+					normals[3*pi+1] = 0
+					normals[3*pi+2] = 0
+				}
+
+		for (let faces of meshes)
+			for (let face of faces)
+				compute_smooth_mesh_normals({
+					face: face,
+					points: points,
+					normals: normals,
+					triangles: face.triangles(),
+				})
 
 		faces_rr.update(materials)
-		faces_rr.model = models_buf
 
-		points_rr.draw(prog)
-		faces_rr.draw(prog)
+		if (points_changed || used_lines_changed)
+			black_fat_lines_rr.update(each_nonedge_line, nonedge_line_count)
 
-		/*
-		upload_vis_edges_mesh()
-		upload_inv_edges_mesh()
-		upload_sel_inv_edges_mesh()
-		upload_nonedge_lines_mesh()
-		upload_sel_vis_lines_mesh()
+		if (points_changed || sel_lines_changed)
+			blue_fat_lines_rr.update(each_sel_vis_line, e.sel_lines.size)
 
-		upload_flat_faces_mesh()
-		upload_smooth_faces_mesh()
+		points_rr             .model = models_buf
+		faces_rr              .model = models_buf
+		black_thin_lines_rr   .model = models_buf
+		black_dashed_lines_rr .model = models_buf
+		blue_dashed_lines_rr  .model = models_buf
+		black_fat_lines_rr    .model = models_buf
+		blue_fat_lines_rr     .model = models_buf
 
-		*/
+		points_rr             .draw(prog)
+		faces_rr              .draw(prog)
+		black_thin_lines_rr.draw(prog)
+		if (black_dashed_lines_rr.index) black_dashed_lines_rr .draw(prog)
+		if ( blue_dashed_lines_rr.index)  blue_dashed_lines_rr .draw(prog)
+		black_fat_lines_rr    .draw(prog)
+		blue_fat_lines_rr     .draw(prog)
 
-		points_changed = false
+		points_changed      = false
 		used_points_changed = false
-		used_lines_changed = false
-		sel_lines_changed = false
+		used_lines_changed  = false
+		sel_lines_changed   = false
 
 		if (DEBUG)
 			print('update')

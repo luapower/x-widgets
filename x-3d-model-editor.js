@@ -1278,6 +1278,8 @@ component('x-modeleditor', function(e) {
 				 2,  0,  2,
 				 2,  2,  2,
 				 0,  2,  2,
+				 0,  0,  0,
+				-1,  1,  0,
 			],
 			faces: [
 				[1, 0, 3, 2],
@@ -1286,6 +1288,9 @@ component('x-modeleditor', function(e) {
 				[4, 0, 1, 5],
 				[0, 4, 7, 3],
 				[5, 1, 2, 6],
+			],
+			lines: [
+				8, 9,
 			],
 		}
 
@@ -1299,8 +1304,6 @@ component('x-modeleditor', function(e) {
 		e.model.root.set_line_smoothness(2, 1)
 		e.model.root.set_line_opacity(0, 0)
 		e.model.root.set_line_opacity(2, 0)
-
-		//e.model.group.position.y = 1
 
 	}
 

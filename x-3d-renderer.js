@@ -397,6 +397,7 @@ gl.faces_renderer = function() {
 	let index_dab = gl.dyn_arr_index_buffer()
 
 	let _v0 = v3()
+	let _v1 = v3()
 	let _uv = v2()
 
 	e.update = function(materials) {
@@ -406,10 +407,8 @@ gl.faces_renderer = function() {
 		for (let [mat, faces] of materials) {
 			for (let face of faces) {
 				face.update_if_invalid()
-				if (!face.mesh) {
-					pt_n += face.length
-					pi_n += face.triangles().length
-				}
+				pt_n += face.length
+				pi_n += face.triangles().length
 			}
 		}
 
@@ -431,28 +430,26 @@ gl.faces_renderer = function() {
 		for (let [mat, faces] of materials) {
 			let k0 = k
 			for (let face of faces) {
-				if (!face.mesh) {
-					let np = face.plane().normal
-					let j0 = j
-					let i, n
-					for (i = 0, n = face.length; i < n; i++, j++) {
-						let p = face.get_point(i, _v0)
-						let uv = face.uv_at(i, face.uvm, mat.uv, _uv)
-						pos[3*j+0] = p[0]
-						pos[3*j+1] = p[1]
-						pos[3*j+2] = p[2]
-						normal[3*j+0] = np[0]
-						normal[3*j+1] = np[1]
-						normal[3*j+2] = np[2]
-						uv[2*j+0] = uv[0]
-						uv[2*j+1] = uv[1]
-						selected[j] = face.selected
-						face_id[j] = face.id
-					}
-					let tris = face.triangles()
-					for (i = 0, n = tris.length; i < n; i++, k++) {
-						index[k] = j0 + tris[i]
-					}
+				let j0 = j
+				let i, n
+				for (i = 0, n = face.length; i < n; i++, j++) {
+					let p = face.get_point(i, _v0)
+					let np = face.get_normal(i, _v1)
+					let uv = face.uv_at(i, face.uvm, mat.uv, _uv)
+					pos[3*j+0] = p[0]
+					pos[3*j+1] = p[1]
+					pos[3*j+2] = p[2]
+					normal[3*j+0] = np[0]
+					normal[3*j+1] = np[1]
+					normal[3*j+2] = np[2]
+					uv[2*j+0] = uv[0]
+					uv[2*j+1] = uv[1]
+					selected[j] = face.selected
+					face_id[j] = face.id
+				}
+				let tris = face.triangles()
+				for (i = 0, n = tris.length; i < n; i++, k++) {
+					index[k] = j0 + tris[i]
 				}
 			}
 			draw_ranges.push([mat, k0, k - k0])
@@ -561,13 +558,13 @@ gl.solid_lines_renderer = function() {
 
 // solid point rendering -----------------------------------------------------
 
-gl.points_renderer = function() {
+gl.points_renderer = function(e) {
 
 	let gl = this
-	let e = {
+	e = assign({
 		base_color : 0x000000,
 		point_size : 4,
-	}
+	}, e)
 
 	let prog = this.program('solid_point', `
 
@@ -621,14 +618,14 @@ gl.points_renderer = function() {
 
 // dashed lines rendering ----------------------------------------------------
 
-gl.dashed_lines_renderer = function() {
+gl.dashed_lines_renderer = function(e) {
 
 	let gl = this
-	let e = {
+	e = assign({
 		base_color: 0x000000,
 		dash: 1,
 		gap: 3,
-	}
+	}, e)
 
 	// works with gl.LINES drawing mode.
 	let prog = this.program('dashed_line', `
@@ -698,12 +695,12 @@ gl.dashed_lines_renderer = function() {
 
 // fat lines rendering -------------------------------------------------------
 
-gl.fat_lines_renderer = function() {
+gl.fat_lines_renderer = function(e) {
 
 	let gl = this
-	let e = {
-		color: v3(),
-	}
+	e = assign({
+		base_color: 0x000000,
+	}, e)
 
 	let prog = gl.program('fat_line', `
 
@@ -748,10 +745,10 @@ gl.fat_lines_renderer = function() {
 
 		#include mesh.fs
 
-		uniform vec3 color;
+		uniform vec3 base_color;
 
 		void main() {
-			frag_color = vec4(color, 1.0);
+			frag_color = vec4(base_color, 1.0);
 		}
 
 	`)
@@ -759,10 +756,10 @@ gl.fat_lines_renderer = function() {
 	let davb = gl.dyn_arr_vertex_buffer({pos: 'v3', q: 'v3', dir: 'i8'})
 	let ib = gl.dyn_arr_index_buffer()
 
-	e.update = function(lines) {
+	e.update = function(each_line, line_count) {
 
-		let vertex_count = 4 * lines.length
-		let index_count  = 6 * lines.length
+		let vertex_count = 4 * line_count
+		let index_count  = 6 * line_count
 
 		davb.len = vertex_count
 
@@ -777,7 +774,7 @@ gl.fat_lines_renderer = function() {
 
 		let i = 0
 		let j = 0
-		for (let line of lines) {
+		each_line(function(line) {
 
 			let p1x = line[0][0]
 			let p1y = line[0][1]
@@ -836,7 +833,7 @@ gl.fat_lines_renderer = function() {
 
 			i += 4
 			j += 6
-		}
+		})
 
 		davb.upload()
 		ib.upload()
@@ -848,10 +845,11 @@ gl.fat_lines_renderer = function() {
 		if (prog)
 			return // no shadows or hit-testing
 		vao.use()
-		vao.set_uni ('color', e.color)
 		vao.set_attrs(davb)
 		vao.set_attr('model', e.model)
 		vao.set_index(ib.buffer)
+		vao.set_uni('base_color', e.base_color)
+		vao.set_attr('color', e.color)
 		gl.draw_triangles()
 		vao.unuse()
 	}
@@ -893,15 +891,6 @@ gl.fat_lines_renderer = function() {
 
 	triangle_pis.max_index = pos_template.length - 1
 
-	let normal = new f32arr(pos_template.length)
-
-	compute_smooth_mesh_normals({
-		points: pos_template,
-		triangle_point_indices: triangle_pis,
-		normals: normal,
-	})
-
-	normal.n_components = 3
 	let len = 6 * 3 * 2
 	let pos = new f32arr(len * 3)
 
@@ -913,7 +902,6 @@ gl.fat_lines_renderer = function() {
 		let e = {
 			pos: pos,
 			index: triangle_pis,
-			normal: normal,
 			len: len,
 		}
 
