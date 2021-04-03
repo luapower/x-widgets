@@ -66,7 +66,7 @@
 		plane xy_quat is_convex_quad triangle_count triangles triangle contains_point
 
 	line3 [p0, p1]
-		set clone equals
+		set(line | p1,p2) clone equals
 		center delta distance2 distance at
 		closest_point_to_point_t closest_point_to_point intersect_line intersect_plane intersects_plane
 		transform
@@ -82,7 +82,7 @@
 (function() {
 
 NEAR = 1e-5 // distance epsilon (tolerance)
-FAR  = 1e3  // skybox distance from center
+FAR  = 1e5  // skybox distance from center
 
 // v2 ------------------------------------------------------------------------
 
@@ -2406,6 +2406,9 @@ poly3p.point_count = function point_count() {
 poly3p.get_point = function get_point(i, out) {
 	return out.from_v3_array(this.points, this[i])
 }
+poly3p.get_normal = function(i, out) {
+	return out.set(this.plane().normal)
+}
 
 poly3p._update_plane = function() {
 	let pl = this._plane || plane()
@@ -2511,6 +2514,7 @@ poly3p._update_triangles = function() {
 			ps[2*i+1] = p[1]
 		}
 		out = earcut2(ps, null, 2)
+		print(ps, out, tri_count)
 		assert(out.length == tri_count)
 	}
 	this._triangles = out
@@ -2632,7 +2636,7 @@ poly3p.intersect_line = function(line, face) {
 			p1 = line.end
 			p2 = line.start
 		}
-		let line_dir = _p.copy(p2).sub(p1).setLength(1)
+		let line_dir = _p.set(p2).sub(p1).setLength(1)
 	}
 }
 
@@ -2643,10 +2647,10 @@ poly3p.update_if_invalid = function() {
 }
 
 poly3p.update = function() {
+	this.invalid = false
 	this._update_plane()
 	this._update_xy_quat()
 	this._update_triangles()
-	this.invalid = false
 	return this
 }
 
@@ -2775,7 +2779,7 @@ function test_plane_graph_regions() {
 		//v3(-5, 1, 0), v3(5,  1, 0), v3(-5, 4, 0), v3(5, 4, 0),
 		//v3(0, -1, 0), v3(1, -2, 0),
 	]
-	let get_point = function(i, out) { out.copy(points[i]); return out }
+	let get_point = function(i, out) { out.set(points[i]); return out }
 	let lines  = [0,1, 0,2,  1,2, 1,3, 2,4, 3,4,  ] // 5,6, 5,7, 6,8, 7,8,  0,9, 9,10]
 	let rt = plane_graph_regions(v3(0, 0, 1), get_point, lines)
 	for (let r of rt) { print(r.map(i => i+1)) }
@@ -2792,8 +2796,13 @@ let line3_class = class line3 extends Array {
 	}
 
 	set(p0, p1) {
-		this[0].copy(p0)
-		this[1].copy(p1)
+		if (p0.is_line3) {
+			let line = p0
+			p0 = line[0]
+			p1 = line[1]
+		}
+		this[0].set(p0)
+		this[1].set(p1)
 		return this
 	}
 

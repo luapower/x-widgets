@@ -5,7 +5,7 @@
 
 */
 
-DEBUG = 1
+DEBUG = 0
 
 // colors --------------------------------------------------------------------
 
@@ -30,6 +30,7 @@ component('x-modeleditor', function(e) {
 	e.add(canvas)
 
 	let gl = assert(canvas.getContext('webgl2'))
+	//gl.wrap_calls()
 
 	// props ------------------------------------------------------------------
 
@@ -44,8 +45,11 @@ component('x-modeleditor', function(e) {
 		},
 	})
 	skybox.on('load', render)
-	let axes_renderer = gl.axes_renderer()
-	axes_renderer.add_instance()
+
+	let axes_rr = gl.axes_renderer()
+	axes_rr.add_instance()
+
+	//let ground_rr = gl.ground_plane_renderer()
 
 	// camera -----------------------------------------------------------------
 
@@ -94,22 +98,21 @@ component('x-modeleditor', function(e) {
 	e.prop('latitude'   , {store: 'var', type: 'number', default: 44.42314})
 	e.prop('longitude'  , {store: 'var', type: 'number', default: 26.35673})
 
-	let sun_pos = v3()
+	let sun_dir = v3()
 	function update_sun_pos() {
 		let {azimuth, altitude} = suncalc.sun_position(e.time, e.latitude, e.longitude)
-		sun_pos.set(v3.z_axis)
+		sun_dir.set(v3.z_axis)
 			.rotate(v3.x_axis, -altitude)
 			.rotate(v3.y_axis, -azimuth + rad * e.north)
-		if (e.sunlight)
+		if (e.sunlight || e.shadows)
 			update_sunlight_pos()
 	}
-	update_sun_pos()
 
 	function update_sunlight_pos() {
-		if (e.sunlight) {
-			renderer.sunlight_dir.set(sun_pos)
+		if (e.sunlight || e.shadows) {
+			renderer.sunlight_dir.set(sun_dir).set(.18, 1, .2)
 		} else {
-			renderer.sunlight_dir.set(camera.pos)
+			renderer.sunlight_dir.set(camera.dir)
 		}
 		renderer.update()
 		render()
@@ -123,7 +126,7 @@ component('x-modeleditor', function(e) {
 		gl.set_uni('view_proj', camera.view_proj)
 		skybox.update_view(camera.pos)
 		update_dot_positions()
-		if (!e.sunlight)
+		if (!(e.sunlight || e.shadows))
 			update_sunlight_pos()
 		render()
 	}
@@ -134,22 +137,27 @@ component('x-modeleditor', function(e) {
 		enable_shadows: e.shadows,
 	})
 
-	let draw_all = function(prog) {
-		if (!prog)
-			skybox.draw()
-		axes_renderer.draw()
+	function draw(prog) {
+		//gl.start_trace()
+		let t0 = time()
+		skybox.draw(prog)
+		axes_rr.draw(prog)
+		//ground_rr.draw(prog)
 		e.model.draw(prog)
+		//print(gl.stop_trace())
+		//print(((time() - t0) * 1000).toFixed(0), 'ms')
 	}
 
 	let raf_id
 	function do_render() {
-		renderer.render(draw_all)
+		renderer.render(draw)
 		raf_id = null
 	}
 
 	function render() {
 		if (!raf_id)
 			raf_id = raf(do_render)
+		mouse.valid = false
 	}
 
 	/*
@@ -603,7 +611,6 @@ component('x-modeleditor', function(e) {
 
 	// model ------------------------------------------------------------------
 
-	e.components = {} // {name->group}
 	e.model = model3({gl: gl})
 	e.model.editor = e
 
@@ -619,20 +626,20 @@ component('x-modeleditor', function(e) {
 		let cam0 = camera.clone()
 		let mx0 = mouse.x
 		let my0 = mouse.y
-		let hit_point = v3().set(mouse.point)
-		let panning
+		let hit_point = v3().set(mouse.hit_point)
+		let panning = shift
 		return capture(function() {
 			let mx = mouse.x
 			let my = mouse.y
-			if (e.shift == !panning) {
+			if (shift == !panning) {
 				cam0.set(camera)
 				mx0 = mx
 				my0 = my
-				panning = e.shift
+				panning = shift
 			} else {
 				camera.set(cam0)
 			}
-			if (e.shift) {
+			if (panning) {
 				camera.pan(hit_point, mx0, my0, mx, my)
 			} else {
 				let dx = (mx - mx0) / 150
@@ -920,7 +927,6 @@ component('x-modeleditor', function(e) {
 		if (cur_line.visible) {
 			let closing = cline[1].i != null || cline[1].li != null
 			e.model.draw_line(cline)
-			e.model.update()
 			ref_point.visible = false
 			if (closing) {
 				tools.line.cancel()
@@ -964,11 +970,9 @@ component('x-modeleditor', function(e) {
 				let p = mouse_hit_faces()
 				if (p && p.snap == 'face') {
 					e.model.select_face(p.face)
-					e.model.update()
 				} else {
 					p = null
 					e.model.select_all(false)
-					e.model.update()
 				}
 				hit_p = p
 				if ((hit_p && hit_p.face) !== (p && p.face)) // hit face changed
@@ -994,14 +998,12 @@ component('x-modeleditor', function(e) {
 
 		function start() {
 			pull = e.model.start_pull(hit_p)
-			e.model.update()
 		}
 
 		function stop() {
 			pull.stop()
 			pull = null
 			e.model.select_all(false)
-			e.model.update()
 		}
 
 		tools.pull.pointerdown = function(capture) {
@@ -1036,8 +1038,8 @@ component('x-modeleditor', function(e) {
 		let p
 
 		let update_mode = function() {
-			mode = e.shift && e.ctrl && 'remove'
-				|| e.shift && 'toggle' || e.ctrl && 'add' || null
+			mode = shift && ctrl && 'remove'
+				|| shift && 'toggle' || ctrl && 'add' || null
 			e.cursor = 'select' + (mode && '_' + mode || '')
 			if (mode == 'remove') mode = false
 			if (mode == 'add') mode = true
@@ -1058,17 +1060,13 @@ component('x-modeleditor', function(e) {
 			p = mouse_hit_model()
 			if (!p && nclicks == 1 && !mode) {
 				e.model.select_all(false)
-				e.model.update()
 			} else if (p && nclicks == 3) {
 				e.model.select_all(true)
-				e.model.update()
 			} else if (p && nclicks <= 2) {
 				if (p.li != null) {
 					e.model.select_line(p.li, mode, nclicks == 2)
-					e.model.update()
 				} else if (p.face != null) {
 					e.model.select_face(p.face, mode, nclicks == 2)
-					e.model.update()
 				}
 			}
 		}
@@ -1103,18 +1101,19 @@ component('x-modeleditor', function(e) {
 
 	let mouse = v2()
 	mouse.ray = line3()
-	mouse.point = v3()
-
-	let face_id_renderer = gl.face_id_renderer()
+	mouse.hit_point = v3()
 
 	{
 		let _m0 = mat4()
-		let _m1 = mat4()
 		let _p0 = v3()
 		let _p1 = v3()
 		let _ray = line3()
 		let hit = {}
-		function update_mouse(ev, mx, my, left_down, no_pointermove) {
+		function update_mouse(ev, mx, my, validate, left_down, no_pointermove) {
+			if (!mouse.valid && validate) {
+				e.model.update_mouse()
+				mouse.valid = true
+			}
 			let r = e.rect()
 			mx -= r.x
 			my -= r.y
@@ -1125,20 +1124,20 @@ component('x-modeleditor', function(e) {
 			update_keys(ev)
 			camera.raycast(mx, my, mouse.ray)
 			let inst_model, inst_point, face
-			if (face_id_renderer.hit_test(mx, my, hit)) {
-				let model = e.model.instance_matrix(hit.inst_id, _m0)
-				let inv_model = _m1.set(model).invert()
+			if (e.model.hit_test(mx, my, hit)) {
+				let comp = hit.comp
+				let model = hit.inst
+				let inv_model = _m0.set(model).invert()
 				let ray = _ray.set(mouse.ray).transform(inv_model)
-				let face = e.model.face(hit.face_id)
+				let face = hit.face
 				inst_point = face.plane().intersect_line(ray, null, _p0)
 				if (inst_point) {
-					mouse.point.set(inst_point).transform(model)
+					mouse.hit_point.set(inst_point).transform(model)
 					inst_model = model
 				}
 			} else {
-				mouse.ray.at(min(FAR / 10, camera.pos.len()), mouse.point)
+				mouse.ray.at(min(FAR / 10, camera.pos.len()), mouse.hit_point)
 			}
-			mouse.inst_id = hit.inst_id
 			mouse.inst_model = inst_model
 			mouse.inst_point = inst_point
 			mouse.face = face
@@ -1148,10 +1147,11 @@ component('x-modeleditor', function(e) {
 		}
 	}
 
+	let shift, ctrl, alt
 	function update_keys(ev) {
-		e.shift = ev.shiftKey
-		e.ctrl  = ev.ctrlKey
-		e.alt   = ev.altKey
+		shift = ev.shiftKey
+		ctrl  = ev.ctrlKey
+		alt   = ev.altKey
 	}
 
 	function fire_pointermove() {
@@ -1164,16 +1164,16 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('pointerdown', function(ev, mx, my) {
-		update_mouse(ev, mx, my, true)
+		update_mouse(ev, mx, my, true, true)
 		if (tool.pointerdown) {
 			let captured
 			function capture(move, up) {
 				let movewrap = move && function(ev, mx, my) {
-					update_mouse(ev, mx, my, null, true)
+					update_mouse(ev, mx, my, false, null, true)
 					return move()
 				}
 				let upwrap = up && function(ev, mx, my) {
-					update_mouse(ev, mx, my, false, true)
+					update_mouse(ev, mx, my, true, false, true)
 					return up()
 				}
 				captured = e.capture_pointer(ev, movewrap, upwrap)
@@ -1186,7 +1186,7 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('pointerup', function(ev, mx, my) {
-		update_mouse(ev, mx, my, false)
+		update_mouse(ev, mx, my, true, false)
 		if (tool.pointerup) {
 			tool.pointerup()
 			fire_pointermove()
@@ -1199,7 +1199,7 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('click', function(ev, nclicks, mx, my) {
-		update_mouse(ev, mx, my)
+		update_mouse(ev, mx, my, true)
 		if (tool.click) {
 			tool.click(nclicks)
 			fire_pointermove()
@@ -1208,8 +1208,8 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('wheel', function(ev, dy, mx, my) {
-		update_mouse(ev, mx, my)
-		camera.dolly(mouse.point, 1 + 0.2 * (dy / 100))
+		update_mouse(ev, mx, my, true)
+		camera.dolly(mouse.hit_point, 1 + 0.4 * dy)
 		update_camera()
 		return false
 	})
@@ -1228,11 +1228,9 @@ component('x-modeleditor', function(e) {
 		update_keys(ev)
 		if (key == 'Delete') {
 			e.model.remove_selection()
-			e.model.update()
 			render()
 		} else if (key == 'h') {
 			e.model.toggle_invisible_lines()
-			e.model.update()
 			render()
 		}
 		if (tool.keydown)
@@ -1261,7 +1259,6 @@ component('x-modeleditor', function(e) {
 	})
 
 	// test cube --------------------------------------------------------------
-
 
 	function draw_test_cube() {
 
@@ -1298,6 +1295,7 @@ component('x-modeleditor', function(e) {
 		m.faces[1].material = mat1
 		m.faces[2].material = mat2
 
+		e.model.root.name = 'root'
 		e.model.root.set(m)
 
 		e.model.root.set_line_smoothness(0, 1)
@@ -1305,9 +1303,27 @@ component('x-modeleditor', function(e) {
 		e.model.root.set_line_opacity(0, 0)
 		e.model.root.set_line_opacity(2, 0)
 
+		let c1 = model3_component({model: e.model, name: 'c1'})
+
+		m.faces[0].material = null
+		m.faces[1].material = null
+		m.faces[2].material = null
+
+		c1.set(m)
+
+		e.model.root.add_child(c1, mat4().translate(3, 0, 0))
+		e.model.root.add_child(c1, mat4().translate(4, 3, 0))
+
+		for (let i = 0; i < 20; i++)
+			for (let j = 0; j < 2; j++)
+				for (let k = 0; k < 2; k++)
+					e.model.root.add_child(c1, mat4().translate(0 + i * 3, 3 + j * 3, -5 - k * 3))
+
 	}
 
 	// init -------------------------------------------------------------------
+
+	update_sun_pos()
 
 	draw_test_cube()
 

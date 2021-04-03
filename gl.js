@@ -94,9 +94,61 @@
 
 (function() {
 
-// clearing ------------------------------------------------------------------
-
 let gl = WebGL2RenderingContext.prototype
+
+// debugging -----------------------------------------------------------------
+
+{
+
+let methods = {}
+let constant_names = {}
+for (let name in gl) {
+	let d = Object.getOwnPropertyDescriptor(gl, name)
+	if (isfunc(d.value) && name != 'getError')
+		methods[name] = d.value
+	else if (isnum(d.value))
+		constant_names[d.value] = name
+}
+
+function count_call(name, args, t) {
+	if (name == 'useProgram' && args[0])
+		name = 'useProgram ' + args[0].name
+	t[name] = (t[name] || 0) + 1
+}
+
+gl.wrap_calls = function() {
+	for (let name in methods) {
+		let f = methods[name]
+		this[name] = function(...args) {
+			if (this._call_counts)
+				count_call(name, args, this._call_counts)
+			let ret = f.call(this, ...args)
+			let err = this.getError()
+			assert(!err, '{0}: {1}', name, constant_names[err])
+			return ret
+		}
+	}
+	this.wrap_calls = noop
+	return this
+}
+
+gl.start_trace = function() {
+	this.wrap_calls()
+	this._call_counts = {}
+	this.t0 = time()
+}
+
+gl.stop_trace = function() {
+	let cc = this._call_counts
+	this._call_counts = null
+	this.t1 = time()
+	this.dt_ms = (this.t1 - this.t0) * 1000
+	return cc
+}
+
+}
+
+// clearing ------------------------------------------------------------------
 
 gl.clear_all = function(r, g, b, a, depth) {
 	let gl = this
@@ -299,7 +351,6 @@ prog.free = function() {
 	this.free = noop
 }
 
-
 let vao = WebGLVertexArrayObject.prototype
 
 gl.vao = function() {
@@ -349,11 +400,12 @@ vao.use = function() {
 	this.bind()
 
 	// simulate VAO-specific uniforms.
-	let unis = prog.vao_uniforms
+	let unis = prog.uniform_info
 	if (unis) {
-		assert(this.uniforms, 'no uniforms assigned')
+		let vals = this.uniforms
+		let globals = gl.uniforms
 		for (let name in unis) {
-			let args = assert(this.uniforms[name], 'uniform {0} not assigned', name)
+			let args = (vals && vals[name]) || (globals && globals[name]) || empty_array
 			prog.set_uni(name, ...args)
 		}
 	}
@@ -367,8 +419,9 @@ vao.unuse = function() {
 }
 
 vao.set_uni = function(name, ...args) {
+	if (this.program && !this.program.uniform_info[name])
+		return
 	assign(attr(attr(this, 'uniforms'), name, Array), args)
-	attr(this.program, 'vao_uniforms')[name] = true
 	if (this.gl.active_program == this.program) // set_uni() after use()
 		this.program.set_uni(name, ...args)
 	return this
@@ -788,7 +841,7 @@ gl.dyn_arr_buffer = function(arr_type, data_or_cap, n_components, instance_divis
 	db.buffer_replaced = function(b) { dab.buffer_replaced(b) }
 
 	property(dab, 'len',
-		function() { return db.len },
+		function() { return da.len },
 		function(len) { da.len = len }
 	)
 
@@ -980,26 +1033,26 @@ prog.attr_location = function(name) {
 prog.set_uni_f = function(name, v) {
 	let loc = this.uniform_location(name)
 	if (loc)
-		this.gl.uniform1f(loc, v)
+		this.gl.uniform1f(loc, v || 0)
 	return this
 }
 
 prog.set_uni_i = function(name, v) {
 	let loc = this.uniform_location(name)
 	if (loc)
-		this.gl.uniform1i(loc, v)
+		this.gl.uniform1i(loc, v || 0)
 	return this
 }
 
 prog.set_uni_v2 = function(name, x, y) {
 	let loc = this.uniform_location(name)
 	if (loc) {
-		if (x.is_v2 || x.is_v3 || x.is_v4) {
+		if (x && (x.is_v2 || x.is_v3 || x.is_v4)) {
 			let p = x
 			x = p.x
 			y = p.y
 		}
-		this.gl.uniform2f(loc, x, y)
+		this.gl.uniform2f(loc, x || 0, y || 0)
 	}
 	return this
 }
@@ -1007,7 +1060,7 @@ prog.set_uni_v2 = function(name, x, y) {
 prog.set_uni_v3 = function(name, x, y, z) {
 	let loc = this.uniform_location(name)
 	if (loc) {
-		if (x.is_v3 || x.is_v4) {
+		if (x && (x.is_v3 || x.is_v4)) {
 			let p = x
 			x = p.x
 			y = p.y
@@ -1018,7 +1071,7 @@ prog.set_uni_v3 = function(name, x, y, z) {
 			y = (c >>  8 & 0xff) / 255
 			z = (c       & 0xff) / 255
 		}
-		this.gl.uniform3f(loc, x, y, z)
+		this.gl.uniform3f(loc, x || 0, y || 0, z || 0)
 	}
 	return this
 }
@@ -1026,12 +1079,12 @@ prog.set_uni_v3 = function(name, x, y, z) {
 prog.set_uni_v4 = function(name, x, y, z, w) {
 	let loc = this.uniform_location(name)
 	if (loc) {
-		if (x.is_v3 || x.is_v4) {
+		if (x && (x.is_v3 || x.is_v4)) {
 			let p = x
 			x = p.x
 			y = p.y
 			z = p.z
-			w = or(p.w, 1)
+			w = p.w
 		} else if (isnum(x) && y == null) { // 0xRRGGBBAA -> (r, g, b, a)
 			let c = x
 			x = (c >> 24       ) / 255
@@ -1039,7 +1092,7 @@ prog.set_uni_v4 = function(name, x, y, z, w) {
 			z = (c >>  8 & 0xff) / 255
 			w = (c       & 0xff) / 255
 		}
-		this.gl.uniform4f(loc, x, y, z, w)
+		this.gl.uniform4f(loc, x || 0, y || 0, z || 0, or(w, 1))
 	}
 	return this
 }
@@ -1047,14 +1100,14 @@ prog.set_uni_v4 = function(name, x, y, z, w) {
 prog.set_uni_mat3 = function(name, m) {
 	let loc = this.uniform_location(name)
 	if (loc)
-		this.gl.uniformMatrix3fv(loc, false, m)
+		this.gl.uniformMatrix3fv(loc, false, m || mat3f32.identity)
 	return this
 }
 
 prog.set_uni_mat4 = function(name, m) {
 	let loc = this.uniform_location(name)
 	if (loc)
-		this.gl.uniformMatrix4fv(loc, false, m)
+		this.gl.uniformMatrix4fv(loc, false, m || mat4f32.identity)
 	return this
 }
 
@@ -1062,13 +1115,14 @@ let set_uni_texture_func = function(gl_target) {
 	return function(name, tex, unit) {
 		let loc = this.uniform_location(name)
 		if (loc) {
-			unit = unit || 0
 			let gl = this.gl
 			if (tex) {
-				assert(tex.gl_target == gl_target)
+				//TODO: this assert prevents viewing of shadow maps.
+				//assert(tex.gl_target == gl_target)
 				tex.bind(unit)
-			} else
-				gl.bindTexture(gl_target, null)
+			} else {
+				gl.bind_texture(gl_target, null, unit)
+			}
 			gl.uniform1i(loc, unit)
 		}
 		return this
@@ -1120,7 +1174,8 @@ gl.draw = function(gl_mode, offset, count) {
 		if (count == null)
 			count = ib.len
 		if (n_inst != null) {
-			// yes, we want gl.drawElementsInstancedBaseInstance(), I know...
+			// NOTE: don't look for an offset-in-the-instance-buffers arg,
+			// that's glDrawElementsInstancedBaseInstance() which is not exposed.
 			gl.drawElementsInstanced(gl_mode, count, ib.gl_type, offset, n_inst)
 		} else {
 			gl.drawElements(gl_mode, count, ib.gl_type, offset)
@@ -1153,16 +1208,15 @@ gl.texture = function(target) {
 	return tex
 }
 
-tex.bind = function(unit) {
-	let gl = this.gl
+gl.bind_texture = function(target, tex, unit) {
+	let gl = this
 	gl.activeTexture(gl.TEXTURE0 + (unit || 0))
-	gl.bindTexture(this.gl_target, this)
+	gl.bindTexture(or(target, gl.TEXTURE_2D), tex)
 	return this
 }
 
-tex.unbind = function() {
-	let gl = this.gl
-	gl.bindTexture(this.gl_target, null)
+tex.bind = function(unit) {
+	this.gl.bind_texture(this.gl_target, this, unit)
 	return this
 }
 
@@ -1214,8 +1268,10 @@ let tex_side_target = function(tex, side) {
 
 tex.set_rgba = function(w, h, pixels, side) {
 	let gl = this.gl
+
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+
 	this.w = w
 	this.h = h
 	this.format = 'rgba'
@@ -1223,10 +1279,25 @@ tex.set_rgba = function(w, h, pixels, side) {
 	return this
 }
 
+tex.set_rgba16 = function(w, h, pixels, side) {
+	let gl = this.gl
+
+	this.bind()
+	gl.texImage2D(tex_side_target(this, side), 0, gl.RGBA16UI, w, h, 0, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, pixels)
+
+	this.w = w
+	this.h = h
+	this.format = 'rgba16'
+	this.attach = 'color'
+	return this
+}
+
 tex.set_u32 = function(w, h, pixels, side) {
 	let gl = this.gl
+
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.R32UI, w, h, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, pixels)
+
 	this.w = w
 	this.h = h
 	this.format = 'u32'
@@ -1240,12 +1311,13 @@ let is_pow2 = function(value) {
 
 tex.set_image = function(image, pixel_scale, side) {
 	let gl = this.gl
-	this.bind()
 	let gl_target = tex_side_target(this, side)
+
+	this.bind()
 	gl.texImage2D(gl_target, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
 	if (gl_target == gl.TEXTURE_2D)
 		gl.generateMipmap(gl_target)
-	this.unbind()
+
 	let w = image.width
 	let h = image.height
 	if (!side) {
@@ -1262,6 +1334,7 @@ tex.set_image = function(image, pixel_scale, side) {
 	this.h = h
 	this.format = 'rgba'
 	this.attach = 'color'
+
 	return this
 }
 
@@ -1294,9 +1367,11 @@ let parse_wrap = function(s) {
 tex.set_wrap = function(wrap_s, wrap_t) {
 	let gl = this.gl
 	wrap_t = or(wrap_t, wrap_s)
+
 	this.bind()
 	gl.texParameteri(this.gl_target, gl.TEXTURE_WRAP_S, parse_wrap(wrap_s))
 	gl.texParameteri(this.gl_target, gl.TEXTURE_WRAP_T, parse_wrap(wrap_t))
+
 	return this
 }
 
@@ -1312,9 +1387,11 @@ let parse_filter = function(s) {
 
 tex.set_filter = function(min_filter, mag_filter) {
 	let gl = this.gl
+
 	this.bind()
 	gl.texParameteri(this.gl_target, gl.TEXTURE_MIN_FILTER, parse_filter(min_filter))
 	gl.texParameteri(this.gl_target, gl.TEXTURE_MAG_FILTER, parse_filter(mag_filter))
+
 	return this
 }
 
@@ -1351,6 +1428,7 @@ let rbo_set = function(rbo, gl, attach, gl_format, w, h, n_samples) {
 		n_samples = min(repl(n_samples, true, 4), gl.getParameter(gl.MAX_SAMPLES))
 		gl.renderbufferStorageMultisample(gl.RENDERBUFFER, rbo.n_samples, gl_format, w, h)
 	} else {
+		n_samples = 1
 		gl.renderbufferStorage(gl.RENDERBUFFER, gl_format, w, h)
 	}
 	rbo.w = w
@@ -1492,6 +1570,7 @@ gl.blit = function(
 	if (dst_fbo) dst_fbo.unbind()
 }
 
+// NOTE: this is a total performance killer, use sparringly!
 fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 	let gl = this.gl
 	let fbo = this
@@ -1516,6 +1595,13 @@ fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 			check_arr_type(buf, u8arr)
 		}
 		gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf)
+	} else if (tex.format == 'rgba16') {
+		if (!buf) {
+			buf = new u16arr(w * h * 4)
+		} else {
+			check_arr_type(buf, u16arr)
+		}
+		gl.readPixels(0, 0, w, h, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, buf)
 	} else if (tex.format == 'u32') {
 		if (!buf) {
 			buf = new u32arr(w * h)
@@ -1574,9 +1660,9 @@ fbo.attach = function(tex_or_rbo, target, color_unit) {
 		let rbo = tex_or_rbo
 		rbo.bind()
 		gl.framebufferRenderbuffer(this.gl_target(), gl_attach, gl.RENDERBUFFER, rbo)
-		assert(this.n_samples == null || rbo.n_samples == null || this.n_samples == rbo.n_samples,
+		assert(this.n_samples == null || this.n_samples == rbo.n_samples,
 			'different n_samples {0}, was {1}', rbo.n_samples, this.n_samples)
-		this.n_samples = or(rbo.n_samples, this.n_samples)
+		this.n_samples = rbo.n_samples
 	} else if (tex_or_rbo instanceof WebGLTexture) {
 		let tex = tex_or_rbo
 		gl.framebufferTexture2D(this.gl_target(), gl_attach, gl.TEXTURE_2D, tex, 0)
@@ -1607,6 +1693,12 @@ fbo.clear_color = function(color_unit, r, g, b, a) {
 		_c[2] = b
 		_c[3] = or(a, 1)
 		gl.clearBufferfv(gl.COLOR, color_unit, _c)
+	} else if (tex.format == 'rgba16') {
+		_u[0] = r
+		_u[1] = g
+		_u[2] = b
+		_u[3] = or(a, 1)
+		gl.clearBufferuiv(gl.COLOR, color_unit, _u)
 	} else if (tex.format == 'u32') {
 		_u[0] = r
 		gl.clearBufferuiv(gl.COLOR, color_unit, _u)

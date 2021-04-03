@@ -90,6 +90,8 @@ gl.module('phong.fs', `
 
 	in vec4 v_pos_sdm_view_proj;
 
+	float shadow = 0.0;
+
 	void do_phong() {
 
 		float ambient = ambient_strength;
@@ -103,12 +105,10 @@ gl.module('phong.fs', `
 		vec3 reflect_dir = reflect(-light_dir, normal);
 		float specular = specular_strength * pow(max(dot(view_dir, reflect_dir), 0.0), shininess);
 
-		float shadow = 0.0;
 		if (enable_shadows) {
 
 			vec3 p = v_pos_sdm_view_proj.xyz / v_pos_sdm_view_proj.w;
 			p = p * 0.5 + 0.5;
-			float closest_depth = texture(shadow_map, p.xy).r;
 			float current_depth = p.z;
 			float bias = max(0.05 * (1.0 - dot(normal, light_dir)), 0.000001);
 
@@ -125,7 +125,11 @@ gl.module('phong.fs', `
 
 		float light = (ambient + (1.0 - shadow) * (diffuse + specular));
 
-		frag_color = vec4(light * sunlight_color, 1.0) * (vec4(diffuse_color, 1.0) + texture(diffuse_map, v_uv));
+		vec4 b_color = vec4(diffuse_color, 1.0);
+		//vec4 t_color = texture(diffuse_map, v_uv);
+		//vec4 f_color = mix(b_color, t_color, 0.0);
+
+		frag_color = vec4(light * sunlight_color, 1.0) * b_color;
 
 	}
 
@@ -138,15 +142,15 @@ gl.scene_renderer = function(r) {
 	r = r || {}
 
 	r.background_color = r.background_color || v4(1, 1, 1, 1)
-	r.sunlight_dir     = r.sunlight_dir || v3(1, 1, 0)
+	r.sunlight_dir     = r.sunlight_dir || v3(0, 1, 0)
 	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
 	r.diffuse_color    = r.diffuse_color || v3(1, 1, 1)
-	r.sdm_proj         = r.sdm_proj || mat4().ortho(-10, 10, -10, 10, -1e4, 1e4)
 
-	let sunlight_view = mat4()
+	let w = 20
+	let shadow_depth = sqrt(FAR)
+	r.sdm_proj = r.sdm_proj || mat4().ortho(-w, w, -w, w, -shadow_depth, shadow_depth)
+
 	let sdm_view_proj = mat4()
-	let origin = v3.origin
-	let up_dir = v3.up
 	let sunlight_pos = v3()
 
 	let sdm_prog = gl.program('shadow_map', `
@@ -173,10 +177,6 @@ gl.scene_renderer = function(r) {
 	r.update = function() {
 
 		sunlight_pos.set(r.sunlight_dir).set_len(FAR)
-		sunlight_view.reset()
-			.translate(sunlight_pos)
-			.look_at(sunlight_pos, origin, up_dir)
-			.invert()
 
 		gl.set_uni('sunlight_pos', sunlight_pos)
 		gl.set_uni('sunlight_color', r.sunlight_color)
@@ -186,14 +186,20 @@ gl.scene_renderer = function(r) {
 
 		if (r.enable_shadows) {
 
+			let sunlight_view = mat4()
+			sunlight_view.reset()
+				.translate(sunlight_pos)
+				.look_at(r.sunlight_dir, v3.up)
+				.invert()
 			mat4.mul(r.sdm_proj, sunlight_view, sdm_view_proj)
 			gl.set_uni('sdm_view_proj', sdm_view_proj)
 
-			let sdm_res1 = or(r.shadow_map_resolution, 1024)
+			let sdm_res1 = or(r.shadow_map_resolution, 1024 * 4)
 			if (sdm_res1 != sdm_res) {
 				sdm_res = sdm_res1
 
 				sdm_tex.set_depth(sdm_res, sdm_res, true)
+				sdm_tex.set_wrap('clamp')
 
 				sdm_fbo.bind()
 				sdm_fbo.attach(sdm_tex, 'depth')
@@ -214,6 +220,7 @@ gl.scene_renderer = function(r) {
 			sdm_fbo.bind('draw', 'none')
 			gl.viewport(0, 0, sdm_res, sdm_res)
 			gl.clearDepth(1)
+			gl.enable(gl.CULL_FACE)
 			gl.cullFace(gl.FRONT) // to get rid of peter paning.
 			gl.clear(gl.DEPTH_BUFFER_BIT)
 			draw(sdm_prog)
@@ -225,6 +232,7 @@ gl.scene_renderer = function(r) {
 		let ch = gl.canvas.ch
 		gl.viewport(0, 0, cw, ch)
 		gl.clear_all(...r.background_color)
+		gl.disable(gl.CULL_FACE)
 		draw()
 	}
 
@@ -246,7 +254,6 @@ gl.face_id_renderer = function(r) {
 		#include mesh.vs
 
 		in uint face_id;
-		in uint inst_id;
 
 		flat out uint v_face_id;
 		flat out uint v_inst_id;
@@ -254,7 +261,7 @@ gl.face_id_renderer = function(r) {
 		void main() {
 			gl_Position = mvp(pos);
 			v_face_id = face_id;
-			v_inst_id = inst_id;
+			v_inst_id = uint(gl_InstanceID);
 		}
 
 	`, `
@@ -267,19 +274,19 @@ gl.face_id_renderer = function(r) {
 		flat in uint v_face_id;
 		flat in uint v_inst_id;
 
-		layout (location = 0) out uint frag_color0;
-		layout (location = 1) out uint frag_color1;
+		layout (location = 0) out uvec4 frag_color;
 
 		void main() {
-			frag_color0 = v_face_id;
-			frag_color1 = v_inst_id;
+			frag_color.r = v_face_id >> 16;
+			frag_color.g = v_face_id & 0xffffu;
+			frag_color.b = v_inst_id >> 16;
+			frag_color.a = v_inst_id & 0xffffu;
 		}
 
 	`)
 
 	let w, h
 	let face_id_map = gl.texture()
-	let inst_id_map = gl.texture()
 	let depth_map = gl.rbo()
 	let fbo = gl.fbo()
 	let face_id_arr
@@ -291,21 +298,18 @@ gl.face_id_renderer = function(r) {
 		if (w1 != w || h1 != h) {
 			w = w1
 			h = h1
-			face_id_map.set_u32(w, h); face_id_arr = new u32arr(w * h)
-			inst_id_map.set_u32(w, h); inst_id_arr = new u32arr(w * h)
+			face_id_map.set_rgba16(w, h)
+			face_id_arr = new u16arr(4 * w * h)
 			depth_map.set_depth(w, h, true)
 		}
-		fbo.bind('draw', ['color', 'color'])
-		fbo.attach(face_id_map, 'color', 0)
-		fbo.attach(inst_id_map, 'color', 1)
+		fbo.bind('draw', ['color'])
+		fbo.attach(face_id_map, 'color')
 		fbo.attach(depth_map)
-		fbo.clear_color(0, 0xffffffff)
-		fbo.clear_color(1, 0xffffffff)
+		fbo.clear_color(0, 0xffff, 0xffff, 0xffff, 0xffff)
 		gl.clear_all()
 		draw(face_id_prog)
 		fbo.unbind()
 		fbo.read_pixels('color', 0, face_id_arr)
-		fbo.read_pixels('color', 1, inst_id_arr)
 	}
 
 	r.hit_test = function(x, y, out) {
@@ -316,8 +320,13 @@ gl.face_id_renderer = function(r) {
 		if (x < 0 || x >= w || y < 0 || y >= h)
 			return
 		y = (h-1) - y // textures are read upside down...
-		let face_id = face_id_arr[y * w + x]
-		let inst_id = inst_id_arr[y * w + x]
+		let i = 4 * (y * w + x)
+		let r = face_id_arr[i+0]
+		let g = face_id_arr[i+1]
+		let b = face_id_arr[i+2]
+		let a = face_id_arr[i+3]
+		let face_id = ((r << 16) | g) >>> 0
+		let inst_id = ((b << 16) | a) >>> 0
 		if (face_id == 0xffffffff || inst_id == 0xffffffff)
 			return
 		out.inst_id = inst_id
@@ -327,12 +336,6 @@ gl.face_id_renderer = function(r) {
 
 	return r
 
-}
-
-// instance buffers ----------------------------------------------------------
-
-gl.instance_buffer = function() {
-	//
 }
 
 // face rendering ------------------------------------------------------------
@@ -400,31 +403,16 @@ gl.faces_renderer = function() {
 	let _v1 = v3()
 	let _uv = v2()
 
-	let materials = []
-	let material_set = set()
-
-	function cmp_opacity(m1, m2) {
-		return (m2.opacity < 1) - (m1.opacity < 1)
-	}
-
-	e.update = function(faces) {
-
-		// gather materials in an array and sort them opaque-first.
-		materials.length = 0
-		material_set.clear()
-		for (let face of faces)
-			material_set.add(face.material)
-		for (let material of material_set)
-			materials.push(material)
-		materials.sort(cmp_opacity)
+	e.update = function(mat_faces_map) {
 
 		// get total vertex count and vertex index count.
 		let pt_n = 0
 		let pi_n = 0
-		for (let face of faces) {
-			face.update_if_invalid()
-			pt_n += face.length
-			pi_n += face.triangles().length
+		for (let mat_inst of mat_faces_map.values()) {
+			for (let face of mat_inst) {
+				pt_n += face.length
+				pi_n += face.triangles().length
+			}
 		}
 
 		// resize buffers and arrays to fit.
@@ -443,13 +431,13 @@ gl.faces_renderer = function() {
 		let j = 0
 		let k = 0
 		draw_ranges.length = 0
-		for (let mat of materials) {
+		for (let [mat, faces] of mat_faces_map) {
 			let k0 = k
-			for (let face of mat.faces) {
+			for (let face of faces) {
 				let j0 = j
 				let i, n
 				for (i = 0, n = face.length; i < n; i++, j++) {
-					let p = face.get_point(i, _v0)
+					let p  = face.get_point(i, _v0)
 					let np = face.get_normal(i, _v1)
 					let uv = face.uv_at(i, face.uvm, mat.uv, _uv)
 					pos[3*j+0] = p[0]
@@ -488,6 +476,7 @@ gl.faces_renderer = function() {
 			vao.set_index(index_dab.buffer)
 			vao.set_attr('model'  , e.model)
 			vao.set_attr('inst_id', e.inst_id)
+			vao.set_uni('diffuse_map', null)
 			gl.draw_triangles()
 			vao.unuse()
 		} else {
@@ -552,9 +541,11 @@ gl.solid_lines_renderer = function() {
 
 	let vao = prog.vao()
 
-	e.draw = function(prog) {
+	e.draw = function(prog, has_index) {
 		if (prog)
 			return // no shadows or hit-testing.
+		if (!e.index && has_index !== false)
+			return
 		vao.use()
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
@@ -612,9 +603,11 @@ gl.points_renderer = function(e) {
 
 	let vao = prog.vao()
 
-	e.draw = function(prog) {
+	e.draw = function(prog, has_index) {
 		if (prog)
 			return // no shadows or hit testing.
+		if (!e.index && has_index !== false)
+			return
 		vao.use()
 		vao.set_uni('point_size', e.point_size)
 		vao.set_attr('pos', e.pos)
@@ -687,9 +680,11 @@ gl.dashed_lines_renderer = function(e) {
 
 	let vao = prog.vao()
 
-	e.draw = function(prog) {
+	e.draw = function(prog, has_index) {
 		if (prog)
 			return // no shadows or hit-testing.
+		if (!e.index && has_index !== false)
+			return
 		vao.use()
 		vao.set_uni('dash', e.dash)
 		vao.set_uni('gap', e.gap)
@@ -861,6 +856,8 @@ gl.fat_lines_renderer = function(e) {
 	e.draw = function(prog) {
 		if (prog)
 			return // no shadows or hit-testing
+		if (!ib.buffer)
+			return
 		vao.use()
 		vao.set_attrs(davb)
 		vao.set_attr('model', e.model)
@@ -935,7 +932,7 @@ gl.fat_lines_renderer = function(e) {
 	}
 }
 
-// skybox prop ---------------------------------------------------------------
+// skybox --------------------------------------------------------------------
 
 gl.skybox = function(opt) {
 
@@ -993,7 +990,7 @@ gl.skybox = function(opt) {
 	let cube_map_tex
 
 	e.update_view = function(view_pos) {
-		model.reset().set_position(view_pos).scale(FAR * 2)
+		model.reset().set_position(view_pos).scale(FAR)
 		inst_buf.upload(model, 0)
 	}
 
@@ -1045,39 +1042,98 @@ gl.skybox = function(opt) {
 	return e
 }
 
-// texture quad prop ---------------------------------------------------------
+// ground plane with shadows -------------------------------------------------
 
-gl.texture_quad = function(tex, imat) {
+gl.ground_plane_renderer = function() {
+
 	let gl = this
+	let e = {}
 
-	let quad = poly3({mode: 'flat'}, [
-		-1, -1, 0,
-		 1, -1, 0,
-		 1, 1, 0,
-		-1, 1, 0
+	let prog = gl.program('ground_plane', `
+
+		#include phong.vs
+
+		void main() {
+			do_phong();
+		}
+
+	`, `
+
+		#include phong.fs
+
+		void main() {
+			do_phong();
+			if (shadow < 0.0)
+				discard;
+			if (shadow < 1.0)
+				frag_color.a = 1.0 - shadow;
+		}
+
+	`)
+
+	let rr = gl.faces_renderer()
+	let poly = poly3([0, 1, 2, 3])
+	poly.points = [
+		-1,  0,  1,
+		 1,  0,  1,
+		 1,  0, -1,
+		-1,  0, -1,
+	]
+	poly.material = {
+		diffuse_color: 0xffffff,
+		uv: v2(1, 1),
+		opacity: 1,
+		faces: [poly],
+	}
+
+	rr.model = gl.mat4_instance_buffer(mat4f32().scale(100))
+	rr.update([poly])
+
+	e.draw = function(r_prog) {
+		if (r_prog && r_prog.name == 'face_id')
+			return // not hit-testable.
+		gl.enable(gl.CULL_FACE)
+		gl.cullFace(gl.BACK)
+		rr.draw(r_prog || prog)
+		gl.disable(gl.CULL_FACE)
+	}
+
+	return e
+}
+
+// shadow map display quad (for debugging) -----------------------------------
+
+gl.shadow_map_quad = function(tex, imat) {
+	let gl = this
+	let e = {model: imat || mat4f32()}
+
+	let pos = gl.v3_buffer([
+		-1, -1,  0,
+		 1, -1,  0,
+		 1,  1,  0,
+		-1,  1,  0,
 	])
+	let uv = gl.v2_buffer([
+		0, 0,
+		1, 0,
+		1, 1,
+		0, 1,
+	])
+	let index = gl.index_buffer([0, 1, 2, 0, 2, 3])
+	let model = gl.mat4_instance_buffer(e.model)
 
-	let uvs = quad.uvs(null, v2(.5, .5))
-	let tris = quad.triangulate()
-	imat = imat || mat4f32()
-
-	let pos = gl.v3_buffer(quad)
-	let uv = gl.v2_buffer(uvs)
-	let index = gl.index_buffer(tris)
-	let model = gl.mat4_instance_buffer(imat)
-
-	let pr = gl.program('texture_quad_prop', `
+	let pr = gl.program('texture_quad', `
 		#include mesh.vs
-		out vec2 v_uv;
 		void main() {
 			v_uv = uv;
 			gl_Position = mvp(pos);
 		}
 	`, `
 		#include mesh.fs
-		in vec2 v_uv;
 		void main() {
-			frag_color = vec4(vec3(texture(diffuse_map, v_uv).r), 1.0);
+			float r = texture(diffuse_map, v_uv).r;
+			//if (r == 1.0) discard;
+			frag_color = vec4(vec3(r), 1.0);
 		}
 	`)
 
@@ -1090,13 +1146,17 @@ gl.texture_quad = function(tex, imat) {
 	vao.set_uni('diffuse_map', tex)
 	vao.unbind()
 
-	quad.draw = function() {
+	e.update = function() {
+		model.upload(e.model, 0)
+	}
+
+	e.draw = function() {
 		vao.use()
 		gl.draw_triangles()
 		vao.unuse()
 	}
 
-	quad.free = function() {
+	e.free = function() {
 		vao.free()
 		pos.free()
 		index.free()
@@ -1104,12 +1164,7 @@ gl.texture_quad = function(tex, imat) {
 		model.free()
 	}
 
-	quad.model = imat
-	quad.update_model = function() {
-		model.update(imat, 0, model.n_components)
-	}
-
-	return quad
+	return e
 }
 
 // axes prop -----------------------------------------------------------------
@@ -1171,8 +1226,8 @@ gl.axes_renderer = function(opt) {
 	dashed_r.color = color
 
 	e.draw = function(prog) {
-		lines_r.draw(prog)
-		dashed_r.draw(prog)
+		lines_r.draw(prog, false)
+		dashed_r.draw(prog, false)
 	}
 
 	return e

@@ -9,6 +9,7 @@
 		isstr(s)
 		isnum(n)
 		isbool(b)
+		isfunc(f)
 	logic:
 		or(x, z)
 		strict_or(x, z)
@@ -128,6 +129,7 @@ isarray = Array.isArray
 isstr = s => typeof s == 'string'
 isnum = n => typeof n == 'number'
 isbool = b => typeof b == 'boolean'
+isfunc = f => typeof f == 'function'
 
 // logic ---------------------------------------------------------------------
 

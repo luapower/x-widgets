@@ -33,164 +33,229 @@ model3 = function(e) {
 	e = e || {}
 	let gl = e.gl
 
-	// component instance tree ------------------------------------------------
+	let instances_valid
+
+	// layers -----------------------------------------------------------------
+
+	let layers = []
+
+	function add_layer(layer) {
+		layers.push(layer)
+		instances_valid = false
+	}
+
+	function remove_layer(layer) {
+		// TODO: move tbis layer's instances to the default layer.
+		layers.remove_value(layer)
+		instances_valid = false
+	}
+
+	function layer_set_visibile(layer, visible) {
+		layer.visible = !!visible
+		instances_valid = false
+	}
+
+	// components -------------------------------------------------------------
+
+	let comps         = [] // [comp1,...]
+	let free_comp_ids = [] // [ci1,...]
+	let comp_by_id = map() // {ci -> comp}
+
+	function add_component(comp) {
+		let id = free_comp_ids.pop()
+		if (id == null)
+			id = comps.length
+		comps[id] = comp
+		comp.id = id
+		comp_by_id.set(id, comp)
+	}
+
+	function remove_component(comp) {
+		comps[comp.id] = null
+		free_comp_ids.push(comp.id)
+	}
+
+	e.add_component = add_component
+
+	// component instances ----------------------------------------------------
+
+	// NOTE: instance objects are mat4's, that's ok, don't sweat it.
+
+	let root_inst
+
+	function child_added(parent_comp, inst) {
+		instances_valid = false
+	}
+
+	function child_removed(parent_comp, inst) {
+		instances_valid = false
+	}
+
+	function child_changed(inst) {
+		//
+		instances_valid = false
+	}
+
+	let _m = mat4()
+
+	function update_instance_matrix(inst, parent_inst) {
+		let dab = inst.comp.model_dab
+		let i = dab.len
+		dab.len = i + 1
+		_m.set(inst).mul(parent_inst).to_mat4_array(dab.array, i)
+
+		let children = inst.comp.children
+		if (children)
+			for (let child_inst of children)
+				if (child_inst.visible !== false)
+					update_instance_matrix(child_inst, inst)
+	}
+
+	function update_instance_matrices() {
+
+		if (instances_valid)
+			return
+
+		for (let comp of comps)
+			if (comp.model_dab)
+				comp.model_dab.len = 0
+			else
+				comp.model_dab = gl.dyn_arr_mat4_instance_buffer()
+
+		update_instance_matrix(root_inst, mat4.identity)
+
+		for (let comp of comps)
+			comp.model_dab.upload()
+
+		instances_valid = true
+	}
+
+	function draw(prog) {
+		update_instance_matrices()
+		for (let comp of comps)
+			comp.draw(prog, comp.model_dab.buffer)
+	}
+
+	function init() {
+		e.root = e.root || model3_component({model: e})
+		root_inst = mat4()
+		root_inst.comp = e.root
+	}
+
+	function gc_components() {
+		for (let [comp, insts] of instances) {
+			if (!insts.length) {
+				if (insts.dab)
+					insts.dab.free()
+				instances.delete(comp)
+				remove_component(comp)
+				comp.free()
+			}
+		}
+	}
+
+	e.child_added = child_added
+	e.child_removed = child_removed
+	e.child_changed = child_changed
+	e.draw = draw
+	e.gc_components = gc_components
+
+	// hit-testing ------------------------------------------------------------
+
+	let face_id_rr = gl.face_id_renderer()
+
+	function update_mouse() {
+		face_id_rr.render(draw)
+	}
 
 	{
-		let instances = map() // {comp -> [inst1,..., dab: ]}
-		let root_rel_mat
-
-		function instantiate(rel_mat, parent_rel_mat) {
-			let comp = rel_mat.comp
-			attr(instances, comp, Array).push(rel_mat)
-			if (parent_rel_mat)
-				attr(parent_rel_mat, 'children', Array).push(rel_mat)
-			for (let child_rel_mat of comp.children)
-				instantiate(child_rel_mat, rel_mat)
-			return rel_mat
+	let hit = {}
+	let inst = mat4()
+	function hit_test(mx, my, out) {
+		let inst_model, inst_point, face
+		if (face_id_rr.hit_test(mx, my, hit)) {
+			let comp_id = hit.face_id >>> 18 // 32K components
+			let fi      = hit.face_id & ((1 << 18) - 1) // 500K faces each
+			let comp = comp_by_id.get(comp_id)
+			inst.from_mat4_array(comp.model_dab.array, hit.inst_id)
+			out.comp = comp
+			out.inst = inst
+			out.face = comp.face_at(fi)
+			return out
 		}
+	}}
 
-		function child_added(parent_comp, rel_mat) {
-			for (let parent_rel_mat of instances.get(parent_comp))
-				instantiate(rel_mat, parent_rel_mat)
-		}
-
-		function child_removed(parent_comp, rel_mat) {
-			for (let parent_rel_mat of instances.get(parent_comp))
-				parent_rel_mat.children.remove_value(rel_mat)
-		}
-
-		function child_changed(rel_mat) {
-			//
-		}
-
-		let _m = mat4()
-
-		function update_instance_matrix(rel_mat, parent_rel_mat) {
-			let rel_mats = attr(instances, rel_mat.comp, Array)
-			let i = rel_mats.dab.len
-			rel_mats.dab.len = i + 1
-			_m.set(rel_mat).mul(parent_rel_mat).to_mat4_array(rel_mats.dab.array, i)
-			if (rel_mat.children)
-				for (let child_rel_mat of rel_mat.children)
-					update_instance_matrix(child_rel_mat, rel_mat)
-		}
-
-		function update_instance_matrices() {
-
-			for (let rel_mats of instances.values())
-				if (rel_mats.dab)
-					rel_mats.dab.len = 0
-				else
-					rel_mats.dab = gl.dyn_arr_mat4_instance_buffer()
-
-			update_instance_matrix(root_rel_mat, mat4.identity)
-
-			for (let rel_mats of instances.values())
-				rel_mats.dab.upload()
-
-		}
-
-		function draw(prog) {
-			for (let [comp, rel_mats] of instances)
-				comp.draw(prog, rel_mats.dab.buffer)
-		}
-
-		function free() {
-			for (let rel_mats of instances.values())
-				if (rel_mats.dab) {
-					rel_mats.dab.free()
-					rel_mats.dab = null
-				}
-		}
-
-		function init_root() {
-			e.root = e.root || model3_component({model: e})
-			root_rel_mat = mat4()
-			root_rel_mat.comp = e.root
-			instantiate(root_rel_mat)
-			update_instance_matrices()
-		}
-
-		e.child_added = child_added
-		e.child_removed = child_removed
-		e.child_changed = child_changed
-		e.draw = draw
-		e.free = free
-
-	}
+	e.update_mouse = update_mouse
+	e.hit_test     = hit_test
 
 	// materials --------------------------------------------------------------
 
-	{
-		let materials = [] //[{diffuse_color:, diffuse_map:, uv: , opacity: , faces: [face1,...]},...]
+	let materials = [] //[{diffuse_color:, diffuse_map:, uv: , opacity: , faces: [face1,...]},...]
 
-		function add_material(opt) {
-			let mat = assign({
-				diffuse_color: 0xffffff,
-				uv: v2(1, 1),
-				opacity: 1,
-				faces: [],
-			}, opt)
-			mat.opacity = clamp(mat.opacity, 0, 1)
-			materials.push(mat)
-			return mat
-		}
-
-		e.add_material = add_material
-
-		e.default_material = add_material({diffuse_color: 0xffffff})
-
+	function add_material(opt) {
+		let mat = assign({
+			diffuse_color: 0xffffff,
+			uv: v2(1, 1),
+			opacity: 1,
+		}, opt)
+		mat.opacity = clamp(mat.opacity, 0, 1)
+		materials.push(mat)
+		return mat
 	}
+
+	e.add_material = add_material
+
+	e.default_material = add_material({diffuse_color: 0xffffff})
 
 	// undo/redo stacks -------------------------------------------------------
 
-	{
-		let undo_groups = [] // [i1, ...] indices in undo_stack where groups start
-		let undo_stack  = [] // [args1...,argc1,f1, ...]
-		let redo_groups = [] // same
-		let redo_stack  = [] // same
+	let undo_groups = [] // [i1, ...] indices in undo_stack where groups start
+	let undo_stack  = [] // [args1...,argc1,f1, ...]
+	let redo_groups = [] // same
+	let redo_stack  = [] // same
 
-		function start_undo() {
-			undo_groups.push(undo_stack.length)
-		}
-
-		function push_undo(f, ...args) {
-			undo_stack.push(...args, args.length, f)
-		}
-
-		function undo_from(stack, start) {
-			start_undo()
-			while (stack.length >= start) {
-				let f = stack.pop()
-				let argc = stack.pop()
-				f(...stack.splice(-argc))
-			}
-		}
-
-		function undo() {
-			let stack  = undo_stack
-			let groups = undo_groups
-			let start  = groups.pop()
-			if (start == null)
-				return
-			undo_groups = redo_groups
-			undo_stack  = redo_stack
-			undo_from(stack, start)
-			undo_groups = groups
-			undo_stack  = stack
-		}
-
-		function redo() {
-			undo_from(redo_stack, redo_groups.pop())
-		}
-
-		e.start_undo = start_undo
-		e.undo = undo
-		e.redo = redo
-		e.push_undo = push_undo
+	function start_undo() {
+		undo_groups.push(undo_stack.length)
 	}
 
-	init_root()
+	function push_undo(f, ...args) {
+		undo_stack.push(...args, args.length, f)
+	}
+
+	function undo_from(stack, start) {
+		start_undo()
+		while (stack.length >= start) {
+			let f = stack.pop()
+			let argc = stack.pop()
+			f(...stack.splice(-argc))
+		}
+	}
+
+	function undo() {
+		let stack  = undo_stack
+		let groups = undo_groups
+		let start  = groups.pop()
+		if (start == null)
+			return
+		undo_groups = redo_groups
+		undo_stack  = redo_stack
+		undo_from(stack, start)
+		undo_groups = groups
+		undo_stack  = stack
+	}
+
+	function redo() {
+		undo_from(redo_stack, redo_groups.pop())
+	}
+
+	e.start_undo = start_undo
+	e.undo = undo
+	e.redo = redo
+	e.push_undo = push_undo
+
+	// init -------------------------------------------------------------------
+
+	init()
 
 	return e
 
@@ -202,6 +267,13 @@ model3_component = function(e) {
 	let gl = e.model.gl
 	let push_undo = model.push_undo
 
+	model.add_component(e)
+
+	function log(s, ...args) {
+		assert(DEBUG)
+		print(e.id, s, ...args)
+	}
+
 	// model (as in MVC and as in 3D model) -----------------------------------
 
 	let points    = [] // [(x, y, z), ...]
@@ -210,7 +282,8 @@ model3_component = function(e) {
 	let prc       = [] // [rc1,...]; ref counts of points.
 	let lines     = [] // [(p1i, p2i, rc, sm, op), ...]; rc=refcount, sm=smoothness, op=opacity.
 	let free_lis  = [] // [l1i,...]; freelist of line indices.
-	let faces     = set() // {poly3[p1i, p2i, ..., lis: [line1i,...], selected:, material:, ]}
+	let faces     = [] // [poly3[p1i, p2i, ..., lis: [line1i,...], selected:, material:, ],...]
+	let free_fis  = [] // [face1_index,...]
 	let meshes    = set() // {{face},...}; meshes are sets of all faces connected by smooth lines.
 
 	let children  = [] // [mat1,...]
@@ -257,7 +330,7 @@ model3_component = function(e) {
 		upload_point(pi, x, y, z)
 
 		if (DEBUG)
-			print('add_point', pi, x+','+y+','+z)
+			log('add_point', pi, x+','+y+','+z)
 
 		return pi
 	}
@@ -279,7 +352,7 @@ model3_component = function(e) {
 
 		push_undo(ref_point, pi)
 
-		// if (DEBUG) print('unref_point', pi, prc[pi])
+		// if (DEBUG) log('unref_point', pi, prc[pi])
 	}
 
 	let ref_point = function(pi) {
@@ -291,7 +364,7 @@ model3_component = function(e) {
 
 		push_undo(unref_point, pi)
 
-		// if (DEBUG) print('ref_point', pi, prc[pi])
+		// if (DEBUG) log('ref_point', pi, prc[pi])
 	}
 
 	function move_point(pi, x, y, z) {
@@ -346,7 +419,7 @@ model3_component = function(e) {
 		push_undo(unref_line, li)
 
 		if (DEBUG)
-			print('add_line', li, p1i+','+p2i)
+			log('add_line', li, p1i+','+p2i)
 
 		return li
 	}
@@ -372,7 +445,7 @@ model3_component = function(e) {
 			push_undo(add_line, p1i, p2i, li)
 
 			if (DEBUG)
-				print('remove_line', li)
+				log('remove_line', li)
 
 		} else {
 
@@ -388,7 +461,8 @@ model3_component = function(e) {
 
 		}
 
-		// if (DEBUG) print('unref_line', li, lines[5*li+2])
+		// if (DEBUG)
+			// log('unref_line', li, lines[5*li+2])
 	}
 
 	function ref_line(li) {
@@ -406,7 +480,8 @@ model3_component = function(e) {
 
 		push_undo(unref_line, li)
 
-		// if (DEBUG) print('ref_line', li, lines[5*li+2])
+		// if (DEBUG)
+			// log('ref_line', li, lines[5*li+2])
 	}
 
 	let face = {is_face3: true}
@@ -448,45 +523,71 @@ model3_component = function(e) {
 
 	let face3 = poly3.subclass(face)
 
-	let next_face_id = 0
-	function add_face(face) {
-		if (!face.is_face3) {
-			face = face3(face)
+	let mat_faces_map = map() // {material -> [face1,...]}
+
+	function material_instance(mat) {
+		mat = mat || model.default_material
+		let mat_insts = attr(mat_faces_map, mat, Array)
+		mat_insts.material = mat
+		return mat_insts
+	}
+
+	function add_face(pis, lis, material) {
+		let face
+		let fi = free_fis.pop()
+		if (fi == null) {
+			fi = faces.length
+			face = face3()
+			face.lis = []
 			face.points = points
+			face.index = fi
+			face.id = (e.id << 18) | fi
+			faces[fi] = face
+		} else {
+			face = faces[fi]
 		}
-		let id = next_face_id++
-		for (let pi of face)
-			ref_point(pi)
-		if (!face.lis)
-			update_face_lis(face)
-		else
-			for (let li of face.lis)
+		if (pis) {
+			face.extend(pis)
+			for (let pi of pis)
+				ref_point(pi)
+		}
+		if (lis) {
+			face.lis.extend(lis)
+			for (let li of lis)
 				ref_line(li)
-		face.id = id
-		face.material = face.material || model.default_material
-		face.material.faces.push(face)
-		faces.add(face)
+		} else
+			update_face_lis(face)
+		face.mat_inst = material_instance(material)
+		face.mat_inst.push(face)
+		faces.push(face)
 		if (DEBUG)
-			print('add_face', id, face.join(','), face.lis.join(','))
-		return id
+			log('add_face', face.id, face.join(','), face.lis.join(','), material.id)
+		return face
 	}
 
 	function remove_face(face) {
-		faces.delete(face)
+		free_fis.push(face.index)
 		for (let li of face.lis)
 			unref_line(li)
 		for (let pi of face)
 			unref_point(pi)
+		face.length = 0
+		face.lis.length = 0
+		face.mat_inst = null
 		if (DEBUG)
-			print('remove_face', face.id)
+			log('remove_face', face.index)
 	}
 
-	function set_material(face, mat) {
-		face.material.faces.remove_value(face)
-		face.material = mat
-		mat.faces.push(face)
+	function face_at(fi) {
+		return faces[fi]
+	}
+
+	function set_material(face, material) {
+		face.mat_inst.remove_value(face)
+		face.mat_inst = material_instance(material)
+		face.mat_inst.push(face)
 		if (DEBUG)
-			print('set_material', face.id, mat.mi)
+			log('set_material', face.index, material.id)
 	}
 
 	function ref_or_add_line(p1i, p2i) {
@@ -505,7 +606,6 @@ model3_component = function(e) {
 	}
 
 	function update_face_lis(face) {
-		face.lis = face.lis || []
 		let lis = face.lis
 		lis.length = 0
 		let p1i = face[0]
@@ -521,7 +621,7 @@ model3_component = function(e) {
 		let line_ei = ei - (line_before_point ? 1 : 0)
 		assert(line_ei >= 0) // can't use ei=0 and line_before_point=true with this function.
 		if (DEBUG)
-			print('insert_edge', face.id, '@'+ei, 'pi='+pi, '@'+line_ei, 'li='+li, 'before_pi='+face[ei])
+			log('insert_edge', face.index, '@'+ei, 'pi='+pi, '@'+line_ei, 'li='+li, 'before_pi='+face[ei])
 		face.insert(ei, pi)
 		face.lis.insert(line_ei, li)
 		if (face.mesh)
@@ -629,16 +729,16 @@ model3_component = function(e) {
 
 	}
 
-	// children
+	// component children
 
 	function add_child(comp, mat) {
 		assert(mat.is_mat4)
 		assert(comp.model == model)
-		map.comp = comp
+		mat.comp = comp
 		children.push(mat)
 		model.child_added(e, mat)
 		if (DEBUG)
-			print('add_child', mat)
+			log('add_child', mat)
 		return mat
 	}
 
@@ -649,8 +749,8 @@ model3_component = function(e) {
 
 	// public API
 
-	e.point_count     = point_count
-	e.get_point       = get_point
+	e.point_count = point_count
+	e.get_point   = get_point
 
 	e.line_count      = line_count
 	e.get_line        = get_line
@@ -660,9 +760,13 @@ model3_component = function(e) {
 	e.set_line_smoothness = set_line_smoothness
 	e.set_line_opacity = set_line_opacity
 
-	e.set_material    = set_material
+	e.add_face    = add_face
+	e.remove_face = remove_face
+	e.face_at     = face_at
 
-	e.each_line_face  = each_line_face
+	e.set_material = set_material
+
+	e.each_line_face = each_line_face
 
 	e.children        = children
 	e.add_child       = add_child
@@ -679,8 +783,8 @@ model3_component = function(e) {
 				)
 
 		if (t.faces)
-			for (let face of t.faces)
-				add_face(face)
+			for (let ft of t.faces)
+				add_face(ft, ft.lis, ft.material)
 
 		if (t.lines)
 			for (let i = 0, n = t.lines.length; i < n; i += 2)
@@ -1171,7 +1275,7 @@ model3_component = function(e) {
 			}
 
 			if (DEBUG) {
-				print('pull.start', pull.face.id,
+				log('pull.start', pull.face.index,
 					'edges:'+Object.keys(new_pp_edge).join(','),
 					'faces:'+Object.keys(new_pp_face).join(','),
 					'insert:'+json(ins_edge).replaceAll('"', '')
@@ -1219,10 +1323,10 @@ model3_component = function(e) {
 
 				// create pp side face.
 				let pull_li = add_line(p1i, p2i)
-				let pis = [old_p1i, old_p2i, p2i, p1i]
-				let lis = [old_pull_li, side2_li, pull_li, side1_li]
-				let face = pis; face.lis = lis
-				add_face(face)
+				let face = add_face(
+					[old_p1i, old_p2i, p2i, p1i],
+					[old_pull_li, side2_li, pull_li, side1_li]
+				)
 
 				// replace edge in pulled face.
 				pull.face.lis[e1i] = pull_li
@@ -1273,7 +1377,7 @@ model3_component = function(e) {
 		pull.stop = function() {
 			// TODO: make hole, etc.
 			if (DEBUG)
-				print('pull.stop')
+				log('pull.stop')
 		}
 
 		pull.cancel = function() {
@@ -1451,7 +1555,7 @@ model3_component = function(e) {
 				for (let face of mesh)
 					face.compute_smooth_normals(normals)
 
-		faces_rr.update(faces)
+		faces_rr.update(mat_faces_map)
 
 		if (points_changed || used_lines_changed)
 			black_fat_lines_rr.update(each_nonedge_line, nonedge_line_count)
@@ -1467,21 +1571,22 @@ model3_component = function(e) {
 		black_fat_lines_rr    .model = models_buf
 		blue_fat_lines_rr     .model = models_buf
 
-		points_rr             .draw(prog)
-		faces_rr              .draw(prog)
-		black_thin_lines_rr.draw(prog)
-		if (black_dashed_lines_rr.index) black_dashed_lines_rr .draw(prog)
-		if ( blue_dashed_lines_rr.index)  blue_dashed_lines_rr .draw(prog)
-		black_fat_lines_rr    .draw(prog)
-		blue_fat_lines_rr     .draw(prog)
+		if (prog && prog.name == 'face_id') {
+			faces_rr.draw(prog)
+		} else {
+			points_rr             .draw(prog)
+			faces_rr              .draw(prog)
+			black_thin_lines_rr   .draw(prog)
+			black_dashed_lines_rr .draw(prog)
+			blue_dashed_lines_rr  .draw(prog)
+			black_fat_lines_rr    .draw(prog)
+			blue_fat_lines_rr     .draw(prog)
+		}
 
 		points_changed      = false
 		used_points_changed = false
 		used_lines_changed  = false
 		sel_lines_changed   = false
-
-		if (DEBUG)
-			print('update')
 
 	}
 

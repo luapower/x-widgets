@@ -5,8 +5,8 @@
 <script src=glue.js></script>
 <script src=divs.js></script>
 <script src=3d.js></script>
-<script src=earcut.js></script>
 <script src=gl.js></script>
+<script src=earcut.js></script>
 <script src=suncalc.js></script>
 <script src=x-3d-renderer.js></script>
 </head>
@@ -22,6 +22,7 @@ canvas.on('webglcontextlost', function() {
 let gl = canvas.getContext('webgl2', {
 	//antialias: false, // MSAA FBOs can't be blitted to a MSAA canvas.
 })
+gl.wrap_calls()
 
 // scene ---------------------------------------------------------------------
 
@@ -40,19 +41,29 @@ let points = [
 
 face3 = poly3
 
+//let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
+
+let mat1 = {
+	diffuse_color: 0xffffff,
+	//diffuse_map: tex1,
+	uv: v2(1, 1),
+}
+
 let faces = [
-	face3({points: points, valid: true, id: 0, uvm: mat3().translate(.1, .1).scale(1)}, [1, 0, 3, 2]),
-	face3({points: points, valid: true, id: 1, uvm: mat3().scale(1).invert()}, [4, 5, 6, 7]),
-	face3({points: points, valid: true, id: 2, uvm: mat3().scale(1).invert()}, [7, 6, 2, 3]), //[6, 2, 3],
-	face3({points: points, valid: true, id: 3, uvm: mat3().scale(1).invert()}, [4, 0, 1, 5]),
-	face3({points: points, valid: true, id: 4, uvm: mat3().scale(1).invert()}, [0, 4, 7, 3]),
-	face3({points: points, valid: true, id: 5, uvm: mat3().scale(1).invert()}, [5, 1, 2, 6]),
+	face3({material: mat1, points: points, valid: true, id: 0, uvm: mat3().translate(.1, .1).scale(1)}, [1, 0, 3, 2]),
+	face3({material: mat1, points: points, valid: true, id: 1, uvm: mat3().scale(1).invert()}, [4, 5, 6, 7]),
+	face3({material: mat1, points: points, valid: true, id: 2, uvm: mat3().scale(1).invert()}, [7, 6, 2, 3]), //[6, 2, 3],
+	face3({material: mat1, points: points, valid: true, id: 3, uvm: mat3().scale(1).invert()}, [4, 0, 1, 5]),
+	face3({material: mat1, points: points, valid: true, id: 4, uvm: mat3().scale(1).invert()}, [0, 4, 7, 3]),
+	face3({material: mat1, points: points, valid: true, id: 5, uvm: mat3().scale(1).invert()}, [5, 1, 2, 6]),
 ]
+
+mat1.faces = faces
 
 let inst_ids = []
 
 function scale_texture(tex) {
-	print('here')
+	print('scale_texture')
 	return
 	let pi = 0
 	for (let face of faces) {
@@ -69,8 +80,8 @@ let inst_mat1 = mat4()
 
 let inst_mats = [
 	...inst_mat1,
-	...mat4().translate(  0,   0,   0),
-	...mat4().translate( 10,   0,   0),
+	...mat4().translate( -1,   0,  -1),
+	...mat4().translate( 11,   0,  -1),
 	...mat4().translate(  0,  10,   0),
 	...mat4().translate( 10,  10,   0),
 	...mat4().translate(  0,   0, -10),
@@ -190,7 +201,7 @@ document.on('keydown', function(key) {
 	print(key)
 })
 
-// materials & textures
+// rendering
 
 let points_rr = gl.points_renderer()
 let faces_rr = gl.faces_renderer()
@@ -198,19 +209,7 @@ let solid_lines_rr = gl.solid_lines_renderer()
 let dashed_lines_rr = gl.dashed_lines_renderer()
 let fat_lines_rr = gl.fat_lines_renderer()
 
-let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
-
-// rendering
-
-let materials = map()
-materials.set({
-	diffuse_color: 0x000000,
-	diffuse_map: tex1,
-	faces: faces,
-	uv: v2(1, 1),
-}, faces)
-
-faces_rr.update(materials)
+faces_rr.update(faces)
 faces_rr.inst_id = inst_id_dbuf.buffer
 faces_rr.model = inst_mat_dbuf.buffer
 
@@ -278,7 +277,16 @@ skybox = gl.skybox({
 let axes_rr = gl.axes_renderer()
 axes_rr.upload_model(axes_rr.add_instance(), mat4f32())
 
-function draw_all(prog) {
+let tq
+
+function draw(prog) {
+	if (!tq && !prog) {
+		let [sm_tex] = gl.uniforms.shadow_map
+		if (sm_tex)
+			tq = gl.shadow_map_quad(sm_tex, mat4f32().translate(5, 5, -15).scale(5))
+	}
+	if (tq && !prog)
+		tq.draw()
 	skybox.draw(prog)
 	axes_rr.draw(prog)
 	points_rr.pos = points_dbuf.buffer
@@ -292,10 +300,11 @@ function draw_all(prog) {
 
 function animate() {
 	start_frame()
-	scene_rr.sunlight_dir.set(camera.dir)
+	if (!scene_rr.enable_shadows)
+		scene_rr.sunlight_dir.set(camera.dir)
 	scene_rr.update()
-	scene_rr.render(draw_all)
-	face_id_rr.render(draw_all)
+	scene_rr.render(draw)
+	face_id_rr.render(draw)
 	raf(animate)
 }
 

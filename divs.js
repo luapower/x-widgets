@@ -395,8 +395,15 @@ callers.keypress = callers.keydown
 callers.wheel = function(ev, f) {
 	if (ev.target.effectively_disabled)
 		return
-	if (ev.deltaY)
-		return f.call(this, ev, ev.deltaY, ev.clientX, ev.clientY)
+	if (ev.deltaY) {
+		let dy = ev.deltaY
+		// 90% of Mozilla is funded by Google but they still hate each other...
+		if (abs(dy) >= 100) // Chrome
+			dy /= 100
+		else
+			dy /= 3 // Firefox
+		return f.call(this, ev, dy, ev.clientX, ev.clientY)
+	}
 }
 
 etrack = new Map()
