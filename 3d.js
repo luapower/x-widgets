@@ -72,7 +72,7 @@
 		transform
 
 	camera[3]
-		viewport_w|h pos dir up perspective ortho dolly orbit
+		view_size pos dir up perspective ortho dolly orbit
 		update proj view inv_view inv_proj view_proj
 		world_to_screen screen_to_clip screen_to_view screen_to_world
 		raycast
@@ -2941,6 +2941,8 @@ camera = function(e) {
 	e.inv_view = mat4()
 	e.view_proj = mat4()
 
+	e.view_size = e.view_size || v2()
+
 	e.set = function(c) {
 		e.pos.set(c.pos)
 		e.dir.set(c.dir)
@@ -2961,7 +2963,7 @@ camera = function(e) {
 	}
 
 	e.perspective = function() {
-		let aspect = e.viewport_w / e.viewport_h
+		let aspect = e.view_size[0] / e.view_size[1]
 		e.proj.perspective(rad * e.fov, aspect, e.near, e.far)
 		return this
 	}
@@ -3035,8 +3037,8 @@ camera = function(e) {
 
 	e.clip_to_screen = function(p, out) {
 		assert(out.is_v2 || out.is_v3)
-		out[0] = round(( p[0] + 1) * e.viewport_w / 2)
-		out[1] = round((-p[1] + 1) * e.viewport_h / 2)
+		out[0] = round(( p[0] + 1) * e.view_size[0] / 2)
+		out[1] = round((-p[1] + 1) * e.view_size[1] / 2)
 		if (out.is_v3)
 			out[2] = 0
 		return out
@@ -3054,8 +3056,8 @@ camera = function(e) {
 
 	// (0..w, 0..h, z) -> (-1..1, -1..1, z)
 	e.screen_to_clip = function(x, y, z, out) {
-		let w = e.viewport_w
-		let h = e.viewport_h
+		let w = e.view_size[0]
+		let h = e.view_size[1]
 		assert(out.is_v4)
 		out[0] = (2 * x) / w - 1
 		out[1] = 1 - (2 * y) / h

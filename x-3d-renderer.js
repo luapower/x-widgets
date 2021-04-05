@@ -11,17 +11,32 @@
 
 let gl = WebGL2RenderingContext.prototype
 
-gl.module('mesh.vs', `
-
-	#version 300 es
+gl.module('globals', `
 
 	precision highp float;
 	precision highp int;
 
-	uniform mat4 view;
-	uniform mat4 proj;
-	uniform mat4 view_proj;
-	uniform vec2 viewport_size;
+	layout (std140) uniform globals {
+
+		mat4 view;
+		mat4 proj;
+		mat4 view_proj;
+		vec2 view_size;
+		vec3 view_pos;
+
+		vec3 sunlight_pos;
+		vec3 sunlight_color;
+		float ambient_strength;
+
+	};
+
+`)
+
+gl.module('mesh.vs', `
+
+	#version 300 es
+
+	#include globals
 
 	in mat4 model;
 	in vec3 pos;
@@ -42,11 +57,11 @@ gl.module('mesh.fs', `
 
 	#version 300 es
 
+	#include globals
+
 	precision highp float;
 	precision highp int;
 
-	uniform vec3 view_pos;
-	uniform vec2 viewport_size;
 	uniform vec3 diffuse_color;
 	uniform sampler2D diffuse_map;
 
@@ -80,13 +95,12 @@ gl.module('phong.fs', `
 
 	#include mesh.fs
 
-	uniform vec3 sunlight_pos;
-	uniform vec3 sunlight_color;
-	uniform float shininess;
-	uniform float ambient_strength;
-	uniform float specular_strength;
-	uniform bool enable_shadows;
-	uniform sampler2D shadow_map;
+	//layout (std140) uniform phong {
+		uniform float shininess;
+		uniform float specular_strength;
+		uniform bool enable_shadows;
+		uniform sampler2D shadow_map;
+	//};
 
 	in vec4 v_pos_sdm_view_proj;
 
@@ -145,6 +159,10 @@ gl.scene_renderer = function(r) {
 	r.sunlight_dir     = r.sunlight_dir || v3(0, 1, 0)
 	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
 	r.diffuse_color    = r.diffuse_color || v3(1, 1, 1)
+	r.ambient_strength = or(r.ambient_strength, 0.1)
+
+	let globals_ubo = gl.faces_program().ubo('globals')
+	gl.bind_ubo(globals_ubo)
 
 	let w = 20
 	let shadow_depth = sqrt(FAR)
@@ -178,11 +196,21 @@ gl.scene_renderer = function(r) {
 
 		sunlight_pos.set(r.sunlight_dir).set_len(FAR)
 
-		gl.set_uni('sunlight_pos', sunlight_pos)
-		gl.set_uni('sunlight_color', r.sunlight_color)
-		gl.set_uni('diffuse_color', r.diffuse_color)
+		globals_ubo.set('view'             , r.camera.view)
+		globals_ubo.set('proj'             , r.camera.proj)
+		globals_ubo.set('view_proj'        , r.camera.view_proj)
+		globals_ubo.set('view_size'        , r.camera.view_size)
+		globals_ubo.set('view_pos'         , r.camera.pos)
 
-		gl.set_uni('enable_shadows', r.enable_shadows)
+		globals_ubo.set('sunlight_pos'     , sunlight_pos)
+		globals_ubo.set('sunlight_color'   , r.sunlight_color)
+		globals_ubo.set('ambient_strength' , r.ambient_strength)
+
+		globals_ubo.set('enable_shadows'   , r.enable_shadows)
+
+		globals_ubo.upload()
+
+		gl.set_uni('diffuse_color', r.diffuse_color)
 
 		if (r.enable_shadows) {
 
@@ -340,18 +368,9 @@ gl.face_id_renderer = function(r) {
 
 // face rendering ------------------------------------------------------------
 
-gl.faces_renderer = function() {
+gl.faces_program = function() {
 
-	let gl = this
-
-	let e = {
-		ambient_strength: 0.1,
-		specular_strength: .2,
-		shininess: 5,
-		polygon_offset: .0001,
-	}
-
-	let prog = gl.program('face', `
+	return this.program('face', `
 
 		#include phong.vs
 
@@ -384,6 +403,20 @@ gl.faces_renderer = function() {
 		}
 
 	`)
+
+}
+
+gl.faces_renderer = function() {
+
+	let gl = this
+
+	let e = {
+		specular_strength: .2,
+		shininess: 5,
+		polygon_offset: .0001,
+	}
+
+	let prog = gl.faces_program()
 
 	let vao = prog.vao()
 
@@ -467,10 +500,10 @@ gl.faces_renderer = function() {
 
 	let vao_set = gl.vao_set()
 
-	e.draw = function(prog) {
+	e.draw = function(prog1) {
 		gl.polygonOffset(e.polygon_offset, 0)
-		if (prog) {
-			let vao = vao_set.vao(prog)
+		if (prog1) {
+			let vao = vao_set.vao(prog1)
 			vao.use()
 			vao.set_attrs(davb)
 			vao.set_index(index_dab.buffer)
@@ -485,7 +518,6 @@ gl.faces_renderer = function() {
 			vao.set_index(index_dab.buffer)
 			vao.set_attr('model', e.model)
 			for (let [mat, offset, len] of draw_ranges) {
-				vao.set_uni('ambient_strength' , or(mat.ambient_strength, e.ambient_strength))
 				vao.set_uni('specular_strength', or(mat.specular_strength, e.specular_strength))
 				vao.set_uni('shininess'        , 1 << or(mat.shininess, e.shininess)) // keep this a pow2.
 				vao.set_uni('diffuse_color', mat.diffuse_color)
@@ -541,8 +573,8 @@ gl.solid_lines_renderer = function() {
 
 	let vao = prog.vao()
 
-	e.draw = function(prog, has_index) {
-		if (prog)
+	e.draw = function(prog1, has_index) {
+		if (prog1)
 			return // no shadows or hit-testing.
 		if (!e.index && has_index !== false)
 			return
@@ -603,8 +635,8 @@ gl.points_renderer = function(e) {
 
 	let vao = prog.vao()
 
-	e.draw = function(prog, has_index) {
-		if (prog)
+	e.draw = function(prog1, has_index) {
+		if (prog1)
 			return // no shadows or hit testing.
 		if (!e.index && has_index !== false)
 			return
@@ -670,7 +702,7 @@ gl.dashed_lines_renderer = function(e) {
 		void main() {
 			vec2 p1 = (v_p1.xyz / v_p1.w).xy;
 			vec2 p2 = (v_p2.xyz / v_p2.w).xy;
-			float dist = length((p1 - p2) * viewport_size.xy * 0.5);
+			float dist = length((p1 - p2) * view_size.xy * 0.5);
 			if (fract(dist / (dash + gap)) > dash / (dash + gap))
 				discard;
 			frag_color = v_color;
@@ -680,8 +712,8 @@ gl.dashed_lines_renderer = function(e) {
 
 	let vao = prog.vao()
 
-	e.draw = function(prog, has_index) {
-		if (prog)
+	e.draw = function(prog1, has_index) {
+		if (prog1)
 			return // no shadows or hit-testing.
 		if (!e.index && has_index !== false)
 			return
@@ -747,7 +779,7 @@ gl.fat_lines_renderer = function(e) {
 			vec2 s2 = p2.xy / p2.w;
 			float nx = s2.x - s1.x;
 			float ny = s1.y - s2.y;
-			vec2 n = normalize(vec2(ny, nx) * dir) / viewport_size * 2.0 * p1.w;
+			vec2 n = normalize(vec2(ny, nx) * dir) / view_size * 2.0 * p1.w;
 
 			gl_Position = p1 + vec4(n, 0.0, 0.0);
 
@@ -853,8 +885,8 @@ gl.fat_lines_renderer = function(e) {
 
 	let vao = prog.vao()
 
-	e.draw = function(prog) {
-		if (prog)
+	e.draw = function(prog1) {
+		if (prog1)
 			return // no shadows or hit-testing
 		if (!ib.buffer)
 			return
@@ -1028,8 +1060,8 @@ gl.skybox = function(opt) {
 
 	}
 
-	e.draw = function(prog) {
-		if (prog)
+	e.draw = function(prog1) {
+		if (prog1)
 			return // no shadows or hit-testing
 		vao.use()
 		gl.draw_triangles()
@@ -1040,6 +1072,25 @@ gl.skybox = function(opt) {
 	e.update()
 
 	return e
+}
+
+gl.helper_lines_renderer = function() {
+
+	let e = {}
+
+	let helper_fat_lines_rr    = gl.fat_lines_renderer({})
+	let helper_dashed_lines_rr = gl.dashed_lines_renderer({dash: 5, gap: 3})
+
+	e.line = function(p1, p2) {
+
+		//
+
+	}
+
+	e.draw = function() {
+
+	}
+
 }
 
 // ground plane with shadows -------------------------------------------------
@@ -1089,12 +1140,12 @@ gl.ground_plane_renderer = function() {
 	rr.model = gl.mat4_instance_buffer(mat4f32().scale(100))
 	rr.update([poly])
 
-	e.draw = function(r_prog) {
-		if (r_prog && r_prog.name == 'face_id')
+	e.draw = function(prog1) {
+		if (prog1 && prog1.name == 'face_id')
 			return // not hit-testable.
 		gl.enable(gl.CULL_FACE)
 		gl.cullFace(gl.BACK)
-		rr.draw(r_prog || prog)
+		rr.draw(prog1 || prog)
 		gl.disable(gl.CULL_FACE)
 	}
 
@@ -1150,7 +1201,9 @@ gl.shadow_map_quad = function(tex, imat) {
 		model.upload(e.model, 0)
 	}
 
-	e.draw = function() {
+	e.draw = function(prog1) {
+		if (prog1)
+			return
 		vao.use()
 		gl.draw_triangles()
 		vao.unuse()
@@ -1225,9 +1278,9 @@ gl.axes_renderer = function(opt) {
 	dashed_r.pos = pos_neg
 	dashed_r.color = color
 
-	e.draw = function(prog) {
-		lines_r.draw(prog, false)
-		dashed_r.draw(prog, false)
+	e.draw = function(prog1) {
+		lines_r.draw(prog1, false)
+		dashed_r.draw(prog1, false)
 	}
 
 	return e

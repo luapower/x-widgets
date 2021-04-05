@@ -54,6 +54,9 @@
 		vao.unuse()
 		vao.dab(attr_name, [cap]) -> dab
 
+	UBOs
+		//
+
 	Textures
 
 		gl.texture(['cubemap']) -> tex
@@ -97,8 +100,6 @@
 let gl = WebGL2RenderingContext.prototype
 
 // debugging -----------------------------------------------------------------
-
-{
 
 let methods = {}
 let constant_names = {}
@@ -146,15 +147,13 @@ gl.stop_trace = function() {
 	return cc
 }
 
-}
-
 // clearing ------------------------------------------------------------------
 
 gl.clear_all = function(r, g, b, a, depth) {
 	let gl = this
 	if (gl.draw_fbo) {
 		// NOTE: not using gl.clear(gl.COLOR_BUFFER_BIT) on a FBO because that
-		// clears _all_ color buffers, which we don't want (we do clear the
+		// clears _all_ color buffers, which we don't want (we clear the
 		// secondary color buffers separately with a different value).
 		if (r != null)
 			gl.draw_fbo.clear_color(0, r, g, b, a)
@@ -227,12 +226,11 @@ gl.shader = function(type, name, gl_type, code) {
 	gl.compileShader(shader)
 
 	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-		print('ERROR: '+type+' shader "'+name+'" compilation failed')
 		let errors = gl.getShaderInfoLog(shader)
 		print(errors)
 		print(linenumbers(shader.raw_code, errors))
 		gl.deleteShader(shader)
-		assert(false)
+		assert(false, '{0} shader compilation failed for {1}', type, name)
 	}
 
 	return shader
@@ -274,7 +272,6 @@ gl.program = function(name, vs_code, fs_code) {
 	gl.validateProgram(pr)
 
 	if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) {
-		print('ERROR: "'+name+'" program linking failed')
 		print(gl.getProgramInfoLog(pr))
 		print('VERTEX SHADER')
 		print(vs_code)
@@ -283,16 +280,37 @@ gl.program = function(name, vs_code, fs_code) {
 		gl.deleteProgram(pr)
 		gl.deleteShader(vs)
 		gl.deleteShader(fs)
-		assert(false)
+		assert(false, 'linking failed for program {0}', name)
 	}
 
+	// uniform RTTI.
 	pr.uniform_count = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS)
-	pr.uniform_info = {}
+	pr.uniform_info = {} // {name->info}
+	let u_info_by_index = {} // {uniform_index->info}
 	for (let i = 0, n = pr.uniform_count; i < n; i++) {
 		let info = gl.getActiveUniform(pr, i)
 		pr.uniform_info[info.name] = info
+		u_info_by_index[i] = info
 	}
 
+	// UBO RTTI.
+	pr.uniform_block_count = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORM_BLOCKS)
+	pr.uniform_blocks = {} // {name->info}
+	for (let ubi = 0, ubn = pr.uniform_block_count; ubi < ubn; ubi++) {
+		let ub_name = gl.getActiveUniformBlockName(pr, ubi)
+		let ub_info = {name: ub_name, fields: {}, index: ubi}
+		pr.uniform_blocks[ub_name] = ub_info
+		ub_info.size = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_DATA_SIZE)
+		let uis = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES)
+		let ubos = gl.getActiveUniforms(pr, uis, gl.UNIFORM_OFFSET)
+		for (let i = 0, n = uis.length; i < n; i++) {
+			let u_info = u_info_by_index[uis[i]]
+			u_info.ub_offset = ubos[i]
+			ub_info.fields[u_info.name] = u_info
+		}
+	}
+
+	// attr RTTI.
 	pr.attr_info = {}
 	pr.attr_count = gl.getProgramParameter(pr, gl.ACTIVE_ATTRIBUTES)
 	for (let i = 0, n = pr.attr_count; i < n; i++) {
@@ -317,7 +335,14 @@ prog.use = function() {
 		gl.useProgram(this)
 		gl.active_program = this
 
-		if (gl.uniforms) { // ... set global uniforms.
+		if (gl.ubos) { // bind global UBOs matching on name.
+			for (let ub_name in this.uniform_blocks) {
+				let ubo = gl.ubos[ub_name]
+				this.bind_ubo(ub_name, ubo.slot)
+			}
+		}
+
+		if (gl.uniforms) { // set global uniforms.
 			for (let name in gl.uniforms) {
 				let args = gl.uniforms[name]
 				this.set_uni(name, ...args)
@@ -568,8 +593,7 @@ function check_arr_type(arr, arr_type) {
 
 function check_arr_nc(arr, nc) {
 	let arr_nc = arr.n_components
-	nc = or(nc, arr_nc)
-	assert(nc != null, 'n_components required')
+	nc = or(or(nc, arr_nc), 1)
 	assert(or(arr_nc, nc) == nc, 'different n_components {0}, wanted {1}', arr_nc, nc)
 	return nc
 }
@@ -586,13 +610,13 @@ function check_arr_len(nc, arr, len, arr_offset) {
 }
 
 gl.buffer = function(data_or_cap, arr_type, nc, instance_divisor, normalize, for_index) {
-	assert(instance_divisor == null || instance_divisor == 1, 'NYI')
+	assert(instance_divisor == null || instance_divisor == 1, 'buffer() NYI for instance_divisor != 1')
 	let gl = this
 	let b = gl.createBuffer()
 	let cap, len, arg
 	if (isnum(data_or_cap)) { // capacity, arr_type, ...
 		assert(arr_type, 'arr_type required')
-		assert(nc != null, 'n_components required')
+		nc = or(nc, 1)
 		cap = data_or_cap
 		len = 0
 		arg = cap * nc * arr_type.BYTES_PER_ELEMENT
@@ -620,7 +644,7 @@ gl.buffer = function(data_or_cap, arr_type, nc, instance_divisor, normalize, for
 		|| arr_type ==   i8arr && gl.BYTE
 		|| arr_type ==  i16arr && gl.SHORT
 		|| arr_type ==  i32arr && gl.INT
-		|| assert(false, 'unsupported arr_type {0}', arr_type.name)
+		|| assert(false, 'buffer() NYI for arr_type {0}', arr_type.name)
 	b.arr_type = arr_type
 	b.gl = gl
 	b.n_components = nc
@@ -1004,6 +1028,101 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 	return e
 }
 
+// UBOs ----------------------------------------------------------------------
+
+prog.ub_info = function(ub_name) {
+	return assert(this.uniform_blocks[ub_name], 'invalid uniform block {0}', ub_name)
+}
+
+prog.ubo = function(ub_name) {
+	let gl = this.gl
+
+	let ub = this.ub_info(ub_name)
+
+	let buf = gl.buffer(ub.size, u8arr)
+	let arr     = new ArrayBuffer(ub.size)
+	let arr_u8  = new u8arr(arr)
+	let arr_f32 = new f32arr(arr)
+	let arr_i32 = new i32arr(arr)
+
+	let ubo = {program: this, name: ub_name, buffer: buf, values: {}}
+
+	ubo.set = function(name, val) {
+		if (!ub.fields[name])
+			return
+		this.values[name] = val
+	}
+
+	ubo.upload = function() {
+		let set_one
+		for (let name in this.values) {
+			let val = this.values[name]
+			let u_info = ub.fields[name]
+			let gl_type = u_info.type
+			let offset = u_info.ub_offset >> 2
+			if (
+				   gl_type == gl.INT
+				|| gl_type == gl.BOOL
+				|| gl_type == gl.SAMPLER_2D
+				|| gl_type == gl.SAMPLER_CUBE
+			) {
+				arr_i32[offset] = val
+			} else if (gl_type == gl.FLOAT) {
+				arr_f32[offset] = val
+			} else if (
+				   gl_type == gl.FLOAT_VEC2
+				|| gl_type == gl.FLOAT_VEC3
+				|| gl_type == gl.FLOAT_VEC4
+				|| gl_type == gl.FLOAT_MAT3
+				|| gl_type == gl.FLOAT_MAT4
+			) {
+				arr_f32.set(val, offset)
+			} else {
+				assert(false, 'upload() NYI for type {1} (field {0})', name, constant_names[gl_type])
+			}
+			delete this.values[name]
+			set_one = true
+		}
+		if (set_one)
+			buf.upload(arr_u8)
+	}
+	return ubo
+}
+
+prog.bind_ubo = function(ub_name, slot) {
+	let gl = this.gl
+	let ubi = this.ub_info(ub_name).index
+	let ubs = attr(this, 'ubo_bindings')
+	if (slot == null) {
+		let ubo = gl.ubos && gl.ubos[ub_name]
+		slot = assert(ubo && ubo.slot, 'bind_ubo() no name-bound UBO {0}', ub_name)
+	}
+	if (ubs[ub_name] != slot) {
+		gl.uniformBlockBinding(this, ubi, slot)
+		ubs[ub_name] = slot
+	}
+	return this
+}
+
+gl.bind_ubo = function(ubo, slot) {
+	let slots = attr(this, 'ubo_slots', Map)
+	if (slot == null) { // name-based slot reservation.
+		let ubos = attr(this, 'ubos')
+		let ubo0 = ubos[ubo.name]
+		this.next_ubo_slot = (this.next_ubo_slot || 0)
+		slot = ubo0 ? ubo0.slot : (this.next_ubo_slot++)
+		ubo.slot = slot
+		ubos[ubo.name] = ubo
+	} else {
+		assert(!this.ubos, 'bind_ubo() use of both explicit and name-based slot allocation')
+	}
+	if (slots.get(slot) != ubo) {
+		this.bindBufferBase(gl.UNIFORM_BUFFER, slot, ubo && ubo.buffer)
+		slots.set(slot, ubo)
+	}
+	return this
+}
+
 // setting uniforms and attributes and drawing -------------------------------
 
 prog.uniform_location = function(name) {
@@ -1156,7 +1275,7 @@ prog.set_uni = function(name, a, b, c, d) {
 	else if (info.type == gl.SAMPLER_CUBE)
 		return this.set_uni_texture_cube(name, a, b)
 	else
-		assert(false, 'unknown uniform type for {0}', name)
+		assert(false, 'set_uni() uniform type NYI for {0}', name)
 }
 
 gl.set_uni = function(name, ...args) {
@@ -1610,7 +1729,7 @@ fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 		}
 		gl.readPixels(0, 0, w, h, gl.RED_INTEGER, gl.UNSIGNED_INT, buf)
 	} else {
-		assert(false, 'read_pixels NYI for {0} format', tex.format)
+		assert(false, 'read_pixels() NYI for {0} format', tex.format)
 	}
 	fbo.unbind()
 	return buf
@@ -1669,13 +1788,6 @@ fbo.attach = function(tex_or_rbo, target, color_unit) {
 	} else
 		assert(false, 'Renderbuffer or Texture expected')
 
-	assert(this.w == null || tex_or_rbo.w == null || this.w == tex_or_rbo.w,
-		'different width {0}, was ', tex_or_rbo.w, this.w)
-	assert(this.h == null || tex_or_rbo.h == null || this.h == tex_or_rbo.h,
-		'different height {0}, was ', tex_or_rbo.h, this.h)
-	this.w = or(tex_or_rbo.w, this.w)
-	this.h = or(tex_or_rbo.h, this.h)
-
 	attr(this, 'attachments')[target + color_unit] = tex_or_rbo
 
 	return this
@@ -1703,7 +1815,7 @@ fbo.clear_color = function(color_unit, r, g, b, a) {
 		_u[0] = r
 		gl.clearBufferuiv(gl.COLOR, color_unit, _u)
 	} else {
-		assert(false, 'clear_color NYI for {0} format', tex.format)
+		assert(false, 'clear_color() NYI for {0} format', tex.format)
 	}
 }
 

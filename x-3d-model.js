@@ -38,10 +38,13 @@ model3 = function(e) {
 	// layers -----------------------------------------------------------------
 
 	let layers = []
+	let next_layer_num = 0
 
-	function add_layer(layer) {
+	function add_layer(opt) {
+		layer = assign({name: 'layer '+(next_layer_num++), visible: true, can_hide: true}, opt)
 		layers.push(layer)
 		instances_valid = false
+		return layer
 	}
 
 	function remove_layer(layer) {
@@ -83,6 +86,16 @@ model3 = function(e) {
 
 	let root_inst
 
+	function each_child_inst(children, f) {
+		if (children)
+			for (let child_inst of children)
+				each_child_inst(child_inst, inst)
+	}
+
+	function each_instance(f) {
+		each_child_inst(root_inst.comp.children, f)
+	}
+
 	function child_added(parent_comp, inst) {
 		instances_valid = false
 	}
@@ -107,7 +120,7 @@ model3 = function(e) {
 		let children = inst.comp.children
 		if (children)
 			for (let child_inst of children)
-				if (child_inst.visible !== false)
+				if (child_inst.layer.visible)
 					update_instance_matrix(child_inst, inst)
 	}
 
@@ -130,16 +143,11 @@ model3 = function(e) {
 		instances_valid = true
 	}
 
-	function draw(prog) {
-		update_instance_matrices()
-		for (let comp of comps)
-			comp.draw(prog, comp.model_dab.buffer)
-	}
-
-	function init() {
+	function init_root() {
 		e.root = e.root || model3_component({model: e})
 		root_inst = mat4()
 		root_inst.comp = e.root
+		e.default_layer = add_layer({name: 'default', can_hide: false})
 	}
 
 	function gc_components() {
@@ -157,8 +165,17 @@ model3 = function(e) {
 	e.child_added = child_added
 	e.child_removed = child_removed
 	e.child_changed = child_changed
-	e.draw = draw
 	e.gc_components = gc_components
+
+	// rendering --------------------------------------------------------------
+
+	function draw(prog) {
+		update_instance_matrices()
+		for (let comp of comps)
+			comp.draw(prog, comp.model_dab.buffer)
+	}
+
+	e.draw = draw
 
 	// hit-testing ------------------------------------------------------------
 
@@ -255,7 +272,7 @@ model3 = function(e) {
 
 	// init -------------------------------------------------------------------
 
-	init()
+	init_root()
 
 	return e
 
@@ -731,10 +748,11 @@ model3_component = function(e) {
 
 	// component children
 
-	function add_child(comp, mat) {
+	function add_child(comp, mat, layer) {
 		assert(mat.is_mat4)
 		assert(comp.model == model)
 		mat.comp = comp
+		mat.layer = layer || model.default_layer
 		children.push(mat)
 		model.child_added(e, mat)
 		if (DEBUG)
@@ -745,6 +763,18 @@ model3_component = function(e) {
 	function remove_child(mat) {
 		assert(children.remove_value(mat) != -1)
 		model.child_removed(e, mat)
+	}
+
+	function set_child_layer(mat, layer) {
+		assert(mat.comp == this)
+		mat.layer = layer
+		model.layer_changed(mat)
+		return mat
+	}
+
+	function set_child_matrix(nat, mat1) {
+		assert(mat.comp == this)
+		return mat.set(mat1)
 	}
 
 	// public API
@@ -771,6 +801,7 @@ model3_component = function(e) {
 	e.children        = children
 	e.add_child       = add_child
 	e.remove_child    = remove_child
+	e.set_child_layer = set_child_layer
 
 	e.set = function(t) {
 
@@ -1389,7 +1420,7 @@ model3_component = function(e) {
 		return pull
 	}
 
-	// view --------------------------------------------------------------------
+	// rendering --------------------------------------------------------------
 
 	let points_dab           = gl && gl.dyn_arr_v3_buffer() // coords for points and lines
 	let used_pis_dab         = gl && gl.dyn_arr_u32_index_buffer() // points index buffer
@@ -1405,7 +1436,7 @@ model3_component = function(e) {
 	let black_fat_lines_rr    = gl.fat_lines_renderer({})
 	let blue_fat_lines_rr     = gl.fat_lines_renderer({base_color: 0x0000ff})
 
-	e.free = function() {
+	function free() {
 		points_dab            .free()
 		used_pis_dab          .free()
 		vis_edge_lis_dab      .free()
@@ -1419,6 +1450,8 @@ model3_component = function(e) {
 		blue_dashed_lines_rr  .free()
 		black_fat_lines_rr    .free()
 		blue_fat_lines_rr     .free()
+
+		camera_ubo            .free()
 	}
 
 	let _pa = new f32arr(3)
@@ -1590,6 +1623,7 @@ model3_component = function(e) {
 
 	}
 
+	e.free = free
 	e.draw = draw
 
 	return e
