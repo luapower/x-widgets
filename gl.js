@@ -115,14 +115,15 @@ function count_call(name, args, t) {
 	if (name == 'useProgram' && args[0])
 		name = 'useProgram ' + args[0].name
 	t[name] = (t[name] || 0) + 1
+	t._n++
 }
 
 gl.wrap_calls = function() {
 	for (let name in methods) {
 		let f = methods[name]
 		this[name] = function(...args) {
-			if (this._call_counts)
-				count_call(name, args, this._call_counts)
+			if (this._trace)
+				count_call(name, args, this._trace)
 			let ret = f.call(this, ...args)
 			let err = this.getError()
 			assert(!err, '{0}: {1}', name, constant_names[err])
@@ -135,16 +136,15 @@ gl.wrap_calls = function() {
 
 gl.start_trace = function() {
 	this.wrap_calls()
-	this._call_counts = {}
-	this.t0 = time()
+	this._trace = {_n: 0, _t0: time()}
 }
 
 gl.stop_trace = function() {
-	let cc = this._call_counts
-	this._call_counts = null
-	this.t1 = time()
-	this.dt_ms = (this.t1 - this.t0) * 1000
-	return cc
+	let t = this._trace
+	this._trace = null
+	t._t1 = time()
+	t._dt_ms = (t._t1 - t._t0) * 1000
+	return t
 }
 
 // clearing ------------------------------------------------------------------
@@ -291,6 +291,7 @@ gl.program = function(name, vs_code, fs_code) {
 		let info = gl.getActiveUniform(pr, i)
 		pr.uniform_info[info.name] = info
 		u_info_by_index[i] = info
+		info.location = gl.getUniformLocation(pr, info.name)
 	}
 
 	// UBO RTTI.
@@ -317,6 +318,7 @@ gl.program = function(name, vs_code, fs_code) {
 		let info = gl.getActiveAttrib(pr, i)
 		info.buffer_type = attr_buffer_types[info.type]
 		pr.attr_info[info.name] = info
+		info.location = gl.getAttribLocation(pr, info.name)
 	}
 
 	pr.gl = gl
@@ -1126,27 +1128,13 @@ gl.bind_ubo = function(ubo, slot) {
 // setting uniforms and attributes and drawing -------------------------------
 
 prog.uniform_location = function(name) {
-	let t = attr(this, 'uniform_locations')
-	let loc = t[name]
-	if (!loc) {
-		loc = this.gl.getUniformLocation(this, name)
-		if (!loc)
-			return
-		t[name] = loc
-	}
-	return loc
+	let info = this.uniform_info[name]
+	return info && info.location
 }
 
 prog.attr_location = function(name) {
-	let t = attr(this, 'attr_locations')
-	let loc = t[name]
-	if (loc == null) {
-		loc = this.gl.getAttribLocation(this, name)
-		if (loc == -1)
-			return
-		t[name] = loc
-	}
-	return loc
+	let info = this.attr_info[name]
+	return info && info.location
 }
 
 prog.set_uni_f = function(name, v) {
