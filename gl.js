@@ -3,16 +3,24 @@
 	WebGL 2 wrapper.
 	Written by Cosmin Apreutesei.
 
+	Canvas
+
+		gl.clear_all(r, g, b, [a=1], [depth=1])
+
 	Programs
 
 		gl.module(name, code)
-		gl.program(name, vs_code, fs_code) -> pr
+
+		gl.program(name, vs_code, fs_code) -> prog
+
+		prog.set_uni(name, f | v2 | v3 | v4 | x,[y,[z,[w]]])
+		prog.set_uni(name, tex, [texture_unit=0])
 
 	VBOs
 
-		gl.[dyn_][arr_]<type>_[instance_]buffer(data|capacity, [normalize]) -> [d][a]b
+		gl.[dyn_][arr_]<type>_[instance_]buffer([data|capacity]) -> [d][a]b
 			type: f32|u8|u16|u32|i8|i16|i32|v2|v3|v4|mat3|mat4
-		gl.[dyn_][arr_]index_buffer(data|capacity, [type|max_idx]) -> [d][a]b
+		gl.[dyn_][arr_][<type>_]index_buffer(data|capacity, [type|max_idx]) -> [d][a]b
 			type: u8|u16|u32
 		gl.dyn_arr_vertex_buffer({name->type}) -> davb
 
@@ -21,12 +29,10 @@
 		b.set(in_b, [offset=0], [len], [in_offset=0])
 		b.arr([data|len]) -> a
 		b.len
-		b.arr_type b.gl_type b.n_components b.instance_divisor b.normalize b.for_index
 
 		db.buffer
 		db.grow_type(arr|[...]|u8arr|u16arr|u32arr|max_idx)
 		db.len
-		db.arr_type db.n_components db.instance_divisor db.normalize db.for_index
 
 		dab.buffer
 		dab.array
@@ -41,21 +47,24 @@
 		davb.<name> -> dab
 		davb.to_vao(vao)
 
+	UBOs
+
+		prog.ubo(ub_name) -> ubo
+		ubo.set(field_name, val)
+		ubo.values = {name->val}
+		ubo.upload()
+		gl.bind_ubo(ubo[, slot])
+		prog.bind_ubo(ub_name[, slot])
+
 	VAOs
 
-		pr.vao() -> vao
+		prog.vao() -> vao
 		vao.use()
 		vao.set_attrs(davb)
 		vao.set_attr(name, b)
-		vao.set_uni(name, val...)
-		vao.set_uni(name, tex, [texture_unit=0])
-		gl.set_uni(name, ...)
 		vao.set_index(b)
 		vao.unuse()
 		vao.dab(attr_name, [cap]) -> dab
-
-	UBOs
-		//
 
 	Textures
 
@@ -88,10 +97,9 @@
 			[sx0], [sy0], [sx1], [sy1],
 			[dx0], [dy0], [dx1], [dy1])
 
-	Clearing & freeing
+	Freeing
 
-		gl.clear_all(r, g, b, [a=1], [depth=1])
-		pr|db|b|vao|fbo.free()
+		prog|b|db|dab|davb|ubo|vao|tex|rbo|fbo.free()
 
 */
 
@@ -113,7 +121,9 @@ for (let name in gl) {
 
 function count_call(name, args, t) {
 	if (name == 'useProgram' && args[0])
-		name = 'useProgram ' + args[0].name
+		name = name + ' ' + args[0].name
+	if (name.starts('uniform'))
+		name = name + ' ' + args[0].name
 	t[name] = (t[name] || 0) + 1
 	t._n++
 }
@@ -187,7 +197,7 @@ let outdent = function(s) {
 
 gl.module = function(name, s) {
 	let t = attr(this, 'includes')
-	assert(t[name] == null, 'module already exists {0}', name)
+	assert(t[name] == null, 'module already exists: {0}', name)
 	t[name] = outdent(s)
 }
 
@@ -230,7 +240,7 @@ gl.shader = function(type, name, gl_type, code) {
 		print(errors)
 		print(linenumbers(shader.raw_code, errors))
 		gl.deleteShader(shader)
-		assert(false, '{0} shader compilation failed for {1}', type, name)
+		assert(false, '{0} shader compilation failed for program {1}', type, name)
 	}
 
 	return shader
@@ -238,19 +248,36 @@ gl.shader = function(type, name, gl_type, code) {
 
 let prog = WebGLProgram.prototype
 
-let attr_buffer_types = {
-	[gl.FLOAT          ] : 'f32',
-	[gl.UNSIGNED_BYTE  ] : 'u8',
-	[gl.UNSIGNED_SHORT ] : 'u16',
-	[gl.UNSIGNED_INT   ] : 'u32',
-	[gl.BYTE           ] : 'i8',
-	[gl.SHORT          ] : 'i16',
-	[gl.INT            ] : 'i32',
-	[gl.FLOAT_VEC2     ] : 'v2',
-	[gl.FLOAT_VEC3     ] : 'v3',
-	[gl.FLOAT_VEC4     ] : 'v4',
-	[gl.FLOAT_MAT3     ] : 'mat3',
-	[gl.FLOAT_MAT4     ] : 'mat4',
+let btinfo_by_gl_type = {}
+let btinfo_by_type = {}
+for (let [gl_type, type, arr_type, nc, val_gl_type] of [
+	[gl.FLOAT         , 'f32' , f32arr,  1],
+	[gl.UNSIGNED_BYTE , 'u8'  , u8arr ,  1],
+	[gl.UNSIGNED_SHORT, 'u16' , u16arr,  1],
+	[gl.UNSIGNED_INT  , 'u32' , u32arr,  1],
+	[gl.BYTE          , 'i8'  , i8arr ,  1],
+	[gl.SHORT         , 'i16' , i16arr,  1],
+	[gl.INT           , 'i32' , i32arr,  1],
+	[gl.FLOAT_VEC2    , 'v2'  , f32arr,  2, gl.FLOAT],
+	[gl.FLOAT_VEC3    , 'v3'  , f32arr,  3, gl.FLOAT],
+	[gl.FLOAT_VEC4    , 'v4'  , f32arr,  4, gl.FLOAT],
+	[gl.FLOAT_MAT3    , 'mat3', f32arr,  9, gl.FLOAT],
+	[gl.FLOAT_MAT4    , 'mat4', f32arr, 16, gl.FLOAT],
+]) {
+	let info = {
+		gl_type: gl_type,
+		val_gl_type: gl_type,
+		type: type,
+		arr_type: arr_type,
+		nc: nc,
+	}
+	btinfo_by_gl_type[gl_type] = info
+	btinfo_by_type[type] = info
+}
+
+function btinfo(type) {
+	assert(type, 'type required')
+	return assert(btinfo_by_type[type], 'unknown type {1}', type)
 }
 
 gl.program = function(name, vs_code, fs_code) {
@@ -283,7 +310,7 @@ gl.program = function(name, vs_code, fs_code) {
 		assert(false, 'linking failed for program {0}', name)
 	}
 
-	// uniform RTTI.
+	// uniforms RTTI.
 	pr.uniform_count = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS)
 	pr.uniform_info = {} // {name->info}
 	let u_info_by_index = {} // {uniform_index->info}
@@ -292,6 +319,8 @@ gl.program = function(name, vs_code, fs_code) {
 		pr.uniform_info[info.name] = info
 		u_info_by_index[i] = info
 		info.location = gl.getUniformLocation(pr, info.name)
+		if (info.location)
+			info.location.name = info.name
 	}
 
 	// UBO RTTI.
@@ -311,14 +340,23 @@ gl.program = function(name, vs_code, fs_code) {
 		}
 	}
 
-	// attr RTTI.
+	// attrs RTTI.
 	pr.attr_info = {}
 	pr.attr_count = gl.getProgramParameter(pr, gl.ACTIVE_ATTRIBUTES)
 	for (let i = 0, n = pr.attr_count; i < n; i++) {
-		let info = gl.getActiveAttrib(pr, i)
-		info.buffer_type = attr_buffer_types[info.type]
-		pr.attr_info[info.name] = info
-		info.location = gl.getAttribLocation(pr, info.name)
+		let ainfo = gl.getActiveAttrib(pr, i)
+		let name = ainfo.name
+		let size = ainfo.size
+		let gl_type = ainfo.type
+		let location = gl.getAttribLocation(pr, name)
+		let info = assign({
+				name: name,
+				size: size,
+				location: location,
+				program: pr,
+			}, btinfo_by_gl_type[gl_type])
+		pr.attr_info[name] = info
+		pr.attr_info[location] = info
 	}
 
 	pr.gl = gl
@@ -341,13 +379,6 @@ prog.use = function() {
 			for (let ub_name in this.uniform_blocks) {
 				let ubo = gl.ubos[ub_name]
 				this.bind_ubo(ub_name, ubo.slot)
-			}
-		}
-
-		if (gl.uniforms) { // set global uniforms.
-			for (let name in gl.uniforms) {
-				let args = gl.uniforms[name]
-				this.set_uni(name, ...args)
 			}
 		}
 
@@ -380,17 +411,38 @@ prog.free = function() {
 
 let vao = WebGLVertexArrayObject.prototype
 
-gl.vao = function() {
+// shared VAO: works with multiple programs but requires hardcoded attr. locations.
+gl.vao = function(programs) {
 	let gl = this
 	let vao = gl.createVertexArray()
 	vao.gl = gl
+	vao.programs = assert(programs, 'programs required')
+	vao.attr_info = {}
+	for (let prog of programs) {
+		for (let name of prog.attr_info) {
+			let info = prog.attr_info[name]
+			let info0 = vao.attr_info[name]
+			if (!info0) {
+				info.program = prog
+				vao.attr_info[name] = info
+			} else {
+				assert(info0.type == info.type, 'type mismatch {0} from {1} vs {2} from {3}',
+					info.type, prog, info0.type, info0.program.name)
+				assert(info0.location == info.location, 'location mismatch {0} from {1} vs {2} from {3}',
+					info.location, prog, info0.location, info0.program.name)
+			}
+		}
+	}
 	return vao
 }
 
+// program-specific VAO: only with the program that created it.
 prog.vao = function() {
 	let gl = this.gl
-	let vao = gl.vao()
+	let vao = gl.createVertexArray()
+	vao.gl = gl
 	vao.program = this
+	vao.attr_info = this.attr_info
 	if (!this.vaos)
 		this.vaos = []
 	this.vaos.push(vao)
@@ -416,27 +468,12 @@ vao.unbind = function() {
 
 vao.use = function() {
 	let gl = this.gl
-	let prog
 	if (this.program) {
-		prog = this.program
-		prog.use()
+		this.program.use()
 	} else {
-		prog = gl.active_program
-		assert(prog, 'no active program for shared VAO')
+		assert(gl.active_program, 'no active program for shared VAO')
 	}
 	this.bind()
-
-	// simulate VAO-specific uniforms.
-	let unis = prog.uniform_info
-	if (unis) {
-		let vals = this.uniforms
-		let globals = gl.uniforms
-		for (let name in unis) {
-			let args = (vals && vals[name]) || (globals && globals[name]) || empty_array
-			prog.set_uni(name, ...args)
-		}
-	}
-
 	return this
 }
 
@@ -445,74 +482,62 @@ vao.unuse = function() {
 	this.program.unuse()
 }
 
-vao.set_uni = function(name, ...args) {
-	if (this.program && !this.program.uniform_info[name])
-		return
-	assign(attr(attr(this, 'uniforms'), name, Array), args)
-	if (this.gl.active_program == this.program) // set_uni() after use()
-		this.program.set_uni(name, ...args)
-	return this
-}
-
-vao.set_attr = function(name, b, stride, offset) {
+vao.set_attr = function(name, b) {
 	let gl = this.gl
-	let t = attr(this, 'buffers')
-	let b0 = t[name]
-	if (b0 == b)
-		return this
-	let loc = isstr(name) ? this.program.attr_location(name) : name
-	if (loc == null)
-		return this
+
 	let bound = gl.active_vao == this
 	assert(bound || !gl.active_vao)
+
+	let info = this.attr_info[name]
+	if (info == null)
+		return this
+
+	let buffers = attr(this, 'buffers')
+	let b0 = buffers[name]
+	if (b0 == b)
+		return this
+
 	if (!bound)
 		this.bind()
-	stride = stride || 0
-	offset = offset || 0
+
 	gl.bindBuffer(gl.ARRAY_BUFFER, b)
-	if (b.n_components == 16 && b.gl_type == gl.FLOAT) { // mat4
-		assert(!b.normalize)
-		gl.vertexAttribPointer(loc+0, 4, gl.FLOAT, false, 64,  0)
-		gl.vertexAttribPointer(loc+1, 4, gl.FLOAT, false, 64, 16)
-		gl.vertexAttribPointer(loc+2, 4, gl.FLOAT, false, 64, 32)
-		gl.vertexAttribPointer(loc+3, 4, gl.FLOAT, false, 64, 48)
-		if (b.instance_divisor != null) {
-			gl.vertexAttribDivisor(loc+0, b.instance_divisor)
-			gl.vertexAttribDivisor(loc+1, b.instance_divisor)
-			gl.vertexAttribDivisor(loc+2, b.instance_divisor)
-			gl.vertexAttribDivisor(loc+3, b.instance_divisor)
-		}
-		gl.enableVertexAttribArray(loc+0)
-		gl.enableVertexAttribArray(loc+1)
-		gl.enableVertexAttribArray(loc+2)
-		gl.enableVertexAttribArray(loc+3)
-	} else if (b.n_components == 9 && b.gl_type == gl.FLOAT) { // mat3
-		assert(!b.normalize)
-		gl.vertexAttribPointer(loc+0, 3, gl.FLOAT, false, 36,  0)
-		gl.vertexAttribPointer(loc+1, 3, gl.FLOAT, false, 36, 12)
-		gl.vertexAttribPointer(loc+2, 3, gl.FLOAT, false, 36, 24)
-		if (b.instance_divisor != null) {
-			gl.vertexAttribDivisor(loc+0, b.instance_divisor)
-			gl.vertexAttribDivisor(loc+1, b.instance_divisor)
-			gl.vertexAttribDivisor(loc+2, b.instance_divisor)
-		}
-		gl.enableVertexAttribArray(loc+0)
-		gl.enableVertexAttribArray(loc+1)
-		gl.enableVertexAttribArray(loc+2)
-	} else {
-		if (b.gl_type == gl.INT || b.gl_type == gl.UNSIGNED_INT) {
-			assert(!b.normalize)
-			gl.vertexAttribIPointer(loc, b.n_components, b.gl_type, stride, offset)
-		} else {
-			gl.vertexAttribPointer(loc, b.n_components, b.gl_type, b.normalize, stride, offset)
-		}
-		if (b.instance_divisor != null)
-			gl.vertexAttribDivisor(loc, b.instance_divisor)
-		gl.enableVertexAttribArray(loc)
+
+	let loc = info.location
+	let gl_type = or(info.val_gl_type, info.gl_type)
+	let nc = info.nc
+	let nloc = min(1, nc >> 2)
+
+	if (!b != !b0) {
+		for (let i = 0; i < nloc; i++)
+			if (b)
+				gl.enableVertexAttribArray(loc+i)
+			else
+				gl.disableVertexAttribArray(loc+i)
 	}
+
+	let config = attr(this, 'config')
+	if (b && !config[name]) {
+		if (info.type == 'i32' || info.type == 'u32') {
+			gl.vertexAttribIPointer(loc, nc, gl_type, 0, 0)
+		} else if (nloc > 1) {
+			let sz = nloc * 4
+			for (let i = 0; i < nloc; i++)
+				gl.vertexAttribPointer(loc+i, nc, gl_type, false, n * sz, i * sz)
+		} else {
+			gl.vertexAttribPointer(loc, nc, gl_type, false, 0, 0)
+		}
+		config[name] = true
+	}
+
+	if ((b && b.inst_div || 0) != (b0 && b0.inst_div || 0))
+		for (let i = 0; i < nloc; i++)
+			gl.vertexAttribDivisor(loc+i, b && b.inst_div || 0)
+
 	if (!bound)
 		this.unbind()
-	t[name] = b
+
+	buffers[name] = b
+
 	return this
 }
 
@@ -527,7 +552,7 @@ property(vao, 'vertex_count', function() {
 	if (this.buffers)
 		for (let name in this.buffers) {
 			let b = this.buffers[name]
-			if (b.instance_divisor == null)
+			if (!b.inst_div)
 				min_len = min(or(min_len, 1/0), b.len)
 		}
 	return min_len || 0
@@ -538,7 +563,7 @@ property(vao, 'instance_count', function() {
 	if (this.buffers)
 		for (let name in this.buffers) {
 			let b = this.buffers[name]
-			if (b.instance_divisor != null)
+			if (b.inst_div)
 				min_len = min(or(min_len, 1/0), b.len)
 		}
 	return min_len || 0
@@ -551,6 +576,7 @@ vao.set_index = function(b) {
 	if (!bound)
 		this.bind()
 	if (this.index_buffer != b) {
+		assert(b.for_index, 'not an index buffer')
 		this.index_buffer = b
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b)
 	}
@@ -589,14 +615,15 @@ gl.vao_set = function() {
 function check_arr_type(arr, arr_type) {
 	if (!arr_type)
 		return arr.constructor
-	assert(arr instanceof arr_type, 'different arr_type {0}, wanted {1}', arr.constructor.name, arr_type.name)
+	assert(arr instanceof arr_type,
+		'different arr_type {0}, expected {1}', arr.constructor.name, arr_type.name)
 	return arr_type
 }
 
 function check_arr_nc(arr, nc) {
-	let arr_nc = arr.n_components
+	let arr_nc = arr.nc
 	nc = or(or(nc, arr_nc), 1)
-	assert(or(arr_nc, nc) == nc, 'different n_components {0}, wanted {1}', arr_nc, nc)
+	assert(or(arr_nc, nc) == nc, 'different number of components {0}, expected {1}', arr_nc, nc)
 	return nc
 }
 
@@ -611,50 +638,40 @@ function check_arr_len(nc, arr, len, arr_offset) {
 	return max(0, len)
 }
 
-gl.buffer = function(data_or_cap, arr_type, nc, instance_divisor, normalize, for_index) {
-	assert(instance_divisor == null || instance_divisor == 1, 'buffer() NYI for instance_divisor != 1')
+gl.buffer = function(data_or_cap, type, inst_div, for_index) {
 	let gl = this
-	let b = gl.createBuffer()
-	let cap, len, arg
-	if (isnum(data_or_cap)) { // capacity, arr_type, ...
-		assert(arr_type, 'arr_type required')
-		nc = or(nc, 1)
+
+	inst_div = inst_div || 0
+	assert(inst_div == 0 || inst_div == 1, 'NYI: inst_div != 1')
+	let info, cap, len, arg
+	if (isnum(data_or_cap)) { // capacity, type, ...
+		info = btinfo(type)
 		cap = data_or_cap
 		len = 0
-		arg = cap * nc * arr_type.BYTES_PER_ELEMENT
-	} else {
-		arg = data_or_cap
-		if (isarray(arg)) { // [elements, ...], arr_type, ...
-			assert(arr_type, 'arr_type required')
-			arg = new arr_type(arg)
-		} else { // arr, [arr_type], ...
-			arr_type = check_arr_type(arg, arr_type)
-		}
-		nc = check_arr_nc(arg, nc)
-		cap = check_arr_len(nc, arg, null, 0)
+		arg = cap * info.nc * info.arr_type.BYTES_PER_ELEMENT
+	} else if (isarray(data_or_cap)) { // [elements, ...], type, ...
+		info = btinfo(type)
+		cap = check_arr_len(info.nc, data_or_cap, null, 0)
 		len = cap
+		arg = new info.arr_type(arg)
+	} else { // arr, [type], ...
+		check_arr_type(arg, type)
+		arg = data_or_cap
+		nc = check_arr_nc(arg, nc)
 	}
-	b.for_index = for_index
-	b.gl_target = for_index ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER
+
+	let gl_target = for_index ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER
+
+	let b = gl.createBuffer()
+	gl.bindBuffer(gl_target, b)
+	gl.bufferData(gl_target, arg, gl.STATIC_DRAW)
+
+	b.gl = gl
 	b.capacity = cap
 	b._len = len
-	b.gl_type =
-		   arr_type ==  f32arr && gl.FLOAT
-		|| arr_type ==   u8arr && gl.UNSIGNED_BYTE
-		|| arr_type ==  u16arr && gl.UNSIGNED_SHORT
-		|| arr_type ==  u32arr && gl.UNSIGNED_INT
-		|| arr_type ==   i8arr && gl.BYTE
-		|| arr_type ==  i16arr && gl.SHORT
-		|| arr_type ==  i32arr && gl.INT
-		|| assert(false, 'buffer() NYI for arr_type {0}', arr_type.name)
-	b.arr_type = arr_type
-	b.gl = gl
-	b.n_components = nc
-	b.instance_divisor = instance_divisor
-	b.normalize = normalize || false
-
-	gl.bindBuffer(b.gl_target, b)
-	gl.bufferData(b.gl_target, arg, gl.STATIC_DRAW)
+	assign(b, info)
+	b.for_index = for_index
+	b.inst_div = inst_div
 
 	return b
 }
@@ -667,13 +684,15 @@ property(WebGLBuffer, 'len',
 	}
 )
 
-function index_arr_type(data_or_cap, arr_type_or_max_idx) {
-	return dyn_arr.index_arr_type(or(arr_type_or_max_idx, or(data_or_cap, 0)))
+function index_arr_type(data_or_cap, type_or_max_idx, fname) {
+	if (isstr(type_or_max_idx))
+		type_or_max_idx = assert(btinfo(type_or_max_idx, fname).arr_type)
+	return dyn_arr.index_arr_type(or(type_or_max_idx, or(data_or_cap, 0)))
 }
 
-gl.index_buffer = function(data_or_cap, arr_type_or_max_idx) {
-	let arr_type = index_arr_type(data_or_cap, arr_type_or_max_idx)
-	return this.buffer(data_or_cap, arr_type, 1, null, false, true)
+gl.index_buffer = function(data_or_cap, type_or_max_idx) {
+	let arr_type = index_arr_type(data_or_cap, type_or_max_idx, 'index_buffer()')
+	return this.buffer(data_or_cap, arr_type, null, true)
 }
 
 let buf = WebGLBuffer.prototype
@@ -681,19 +700,19 @@ let buf = WebGLBuffer.prototype
 buf.arr = function(data_or_len) {
 	if (data_or_len == null)
 		data_or_len = this.len
-	let nc = this.n_components
+	let nc = this.nc
 	if (isnum(data_or_len))
 		data_or_len = data_or_len * nc
 	else
 		check_arr_nc(data_or_len, nc)
 	let arr = new this.arr_type(data_or_len)
-	arr.n_components = this.n_components
+	arr.nc = this.nc
 	return arr
 }
 
 buf.upload = function(in_arr, offset, len, in_offset) {
 	let gl = this.gl
-	let nc = this.n_components
+	let nc = this.nc
 	if (isarray(in_arr)) { // [...], ...
 		in_arr = new this.arr_type(in_arr)
 	} else { // arr, ...
@@ -717,7 +736,7 @@ buf.upload = function(in_arr, offset, len, in_offset) {
 
 buf.download = function(out_arr, offset, len, out_offset) {
 	let gl = this
-	let nc = this.n_components
+	let nc = this.nc
 	check_arr_type(out_arr, this.arr_type)
 	check_arr_nc(out_arr, nc)
 	offset = offset || 0
@@ -736,7 +755,7 @@ buf.download = function(out_arr, offset, len, out_offset) {
 
 buf.set = function(in_buf, offset, len, in_offset) {
 	let gl = this.gl
-	let nc = this.n_components
+	let nc = this.nc
 	check_arr_type(in_buf, this.arr_type)
 	check_arr_nc(in_buf, nc)
 	offset = offset || 0
@@ -763,44 +782,43 @@ buf.free = function() {
 	this.gl.deleteBuffer(this)
 }
 
-gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, normalize, for_index) {
+gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 
-	n_components = n_components || 1
-
+	let info = btinfo(type)
 	let gl = this
 	let db = {
 		is_dyn_buffer: true,
 		gl: gl,
-		arr_type: arr_type,
-		n_components: n_components,
-		instance_divisor: instance_divisor,
-		normalize: normalize,
+		type: type,
+		inst_div: inst_div,
 		for_index: for_index,
 		buffer: null,
 		buffer_replaced: noop,
 	}
 
 	db.grow_type = function(arg) {
-		let arr_type1 = dyn_arr.index_arr_type(arg)
-		if (arr_type1.BYTES_PER_ELEMENT <= arr_type.BYTES_PER_ELEMENT)
+		let arr_type1 = index_arr_type(null, arg, 'grow_type()')
+		let info1 = btinfo(arr_type1)
+		assert(info1.nc == info.nc)
+		if (info1.arr_type.BYTES_PER_ELEMENT <= info.arr_type.BYTES_PER_ELEMENT)
 			return
 		if (this.buffer) {
 			let a1
 			if (this.len > 0) {
 				let a0 = this.buffer.download(this.buffer.arr())
 				let a1 = new arr_type1(this.len)
-				for (let i = 0, n = a0.length * n_components; i < n; i++)
+				for (let i = 0, n = a0.length * nc; i < n; i++)
 					a1[i] = a0[i]
 			}
 			let cap = this.buffer.capacity
 			this.buffer.free()
-			this.buffer = gl.buffer(cap, arr_type1, n_components, instance_divisor, normalize, for_index)
+			this.buffer = gl.buffer(cap, arr_type1, inst_div, for_index)
 			if (a1)
 				this.buffer.upload(a1)
 			this.buffer_replaced(this.buffer)
 		}
-		arr_type = arr_type1
-		this.arr_type = arr_type1
+		info = info1
+		this.type = info.type
 	}
 
 	db._grow = function(cap, pow2) {
@@ -809,7 +827,7 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 			if (pow2 !== false)
 				cap = nextpow2(cap)
 			let b0 = this.buffer
-			let b1 = gl.buffer(cap, arr_type, n_components, instance_divisor, normalize, for_index)
+			let b1 = gl.buffer(cap, arr_type, inst_div, for_index)
 			if (b0) {
 				b1.set(b0)
 				b0.free()
@@ -843,25 +861,25 @@ gl.dyn_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, 
 			db._grow(cap)
 		} else {
 			let data = data_or_cap
-			let len = data.length / n_components
-			assert(len == floor(len), 'source array length not multiple of {0}', n_components)
-			db.buffer = gl.buffer(data, arr_type, n_components, instance_divisor, normalize, for_index)
+			let len = data.length / nc
+			assert(len == floor(len), 'source array length not multiple of {0}', nc)
+			db.buffer = gl.buffer(data, arr_type, nc, inst_div, for_index)
 		}
 	}
 
 	return db
 }
 
-gl.dyn_index_buffer = function(data_or_cap, arr_type_or_max_idx) {
-	let arr_type = index_arr_type(data_or_cap, arr_type_or_max_idx)
-	return this.dyn_buffer(arr_type, data_or_cap, 1, null, false, true)
+gl.dyn_index_buffer = function(data_or_cap, type_or_max_idx) {
+	let arr_type = index_arr_type(data_or_cap, type_or_max_idx, 'dyn_index_buffer()')
+	return this.dyn_buffer(arr_type, data_or_cap, null, false, true)
 }
 
-gl.dyn_arr_buffer = function(arr_type, data_or_cap, n_components, instance_divisor, normalize, for_index) {
+gl.dyn_arr_buffer = function(arr_type, data_or_cap, inst_div, for_index) {
 
 	let dab = {is_dyn_arr_buffer: true}
-	let db = this.dyn_buffer(arr_type, data_or_cap, n_components, instance_divisor, normalize, for_index)
-	let da = dyn_arr(arr_type, data_or_cap, n_components)
+	let db = this.dyn_buffer(arr_type, data_or_cap, inst_div, for_index)
+	let da = dyn_arr(arr_type, data_or_cap)
 
 	dab.buffer_replaced = noop
 	db.buffer_replaced = function(b) { dab.buffer_replaced(b) }
@@ -914,63 +932,43 @@ gl.dyn_arr_buffer = function(arr_type, data_or_cap, n_components, instance_divis
 	return dab
 }
 
-gl.dyn_arr_index_buffer = function(data_or_cap, arr_type_or_max_idx) {
-	let arr_type = index_arr_type(data_or_cap, arr_type_or_max_idx)
-	return this.dyn_arr_buffer(arr_type, data_or_cap, 1, null, false, true)
+gl.dyn_arr_index_buffer = function(data_or_cap, type_or_max_idx) {
+	let type = index_arr_type(data_or_cap, type_or_max_idx, 'dyn_arr_index_buffer()')
+	return this.dyn_arr_buffer(type, data_or_cap, null, false, true)
 }
 
 // generate gl.*_buffer() APIs.
-let buffer_types = {
-	f32  : [f32arr,  1],
-	u8   : [u8arr ,  1],
-	u16  : [u16arr,  1],
-	u32  : [u32arr,  1],
-	i8   : [i8arr ,  1],
-	i16  : [i16arr,  1],
-	i32  : [i32arr,  1],
-	v2   : [f32arr,  2],
-	v3   : [f32arr,  3],
-	v4   : [f32arr,  4],
-	mat3 : [f32arr,  9],
-	mat4 : [f32arr, 16],
-}
-for (let prefix in buffer_types) {
-	let [arr_type, n_components] = buffer_types[prefix]
-	gl[prefix+'_buffer'] = function buffer(data_or_cap, normalize) {
-		return this.buffer(data_or_cap, arr_type, n_components, null, normalize)
+for (let type in btinfo_by_type) {
+	gl[type+'_buffer'] = function buffer(data_or_cap) {
+		return this.buffer(data_or_cap, type)
 	}
-	gl[prefix+'_instance_buffer'] = function instance_buffer(data_or_cap, normalize) {
-		return this.buffer(data_or_cap, arr_type, n_components, 1, normalize)
+	gl[type+'_instance_buffer'] = function instance_buffer(data_or_cap) {
+		return this.buffer(data_or_cap, type, 1)
 	}
-	gl['dyn_'+prefix+'_buffer'] = function dyn_buffer(data_or_cap, normalize) {
-		return this.dyn_buffer(arr_type, data_or_cap, n_components, null, normalize)
+	gl['dyn_'+type+'_buffer'] = function dyn_buffer(data_or_cap) {
+		return this.dyn_buffer(type, data_or_cap)
 	}
-	gl['dyn_'+prefix+'_instance_buffer'] = function dyn_instance_buffer(data_or_cap, normalize) {
-		return this.dyn_buffer(arr_type, data_or_cap, n_components, 1, normalize)
+	gl['dyn_'+type+'_instance_buffer'] = function dyn_instance_buffer(data_or_cap) {
+		return this.dyn_buffer(type, data_or_cap, 1)
 	}
-	gl['dyn_arr_'+prefix+'_buffer'] = function dyn_arr_buffer(data_or_cap, normalize) {
-		return this.dyn_arr_buffer(arr_type, data_or_cap, n_components, null, normalize)
+	gl['dyn_arr_'+type+'_buffer'] = function dyn_arr_buffer(data_or_cap) {
+		return this.dyn_arr_buffer(type, data_or_cap)
 	}
-	gl['dyn_arr_'+prefix+'_instance_buffer'] = function dyn_arr_instance_buffer(data_or_cap, normalize) {
-		return this.dyn_arr_buffer(arr_type, data_or_cap, n_components, 1, normalize)
+	gl['dyn_arr_'+type+'_instance_buffer'] = function dyn_arr_instance_buffer(data_or_cap) {
+		return this.dyn_arr_buffer(type, data_or_cap, 1)
 	}
 }
 
 // generate gl.*_index_buffer() APIs.
-let index_buffer_types = {
-	u8  : u8arr,
-	u16 : u16arr,
-	u32 : u32arr,
-}
-for (let prefix in index_buffer_types) {
-	let arr_type = index_buffer_types[prefix]
-	gl[prefix+'_index_buffer'] = function index_buffer(data_or_cap) {
+for (let type of ['u8', 'u16', 'u32']) {
+	let arr_type = btinfo_by_type[type].arr_type
+	gl[type+'_index_buffer'] = function index_buffer(data_or_cap) {
 		return this.index_buffer(data_or_cap, arr_type)
 	}
-	gl['dyn_'+prefix+'_index_buffer'] = function dyn_index_buffer(data_or_cap) {
+	gl['dyn_'+type+'_index_buffer'] = function dyn_index_buffer(data_or_cap) {
 		return this.dyn_index_buffer(data_or_cap, arr_type)
 	}
-	gl['dyn_arr_'+prefix+'_index_buffer'] = function dyn_arr_index_buffer(data_or_cap) {
+	gl['dyn_arr_'+type+'_index_buffer'] = function dyn_arr_index_buffer(data_or_cap) {
 		return this.dyn_arr_index_buffer(data_or_cap, arr_type)
 	}
 }
@@ -978,8 +976,7 @@ for (let prefix in index_buffer_types) {
 vao.dab = function(name, cap) {
 	let vao = this
 	let info = assert(vao.program.attr_info[name], 'invalid attribute {0}', name)
-	let [arr_type, n_components] = buffer_types[info.buffer_type]
-	let dab = vao.gl.dyn_arr_buffer(arr_type, cap, n_components)
+	let dab = vao.gl.dyn_arr_buffer(info.type, cap)
 	if (dab.buffer)
 		vao.set_attr(name, dab.buffer)
 	dab.buffer_replaced = function(b) { vao.set_attr(name, b) }
@@ -993,8 +990,8 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 	let dab0
 	for (let name in attrs) {
 		let type = attrs[name]
-		let [arr_type, n_components] = buffer_types[type]
-		let dab = this.dyn_arr_buffer(arr_type, cap, n_components)
+		let info = btinfo(type)
+		let dab = this.dyn_arr_buffer(info.type, cap)
 		e.dabs[name] = dab
 		e[name] = dab
 		dab0 = dab0 || dab
@@ -1041,8 +1038,8 @@ prog.ubo = function(ub_name) {
 
 	let ub = this.ub_info(ub_name)
 
-	let buf = gl.buffer(ub.size, u8arr)
-	let arr     = new ArrayBuffer(ub.size)
+	let buf = gl.buffer(ub.size)
+	let arr = new ArrayBuffer(ub.size)
 	let arr_u8  = new u8arr(arr)
 	let arr_f32 = new f32arr(arr)
 	let arr_i32 = new i32arr(arr)
@@ -1080,7 +1077,8 @@ prog.ubo = function(ub_name) {
 			) {
 				arr_f32.set(val, offset)
 			} else {
-				assert(false, 'upload() NYI for type {1} (field {0})', name, constant_names[gl_type])
+				assert(false, 'NYI: {2} field (program {0} ubo {0} field {1})',
+					this.name, ub_name, name, constant_names[gl_type])
 			}
 			delete this.values[name]
 			set_one = true
@@ -1097,7 +1095,7 @@ prog.bind_ubo = function(ub_name, slot) {
 	let ubs = attr(this, 'ubo_bindings')
 	if (slot == null) {
 		let ubo = gl.ubos && gl.ubos[ub_name]
-		slot = assert(ubo && ubo.slot, 'bind_ubo() no name-bound UBO {0}', ub_name)
+		slot = assert(ubo && ubo.slot, 'no name-bound UBO {0}', ub_name)
 	}
 	if (ubs[ub_name] != slot) {
 		gl.uniformBlockBinding(this, ubi, slot)
@@ -1107,7 +1105,7 @@ prog.bind_ubo = function(ub_name, slot) {
 }
 
 gl.bind_ubo = function(ubo, slot) {
-	let slots = attr(this, 'ubo_slots', Map)
+	let slots = attr(this, 'ubo_slots', Array)
 	if (slot == null) { // name-based slot reservation.
 		let ubos = attr(this, 'ubos')
 		let ubo0 = ubos[ubo.name]
@@ -1116,11 +1114,11 @@ gl.bind_ubo = function(ubo, slot) {
 		ubo.slot = slot
 		ubos[ubo.name] = ubo
 	} else {
-		assert(!this.ubos, 'bind_ubo() use of both explicit and name-based slot allocation')
+		assert(!this.ubos, 'use of both explicit and name-based slot allocation')
 	}
-	if (slots.get(slot) != ubo) {
+	if (slots[slot] != ubo) {
 		this.bindBufferBase(gl.UNIFORM_BUFFER, slot, ubo && ubo.buffer)
-		slots.set(slot, ubo)
+		slots[slot] = ubo
 	}
 	return this
 }
@@ -1129,11 +1127,6 @@ gl.bind_ubo = function(ubo, slot) {
 
 prog.uniform_location = function(name) {
 	let info = this.uniform_info[name]
-	return info && info.location
-}
-
-prog.attr_location = function(name) {
-	let info = this.attr_info[name]
 	return info && info.location
 }
 
@@ -1218,26 +1211,25 @@ prog.set_uni_mat4 = function(name, m) {
 	return this
 }
 
-let set_uni_texture_func = function(gl_target) {
+let set_uni_texture_func = function(target) {
 	return function(name, tex, unit) {
 		let loc = this.uniform_location(name)
 		if (loc) {
 			let gl = this.gl
 			if (tex) {
-				//TODO: this assert prevents viewing of shadow maps.
-				//assert(tex.gl_target == gl_target)
+				assert(tex.target == target,
+					'texture target mismatch {0}, expected {1}', tex.target, target)
 				tex.bind(unit)
 			} else {
-				gl.bind_texture(gl_target, null, unit)
+				gl.bind_texture(target, null, unit)
 			}
 			gl.uniform1i(loc, unit)
 		}
 		return this
 	}
 }
-
-prog.set_uni_texture      = set_uni_texture_func(gl.TEXTURE_2D)
-prog.set_uni_texture_cube = set_uni_texture_func(gl.TEXTURE_CUBE_MAP)
+prog.set_uni_texture      = set_uni_texture_func('2d')
+prog.set_uni_texture_cube = set_uni_texture_func('cubemap')
 
 prog.set_uni = function(name, a, b, c, d) {
 	let gl = this.gl
@@ -1263,12 +1255,8 @@ prog.set_uni = function(name, a, b, c, d) {
 	else if (info.type == gl.SAMPLER_CUBE)
 		return this.set_uni_texture_cube(name, a, b)
 	else
-		assert(false, 'set_uni() uniform type NYI for {0}', name)
-}
-
-gl.set_uni = function(name, ...args) {
-	assign(attr(attr(this, 'uniforms'), name, Array), args)
-	return this
+		assert(false, 'NYI: {2} uniform (program {0}, uniform {1})',
+			this.name, name, constant_names[info.type])
 }
 
 gl.draw = function(gl_mode, offset, count) {
@@ -1311,19 +1299,70 @@ gl.texture = function(target) {
 	let gl = this
 	let tex = gl.createTexture()
 	tex.gl = gl
-	tex.gl_target = target == 'cubemap' && gl.TEXTURE_CUBE_MAP || gl.TEXTURE_2D
+	tex.target = target || '2d'
 	return tex
 }
 
-gl.bind_texture = function(target, tex, unit) {
+let tex_gl_target = function(target) {
+	return target == 'cubemap' && gl.TEXTURE_CUBE_MAP || gl.TEXTURE_2D
+}
+
+gl.bind_texture = function(target, tex1, unit) {
 	let gl = this
-	gl.activeTexture(gl.TEXTURE0 + (unit || 0))
-	gl.bindTexture(or(target, gl.TEXTURE_2D), tex)
+	target = or(target, '2d')
+	unit = unit || 0
+	let units = attr(attr(gl, 'texture_units'), target, Array)
+	let tex0 = units[unit]
+	let gl_target = tex_gl_target(target)
+	if (tex0 != tex1) {
+		if (tex1) {
+			assert(tex1.target == target,
+			'texture target mismatch {0}, wanted {1}', tex1.target, target)
+			tex1.gl_target = gl_target
+		}
+		if (tex0)
+			tex0.unit = null
+
+		gl.activeTexture(gl.TEXTURE0 + unit)
+		gl.bindTexture(gl_target, tex1)
+
+		units[unit] = tex1
+		if (tex1)
+			tex1.unit = unit
+	}
 	return this
 }
 
+gl.unbind_textures = function(target) {
+	let all_units = gl.texture_units
+	if (!all_units)
+		return this
+	if (!target) {
+		this.unbind_textures('2d')
+		this.unbind_textures('cubemap')
+		return this
+	}
+	let units = all_units[target]
+	if (!units)
+		return this
+	let gl_target = tex_gl_target(target)
+	for (let i = 0, n = units.length; i < n; i++) {
+		if (units[i]) {
+			gl.activeTexture(gl.TEXTURE0 + unit)
+			gl.bindTexture(gl_target, null)
+		}
+	}
+	units.length = 0
+}
+
 tex.bind = function(unit) {
-	this.gl.bind_texture(this.gl_target, this, unit)
+	this.gl.bind_texture(this.target, this, unit)
+	return this
+}
+
+tex.unbind = function() {
+	assert(this.unit != null, 'texture not bound')
+	this.gl.bind_texture(this.target, null, this.unit)
 	return this
 }
 
@@ -1335,12 +1374,15 @@ tex.free = function() {
 tex.set_depth = function(w, h, f32) {
 	let gl = this.gl
 	assert(this.gl_target == gl.TEXTURE_2D)
+
 	this.bind()
 	gl.texImage2D(gl.TEXTURE_2D, 0,
 		f32 ? gl.DEPTH_COMPONENT32F : gl.DEPTH_COMPONENT24,
 		w, h, 0, gl.DEPTH_COMPONENT, f32 ? gl.FLOAT : gl.UNSIGNED_INT, null)
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	this.unbind()
+
 	this.w = w
 	this.h = h
 	this.format = 'depth'
@@ -1378,6 +1420,7 @@ tex.set_rgba = function(w, h, pixels, side) {
 
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+	this.unbind()
 
 	this.w = w
 	this.h = h
@@ -1391,6 +1434,7 @@ tex.set_rgba16 = function(w, h, pixels, side) {
 
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.RGBA16UI, w, h, 0, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, pixels)
+	this.unbind()
 
 	this.w = w
 	this.h = h
@@ -1404,6 +1448,7 @@ tex.set_u32 = function(w, h, pixels, side) {
 
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.R32UI, w, h, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, pixels)
+	this.unbind()
 
 	this.w = w
 	this.h = h
@@ -1424,6 +1469,7 @@ tex.set_image = function(image, pixel_scale, side) {
 	gl.texImage2D(gl_target, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
 	if (gl_target == gl.TEXTURE_2D)
 		gl.generateMipmap(gl_target)
+	this.unbind()
 
 	let w = image.width
 	let h = image.height
@@ -1717,7 +1763,7 @@ fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 		}
 		gl.readPixels(0, 0, w, h, gl.RED_INTEGER, gl.UNSIGNED_INT, buf)
 	} else {
-		assert(false, 'read_pixels() NYI for {0} format', tex.format)
+		assert(false, 'NYI: {0} texture', tex.format)
 	}
 	fbo.unbind()
 	return buf
@@ -1774,7 +1820,7 @@ fbo.attach = function(tex_or_rbo, target, color_unit) {
 		let tex = tex_or_rbo
 		gl.framebufferTexture2D(this.gl_target(), gl_attach, gl.TEXTURE_2D, tex, 0)
 	} else
-		assert(false, 'Renderbuffer or Texture expected')
+		assert(false, 'rbo or texture expected')
 
 	attr(this, 'attachments')[target + color_unit] = tex_or_rbo
 
@@ -1803,7 +1849,7 @@ fbo.clear_color = function(color_unit, r, g, b, a) {
 		_u[0] = r
 		gl.clearBufferuiv(gl.COLOR, color_unit, _u)
 	} else {
-		assert(false, 'clear_color() NYI for {0} format', tex.format)
+		assert(false, 'NYI: {0} texture', tex.format)
 	}
 }
 

@@ -21,8 +21,8 @@ gl.module('globals', `
 		mat4 view;
 		mat4 proj;
 		mat4 view_proj;
-		vec2 view_size;
 		vec3 view_pos;
+		vec2 view_size;
 
 		vec3 sunlight_pos;
 		vec3 sunlight_color;
@@ -158,7 +158,6 @@ gl.scene_renderer = function(r) {
 	r.background_color = r.background_color || v4(1, 1, 1, 1)
 	r.sunlight_dir     = r.sunlight_dir || v3(0, 1, 0)
 	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
-	r.diffuse_color    = r.diffuse_color || v3(1, 1, 1)
 	r.ambient_strength = or(r.ambient_strength, 0.1)
 
 	let globals_ubo = gl.faces_program().ubo('globals')
@@ -210,8 +209,6 @@ gl.scene_renderer = function(r) {
 
 		globals_ubo.upload()
 
-		gl.set_uni('diffuse_color', r.diffuse_color)
-
 		if (r.enable_shadows) {
 
 			let sunlight_view = mat4()
@@ -220,7 +217,9 @@ gl.scene_renderer = function(r) {
 				.look_at(r.sunlight_dir, v3.up)
 				.invert()
 			mat4.mul(r.sdm_proj, sunlight_view, sdm_view_proj)
-			gl.set_uni('sdm_view_proj', sdm_view_proj)
+			sdm_prog.use()
+			sdm_prog.set_uni('sdm_view_proj', sdm_view_proj)
+			sdm_prog.unuse()
 
 			let sdm_res1 = or(r.shadow_map_resolution, 1024 * 4)
 			if (sdm_res1 != sdm_res) {
@@ -414,10 +413,10 @@ gl.faces_renderer = function() {
 		specular_strength: .2,
 		shininess: 5,
 		polygon_offset: .0001,
+		diffuse_color: 0xffffff,
 	}
 
 	let prog = gl.faces_program()
-
 	let vao = prog.vao()
 
 	let draw_ranges = []
@@ -509,7 +508,6 @@ gl.faces_renderer = function() {
 			vao.set_index(index_dab.buffer)
 			vao.set_attr('model'  , e.model)
 			vao.set_attr('inst_id', e.inst_id)
-			vao.set_uni('diffuse_map', null)
 			gl.draw_triangles()
 			vao.unuse()
 		} else {
@@ -518,10 +516,10 @@ gl.faces_renderer = function() {
 			vao.set_index(index_dab.buffer)
 			vao.set_attr('model', e.model)
 			for (let [mat, offset, len] of draw_ranges) {
-				vao.set_uni('specular_strength', or(mat.specular_strength, e.specular_strength))
-				vao.set_uni('shininess'        , 1 << or(mat.shininess, e.shininess)) // keep this a pow2.
-				vao.set_uni('diffuse_color', mat.diffuse_color)
-				vao.set_uni('diffuse_map'  , mat.diffuse_map)
+				prog.set_uni('specular_strength' , or(mat.specular_strength, e.specular_strength))
+				prog.set_uni('shininess'         , 1 << or(mat.shininess, e.shininess)) // keep this a pow2.
+				prog.set_uni('diffuse_color'     , or(mat.diffuse_color, e.diffuse_color))
+				prog.set_uni('diffuse_map'       , mat.diffuse_map)
 				gl.draw_triangles(offset, len)
 			}
 			vao.unuse()
@@ -582,7 +580,7 @@ gl.solid_lines_renderer = function() {
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
 		vao.set_index(e.index)
-		vao.set_uni('base_color', e.base_color)
+		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_lines()
 		vao.unuse()
@@ -641,11 +639,11 @@ gl.points_renderer = function(e) {
 		if (!e.index && has_index !== false)
 			return
 		vao.use()
-		vao.set_uni('point_size', e.point_size)
+		prog.set_uni('point_size', e.point_size)
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
 		vao.set_index(e.index)
-		vao.set_uni('base_color', e.base_color)
+		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_points()
 		vao.unuse()
@@ -718,12 +716,12 @@ gl.dashed_lines_renderer = function(e) {
 		if (!e.index && has_index !== false)
 			return
 		vao.use()
-		vao.set_uni('dash', e.dash)
-		vao.set_uni('gap', e.gap)
+		prog.set_uni('dash', e.dash)
+		prog.set_uni('gap', e.gap)
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
 		vao.set_index(e.index)
-		vao.set_uni('base_color', e.base_color)
+		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_lines()
 		vao.unuse()
@@ -894,7 +892,7 @@ gl.fat_lines_renderer = function(e) {
 		vao.set_attrs(davb)
 		vao.set_attr('model', e.model)
 		vao.set_index(ib.buffer)
-		vao.set_uni('base_color', e.base_color)
+		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_triangles()
 		vao.unuse()
@@ -991,7 +989,6 @@ gl.skybox = function(opt) {
 		uniform vec3 horizon_color;
 		uniform vec3 ground_color;
 		uniform float exponent;
-		uniform bool use_difuse_cube_map;
 
 		uniform samplerCube diffuse_cube_map;
 
@@ -1028,16 +1025,16 @@ gl.skybox = function(opt) {
 
 	e.update = function() {
 
-		vao.set_uni('sky_color', e.sky_color || 0xccddff)
-		vao.set_uni('horizon_color', e.horizon_color || 0xffffff)
-		vao.set_uni('ground_color', e.ground_color || 0xe0dddd)
-		vao.set_uni('exponent', or(e.exponent, 1))
+		prog.use()
+		prog.set_uni('sky_color'     , e.sky_color || 0xccddff)
+		prog.set_uni('horizon_color' , e.horizon_color || 0xffffff)
+		prog.set_uni('ground_color'  , e.ground_color || 0xe0dddd)
+		prog.set_uni('exponent'      , or(e.exponent, 1))
 
 		let n_loaded
 		let on_load = function() {
 			n_loaded++
 			if (n_loaded == 6) {
-				vao.set_uni('use_difuse_cube_map', true)
 				e.fire('load')
 			}
 		}
@@ -1046,8 +1043,7 @@ gl.skybox = function(opt) {
 			cube_map_tex = cube_map_tex || gl.texture('cubemap')
 			cube_map_tex.set_wrap('clamp', 'clamp')
 			cube_map_tex.set_filter('linear', 'linear')
-			vao.set_uni('diffuse_cube_map', cube_map_tex)
-			vao.set_uni('use_difuse_cube_map', false)
+			prog.set_uni('diffuse_cube_map', cube_map_tex)
 			n_loaded = 0
 			for (let side in e.images) {
 				let img = e.images[side]
@@ -1057,6 +1053,7 @@ gl.skybox = function(opt) {
 					cube_map_tex.set_image(image, 1, on_load)
 			}
 		}
+		prog.unuse()
 
 	}
 
@@ -1173,7 +1170,7 @@ gl.shadow_map_quad = function(tex, imat) {
 	let index = gl.index_buffer([0, 1, 2, 0, 2, 3])
 	let model = gl.mat4_instance_buffer(e.model)
 
-	let pr = gl.program('texture_quad', `
+	let prog = gl.program('texture_quad', `
 		#include mesh.vs
 		void main() {
 			v_uv = uv;
@@ -1188,14 +1185,16 @@ gl.shadow_map_quad = function(tex, imat) {
 		}
 	`)
 
-	let vao = pr.vao()
+	let vao = prog.vao()
 	vao.bind()
 	vao.set_attr('pos', pos)
 	vao.set_attr('uv', uv)
 	vao.set_attr('model', model)
 	vao.set_index(index)
-	vao.set_uni('diffuse_map', tex)
 	vao.unbind()
+	prog.use()
+	prog.set_uni('diffuse_map', tex)
+	prog.unuse()
 
 	e.update = function() {
 		model.upload(e.model, 0)

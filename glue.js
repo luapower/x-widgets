@@ -72,7 +72,7 @@
 		attr(t, k[, cons])
 		memoize(f)
 	typed arrays:
-		[dyn_][f32|i8|u8|i16|u16|i32|u32]arr(arr|[...]|capacity, [n_components])
+		[dyn_][f32|i8|u8|i16|u16|i32|u32]arr(arr|[...]|capacity, [nc])
 			set(in_arr, [offset=0], [len], [in_offset=0])
 			get(out_arr, [offset=0], [len], [out_offset=0]) -> out_arr
 			invalidate([offset=0], [len])
@@ -469,10 +469,13 @@ function index_arr_type(arg) {
 
 class dyn_arr_class {
 
-	constructor(arr_type, data_or_cap, n_components) {
+	// NOTE: `nc` is "number of components" useful for storing compound values
+	// without having to compute offsets and lengths manually.
+
+	constructor(arr_type, data_or_cap, nc) {
 		this.arr_type = arr_type
-		this.n_components = n_components || 1
-		this.inv_n_components = 1 / this.n_components
+		this.nc = nc || 1
+		this.inv_nc = 1 / this.nc
 		this.array = null
 		this.invalid = false
 		this.invalid_offset1 = null
@@ -484,9 +487,9 @@ class dyn_arr_class {
 				this._grow(cap, false)
 			} else if (data_or_cap) {
 				let data = data_or_cap
-				let data_len = data.length * this.inv_n_components
+				let data_len = data.length * this.inv_nc
 				assert(data_len == floor(data_len),
-					'source array length not multiple of {0}', this.n_components)
+					'source array length not multiple of {0}', this.nc)
 				this.array = data
 				this.array.len = data_len
 			}
@@ -499,8 +502,8 @@ class dyn_arr_class {
 		if (this.capacity < cap) {
 			if (pow2 !== false)
 				cap = nextpow2(cap)
-			let array = new this.arr_type(cap * this.n_components)
-			array.n_components = this.n_components
+			let array = new this.arr_type(cap * this.nc)
+			array.nc = this.nc
 			array.len = this.len
 			if (this.array)
 				array.set(this.array)
@@ -516,9 +519,9 @@ class dyn_arr_class {
 		if (this.array) {
 			let this_len = this.len
 			let array1 = new arr_type1(this.capacity)
-			for (let i = 0, n = this_len * this.n_components; i < n; i++)
+			for (let i = 0, n = this_len * this.nc; i < n; i++)
 				array1[i] = this.array[i]
-			array1.n_components = this.n_components
+			array1.nc = this.nc
 			array1.len = this_len
 			this.array = array1
 		}
@@ -530,12 +533,12 @@ class dyn_arr_class {
 
 		// check/clamp/slice source.
 		data_offset = data_offset || 0
-		let data_len = data.length * this.inv_n_components
-		assert(data_len == floor(data_len), 'source array length not multiple of {0}', this.n_components)
+		let data_len = data.length * this.inv_nc
+		assert(data_len == floor(data_len), 'source array length not multiple of {0}', this.nc)
 		assert(data_offset >= 0 && data_offset <= data_len, 'source offset out of range')
 		len = clamp(or(len, 1/0), 0, data_len - data_offset)
 		if (data_offset != 0 || len != data_len)
-			data = data.subarray(data_offset * this.n_components, (data_offset + len) * this.n_components)
+			data = data.subarray(data_offset * this.nc, (data_offset + len) * this.nc)
 
 		offset = offset || 0
 		assert(offset >= 0, 'offset out of range')
@@ -557,7 +560,7 @@ class dyn_arr_class {
 		len = clamp(or(len, 1/0), 0, this_len - offset)
 		let data = this.array
 		if (offset != 0 || len != this_len)
-			data = data.subarray(offset * this.n_components, (offset + len) * this.n_components)
+			data = data.subarray(offset * this.nc, (offset + len) * this.nc)
 
 		if (data)
 			out.set(data, out_offset)
@@ -597,7 +600,7 @@ class dyn_arr_class {
 }
 
 property(dyn_arr_class, 'capacity',
-	function() { return this.array ? this.array.length * this.inv_n_components : 0 },
+	function() { return this.array ? this.array.length * this.inv_nc : 0 },
 )
 
 property(dyn_arr_class, 'len',
@@ -605,16 +608,16 @@ property(dyn_arr_class, 'len',
 	function(len) { this._set_len(len) }
 )
 
-function dyn_arr(arr_type, data_or_cap, n_components) {
-	return new dyn_arr_class(arr_type, data_or_cap, n_components)
+function dyn_arr(arr_type, data_or_cap, nc) {
+	return new dyn_arr_class(arr_type, data_or_cap, nc)
 }
 
 dyn_arr.index_arr_type = index_arr_type
 
 {
 	let dyn_arr_func = function(arr_type) {
-		return function(data_or_cap, n_components) {
-			return new dyn_arr_class(arr_type, data_or_cap, n_components)
+		return function(data_or_cap, nc) {
+			return new dyn_arr_class(arr_type, data_or_cap, nc)
 		}
 	}
 	dyn_f32arr = dyn_arr_func(Float32Array)

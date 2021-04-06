@@ -12,6 +12,7 @@
 		add adds sub subs negate mul muls div divs min max dot
 		distance[2]_to
 		transform(mat3) rotate
+		origin zero
 
 	v3 [x, y, z]
 		* add sub mul div cross zero one
@@ -21,6 +22,7 @@
 		add adds sub subs negate mul muls div divs min max dot cross
 		angle_to distance[2]_to
 		transform(mat3|mat4|quaternion) rotate
+		origin zero one up right x|y|z_axis black white
 
 	v4 [x, y, z, w]
 		* add sub mul div
@@ -28,6 +30,7 @@
 		len[2] set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
 		transform(mat4)
+		origin one black white
 
 	mat3, mat3f32 [e11, e21, e31, e12, e22, e32, e13, e23, e33]
 		* mul
@@ -661,6 +664,8 @@ v3.right  = v3(1, 0, 0)
 v3.x_axis = v3.right
 v3.y_axis = v3.up
 v3.z_axis = v3(0, 0, 1)
+v3.black  = v3.zero
+v3.white  = v3.one
 
 // temporaries for plane, triangle3 and line3 methods.
 let _v0 = v3()
@@ -948,6 +953,9 @@ v4.div = function div(a, v, out) {
 }
 
 v4.origin = v4()
+v4.one = v4(1, 1, 1)
+v4.black = v4()
+v4.white = v4.one
 
 // mat3 ----------------------------------------------------------------------
 

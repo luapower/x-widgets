@@ -576,7 +576,6 @@ model3_component = function(e) {
 			update_face_lis(face)
 		face.mat_inst = material_instance(material)
 		face.mat_inst.push(face)
-		faces.push(face)
 		if (DEBUG)
 			log('add_face', face.id, face.join(','), face.lis.join(','), material.id)
 		return face
@@ -590,6 +589,7 @@ model3_component = function(e) {
 			unref_point(pi)
 		face.length = 0
 		face.lis.length = 0
+		face.mat_inst.remove_value(face)
 		face.mat_inst = null
 		if (DEBUG)
 			log('remove_face', face.index)

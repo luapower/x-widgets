@@ -34,17 +34,17 @@ component('x-modeleditor', function(e) {
 
 	// props ------------------------------------------------------------------
 
-	let skybox = gl.skybox({
-		images: {
-			posx: 'skybox/posx.jpg',
-			negx: 'skybox/negx.jpg',
-			posy: 'skybox/posy.jpg',
-			negy: 'skybox/negy.jpg',
-			posz: 'skybox/posz.jpg',
-			negz: 'skybox/negz.jpg',
-		},
-	})
-	skybox.on('load', render)
+	//let skybox = gl.skybox({
+	//	images: {
+	//		posx: 'skybox/posx.jpg',
+	//		negx: 'skybox/negx.jpg',
+	//		posy: 'skybox/posy.jpg',
+	//		negy: 'skybox/negy.jpg',
+	//		posz: 'skybox/posz.jpg',
+	//		negz: 'skybox/negz.jpg',
+	//	},
+	//})
+	//skybox.on('load', render)
 
 	let axes_rr = gl.axes_renderer()
 	axes_rr.add_instance()
@@ -121,7 +121,7 @@ component('x-modeleditor', function(e) {
 	function update_camera() {
 		camera.update()
 		fire_pointermove()
-		skybox.update_view(camera.pos)
+		//skybox.update_view(camera.pos)
 		update_dot_positions()
 		update_sunlight_pos()
 		update_renderer()
@@ -135,13 +135,13 @@ component('x-modeleditor', function(e) {
 	})
 
 	function draw(prog) {
-		//gl.start_trace()
+		gl.start_trace()
 		let t0 = time()
-		skybox.draw(prog)
+		//skybox.draw(prog)
 		axes_rr.draw(prog)
 		//ground_rr.draw(prog)
 		e.model.draw(prog)
-		//print(gl.stop_trace())
+		print(gl.stop_trace())
 		helper_fat_lines_rr.draw(prog)
 		helper_dashed_lines_rr.draw(prog)
 	}
