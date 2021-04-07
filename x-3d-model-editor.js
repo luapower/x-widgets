@@ -34,17 +34,17 @@ component('x-modeleditor', function(e) {
 
 	// props ------------------------------------------------------------------
 
-	//let skybox = gl.skybox({
-	//	images: {
-	//		posx: 'skybox/posx.jpg',
-	//		negx: 'skybox/negx.jpg',
-	//		posy: 'skybox/posy.jpg',
-	//		negy: 'skybox/negy.jpg',
-	//		posz: 'skybox/posz.jpg',
-	//		negz: 'skybox/negz.jpg',
-	//	},
-	//})
-	//skybox.on('load', render)
+	let skybox = gl.skybox({
+		images: {
+			posx: 'skybox/posx.jpg',
+			negx: 'skybox/negx.jpg',
+			posy: 'skybox/posy.jpg',
+			negy: 'skybox/negy.jpg',
+			posz: 'skybox/posz.jpg',
+			negz: 'skybox/negz.jpg',
+		},
+	})
+	skybox.on('load', render)
 
 	let axes_rr = gl.axes_renderer()
 	axes_rr.add_instance()
@@ -121,7 +121,7 @@ component('x-modeleditor', function(e) {
 	function update_camera() {
 		camera.update()
 		fire_pointermove()
-		//skybox.update_view(camera.pos)
+		skybox.update_view(camera.pos)
 		update_dot_positions()
 		update_sunlight_pos()
 		update_renderer()
@@ -135,13 +135,13 @@ component('x-modeleditor', function(e) {
 	})
 
 	function draw(prog) {
-		gl.start_trace()
+		//gl.start_trace()
 		let t0 = time()
-		//skybox.draw(prog)
+		skybox.draw(prog)
 		axes_rr.draw(prog)
 		//ground_rr.draw(prog)
 		e.model.draw(prog)
-		print(gl.stop_trace())
+		//print(gl.stop_trace())
 		helper_fat_lines_rr.draw(prog)
 		helper_dashed_lines_rr.draw(prog)
 	}
@@ -635,6 +635,41 @@ component('x-modeleditor', function(e) {
 			}
 			update_camera()
 		})
+	}
+
+	{
+	let hit_point
+
+	tools.orbit.keydown = function(key) {
+		hit_point = hit_point || v3().set(mouse.hit_point)
+		let x = key == 'ArrowLeft' && -1 || key == 'ArrowRight' && 1 || 0
+		let y = key == 'ArrowUp'   && -1 || key == 'ArrowDown'  && 1 || 0
+		if (!shift && ctrl && y) {
+			camera.dolly(hit_point, 1 + 0.4 * (key == 'ArrowDown' ? 1 : -1))
+			update_camera()
+			return false
+		}
+		if (!shift && !ctrl && (x || y)) {
+			let dx = -50 * x
+			let dy = -50 * y
+			camera.pan(hit_point, mouse.x, mouse.y, mouse.x + dx, mouse.y + dy)
+			update_camera()
+			return false
+		}
+		if (shift && !ctrl && (x || y)) {
+			let dx = x / -10
+			let dy = y / -10
+			camera.orbit(hit_point, dy, dx, 0)
+			update_camera()
+			return false
+		}
+	}
+
+	tools.orbit.keyup = function(key) {
+		if (key != 'Shift' && key != 'Control' && key != 'Alt')
+			hit_point = null
+	}
+
 	}
 
 	// current point hit-testing and snapping ---------------------------------
@@ -1240,8 +1275,8 @@ component('x-modeleditor', function(e) {
 
 	e.on('keyup', function(key, shift, ctrl, alt, ev) {
 		update_keys(ev)
-		if (tool.keydown)
-			if (tool.keydown(key) === false)
+		if (tool.keyup)
+			if (tool.keyup(key) === false)
 				return false
 	})
 

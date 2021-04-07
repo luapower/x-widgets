@@ -110,13 +110,13 @@ let gl = WebGL2RenderingContext.prototype
 // debugging -----------------------------------------------------------------
 
 let methods = {}
-let constant_names = {}
+let C = {}
 for (let name in gl) {
 	let d = Object.getOwnPropertyDescriptor(gl, name)
 	if (isfunc(d.value) && name != 'getError')
 		methods[name] = d.value
 	else if (isnum(d.value))
-		constant_names[d.value] = name
+		C[d.value] = name
 }
 
 function count_call(name, args, t) {
@@ -136,7 +136,7 @@ gl.wrap_calls = function() {
 				count_call(name, args, this._trace)
 			let ret = f.call(this, ...args)
 			let err = this.getError()
-			assert(!err, '{0}: {1}', name, constant_names[err])
+			assert(!err, '{0}: {1}', name, C[err])
 			return ret
 		}
 	}
@@ -248,36 +248,42 @@ gl.shader = function(type, name, gl_type, code) {
 
 let prog = WebGLProgram.prototype
 
-let btinfo_by_gl_type = {}
-let btinfo_by_type = {}
-for (let [gl_type, type, arr_type, nc, val_gl_type] of [
-	[gl.FLOAT         , 'f32' , f32arr,  1],
-	[gl.UNSIGNED_BYTE , 'u8'  , u8arr ,  1],
-	[gl.UNSIGNED_SHORT, 'u16' , u16arr,  1],
-	[gl.UNSIGNED_INT  , 'u32' , u32arr,  1],
-	[gl.BYTE          , 'i8'  , i8arr ,  1],
-	[gl.SHORT         , 'i16' , i16arr,  1],
-	[gl.INT           , 'i32' , i32arr,  1],
-	[gl.FLOAT_VEC2    , 'v2'  , f32arr,  2, gl.FLOAT],
-	[gl.FLOAT_VEC3    , 'v3'  , f32arr,  3, gl.FLOAT],
-	[gl.FLOAT_VEC4    , 'v4'  , f32arr,  4, gl.FLOAT],
-	[gl.FLOAT_MAT3    , 'mat3', f32arr,  9, gl.FLOAT],
-	[gl.FLOAT_MAT4    , 'mat4', f32arr, 16, gl.FLOAT],
+let bt_by_gl_type = {}
+let bt_by_type = {}
+let bt_by_arr_type = map()
+for (let [gl_type, type, arr_type, nc, val_gl_type, nloc] of [
+	[gl.FLOAT         , 'f32' , f32arr,  1, null    , 1],
+	[gl.UNSIGNED_BYTE , 'u8'  , u8arr ,  1, null    , 1],
+	[gl.UNSIGNED_SHORT, 'u16' , u16arr,  1, null    , 1],
+	[gl.UNSIGNED_INT  , 'u32' , u32arr,  1, null    , 1],
+	[gl.BYTE          , 'i8'  , i8arr ,  1, null    , 1],
+	[gl.SHORT         , 'i16' , i16arr,  1, null    , 1],
+	[gl.INT           , 'i32' , i32arr,  1, null    , 1],
+	[gl.FLOAT_VEC2    , 'v2'  , f32arr,  2, gl.FLOAT, 1],
+	[gl.FLOAT_VEC3    , 'v3'  , f32arr,  3, gl.FLOAT, 1],
+	[gl.FLOAT_VEC4    , 'v4'  , f32arr,  4, gl.FLOAT, 1],
+	[gl.FLOAT_MAT3    , 'mat3', f32arr,  9, gl.FLOAT, 3],
+	[gl.FLOAT_MAT4    , 'mat4', f32arr, 16, gl.FLOAT, 4],
 ]) {
-	let info = {
+	let bt = {
 		gl_type: gl_type,
-		val_gl_type: gl_type,
+		val_gl_type: or(val_gl_type, gl_type),
 		type: type,
 		arr_type: arr_type,
 		nc: nc,
+		nloc: nloc,
 	}
-	btinfo_by_gl_type[gl_type] = info
-	btinfo_by_type[type] = info
+	bt_by_gl_type[gl_type] = bt
+	bt_by_type[type] = bt
+	if (nc == 1)
+		bt_by_arr_type.set(arr_type, bt)
 }
 
-function btinfo(type) {
-	assert(type, 'type required')
-	return assert(btinfo_by_type[type], 'unknown type {1}', type)
+function tex_type(gl_type) {
+	return (
+			gl_type == gl.SAMPLER_2D   && '2d'
+		|| gl_type == gl.SAMPLER_CUBE && 'cubemap'
+	)
 }
 
 gl.program = function(name, vs_code, fs_code) {
@@ -312,57 +318,76 @@ gl.program = function(name, vs_code, fs_code) {
 
 	// uniforms RTTI.
 	pr.uniform_count = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS)
-	pr.uniform_info = {} // {name->info}
-	let u_info_by_index = {} // {uniform_index->info}
+	pr.uniforms = {} // {name->u}
+	let u_by_index = [] // [index->u]
+	let tex_unit_counts = {'2d': 0, 'cubemap': 0}
+	let n_cubemap = 0
 	for (let i = 0, n = pr.uniform_count; i < n; i++) {
-		let info = gl.getActiveUniform(pr, i)
-		pr.uniform_info[info.name] = info
-		u_info_by_index[i] = info
-		info.location = gl.getUniformLocation(pr, info.name)
-		if (info.location)
-			info.location.name = info.name
-	}
-
-	// UBO RTTI.
-	pr.uniform_block_count = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORM_BLOCKS)
-	pr.uniform_blocks = {} // {name->info}
-	for (let ubi = 0, ubn = pr.uniform_block_count; ubi < ubn; ubi++) {
-		let ub_name = gl.getActiveUniformBlockName(pr, ubi)
-		let ub_info = {name: ub_name, fields: {}, index: ubi}
-		pr.uniform_blocks[ub_name] = ub_info
-		ub_info.size = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_DATA_SIZE)
-		let uis = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES)
-		let ubos = gl.getActiveUniforms(pr, uis, gl.UNIFORM_OFFSET)
-		for (let i = 0, n = uis.length; i < n; i++) {
-			let u_info = u_info_by_index[uis[i]]
-			u_info.ub_offset = ubos[i]
-			ub_info.fields[u_info.name] = u_info
+		let u = gl.getActiveUniform(pr, i)
+		pr.uniforms[u.name] = u
+		u_by_index[i] = u
+		u.location = gl.getUniformLocation(pr, u.name)
+		if (u.location) { // UBO fields are listed too but don't get a location.
+			u.location.name = u.name
+			let tt = tex_type(u.type)
+			if (tt) {
+				u.tex_unit = tex_unit_counts[tt]++
+				u.tex_type = tt
+			}
 		}
 	}
 
-	// attrs RTTI.
-	pr.attr_info = {}
+	// UBs RTTI.
+	pr.uniform_block_count = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORM_BLOCKS)
+	pr.uniform_blocks = {} // {name->ub}
+	for (let ubi = 0, ubn = pr.uniform_block_count; ubi < ubn; ubi++) {
+		let ub_name = gl.getActiveUniformBlockName(pr, ubi)
+		let ub = {
+			name: ub_name,
+			fields: {},
+			index: ubi,
+		}
+		pr.uniform_blocks[ub_name] = ub
+		ub.size = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_DATA_SIZE)
+		let uis = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES)
+		let ubos = gl.getActiveUniforms(pr, uis, gl.UNIFORM_OFFSET)
+		for (let i = 0, n = uis.length; i < n; i++) {
+			let u = u_by_index[uis[i]]
+			u.ub_offset = ubos[i]
+			ub.fields[u.name] = u
+			let tt = tex_type(u.type)
+			if (tt) {
+				u.tex_unit = tex_unit_counts[tt]++
+				u.tex_type = tt
+			}
+		}
+	}
+
+	// attributes RTTI.
+	pr.attrs = {} // {name->a}
 	pr.attr_count = gl.getProgramParameter(pr, gl.ACTIVE_ATTRIBUTES)
 	for (let i = 0, n = pr.attr_count; i < n; i++) {
-		let ainfo = gl.getActiveAttrib(pr, i)
-		let name = ainfo.name
-		let size = ainfo.size
-		let gl_type = ainfo.type
+		let info = gl.getActiveAttrib(pr, i)
+		let name = info.name
+		let size = info.size
+		let gl_type = info.type
 		let location = gl.getAttribLocation(pr, name)
-		let info = assign({
+		let a = assign({
 				name: name,
 				size: size,
 				location: location,
 				program: pr,
-			}, btinfo_by_gl_type[gl_type])
-		pr.attr_info[name] = info
-		pr.attr_info[location] = info
+			}, bt_by_gl_type[gl_type])
+		pr.attrs[name] = a
+		pr.attrs[location] = a
 	}
 
 	pr.gl = gl
 	pr.vs = vs
 	pr.fs = fs
 	pr.name = name
+	pr.ubo_bindings = {}
+
 	gl.programs[name] = pr
 
 	return pr
@@ -370,19 +395,28 @@ gl.program = function(name, vs_code, fs_code) {
 
 prog.use = function() {
 	let gl = this.gl
-	if (gl.active_program != this) {
 
-		gl.useProgram(this)
-		gl.active_program = this
+	if (gl.active_program == this)
+		return this
 
-		if (gl.ubos) { // bind global UBOs matching on name.
-			for (let ub_name in this.uniform_blocks) {
-				let ubo = gl.ubos[ub_name]
-				this.bind_ubo(ub_name, ubo.slot)
-			}
+	gl.useProgram(this)
+	gl.active_program = this
+
+	// bind global UBOs matching on name.
+	if (gl.ubos) {
+		for (let ub_name in this.uniform_blocks) {
+			let ubo = gl.ubos[ub_name]
+			this.bind_ubo(ub_name, ubo.slot)
 		}
-
 	}
+
+	// set or clear texture units to previously set values.
+	for (let name in this.uniforms) {
+		let u = this.uniforms[name]
+		if (u.tex_type)
+			gl.bind_texture(u.tex_type, u.value, u.tex_unit)
+	}
+
 	return this
 }
 
@@ -417,19 +451,19 @@ gl.vao = function(programs) {
 	let vao = gl.createVertexArray()
 	vao.gl = gl
 	vao.programs = assert(programs, 'programs required')
-	vao.attr_info = {}
+	vao.attrs = {}
 	for (let prog of programs) {
-		for (let name of prog.attr_info) {
-			let info = prog.attr_info[name]
-			let info0 = vao.attr_info[name]
-			if (!info0) {
-				info.program = prog
-				vao.attr_info[name] = info
+		for (let name of prog.attrs) {
+			let a = prog.attrs[name]
+			let a0 = vao.attrs[name]
+			if (!a0) {
+				a.program = prog
+				vao.attrs[name] = a
 			} else {
-				assert(info0.type == info.type, 'type mismatch {0} from {1} vs {2} from {3}',
-					info.type, prog, info0.type, info0.program.name)
-				assert(info0.location == info.location, 'location mismatch {0} from {1} vs {2} from {3}',
-					info.location, prog, info0.location, info0.program.name)
+				assert(a0.type == a.type, 'type mismatch {0} from {1} vs {2} from {3}',
+					a.type, prog, a0.type, a0.program.name)
+				assert(a0.location == a.location, 'location mismatch {0} from {1} vs {2} from {3}',
+					a.location, prog, a0.location, a0.program.name)
 			}
 		}
 	}
@@ -442,7 +476,9 @@ prog.vao = function() {
 	let vao = gl.createVertexArray()
 	vao.gl = gl
 	vao.program = this
-	vao.attr_info = this.attr_info
+	vao.attrs = this.attrs
+	vao.config  = [] // {loc->true}
+	vao.buffers = [] // {loc->buffer}
 	if (!this.vaos)
 		this.vaos = []
 	this.vaos.push(vao)
@@ -488,12 +524,12 @@ vao.set_attr = function(name, b) {
 	let bound = gl.active_vao == this
 	assert(bound || !gl.active_vao)
 
-	let info = this.attr_info[name]
-	if (info == null)
+	let a = this.attrs[name]
+	if (a == null)
 		return this
 
-	let buffers = attr(this, 'buffers')
-	let b0 = buffers[name]
+	let loc = a.location
+	let b0 = this.buffers[loc]
 	if (b0 == b)
 		return this
 
@@ -502,10 +538,8 @@ vao.set_attr = function(name, b) {
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, b)
 
-	let loc = info.location
-	let gl_type = or(info.val_gl_type, info.gl_type)
-	let nc = info.nc
-	let nloc = min(1, nc >> 2)
+	let nc = a.nc
+	let nloc = a.nloc
 
 	if (!b != !b0) {
 		for (let i = 0; i < nloc; i++)
@@ -515,18 +549,23 @@ vao.set_attr = function(name, b) {
 				gl.disableVertexAttribArray(loc+i)
 	}
 
-	let config = attr(this, 'config')
-	if (b && !config[name]) {
-		if (info.type == 'i32' || info.type == 'u32') {
-			gl.vertexAttribIPointer(loc, nc, gl_type, 0, 0)
-		} else if (nloc > 1) {
-			let sz = nloc * 4
-			for (let i = 0; i < nloc; i++)
-				gl.vertexAttribPointer(loc+i, nc, gl_type, false, n * sz, i * sz)
+
+	if (b && this.config[loc] != b.type) {
+		assert(b.nc == nc && b.nloc == nloc,
+			'type mismatch {0}, expected {1} for {2}', b.type, a.type, name)
+		if (b.type == 'i32' || b.type == 'u32') {
+			gl.vertexAttribIPointer(loc, nc, b.val_gl_type, 0, 0)
+		} else if (nloc == 1) {
+			gl.vertexAttribPointer(loc, nc, b.val_gl_type, false, 0, 0)
 		} else {
-			gl.vertexAttribPointer(loc, nc, gl_type, false, 0, 0)
+			let nc_per_loc = nc / nloc
+			let stride = nc * 4
+			for (let i = 0; i < nloc; i++) {
+				let offset = i * nc_per_loc * 4
+				gl.vertexAttribPointer(loc+i, nc_per_loc, b.val_gl_type, false, stride, offset)
+			}
 		}
-		config[name] = true
+		this.config[loc] = b.type
 	}
 
 	if ((b && b.inst_div || 0) != (b0 && b0.inst_div || 0))
@@ -536,7 +575,7 @@ vao.set_attr = function(name, b) {
 	if (!bound)
 		this.unbind()
 
-	buffers[name] = b
+	this.buffers[loc] = b
 
 	return this
 }
@@ -550,22 +589,18 @@ vao.set_attrs = function(davb) {
 property(vao, 'vertex_count', function() {
 	let min_len
 	if (this.buffers)
-		for (let name in this.buffers) {
-			let b = this.buffers[name]
-			if (!b.inst_div)
+		for (let b of this.buffers)
+			if (b && !b.inst_div)
 				min_len = min(or(min_len, 1/0), b.len)
-		}
 	return min_len || 0
 })
 
 property(vao, 'instance_count', function() {
 	let min_len
 	if (this.buffers)
-		for (let name in this.buffers) {
-			let b = this.buffers[name]
-			if (b.inst_div)
+		for (let b of this.buffers)
+			if (b && b.inst_div)
 				min_len = min(or(min_len, 1/0), b.len)
-		}
 	return min_len || 0
 })
 
@@ -612,6 +647,13 @@ gl.vao_set = function() {
 
 // VBOs ----------------------------------------------------------------------
 
+function get_bt(type) {
+	assert(type, 'type required')
+	if (isobject(type)) // custom type
+		return type
+	return assert(bt_by_type[type], 'unknown type {1}', type)
+}
+
 function check_arr_type(arr, arr_type) {
 	if (!arr_type)
 		return arr.constructor
@@ -628,9 +670,8 @@ function check_arr_nc(arr, nc) {
 }
 
 function check_arr_len(nc, arr, len, arr_offset) {
-	if (len == null)
-		if (arr.len != null) // dyn_arr
-			len = arr.len - arr_offset
+	if (len == null && arr.len != null) // dyn_arr
+		len = arr.len - arr_offset
 	if (len == null) {
 		len = arr.length / nc - arr_offset
 		assert(len == floor(len), 'array length not multiple of {0}', nc)
@@ -641,35 +682,48 @@ function check_arr_len(nc, arr, len, arr_offset) {
 gl.buffer = function(data_or_cap, type, inst_div, for_index) {
 	let gl = this
 
+	data_or_cap = data_or_cap || 0
 	inst_div = inst_div || 0
 	assert(inst_div == 0 || inst_div == 1, 'NYI: inst_div != 1')
-	let info, cap, len, arg
-	if (isnum(data_or_cap)) { // capacity, type, ...
-		info = btinfo(type)
+
+	let bt, cap, len
+	if (isnum(data_or_cap)) { // [capacity], [type], ...
+		bt = get_bt(type || 'u8')
 		cap = data_or_cap
 		len = 0
-		arg = cap * info.nc * info.arr_type.BYTES_PER_ELEMENT
-	} else if (isarray(data_or_cap)) { // [elements, ...], type, ...
-		info = btinfo(type)
-		cap = check_arr_len(info.nc, data_or_cap, null, 0)
+		data_or_cap = cap * bt.nc * bt.arr_type.BYTES_PER_ELEMENT
+	} else if (isarray(data_or_cap)) { // [element1, ...], [type], ...
+		type = type || data_or_cap.type // take the hint from the array.
+		bt = get_bt(type)
+		cap = check_arr_len(bt.nc, data_or_cap, null, 0)
 		len = cap
-		arg = new info.arr_type(arg)
+		data_or_cap = new bt.arr_type(data_or_cap)
 	} else { // arr, [type], ...
-		check_arr_type(arg, type)
-		arg = data_or_cap
-		nc = check_arr_nc(arg, nc)
+		type = type || data_or_cap.type // take the hint from the array.
+		if (type) {
+			bt = get_bt(type)
+			check_arr_type(data_or_cap, bt.arr_type)
+			check_arr_nc(data_or_cap, bt.nc)
+		} else { // infer type
+			let arr_type = check_arr_type(data_or_cap)
+			// inferring type based on the array's `nc` would be more aking to
+			// speculation than inference, so we're not going to do that.
+			let nc = check_arr_nc(data_or_cap, 1)
+			bt = assign({}, bt_by_arr_type.get(arr_type))
+		}
+		cap = check_arr_len(bt.nc, data_or_cap, null, 0)
+		len = cap
 	}
 
 	let gl_target = for_index ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER
-
 	let b = gl.createBuffer()
 	gl.bindBuffer(gl_target, b)
-	gl.bufferData(gl_target, arg, gl.STATIC_DRAW)
+	gl.bufferData(gl_target, data_or_cap, gl.STATIC_DRAW)
 
 	b.gl = gl
 	b.capacity = cap
 	b._len = len
-	assign(b, info)
+	assign(b, bt)
 	b.for_index = for_index
 	b.inst_div = inst_div
 
@@ -684,15 +738,16 @@ property(WebGLBuffer, 'len',
 	}
 )
 
-function index_arr_type(data_or_cap, type_or_max_idx, fname) {
-	if (isstr(type_or_max_idx))
-		type_or_max_idx = assert(btinfo(type_or_max_idx, fname).arr_type)
-	return dyn_arr.index_arr_type(or(type_or_max_idx, or(data_or_cap, 0)))
+function index_bt(data_or_cap, type_or_max_idx) {
+	if (!isnum(type_or_max_idx))
+		type_or_max_idx = get_bt(type_or_max_idx || 'u8').arr_type
+	let arr_type = dyn_arr.index_arr_type(or(type_or_max_idx, or(data_or_cap, 0)))
+	return assert(bt_by_arr_type.get(arr_type))
 }
 
 gl.index_buffer = function(data_or_cap, type_or_max_idx) {
-	let arr_type = index_arr_type(data_or_cap, type_or_max_idx, 'index_buffer()')
-	return this.buffer(data_or_cap, arr_type, null, true)
+	let type = index_bt(data_or_cap, type_or_max_idx).type
+	return this.buffer(data_or_cap, type, null, true)
 }
 
 let buf = WebGLBuffer.prototype
@@ -700,12 +755,12 @@ let buf = WebGLBuffer.prototype
 buf.arr = function(data_or_len) {
 	if (data_or_len == null)
 		data_or_len = this.len
-	let nc = this.nc
 	if (isnum(data_or_len))
-		data_or_len = data_or_len * nc
+		data_or_len = data_or_len * this.nc
 	else
-		check_arr_nc(data_or_len, nc)
+		check_arr_nc(data_or_len, this.nc)
 	let arr = new this.arr_type(data_or_len)
+	arr.type = this.type // hint for buffer()
 	arr.nc = this.nc
 	return arr
 }
@@ -717,8 +772,8 @@ buf.upload = function(in_arr, offset, len, in_offset) {
 		in_arr = new this.arr_type(in_arr)
 	} else { // arr, ...
 		check_arr_type(in_arr, this.arr_type)
+		check_arr_nc(in_arr, nc)
 	}
-	check_arr_nc(in_arr, nc)
 	offset = offset || 0
 	in_offset = in_offset || 0
 	assert(offset >= 0)
@@ -726,8 +781,8 @@ buf.upload = function(in_arr, offset, len, in_offset) {
 	len = check_arr_len(nc, in_arr, len, in_offset)
 	let bpe = in_arr.BYTES_PER_ELEMENT
 
-	gl.bindBuffer(gl.COPY_READ_BUFFER, this)
-	gl.bufferSubData(gl.COPY_READ_BUFFER, offset * nc * bpe, in_arr, in_offset * nc, len * nc)
+	gl.bindBuffer(gl.COPY_WRITE_BUFFER, this)
+	gl.bufferSubData(gl.COPY_WRITE_BUFFER, offset * nc * bpe, in_arr, in_offset * nc, len * nc)
 
 	this._len = max(this._len, offset + len)
 
@@ -784,41 +839,37 @@ buf.free = function() {
 
 gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 
-	let info = btinfo(type)
 	let gl = this
-	let db = {
+	let db = assign({
 		is_dyn_buffer: true,
 		gl: gl,
-		type: type,
 		inst_div: inst_div,
 		for_index: for_index,
 		buffer: null,
-		buffer_replaced: noop,
-	}
+		buffer_replaced: noop, // event handler stub
+	}, get_bt(type))
 
-	db.grow_type = function(arg) {
-		let arr_type1 = index_arr_type(null, arg, 'grow_type()')
-		let info1 = btinfo(arr_type1)
-		assert(info1.nc == info.nc)
-		if (info1.arr_type.BYTES_PER_ELEMENT <= info.arr_type.BYTES_PER_ELEMENT)
+	db.grow_type = function(type_or_max_idx) {
+		assert(for_index, 'not an index buffer')
+		let bt = index_bt(null, type_or_max_idx)
+		if (bt.arr_type.BYTES_PER_ELEMENT <= this.arr_type.BYTES_PER_ELEMENT)
 			return
 		if (this.buffer) {
 			let a1
 			if (this.len > 0) {
 				let a0 = this.buffer.download(this.buffer.arr())
-				let a1 = new arr_type1(this.len)
-				for (let i = 0, n = a0.length * nc; i < n; i++)
+				let a1 = new bt.arr_type(this.len)
+				for (let i = 0, n = a0.length; i < n; i++)
 					a1[i] = a0[i]
 			}
 			let cap = this.buffer.capacity
 			this.buffer.free()
-			this.buffer = gl.buffer(cap, arr_type1, inst_div, for_index)
+			this.buffer = gl.buffer(cap, bt.type, inst_div, for_index)
 			if (a1)
 				this.buffer.upload(a1)
 			this.buffer_replaced(this.buffer)
 		}
-		info = info1
-		this.type = info.type
+		assign(this, bt)
 	}
 
 	db._grow = function(cap, pow2) {
@@ -827,7 +878,7 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 			if (pow2 !== false)
 				cap = nextpow2(cap)
 			let b0 = this.buffer
-			let b1 = gl.buffer(cap, arr_type, inst_div, for_index)
+			let b1 = gl.buffer(cap, type, inst_div, for_index)
 			if (b0) {
 				b1.set(b0)
 				b0.free()
@@ -857,13 +908,9 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 
 	if (data_or_cap != null) {
 		if (isnum(data_or_cap)) {
-			let cap = data_or_cap
-			db._grow(cap)
+			db._grow(data_or_cap)
 		} else {
-			let data = data_or_cap
-			let len = data.length / nc
-			assert(len == floor(len), 'source array length not multiple of {0}', nc)
-			db.buffer = gl.buffer(data, arr_type, nc, inst_div, for_index)
+			db.buffer = gl.buffer(data_or_cap, type, inst_div, for_index)
 		}
 	}
 
@@ -871,15 +918,16 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 }
 
 gl.dyn_index_buffer = function(data_or_cap, type_or_max_idx) {
-	let arr_type = index_arr_type(data_or_cap, type_or_max_idx, 'dyn_index_buffer()')
-	return this.dyn_buffer(arr_type, data_or_cap, null, false, true)
+	let type = index_bt(data_or_cap, type_or_max_idx).type
+	return this.dyn_buffer(type, data_or_cap, null, true)
 }
 
-gl.dyn_arr_buffer = function(arr_type, data_or_cap, inst_div, for_index) {
+gl.dyn_arr_buffer = function(type, data_or_cap, inst_div, for_index) {
 
+	let bt = get_bt(type)
 	let dab = {is_dyn_arr_buffer: true}
-	let db = this.dyn_buffer(arr_type, data_or_cap, inst_div, for_index)
-	let da = dyn_arr(arr_type, data_or_cap)
+	let db = this.dyn_buffer(type, data_or_cap, inst_div, for_index)
+	let da = dyn_arr(bt.arr_type, data_or_cap, bt.nc)
 
 	dab.buffer_replaced = noop
 	db.buffer_replaced = function(b) { dab.buffer_replaced(b) }
@@ -889,9 +937,9 @@ gl.dyn_arr_buffer = function(arr_type, data_or_cap, inst_div, for_index) {
 		function(len) { da.len = len }
 	)
 
-	dab.grow_type = function(arg) {
-		da.grow_type(arg)
-		db.grow_type(arg)
+	dab.grow_type = function(type_or_max_idx) {
+		da.grow_type(type_or_max_idx)
+		db.grow_type(type_or_max_idx)
 		return this
 	}
 
@@ -933,12 +981,12 @@ gl.dyn_arr_buffer = function(arr_type, data_or_cap, inst_div, for_index) {
 }
 
 gl.dyn_arr_index_buffer = function(data_or_cap, type_or_max_idx) {
-	let type = index_arr_type(data_or_cap, type_or_max_idx, 'dyn_arr_index_buffer()')
-	return this.dyn_arr_buffer(type, data_or_cap, null, false, true)
+	let type = index_bt(data_or_cap, type_or_max_idx).type
+	return this.dyn_arr_buffer(type, data_or_cap, null, true)
 }
 
 // generate gl.*_buffer() APIs.
-for (let type in btinfo_by_type) {
+for (let type in bt_by_type) {
 	gl[type+'_buffer'] = function buffer(data_or_cap) {
 		return this.buffer(data_or_cap, type)
 	}
@@ -961,22 +1009,21 @@ for (let type in btinfo_by_type) {
 
 // generate gl.*_index_buffer() APIs.
 for (let type of ['u8', 'u16', 'u32']) {
-	let arr_type = btinfo_by_type[type].arr_type
 	gl[type+'_index_buffer'] = function index_buffer(data_or_cap) {
-		return this.index_buffer(data_or_cap, arr_type)
+		return this.index_buffer(data_or_cap, type)
 	}
 	gl['dyn_'+type+'_index_buffer'] = function dyn_index_buffer(data_or_cap) {
-		return this.dyn_index_buffer(data_or_cap, arr_type)
+		return this.dyn_index_buffer(data_or_cap, type)
 	}
 	gl['dyn_arr_'+type+'_index_buffer'] = function dyn_arr_index_buffer(data_or_cap) {
-		return this.dyn_arr_index_buffer(data_or_cap, arr_type)
+		return this.dyn_arr_index_buffer(data_or_cap, type)
 	}
 }
 
 vao.dab = function(name, cap) {
 	let vao = this
-	let info = assert(vao.program.attr_info[name], 'invalid attribute {0}', name)
-	let dab = vao.gl.dyn_arr_buffer(info.type, cap)
+	let a = assert(vao.program.attrs[name], 'invalid attribute {0}', name)
+	let dab = vao.gl.dyn_arr_buffer(a.type, cap)
 	if (dab.buffer)
 		vao.set_attr(name, dab.buffer)
 	dab.buffer_replaced = function(b) { vao.set_attr(name, b) }
@@ -990,8 +1037,8 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 	let dab0
 	for (let name in attrs) {
 		let type = attrs[name]
-		let info = btinfo(type)
-		let dab = this.dyn_arr_buffer(info.type, cap)
+		let bt = get_bt(type)
+		let dab = this.dyn_arr_buffer(bt.type, cap)
 		e.dabs[name] = dab
 		e[name] = dab
 		dab0 = dab0 || dab
@@ -1029,14 +1076,14 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 
 // UBOs ----------------------------------------------------------------------
 
-prog.ub_info = function(ub_name) {
+prog.ub = function(ub_name) {
 	return assert(this.uniform_blocks[ub_name], 'invalid uniform block {0}', ub_name)
 }
 
 prog.ubo = function(ub_name) {
 	let gl = this.gl
 
-	let ub = this.ub_info(ub_name)
+	let ub = this.ub(ub_name)
 
 	let buf = gl.buffer(ub.size)
 	let arr = new ArrayBuffer(ub.size)
@@ -1044,7 +1091,12 @@ prog.ubo = function(ub_name) {
 	let arr_f32 = new f32arr(arr)
 	let arr_i32 = new i32arr(arr)
 
-	let ubo = {program: this, name: ub_name, buffer: buf, values: {}}
+	let ubo = {
+		name: ub_name,
+		buffer: buf,
+		values: {},
+		textures: {'2d': [], 'cubemap': []},
+	}
 
 	ubo.set = function(name, val) {
 		if (!ub.fields[name])
@@ -1056,9 +1108,9 @@ prog.ubo = function(ub_name) {
 		let set_one
 		for (let name in this.values) {
 			let val = this.values[name]
-			let u_info = ub.fields[name]
-			let gl_type = u_info.type
-			let offset = u_info.ub_offset >> 2
+			let u = ub.fields[name]
+			let gl_type = u.type
+			let offset = u.ub_offset >> 2
 			if (
 				   gl_type == gl.INT
 				|| gl_type == gl.BOOL
@@ -1075,10 +1127,10 @@ prog.ubo = function(ub_name) {
 				|| gl_type == gl.FLOAT_MAT3
 				|| gl_type == gl.FLOAT_MAT4
 			) {
+				assert(val.length == bt_by_gl_type[gl_type].nc)
 				arr_f32.set(val, offset)
 			} else {
-				assert(false, 'NYI: {2} field (program {0} ubo {0} field {1})',
-					this.name, ub_name, name, constant_names[gl_type])
+				assert(false, 'NYI: {3} field', C[gl_type])
 			}
 			delete this.values[name]
 			set_one = true
@@ -1091,8 +1143,8 @@ prog.ubo = function(ub_name) {
 
 prog.bind_ubo = function(ub_name, slot) {
 	let gl = this.gl
-	let ubi = this.ub_info(ub_name).index
-	let ubs = attr(this, 'ubo_bindings')
+	let ubi = this.ub(ub_name).index
+	let ubs = this.ubo_bindings
 	if (slot == null) {
 		let ubo = gl.ubos && gl.ubos[ub_name]
 		slot = assert(ubo && ubo.slot, 'no name-bound UBO {0}', ub_name)
@@ -1105,10 +1157,14 @@ prog.bind_ubo = function(ub_name, slot) {
 }
 
 gl.bind_ubo = function(ubo, slot) {
-	let slots = attr(this, 'ubo_slots', Array)
-	if (slot == null) { // name-based slot reservation.
+
+	if (slot == null) { // name-based slot allocation.
 		let ubos = attr(this, 'ubos')
 		let ubo0 = ubos[ubo.name]
+		if (ubo0)
+			assert(ubo.program == ubo0.program,
+				'UBO {0} from program {1}, expected UBO from program {2}',
+					ubo.name, ubo.program.name, ubo0.program.name)
 		this.next_ubo_slot = (this.next_ubo_slot || 0)
 		slot = ubo0 ? ubo0.slot : (this.next_ubo_slot++)
 		ubo.slot = slot
@@ -1116,50 +1172,40 @@ gl.bind_ubo = function(ubo, slot) {
 	} else {
 		assert(!this.ubos, 'use of both explicit and name-based slot allocation')
 	}
+
+	let slots = attr(this, 'ubo_slots', Array)
 	if (slots[slot] != ubo) {
 		this.bindBufferBase(gl.UNIFORM_BUFFER, slot, ubo && ubo.buffer)
 		slots[slot] = ubo
 	}
+
 	return this
 }
 
-// setting uniforms and attributes and drawing -------------------------------
+// setting uniforms and drawing ----------------------------------------------
 
-prog.uniform_location = function(name) {
-	let info = this.uniform_info[name]
-	return info && info.location
-}
+prog.set_uni = function(name, x, y, z, w) {
+	let gl = this.gl
 
-prog.set_uni_f = function(name, v) {
-	let loc = this.uniform_location(name)
-	if (loc)
-		this.gl.uniform1f(loc, v || 0)
-	return this
-}
+	let u = this.uniforms[name]
+	if (!u)
+		return this
+	let loc = u && u.location
+	if (!loc)
+		return this
 
-prog.set_uni_i = function(name, v) {
-	let loc = this.uniform_location(name)
-	if (loc)
-		this.gl.uniform1i(loc, v || 0)
-	return this
-}
-
-prog.set_uni_v2 = function(name, x, y) {
-	let loc = this.uniform_location(name)
-	if (loc) {
+	if (u.type == gl.FLOAT) {
+		gl.uniform1f(loc, x || 0)
+	} else if (u.type == gl.INT || u.type == gl.BOOL) {
+		gl.uniform1i(loc, x || 0)
+	} else if (u.type == gl.FLOAT_VEC2) {
 		if (x && (x.is_v2 || x.is_v3 || x.is_v4)) {
 			let p = x
 			x = p.x
 			y = p.y
 		}
-		this.gl.uniform2f(loc, x || 0, y || 0)
-	}
-	return this
-}
-
-prog.set_uni_v3 = function(name, x, y, z) {
-	let loc = this.uniform_location(name)
-	if (loc) {
+		gl.uniform2f(loc, x || 0, y || 0)
+	} else if (u.type == gl.FLOAT_VEC3) {
 		if (x && (x.is_v3 || x.is_v4)) {
 			let p = x
 			x = p.x
@@ -1171,14 +1217,8 @@ prog.set_uni_v3 = function(name, x, y, z) {
 			y = (c >>  8 & 0xff) / 255
 			z = (c       & 0xff) / 255
 		}
-		this.gl.uniform3f(loc, x || 0, y || 0, z || 0)
-	}
-	return this
-}
-
-prog.set_uni_v4 = function(name, x, y, z, w) {
-	let loc = this.uniform_location(name)
-	if (loc) {
+		gl.uniform3f(loc, x || 0, y || 0, z || 0)
+	} else if (u.type == gl.FLOAT_VEC4) {
 		if (x && (x.is_v3 || x.is_v4)) {
 			let p = x
 			x = p.x
@@ -1192,71 +1232,28 @@ prog.set_uni_v4 = function(name, x, y, z, w) {
 			z = (c >>  8 & 0xff) / 255
 			w = (c       & 0xff) / 255
 		}
-		this.gl.uniform4f(loc, x || 0, y || 0, z || 0, or(w, 1))
-	}
-	return this
-}
-
-prog.set_uni_mat3 = function(name, m) {
-	let loc = this.uniform_location(name)
-	if (loc)
-		this.gl.uniformMatrix3fv(loc, false, m || mat3f32.identity)
-	return this
-}
-
-prog.set_uni_mat4 = function(name, m) {
-	let loc = this.uniform_location(name)
-	if (loc)
-		this.gl.uniformMatrix4fv(loc, false, m || mat4f32.identity)
-	return this
-}
-
-let set_uni_texture_func = function(target) {
-	return function(name, tex, unit) {
-		let loc = this.uniform_location(name)
-		if (loc) {
-			let gl = this.gl
-			if (tex) {
-				assert(tex.target == target,
-					'texture target mismatch {0}, expected {1}', tex.target, target)
-				tex.bind(unit)
-			} else {
-				gl.bind_texture(target, null, unit)
-			}
-			gl.uniform1i(loc, unit)
-		}
-		return this
-	}
-}
-prog.set_uni_texture      = set_uni_texture_func('2d')
-prog.set_uni_texture_cube = set_uni_texture_func('cubemap')
-
-prog.set_uni = function(name, a, b, c, d) {
-	let gl = this.gl
-	let info = this.uniform_info[name]
-	if (!info)
-		return this
-	if (info.type == gl.FLOAT)
-		return this.set_uni_f(name, a)
-	else if (info.type == gl.INT || info.type == gl.BOOL)
-		return this.set_uni_i(name, a)
-	else if (info.type == gl.FLOAT_VEC2)
-		return this.set_uni_v2(name, a, b)
-	else if (info.type == gl.FLOAT_VEC3)
-		return this.set_uni_v3(name, a, b, c)
-	else if (info.type == gl.FLOAT_VEC4)
-		return this.set_uni_v4(name, a, b, c, d)
-	else if (info.type == gl.FLOAT_MAT3)
-		return this.set_uni_mat3(name, a)
-	else if (info.type == gl.FLOAT_MAT4)
-		return this.set_uni_mat4(name, a)
-	else if (info.type == gl.SAMPLER_2D)
-		return this.set_uni_texture(name, a, b)
-	else if (info.type == gl.SAMPLER_CUBE)
-		return this.set_uni_texture_cube(name, a, b)
-	else
+		gl.uniform4f(loc, x || 0, y || 0, z || 0, or(w, 1))
+	} else if (u.type == gl.FLOAT_MAT3) {
+		gl.uniformMatrix3fv(loc, false, x || mat3f32.identity)
+	} else if (u.type == gl.FLOAT_MAT4) {
+		gl.uniformMatrix4fv(loc, false, x || mat4f32.identity)
+	} else if (u.type == gl.SAMPLER_2D || u.type == gl.SAMPLER_CUBE) {
+		let tex = x
+		let tex0 = u.value
+		if (tex == tex0)
+			return this
+		if (tex)
+			assert(tex.type == u.tex_type,
+				'texture type mismatch {0}, expected {1}', tex.type, u.tex_type)
+		gl.bind_texture(u.tex_type, tex, u.tex_unit)
+		u.value = tex
+		gl.uniform1i(loc, u.tex_unit)
+	} else {
 		assert(false, 'NYI: {2} uniform (program {0}, uniform {1})',
-			this.name, name, constant_names[info.type])
+			this.name, name, C[u.type])
+	}
+
+	return this
 }
 
 gl.draw = function(gl_mode, offset, count) {
@@ -1287,44 +1284,42 @@ gl.draw = function(gl_mode, offset, count) {
 	return this
 }
 
-gl.draw_triangles = function(o, n) { let gl = this; return gl.draw(gl.TRIANGLES, o, n) }
-gl.draw_points    = function(o, n) { let gl = this; return gl.draw(gl.POINTS   , o, n) }
-gl.draw_lines     = function(o, n) { let gl = this; return gl.draw(gl.LINES    , o, n) }
+gl.draw_triangles = function(o, n) { return this.draw(gl.TRIANGLES, o, n) }
+gl.draw_points    = function(o, n) { return this.draw(gl.POINTS   , o, n) }
+gl.draw_lines     = function(o, n) { return this.draw(gl.LINES    , o, n) }
 
 // textures ------------------------------------------------------------------
 
 let tex = WebGLTexture.prototype
 
-gl.texture = function(target) {
+let tex_gl_target = function(type) {
+	return type == 'cubemap' && gl.TEXTURE_CUBE_MAP || gl.TEXTURE_2D
+}
+
+gl.texture = function(type) {
 	let gl = this
 	let tex = gl.createTexture()
 	tex.gl = gl
-	tex.target = target || '2d'
+	tex.type = type || '2d'
+	tex.gl_target = tex_gl_target(tex.type)
 	return tex
 }
 
-let tex_gl_target = function(target) {
-	return target == 'cubemap' && gl.TEXTURE_CUBE_MAP || gl.TEXTURE_2D
-}
-
-gl.bind_texture = function(target, tex1, unit) {
+gl.bind_texture = function(type, tex1, unit) {
 	let gl = this
-	target = or(target, '2d')
+	type = type || '2d'
 	unit = unit || 0
-	let units = attr(attr(gl, 'texture_units'), target, Array)
+	let units = attr(attr(gl, 'texture_units'), type, Array)
 	let tex0 = units[unit]
-	let gl_target = tex_gl_target(target)
 	if (tex0 != tex1) {
-		if (tex1) {
-			assert(tex1.target == target,
-			'texture target mismatch {0}, wanted {1}', tex1.target, target)
-			tex1.gl_target = gl_target
-		}
+		if (tex1)
+			assert(tex1.type == type,
+				'texture type mismatch {0}, expected {1}', tex1.type, type)
 		if (tex0)
 			tex0.unit = null
 
 		gl.activeTexture(gl.TEXTURE0 + unit)
-		gl.bindTexture(gl_target, tex1)
+		gl.bindTexture(tex_gl_target(type), tex1)
 
 		units[unit] = tex1
 		if (tex1)
@@ -1333,19 +1328,19 @@ gl.bind_texture = function(target, tex1, unit) {
 	return this
 }
 
-gl.unbind_textures = function(target) {
+gl.unbind_textures = function(type) {
 	let all_units = gl.texture_units
 	if (!all_units)
 		return this
-	if (!target) {
+	if (!type) {
 		this.unbind_textures('2d')
 		this.unbind_textures('cubemap')
 		return this
 	}
-	let units = all_units[target]
+	let units = all_units[type]
 	if (!units)
 		return this
-	let gl_target = tex_gl_target(target)
+	let gl_target = tex_gl_target(type)
 	for (let i = 0, n = units.length; i < n; i++) {
 		if (units[i]) {
 			gl.activeTexture(gl.TEXTURE0 + unit)
@@ -1356,13 +1351,13 @@ gl.unbind_textures = function(target) {
 }
 
 tex.bind = function(unit) {
-	this.gl.bind_texture(this.target, this, unit)
+	this.gl.bind_texture(this.type, this, unit)
 	return this
 }
 
 tex.unbind = function() {
 	assert(this.unit != null, 'texture not bound')
-	this.gl.bind_texture(this.target, null, this.unit)
+	this.gl.bind_texture(this.type, null, this.unit)
 	return this
 }
 
@@ -1373,7 +1368,7 @@ tex.free = function() {
 
 tex.set_depth = function(w, h, f32) {
 	let gl = this.gl
-	assert(this.gl_target == gl.TEXTURE_2D)
+	assert(this.type == '2d')
 
 	this.bind()
 	gl.texImage2D(gl.TEXTURE_2D, 0,
@@ -1407,9 +1402,9 @@ let gl_cube_sides = {
 }
 
 let tex_side_target = function(tex, side) {
-	if (tex.gl_target == gl.TEXTURE_CUBE_MAP)
+	if (tex.type == 'cubemap') {
 		return assert(gl_cube_sides[side], 'invalid cube map texture side {0}', side)
-	else {
+	} else {
 		assert(!side)
 		return tex.gl_target
 	}
@@ -1469,7 +1464,6 @@ tex.set_image = function(image, pixel_scale, side) {
 	gl.texImage2D(gl_target, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
 	if (gl_target == gl.TEXTURE_2D)
 		gl.generateMipmap(gl_target)
-	this.unbind()
 
 	let w = image.width
 	let h = image.height
@@ -1608,6 +1602,7 @@ let fbo = WebGLFramebuffer.prototype
 gl.fbo = function() {
 	let fbo = this.createFramebuffer()
 	fbo.gl = this
+	fbo.attachments = {}
 	return fbo
 }
 
@@ -1728,7 +1723,6 @@ fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 	let gl = this.gl
 	let fbo = this
 	assert(!gl.read_fbo)
-	fbo.bind('read', attachment, color_unit)
 	if (x == null) {
 		x = 0
 		y = 0
@@ -1737,9 +1731,11 @@ fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 	} else {
 		assert(x != null)
 		assert(y != null)
-		assert(w != null)
-		assert(h != null)
 	}
+	assert(w != null)
+	assert(h != null)
+
+	fbo.bind('read', attachment, color_unit)
 	let tex = assert(this.attachment(attachment, color_unit))
 	if (tex.format == 'rgba') {
 		if (!buf) {
@@ -1766,6 +1762,7 @@ fbo.read_pixels = function(attachment, color_unit, buf, x, y, w, h) {
 		assert(false, 'NYI: {0} texture', tex.format)
 	}
 	fbo.unbind()
+
 	return buf
 }
 
@@ -1796,7 +1793,7 @@ fbo.free = function() {
 }
 
 fbo.attachment = function(target, color_unit) {
-	return this.attachments && this.attachments[target + (color_unit || 0)]
+	return this.attachments[target + (color_unit || 0)]
 }
 
 let fbo_att = {
@@ -1822,7 +1819,10 @@ fbo.attach = function(tex_or_rbo, target, color_unit) {
 	} else
 		assert(false, 'rbo or texture expected')
 
-	attr(this, 'attachments')[target + color_unit] = tex_or_rbo
+	this.w = or(tex_or_rbo.w, this.w)
+	this.h = or(tex_or_rbo.h, this.h)
+
+	this.attachments[target + color_unit] = tex_or_rbo
 
 	return this
 }

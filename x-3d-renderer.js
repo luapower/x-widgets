@@ -23,6 +23,7 @@ gl.module('globals', `
 		mat4 view_proj;
 		vec3 view_pos;
 		vec2 view_size;
+		float view_near;
 
 		vec3 sunlight_pos;
 		vec3 sunlight_color;
@@ -200,6 +201,7 @@ gl.scene_renderer = function(r) {
 		globals_ubo.set('view_proj'        , r.camera.view_proj)
 		globals_ubo.set('view_size'        , r.camera.view_size)
 		globals_ubo.set('view_pos'         , r.camera.pos)
+		globals_ubo.set('view_near'        , r.camera.near)
 
 		globals_ubo.set('sunlight_pos'     , sunlight_pos)
 		globals_ubo.set('sunlight_color'   , r.sunlight_color)
@@ -412,7 +414,7 @@ gl.faces_renderer = function() {
 	let e = {
 		specular_strength: .2,
 		shininess: 5,
-		polygon_offset: .0001,
+		polygon_offset: 1,
 		diffuse_color: 0xffffff,
 	}
 
@@ -748,10 +750,11 @@ gl.fat_lines_renderer = function(e) {
 
 		#include mesh.vs
 
-		uniform float clip_near;
-
+		uniform vec3 base_color;
+		in vec3 color;
 		in vec3 q; // line's other end-point.
 		in float dir;
+		flat out vec4 v_color;
 
 		vec4 shorten_line(vec4 p1, vec4 p2, float cut_w) {
 			float t = (cut_w - p2.w) / (p1.w - p2.w);
@@ -765,7 +768,7 @@ gl.fat_lines_renderer = function(e) {
 			vec4 p2 = mvp(q);
 
 			// cut the line at near-plane if one of its end-points has w < 0.
-			float cut_w = clip_near * .5;
+			float cut_w = view_near * .5;
 			if (p1.w < cut_w && p2.w > cut_w) {
 				p1 = shorten_line(p1, p2, cut_w);
 			} else if (p2.w < cut_w && p1.w > cut_w) {
@@ -781,16 +784,18 @@ gl.fat_lines_renderer = function(e) {
 
 			gl_Position = p1 + vec4(n, 0.0, 0.0);
 
+			v_color = vec4(base_color + color, 1.0);
+
 		}
 
 	`, `
 
 		#include mesh.fs
 
-		uniform vec3 base_color;
+		flat in vec4 v_color;
 
 		void main() {
-			frag_color = vec4(base_color, 1.0);
+			frag_color = v_color;
 		}
 
 	`)
@@ -888,6 +893,7 @@ gl.fat_lines_renderer = function(e) {
 			return // no shadows or hit-testing
 		if (!ib.buffer)
 			return
+		TRACE1 = 1
 		vao.use()
 		vao.set_attrs(davb)
 		vao.set_attr('model', e.model)
@@ -896,6 +902,7 @@ gl.fat_lines_renderer = function(e) {
 		vao.set_attr('color', e.color)
 		gl.draw_triangles()
 		vao.unuse()
+		TRACE1 = 0
 	}
 
 	e.free = function() {
@@ -941,7 +948,8 @@ gl.fat_lines_renderer = function(e) {
 	gl.box_geometry = function() {
 
 		let pos = new f32arr(pos_template.length)
-		pos.n_components = 3
+		pos.type = 'v3'
+		pos.nc = 3
 
 		let e = {
 			pos: pos,

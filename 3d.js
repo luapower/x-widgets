@@ -409,16 +409,16 @@ let v3_class = class v extends Array {
 	to_v3_array(a, i) { return this.to_array(a, 3 * i) }
 
 	from_rgb(s) {
-		this[0] = ((s >> 16) & 0xff) / 255
-		this[1] = ((s >>  8) & 0xff) / 255
-		this[2] = ( s        & 0xff) / 255
+		this[0] = (s >> 16 & 0xff) / 255
+		this[1] = (s >>  8 & 0xff) / 255
+		this[2] = (s       & 0xff) / 255
 		return this
 	}
 
 	from_rgba(s) {
-		this[0] = ((s >> 24) & 0xff) / 255
-		this[1] = ((s >> 16) & 0xff) / 255
-		this[2] = ((s >>  8) & 0xff) / 255
+		this[0] = (s >> 24 & 0xff) / 255
+		this[1] = (s >> 16 & 0xff) / 255
+		this[2] = (s >>  8 & 0xff) / 255
 		return this
 	}
 
