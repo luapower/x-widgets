@@ -409,7 +409,7 @@ function assign_opt(dt, ...args) {
 function attr(t, k, cons) {
 	cons = cons || Object
 	let v = (t instanceof Map) ? t.get(k) : t[k]
-	if (!v) {
+	if (v === undefined) {
 		v = new cons()
 		if (t instanceof Map)
 			t.set(k, v)

@@ -49,12 +49,11 @@
 
 	UBOs
 
-		prog.ubo(ub_name) -> ubo
+		gl.ubo(ub_name) -> ubo
 		ubo.set(field_name, val)
 		ubo.values = {name->val}
 		ubo.upload()
-		gl.bind_ubo(ubo[, slot])
-		prog.bind_ubo(ub_name[, slot])
+		ubo.bind()
 
 	VAOs
 
@@ -180,7 +179,7 @@ gl.clear_all = function(r, g, b, a, depth) {
 	return this
 }
 
-// shaders & VAOs ------------------------------------------------------------
+// programs ------------------------------------------------------------------
 
 let outdent = function(s) {
 	s = s
@@ -286,18 +285,50 @@ function tex_type(gl_type) {
 	)
 }
 
-gl.program = function(name, vs_code, fs_code) {
+gl.ub = function(name) {
+	return assert(this.ubs && this.ubs[name], 'unknown uniform block {0}', name)
+}
+
+// NOTE: Each UB gets assigned a static UB binding index (we call it slot).
+// NOTE: UBs with the same name must have exactly the same layout, which
+// is what makes it possible to use the same UBO with different programs.
+// This scheme is wasteful of UB binding indices but the assumption is that
+// you'll make just a few very reusable UBOs (one for globals, one for materials).
+gl.register_ub = function(ub) {
+	let ub0 = attr(this, 'ubs')[ub.name]
+	if (ub0) {
+		// check that the layouts of ub and ub0 match.
+		assert(ub0.size == ub.size)
+		assert(ub0.field_count == ub.field_count)
+		for (let name in ub.fields) {
+			let u1 = ub.fields[name]
+			let u0 = ub0.fields[name]
+			assert(u1.type      == u0.type)
+			assert(u1.size      == u0.size)
+			assert(u1.ub_offset == u0.ub_offset)
+		}
+		return ub0
+	} else {
+		this.ubs[ub.name] = ub
+		this.ub_slot_count = this.ub_slot_count || 0
+		ub.slot = this.ub_slot_count++
+		return ub
+	}
+}
+
+gl.program = function(pr_name, vs_code, fs_code) {
 	let gl = this
 
-	let pr = attr(gl, 'programs')[assert(isstr(name), 'program name required')]
+	assert(isstr(pr_name), 'program name required')
+	let pr = attr(gl, 'programs')[pr_name]
 	if (pr) {
 		assert(pr.vs.code == vs_code)
 		assert(pr.fs.code == fs_code)
 		return pr
 	}
 
-	let vs = gl.shader('vertex'  , name, gl.VERTEX_SHADER  , vs_code)
-	let fs = gl.shader('fragment', name, gl.FRAGMENT_SHADER, fs_code)
+	let vs = gl.shader('vertex'  , pr_name, gl.VERTEX_SHADER  , vs_code)
+	let fs = gl.shader('fragment', pr_name, gl.FRAGMENT_SHADER, fs_code)
 	pr = gl.createProgram()
 	gl.attachShader(pr, vs)
 	gl.attachShader(pr, fs)
@@ -313,27 +344,24 @@ gl.program = function(name, vs_code, fs_code) {
 		gl.deleteProgram(pr)
 		gl.deleteShader(vs)
 		gl.deleteShader(fs)
-		assert(false, 'linking failed for program {0}', name)
+		assert(false, 'linking failed for program {0}', pr_name)
 	}
 
 	// uniforms RTTI.
 	pr.uniform_count = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS)
-	pr.uniforms = {} // {name->u}
-	let u_by_index = [] // [index->u]
-	let tex_unit_counts = {'2d': 0, 'cubemap': 0}
+	pr.uniforms = {} // {name->u}, excluding UB fields.
+	let us = [] // [index->u], including UB fields.
 	let n_cubemap = 0
 	for (let i = 0, n = pr.uniform_count; i < n; i++) {
 		let u = gl.getActiveUniform(pr, i)
-		pr.uniforms[u.name] = u
-		u_by_index[i] = u
 		u.location = gl.getUniformLocation(pr, u.name)
+		us[i] = u
 		if (u.location) { // UBO fields are listed too but don't get a location.
+			pr.uniforms[u.name] = u
 			u.location.name = u.name
 			let tt = tex_type(u.type)
-			if (tt) {
-				u.tex_unit = tex_unit_counts[tt]++
+			if (tt)
 				u.tex_type = tt
-			}
 		}
 	}
 
@@ -344,22 +372,31 @@ gl.program = function(name, vs_code, fs_code) {
 		let ub_name = gl.getActiveUniformBlockName(pr, ubi)
 		let ub = {
 			name: ub_name,
-			fields: {},
-			index: ubi,
+			fields: {}, // {name->u}
 		}
-		pr.uniform_blocks[ub_name] = ub
 		ub.size = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_DATA_SIZE)
 		let uis = gl.getActiveUniformBlockParameter(pr, ubi, gl.UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES)
 		let ubos = gl.getActiveUniforms(pr, uis, gl.UNIFORM_OFFSET)
 		for (let i = 0, n = uis.length; i < n; i++) {
-			let u = u_by_index[uis[i]]
+			let u = us[uis[i]]
 			u.ub_offset = ubos[i]
 			ub.fields[u.name] = u
-			let tt = tex_type(u.type)
-			if (tt) {
-				u.tex_unit = tex_unit_counts[tt]++
-				u.tex_type = tt
-			}
+		}
+		ub.field_count = uis.length
+		ub = gl.register_ub(ub)
+
+		gl.uniformBlockBinding(pr, ubi, ub.slot)
+		pr.uniform_blocks[ub_name] = ub
+	}
+
+	// assign static texture units to sampler uniforms.
+	pr.tex_uniforms = [] // [u1,...]
+	let t = {}
+	for (let u of us) {
+		if (u.tex_type && u.location) {
+			t[u.tex_type] = t[u.tex_type] || 0
+			u.tex_unit = t[u.tex_type]++
+			pr.tex_uniforms.push(u)
 		}
 	}
 
@@ -368,27 +405,23 @@ gl.program = function(name, vs_code, fs_code) {
 	pr.attr_count = gl.getProgramParameter(pr, gl.ACTIVE_ATTRIBUTES)
 	for (let i = 0, n = pr.attr_count; i < n; i++) {
 		let info = gl.getActiveAttrib(pr, i)
-		let name = info.name
-		let size = info.size
-		let gl_type = info.type
-		let location = gl.getAttribLocation(pr, name)
+		let location = gl.getAttribLocation(pr, info.name)
 		let a = assign({
-				name: name,
-				size: size,
+				name: info.name,
+				size: info.size,
 				location: location,
 				program: pr,
-			}, bt_by_gl_type[gl_type])
-		pr.attrs[name] = a
+			}, bt_by_gl_type[info.type])
+		pr.attrs[info.name] = a
 		pr.attrs[location] = a
 	}
 
 	pr.gl = gl
 	pr.vs = vs
 	pr.fs = fs
-	pr.name = name
-	pr.ubo_bindings = {}
+	pr.name = pr_name
 
-	gl.programs[name] = pr
+	gl.programs[pr_name] = pr
 
 	return pr
 }
@@ -402,20 +435,9 @@ prog.use = function() {
 	gl.useProgram(this)
 	gl.active_program = this
 
-	// bind global UBOs matching on name.
-	if (gl.ubos) {
-		for (let ub_name in this.uniform_blocks) {
-			let ubo = gl.ubos[ub_name]
-			this.bind_ubo(ub_name, ubo.slot)
-		}
-	}
-
 	// set or clear texture units to previously set values.
-	for (let name in this.uniforms) {
-		let u = this.uniforms[name]
-		if (u.tex_type)
-			gl.bind_texture(u.tex_type, u.value, u.tex_unit)
-	}
+	for (let u of this.tex_uniforms)
+		gl.bind_texture(u.tex_type, u.value, u.tex_unit)
 
 	return this
 }
@@ -442,6 +464,189 @@ prog.free = function() {
 	gl.deleteShader(pr.fs)
 	this.free = noop
 }
+
+// uniforms ------------------------------------------------------------------
+
+prog.set_uni = function(name, x, y, z, w) {
+	let gl = this.gl
+
+	let u = this.uniforms[name]
+	if (!u)
+		return this
+
+	let loc = u.location
+
+	if (u.type == gl.FLOAT) {
+		gl.uniform1f(loc, x || 0)
+	} else if (u.type == gl.INT || u.type == gl.BOOL) {
+		gl.uniform1i(loc, x || 0)
+	} else if (u.type == gl.FLOAT_VEC2) {
+		if (x && (x.is_v2 || x.is_v3 || x.is_v4)) {
+			let p = x
+			x = p.x
+			y = p.y
+		}
+		gl.uniform2f(loc, x || 0, y || 0)
+	} else if (u.type == gl.FLOAT_VEC3) {
+		if (x && (x.is_v3 || x.is_v4)) {
+			let p = x
+			x = p.x
+			y = p.y
+			z = p.z
+		} else if (isnum(x) && y == null) { // 0xRRGGBB -> (r, g, b)
+			let c = x
+			x = (c >> 16 & 0xff) / 255
+			y = (c >>  8 & 0xff) / 255
+			z = (c       & 0xff) / 255
+		}
+		gl.uniform3f(loc, x || 0, y || 0, z || 0)
+	} else if (u.type == gl.FLOAT_VEC4) {
+		if (x && (x.is_v3 || x.is_v4)) {
+			let p = x
+			x = p.x
+			y = p.y
+			z = p.z
+			w = p.w
+		} else if (isnum(x) && y == null) { // 0xRRGGBBAA -> (r, g, b, a)
+			let c = x
+			x = (c >> 24       ) / 255
+			y = (c >> 16 & 0xff) / 255
+			z = (c >>  8 & 0xff) / 255
+			w = (c       & 0xff) / 255
+		}
+		gl.uniform4f(loc, x || 0, y || 0, z || 0, or(w, 1))
+	} else if (u.type == gl.FLOAT_MAT3) {
+		gl.uniformMatrix3fv(loc, false, x || mat3f32.identity)
+	} else if (u.type == gl.FLOAT_MAT4) {
+		gl.uniformMatrix4fv(loc, false, x || mat4f32.identity)
+	} else if (u.type == gl.SAMPLER_2D || u.type == gl.SAMPLER_CUBE) {
+		let tex = x
+		let tex0 = u.value
+		if (tex == tex0)
+			return this
+		if (tex)
+			assert(tex.type == u.tex_type,
+				'texture type mismatch {0}, expected {1}', tex.type, u.tex_type)
+		gl.bind_texture(u.tex_type, tex, u.tex_unit)
+		u.value = tex
+		gl.uniform1i(loc, u.tex_unit)
+	} else {
+		assert(false, 'NYI: {2} uniform (program {0}, uniform {1})',
+			this.name, name, C[u.type])
+	}
+
+	return this
+}
+
+// UBOs ----------------------------------------------------------------------
+
+gl.ubo = function(ub_name) {
+	let gl = this
+
+	let ub = gl.ub(ub_name)
+
+	let b = gl.buffer(ub.size)
+	let arr = new ArrayBuffer(ub.size)
+	let arr_u8  = new u8arr(arr)
+	let arr_f32 = new f32arr(arr)
+	let arr_i32 = new i32arr(arr)
+
+	let ubo = {
+		name: ub_name,
+		buffer: b,
+		values: {}, // {name->val}
+		tex_values: [],
+	}
+
+	ubo.set = function(name, val) {
+		if (!ub.fields[name])
+			return this
+		this.values[name] = val
+		return this
+	}
+
+	ubo.upload = function() {
+		let set_one
+		for (let name in this.values) {
+			let val = this.values[name]
+			let u = ub.fields[name]
+			let gl_type = u.type
+			let offset = u.ub_offset >> 2
+			if (gl_type == gl.INT || gl_type == gl.BOOL) {
+				arr_i32[offset] = val
+			} else if (gl_type == gl.FLOAT) {
+				arr_f32[offset] = val
+			} else if (
+				   gl_type == gl.FLOAT_VEC2
+				|| gl_type == gl.FLOAT_VEC3
+				|| gl_type == gl.FLOAT_VEC4
+				|| gl_type == gl.FLOAT_MAT3
+				|| gl_type == gl.FLOAT_MAT4
+			) {
+				assert(val.length == bt_by_gl_type[gl_type].nc)
+				arr_f32.set(val, offset)
+			} else if (gl_type == gl.SAMPLER_2D || gl_type == gl.SAMPLER_CUBE) {
+				arr_i32[offset] = u.tex_unit
+				gl.bind_texture(u.tex_type, val, u.tex_unit)
+			} else {
+				assert(false, 'NYI: {3} field', C[gl_type])
+			}
+			delete this.values[name]
+			set_one = true
+		}
+		if (set_one)
+			b.upload(arr_u8)
+		return this
+	}
+
+	let slot = ub.slot
+	ubo.bind = function() {
+		let slots = attr(gl, 'ubo_slots', Array)
+		if (slots[slot] != this) {
+			gl.bindBufferBase(gl.UNIFORM_BUFFER, slot, b)
+			slots[slot] = this
+		}
+		return this
+	}
+
+	return ubo
+}
+
+// drawing -------------------------------------------------------------------
+
+gl.draw = function(gl_mode, offset, count) {
+	let gl = this
+	let vao = gl.active_vao
+	let ib = vao.index_buffer
+	let n_inst = vao.instance_count
+	offset = offset || 0
+	if (ib) {
+		if (count == null)
+			count = ib.len
+		if (n_inst != null) {
+			// NOTE: don't look for an offset-in-the-instance-buffers arg,
+			// that's glDrawElementsInstancedBaseInstance() which is not exposed.
+			gl.drawElementsInstanced(gl_mode, count, ib.gl_type, offset, n_inst)
+		} else {
+			gl.drawElements(gl_mode, count, ib.gl_type, offset)
+		}
+	} else {
+		if (count == null)
+			count = vao.vertex_count
+		if (n_inst != null) {
+			gl.drawArraysInstanced(gl_mode, offset, count, n_inst)
+		} else {
+			gl.drawArrays(gl_mode, offset, count)
+		}
+	}
+	return this
+}
+
+gl.draw_triangles = function(o, n) { return this.draw(gl.TRIANGLES, o, n) }
+gl.draw_points    = function(o, n) { return this.draw(gl.POINTS   , o, n) }
+gl.draw_lines     = function(o, n) { return this.draw(gl.LINES    , o, n) }
+
+// VAOs ----------------------------------------------------------------------
 
 let vao = WebGLVertexArrayObject.prototype
 
@@ -1074,220 +1279,6 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 	return e
 }
 
-// UBOs ----------------------------------------------------------------------
-
-prog.ub = function(ub_name) {
-	return assert(this.uniform_blocks[ub_name], 'invalid uniform block {0}', ub_name)
-}
-
-prog.ubo = function(ub_name) {
-	let gl = this.gl
-
-	let ub = this.ub(ub_name)
-
-	let buf = gl.buffer(ub.size)
-	let arr = new ArrayBuffer(ub.size)
-	let arr_u8  = new u8arr(arr)
-	let arr_f32 = new f32arr(arr)
-	let arr_i32 = new i32arr(arr)
-
-	let ubo = {
-		name: ub_name,
-		buffer: buf,
-		values: {},
-		textures: {'2d': [], 'cubemap': []},
-	}
-
-	ubo.set = function(name, val) {
-		if (!ub.fields[name])
-			return
-		this.values[name] = val
-	}
-
-	ubo.upload = function() {
-		let set_one
-		for (let name in this.values) {
-			let val = this.values[name]
-			let u = ub.fields[name]
-			let gl_type = u.type
-			let offset = u.ub_offset >> 2
-			if (
-				   gl_type == gl.INT
-				|| gl_type == gl.BOOL
-				|| gl_type == gl.SAMPLER_2D
-				|| gl_type == gl.SAMPLER_CUBE
-			) {
-				arr_i32[offset] = val
-			} else if (gl_type == gl.FLOAT) {
-				arr_f32[offset] = val
-			} else if (
-				   gl_type == gl.FLOAT_VEC2
-				|| gl_type == gl.FLOAT_VEC3
-				|| gl_type == gl.FLOAT_VEC4
-				|| gl_type == gl.FLOAT_MAT3
-				|| gl_type == gl.FLOAT_MAT4
-			) {
-				assert(val.length == bt_by_gl_type[gl_type].nc)
-				arr_f32.set(val, offset)
-			} else {
-				assert(false, 'NYI: {3} field', C[gl_type])
-			}
-			delete this.values[name]
-			set_one = true
-		}
-		if (set_one)
-			buf.upload(arr_u8)
-	}
-	return ubo
-}
-
-prog.bind_ubo = function(ub_name, slot) {
-	let gl = this.gl
-	let ubi = this.ub(ub_name).index
-	let ubs = this.ubo_bindings
-	if (slot == null) {
-		let ubo = gl.ubos && gl.ubos[ub_name]
-		slot = assert(ubo && ubo.slot, 'no name-bound UBO {0}', ub_name)
-	}
-	if (ubs[ub_name] != slot) {
-		gl.uniformBlockBinding(this, ubi, slot)
-		ubs[ub_name] = slot
-	}
-	return this
-}
-
-gl.bind_ubo = function(ubo, slot) {
-
-	if (slot == null) { // name-based slot allocation.
-		let ubos = attr(this, 'ubos')
-		let ubo0 = ubos[ubo.name]
-		if (ubo0)
-			assert(ubo.program == ubo0.program,
-				'UBO {0} from program {1}, expected UBO from program {2}',
-					ubo.name, ubo.program.name, ubo0.program.name)
-		this.next_ubo_slot = (this.next_ubo_slot || 0)
-		slot = ubo0 ? ubo0.slot : (this.next_ubo_slot++)
-		ubo.slot = slot
-		ubos[ubo.name] = ubo
-	} else {
-		assert(!this.ubos, 'use of both explicit and name-based slot allocation')
-	}
-
-	let slots = attr(this, 'ubo_slots', Array)
-	if (slots[slot] != ubo) {
-		this.bindBufferBase(gl.UNIFORM_BUFFER, slot, ubo && ubo.buffer)
-		slots[slot] = ubo
-	}
-
-	return this
-}
-
-// setting uniforms and drawing ----------------------------------------------
-
-prog.set_uni = function(name, x, y, z, w) {
-	let gl = this.gl
-
-	let u = this.uniforms[name]
-	if (!u)
-		return this
-	let loc = u && u.location
-	if (!loc)
-		return this
-
-	if (u.type == gl.FLOAT) {
-		gl.uniform1f(loc, x || 0)
-	} else if (u.type == gl.INT || u.type == gl.BOOL) {
-		gl.uniform1i(loc, x || 0)
-	} else if (u.type == gl.FLOAT_VEC2) {
-		if (x && (x.is_v2 || x.is_v3 || x.is_v4)) {
-			let p = x
-			x = p.x
-			y = p.y
-		}
-		gl.uniform2f(loc, x || 0, y || 0)
-	} else if (u.type == gl.FLOAT_VEC3) {
-		if (x && (x.is_v3 || x.is_v4)) {
-			let p = x
-			x = p.x
-			y = p.y
-			z = p.z
-		} else if (isnum(x) && y == null) { // 0xRRGGBB -> (r, g, b)
-			let c = x
-			x = (c >> 16 & 0xff) / 255
-			y = (c >>  8 & 0xff) / 255
-			z = (c       & 0xff) / 255
-		}
-		gl.uniform3f(loc, x || 0, y || 0, z || 0)
-	} else if (u.type == gl.FLOAT_VEC4) {
-		if (x && (x.is_v3 || x.is_v4)) {
-			let p = x
-			x = p.x
-			y = p.y
-			z = p.z
-			w = p.w
-		} else if (isnum(x) && y == null) { // 0xRRGGBBAA -> (r, g, b, a)
-			let c = x
-			x = (c >> 24       ) / 255
-			y = (c >> 16 & 0xff) / 255
-			z = (c >>  8 & 0xff) / 255
-			w = (c       & 0xff) / 255
-		}
-		gl.uniform4f(loc, x || 0, y || 0, z || 0, or(w, 1))
-	} else if (u.type == gl.FLOAT_MAT3) {
-		gl.uniformMatrix3fv(loc, false, x || mat3f32.identity)
-	} else if (u.type == gl.FLOAT_MAT4) {
-		gl.uniformMatrix4fv(loc, false, x || mat4f32.identity)
-	} else if (u.type == gl.SAMPLER_2D || u.type == gl.SAMPLER_CUBE) {
-		let tex = x
-		let tex0 = u.value
-		if (tex == tex0)
-			return this
-		if (tex)
-			assert(tex.type == u.tex_type,
-				'texture type mismatch {0}, expected {1}', tex.type, u.tex_type)
-		gl.bind_texture(u.tex_type, tex, u.tex_unit)
-		u.value = tex
-		gl.uniform1i(loc, u.tex_unit)
-	} else {
-		assert(false, 'NYI: {2} uniform (program {0}, uniform {1})',
-			this.name, name, C[u.type])
-	}
-
-	return this
-}
-
-gl.draw = function(gl_mode, offset, count) {
-	let gl = this
-	let vao = gl.active_vao
-	let ib = vao.index_buffer
-	let n_inst = vao.instance_count
-	offset = offset || 0
-	if (ib) {
-		if (count == null)
-			count = ib.len
-		if (n_inst != null) {
-			// NOTE: don't look for an offset-in-the-instance-buffers arg,
-			// that's glDrawElementsInstancedBaseInstance() which is not exposed.
-			gl.drawElementsInstanced(gl_mode, count, ib.gl_type, offset, n_inst)
-		} else {
-			gl.drawElements(gl_mode, count, ib.gl_type, offset)
-		}
-	} else {
-		if (count == null)
-			count = vao.vertex_count
-		if (n_inst != null) {
-			gl.drawArraysInstanced(gl_mode, offset, count, n_inst)
-		} else {
-			gl.drawArrays(gl_mode, offset, count)
-		}
-	}
-	return this
-}
-
-gl.draw_triangles = function(o, n) { return this.draw(gl.TRIANGLES, o, n) }
-gl.draw_points    = function(o, n) { return this.draw(gl.POINTS   , o, n) }
-gl.draw_lines     = function(o, n) { return this.draw(gl.LINES    , o, n) }
-
 // textures ------------------------------------------------------------------
 
 let tex = WebGLTexture.prototype
@@ -1308,46 +1299,28 @@ gl.texture = function(type) {
 gl.bind_texture = function(type, tex1, unit) {
 	let gl = this
 	type = type || '2d'
-	unit = unit || 0
-	let units = attr(attr(gl, 'texture_units'), type, Array)
+	unit = or(unit, -1)
+	if (unit < 0)
+		unit = gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) + unit
+	let units = attr(attr(gl, 'tex_units'), type, Array)
 	let tex0 = units[unit]
-	if (tex0 != tex1) {
-		if (tex1)
-			assert(tex1.type == type,
-				'texture type mismatch {0}, expected {1}', tex1.type, type)
-		if (tex0)
-			tex0.unit = null
+	if (tex1 == tex0)
+		return this
 
-		gl.activeTexture(gl.TEXTURE0 + unit)
-		gl.bindTexture(tex_gl_target(type), tex1)
+	if (tex1)
+		assert(tex1.type == type,
+			'texture type mismatch {0}, expected {1}', tex1.type, type)
+	if (tex0)
+		tex0.unit = null
 
-		units[unit] = tex1
-		if (tex1)
-			tex1.unit = unit
-	}
+	gl.activeTexture(gl.TEXTURE0 + unit)
+	gl.bindTexture(tex_gl_target(type), tex1)
+
+	units[unit] = tex1
+	if (tex1)
+		tex1.unit = unit
+
 	return this
-}
-
-gl.unbind_textures = function(type) {
-	let all_units = gl.texture_units
-	if (!all_units)
-		return this
-	if (!type) {
-		this.unbind_textures('2d')
-		this.unbind_textures('cubemap')
-		return this
-	}
-	let units = all_units[type]
-	if (!units)
-		return this
-	let gl_target = tex_gl_target(type)
-	for (let i = 0, n = units.length; i < n; i++) {
-		if (units[i]) {
-			gl.activeTexture(gl.TEXTURE0 + unit)
-			gl.bindTexture(gl_target, null)
-		}
-	}
-	units.length = 0
 }
 
 tex.bind = function(unit) {
@@ -1376,7 +1349,6 @@ tex.set_depth = function(w, h, f32) {
 		w, h, 0, gl.DEPTH_COMPONENT, f32 ? gl.FLOAT : gl.UNSIGNED_INT, null)
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-	this.unbind()
 
 	this.w = w
 	this.h = h
@@ -1415,7 +1387,6 @@ tex.set_rgba = function(w, h, pixels, side) {
 
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
-	this.unbind()
 
 	this.w = w
 	this.h = h
@@ -1429,7 +1400,6 @@ tex.set_rgba16 = function(w, h, pixels, side) {
 
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.RGBA16UI, w, h, 0, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, pixels)
-	this.unbind()
 
 	this.w = w
 	this.h = h
@@ -1443,7 +1413,6 @@ tex.set_u32 = function(w, h, pixels, side) {
 
 	this.bind()
 	gl.texImage2D(tex_side_target(this, side), 0, gl.R32UI, w, h, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, pixels)
-	this.unbind()
 
 	this.w = w
 	this.h = h

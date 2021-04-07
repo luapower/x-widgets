@@ -19,7 +19,7 @@ canvas.on('webglcontextlost', function() {
 	assert(false, 'webgl context lost')
 })
 
-let gl = canvas.getContext('webgl2', {
+gl = canvas.getContext('webgl2', {
 	//antialias: false, // MSAA FBOs can't be blitted to a MSAA canvas.
 })
 gl.wrap_calls()
@@ -44,7 +44,7 @@ face3 = poly3
 let tex1 = gl.texture().load('checker-big.png', 0.001, scale_texture)
 
 let mat1 = {
-	diffuse_color: 0x9999ff,
+	diffuse_color: 0,
 	diffuse_map: tex1,
 	uv: v2(1, 1),
 }
@@ -65,16 +65,15 @@ materials.set(mat1, faces)
 
 function scale_texture(tex) {
 	print('scale_texture')
-	return
 	let pi = 0
 	for (let face of faces) {
 		for (let i = 0, tris = face.triangles(), n = tris.length; i < n; i++) {
 			let uv = face.uv_at(tris[i], face.uvm, tex.uv)
+			print(uv)
 			uv.to_array(uvs, 2*pi)
 			pi++
 		}
 	}
-	uvs_dbuf.buffer.upload(uvs)
 }
 
 let inst_mat1 = mat4()

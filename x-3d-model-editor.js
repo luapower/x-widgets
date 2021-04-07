@@ -135,13 +135,13 @@ component('x-modeleditor', function(e) {
 	})
 
 	function draw(prog) {
-		//gl.start_trace()
+		gl.start_trace()
 		let t0 = time()
 		skybox.draw(prog)
 		axes_rr.draw(prog)
 		//ground_rr.draw(prog)
 		e.model.draw(prog)
-		//print(gl.stop_trace())
+		print(gl.stop_trace())
 		helper_fat_lines_rr.draw(prog)
 		helper_dashed_lines_rr.draw(prog)
 	}

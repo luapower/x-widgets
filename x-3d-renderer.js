@@ -29,6 +29,7 @@ gl.module('globals', `
 		vec3 sunlight_color;
 		float ambient_strength;
 
+		uniform bool enable_shadows;
 	};
 
 `)
@@ -96,12 +97,10 @@ gl.module('phong.fs', `
 
 	#include mesh.fs
 
-	//layout (std140) uniform phong {
-		uniform float shininess;
-		uniform float specular_strength;
-		uniform bool enable_shadows;
-		uniform sampler2D shadow_map;
-	//};
+	uniform float shininess;
+	uniform float specular_strength;
+
+	uniform sampler2D shadow_map;
 
 	in vec4 v_pos_sdm_view_proj;
 
@@ -141,10 +140,9 @@ gl.module('phong.fs', `
 		float light = (ambient + (1.0 - shadow) * (diffuse + specular));
 
 		vec4 b_color = vec4(diffuse_color, 1.0);
-		//vec4 t_color = texture(diffuse_map, v_uv);
-		//vec4 f_color = mix(b_color, t_color, 0.0);
+		vec4 t_color = texture(diffuse_map, v_uv);
 
-		frag_color = vec4(light * sunlight_color, 1.0) * b_color;
+		frag_color = vec4(light * sunlight_color, 1.0) * (b_color + t_color);
 
 	}
 
@@ -161,8 +159,8 @@ gl.scene_renderer = function(r) {
 	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
 	r.ambient_strength = or(r.ambient_strength, 0.1)
 
-	let globals_ubo = gl.faces_program().ubo('globals')
-	gl.bind_ubo(globals_ubo)
+	let globals_ubo = gl.ubo('globals')
+	globals_ubo.bind()
 
 	let w = 20
 	let shadow_depth = sqrt(FAR)
