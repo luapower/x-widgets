@@ -1,7 +1,7 @@
 /*
 
 	WebGL 2 renderer for a 3D model editor.
-	Written by Cosmin Apreutesei.
+	Written by Cosmin Apreutesei. Public domain.
 
 	Based on tutorials from learnopengl.com.
 
@@ -159,6 +159,8 @@ gl.scene_renderer = function(r) {
 	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
 	r.ambient_strength = or(r.ambient_strength, 0.1)
 
+	r.show_back_faces  = or(r.show_back_faces, false)
+
 	let globals_ubo = gl.ubo('globals')
 	globals_ubo.bind()
 
@@ -259,9 +261,16 @@ gl.scene_renderer = function(r) {
 		let ch = gl.canvas.ch
 		gl.viewport(0, 0, cw, ch)
 		gl.clear_all(...r.background_color)
-		gl.disable(gl.CULL_FACE)
+		if (r.show_back_faces) {
+			gl.disable(gl.CULL_FACE)
+		} else {
+			gl.enable(gl.CULL_FACE)
+			gl.cullFace(gl.BACK)
+		}
 		draw()
 	}
+
+	gl.polygonOffset(1, 0) // make face edges show propertly.
 
 	r.update()
 
@@ -367,9 +376,17 @@ gl.face_id_renderer = function(r) {
 
 // face rendering ------------------------------------------------------------
 
-gl.faces_program = function() {
+gl.faces_renderer = function() {
 
-	return this.program('face', `
+	let gl = this
+
+	let e = {
+		specular_strength: .2,
+		shininess: 5,
+		diffuse_color: 0xffffff,
+	}
+
+	let prog = this.program('face', `
 
 		#include phong.vs
 
@@ -403,20 +420,6 @@ gl.faces_program = function() {
 
 	`)
 
-}
-
-gl.faces_renderer = function() {
-
-	let gl = this
-
-	let e = {
-		specular_strength: .2,
-		shininess: 5,
-		polygon_offset: 1,
-		diffuse_color: 0xffffff,
-	}
-
-	let prog = gl.faces_program()
 	let vao = prog.vao()
 
 	let draw_ranges = []
@@ -500,7 +503,6 @@ gl.faces_renderer = function() {
 	let vao_set = gl.vao_set()
 
 	e.draw = function(prog1) {
-		gl.polygonOffset(e.polygon_offset, 0)
 		if (prog1) {
 			let vao = vao_set.vao(prog1)
 			vao.use()
@@ -509,7 +511,6 @@ gl.faces_renderer = function() {
 			vao.set_attr('model'  , e.model)
 			vao.set_attr('inst_id', e.inst_id)
 			gl.draw_triangles()
-			vao.unuse()
 		} else {
 			vao.use()
 			vao.set_attrs(davb)
@@ -522,9 +523,7 @@ gl.faces_renderer = function() {
 				prog.set_uni('diffuse_map'       , mat.diffuse_map)
 				gl.draw_triangles(offset, len)
 			}
-			vao.unuse()
 		}
-		gl.polygonOffset(0, 0)
 	}
 
 	e.free = function() {
@@ -583,7 +582,6 @@ gl.solid_lines_renderer = function() {
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_lines()
-		vao.unuse()
 	}
 
 	e.free = function() {
@@ -646,7 +644,6 @@ gl.points_renderer = function(e) {
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_points()
-		vao.unuse()
 	}
 
 	e.free = function() {
@@ -724,7 +721,6 @@ gl.dashed_lines_renderer = function(e) {
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_lines()
-		vao.unuse()
 	}
 
 	e.free = function() {
@@ -801,6 +797,61 @@ gl.fat_lines_renderer = function(e) {
 	let davb = gl.dyn_arr_vertex_buffer({pos: 'v3', q: 'v3', dir: 'i8'})
 	let ib = gl.dyn_arr_index_buffer()
 
+	function set_line_pos(line, i, ps, qs) {
+
+		let p1x = line[0][0]
+		let p1y = line[0][1]
+		let p1z = line[0][2]
+		let p2x = line[1][0]
+		let p2y = line[1][1]
+		let p2z = line[1][2]
+
+		// each line has 4 points: (p1, p1, p2, p2).
+		ps[3*(i+0)+0] = p1x
+		ps[3*(i+0)+1] = p1y
+		ps[3*(i+0)+2] = p1z
+
+		ps[3*(i+1)+0] = p1x
+		ps[3*(i+1)+1] = p1y
+		ps[3*(i+1)+2] = p1z
+
+		ps[3*(i+2)+0] = p2x
+		ps[3*(i+2)+1] = p2y
+		ps[3*(i+2)+2] = p2z
+
+		ps[3*(i+3)+0] = p2x
+		ps[3*(i+3)+1] = p2y
+		ps[3*(i+3)+2] = p2z
+
+		// each point has access to its opposite point, so (p2, p2, p1, p1).
+		qs[3*(i+0)+0] = p2x
+		qs[3*(i+0)+1] = p2y
+		qs[3*(i+0)+2] = p2z
+
+		qs[3*(i+1)+0] = p2x
+		qs[3*(i+1)+1] = p2y
+		qs[3*(i+1)+2] = p2z
+
+		qs[3*(i+2)+0] = p1x
+		qs[3*(i+2)+1] = p1y
+		qs[3*(i+2)+2] = p1z
+
+		qs[3*(i+3)+0] = p1x
+		qs[3*(i+3)+1] = p1y
+		qs[3*(i+3)+2] = p1z
+
+	}
+
+	e.update_at = function(i, line) {
+		let ps = davb.pos.array
+		let qs = davb.q.array
+		set_line_pos(line, i * 4, ps, qs)
+		davb.pos.invalidate(i * 4, 1)
+		davb.q  .invalidate(i * 4, 1)
+		davb.pos.update_invalid()
+		davb.q  .update_invalid()
+	}
+
 	e.update = function(each_line, line_count) {
 
 		let vertex_count = 4 * line_count
@@ -821,46 +872,7 @@ gl.fat_lines_renderer = function(e) {
 		let j = 0
 		each_line(function(line) {
 
-			let p1x = line[0][0]
-			let p1y = line[0][1]
-			let p1z = line[0][2]
-			let p2x = line[1][0]
-			let p2y = line[1][1]
-			let p2z = line[1][2]
-
-			// each line has 4 points: (p1, p1, p2, p2).
-			ps[3*(i+0)+0] = p1x
-			ps[3*(i+0)+1] = p1y
-			ps[3*(i+0)+2] = p1z
-
-			ps[3*(i+1)+0] = p1x
-			ps[3*(i+1)+1] = p1y
-			ps[3*(i+1)+2] = p1z
-
-			ps[3*(i+2)+0] = p2x
-			ps[3*(i+2)+1] = p2y
-			ps[3*(i+2)+2] = p2z
-
-			ps[3*(i+3)+0] = p2x
-			ps[3*(i+3)+1] = p2y
-			ps[3*(i+3)+2] = p2z
-
-			// each point has access to its opposite point, so (p2, p2, p1, p1).
-			qs[3*(i+0)+0] = p2x
-			qs[3*(i+0)+1] = p2y
-			qs[3*(i+0)+2] = p2z
-
-			qs[3*(i+1)+0] = p2x
-			qs[3*(i+1)+1] = p2y
-			qs[3*(i+1)+2] = p2z
-
-			qs[3*(i+2)+0] = p1x
-			qs[3*(i+2)+1] = p1y
-			qs[3*(i+2)+2] = p1z
-
-			qs[3*(i+3)+0] = p1x
-			qs[3*(i+3)+1] = p1y
-			qs[3*(i+3)+2] = p1z
+			set_line_pos(line, i, ps, qs)
 
 			// each point has an alternating normal direction.
 			ds[i+0] =  1
@@ -891,7 +903,6 @@ gl.fat_lines_renderer = function(e) {
 			return // no shadows or hit-testing
 		if (!ib.buffer)
 			return
-		TRACE1 = 1
 		vao.use()
 		vao.set_attrs(davb)
 		vao.set_attr('model', e.model)
@@ -899,8 +910,6 @@ gl.fat_lines_renderer = function(e) {
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
 		gl.draw_triangles()
-		vao.unuse()
-		TRACE1 = 0
 	}
 
 	e.free = function() {
@@ -1068,7 +1077,6 @@ gl.skybox = function(opt) {
 			return // no shadows or hit-testing
 		vao.use()
 		gl.draw_triangles()
-		vao.unuse()
 	}
 
 	assign(e, opt)
@@ -1077,22 +1085,119 @@ gl.skybox = function(opt) {
 	return e
 }
 
+// helper lines --------------------------------------------------------------
+
 gl.helper_lines_renderer = function() {
 
+	let gl = this
 	let e = {}
 
-	let helper_fat_lines_rr    = gl.fat_lines_renderer({})
-	let helper_dashed_lines_rr = gl.dashed_lines_renderer({dash: 5, gap: 3})
+	let fl_rr = gl.fat_lines_renderer({})
+	let dl_rr = gl.dashed_lines_renderer({dash: 5, gap: 3})
 
-	e.line = function(p1, p2) {
+	let fl = [] // [line1,...]
+	let dl = [] // [line1,...]
 
-		//
-
+	function each_fat_line(f) {
+		for (let line of fl)
+			f(line)
 	}
 
-	e.draw = function() {
-
+	function update_fl() {
+		fl_rr.update(each_fat_line, fl.length)
 	}
+
+	function update_fl_for(line) {
+		fl_rr.update_at(line.hli, line)
+	}
+
+	let dl_dab_pos   = gl.dyn_arr_buffer('v3')
+	let dl_dab_color = gl.dyn_arr_buffer('v3')
+
+	let dl_dab_model = gl.dyn_arr_buffer('mat4')
+	dl_dab_model.set(0, mat4f32.identity)
+	dl_dab_model.upload_invalid()
+	dl_rr.model = dl_dab_model.buffer
+
+	let _v = v3()
+	function set_dl(line) {
+		let i = line.hli
+		dl_dab_pos.set(2 * (i+0), dl[i][0])
+		dl_dab_pos.set(2 * (i+1), dl[i][1])
+		let c = _v.set(dl[i].color)
+		dl_dab_color.set(2 * (i+0), c)
+		dl_dab_color.set(2 * (i+1), c)
+	}
+
+	function update_dl() {
+
+		dl_dab_pos  .len = dl.length
+		dl_dab_color.len = dl.length
+
+		let i = 0
+		for (line of dl) {
+			if (line.visible)	{
+				line.hli = i++
+				set_dl(line)
+			}
+			line._visible = line.visible
+		}
+
+		dl_dab_pos  .len = i
+		dl_dab_color.len = i
+
+		dl_dab_pos  .upload()
+		dl_dab_color.upload()
+
+		dl_rr.pos   = dl_dab_pos  .buffer
+		dl_rr.color = dl_dab_color.buffer
+	}
+
+	function update_dl_for(line) {
+		set_dl(line)
+		dl_dab_pos  .upload_invalid()
+		dl_dab_color.upload_invalid()
+	}
+
+	e.line = function(line, color, dashed, visible) {
+
+		line.color = color || 0
+		line.visible = visible !== false
+
+		let lines = dashed ? dl : fl
+		let update_lines = dashed ? update_dl     : update_fl
+		let update_line  = dashed ? update_dl_for : update_fl_for
+
+		lines.push(line)
+
+		line.free = function() {
+			lines.remove_value(line)
+			update_lines()
+		}
+
+		line.update = function() {
+			if (line._visible != line.visible)
+				update_lines()
+			else
+				update_line(line)
+		}
+
+		update_lines()
+
+		return line
+	}
+
+	e.draw = function(prog) {
+		fl_rr.draw(prog)
+		dl_rr.draw(prog, false)
+	}
+
+	e.free = function() {
+		fl_rr.free()
+		dl_rr.free()
+	}
+
+	return e
 
 }
 
@@ -1211,7 +1316,6 @@ gl.shadow_map_quad = function(tex, imat) {
 			return
 		vao.use()
 		gl.draw_triangles()
-		vao.unuse()
 	}
 
 	e.free = function() {

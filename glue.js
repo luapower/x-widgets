@@ -74,7 +74,6 @@
 	typed arrays:
 		[dyn_][f32|i8|u8|i16|u16|i32|u32]arr(arr|[...]|capacity, [nc])
 			set(in_arr, [offset=0], [len], [in_offset=0])
-			get(out_arr, [offset=0], [len], [out_offset=0]) -> out_arr
 			invalidate([offset=0], [len])
 			grow_type(arr_type|max_index|[...]|arr)
 	events:
@@ -359,7 +358,10 @@ method(Array, 'move', function(i1, n, insert_i) {
 	this.splice(insert_i, 0, ...this.splice(i1, n))
 })
 
-property(Array, 'last', {get: function() { return this[this.length-1] } })
+property(Array, 'last', {
+	get: function() { return this[this.length-1] },
+	set: function(v) { this[this.length-1] = v }
+})
 
 // binary search for an insert position that keeps the array sorted.
 // using '<' gives the first insert position, while '<=' gives the last.
@@ -529,7 +531,7 @@ class dyn_arr_class {
 		return this
 	}
 
-	set(data, offset, len, data_offset) {
+	set(offset, data, len, data_offset) {
 
 		// check/clamp/slice source.
 		data_offset = data_offset || 0
@@ -540,7 +542,6 @@ class dyn_arr_class {
 		if (data_offset != 0 || len != data_len)
 			data = data.subarray(data_offset * this.nc, (data_offset + len) * this.nc)
 
-		offset = offset || 0
 		assert(offset >= 0, 'offset out of range')
 
 		this._set_len(max(this.len, offset + len))
@@ -548,24 +549,6 @@ class dyn_arr_class {
 		this.invalidate(offset, len)
 
 		return this
-	}
-
-	get(out, offset, len, out_offset) {
-
-		let this_len = this.len
-
-		// check/clamp/slice source.
-		offset = offset || 0
-		assert(offset >= 0 && offset <= this_len, 'offset out of range')
-		len = clamp(or(len, 1/0), 0, this_len - offset)
-		let data = this.array
-		if (offset != 0 || len != this_len)
-			data = data.subarray(offset * this.nc, (offset + len) * this.nc)
-
-		if (data)
-			out.set(data, out_offset)
-
-		return out
 	}
 
 	_set_len = function(len) {

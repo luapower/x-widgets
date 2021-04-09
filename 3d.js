@@ -1,7 +1,7 @@
 /*
 
 	3D math lib.
-	Written by Cosmin Apreutesei.
+	Written by Cosmin Apreutesei. Public domain.
 
 	Code adapted from three.js and glMatrix, MIT License.
 
@@ -69,7 +69,7 @@
 		plane xy_quat is_convex_quad triangle_count triangles triangle contains_point
 
 	line3 [p0, p1]
-		set(line | p1,p2) clone equals
+		set(line | p1,p2) clone equals to|from[_line3]_array
 		center delta distance2 distance at
 		closest_point_to_point_t closest_point_to_point intersect_line intersect_plane intersects_plane
 		transform
@@ -2248,6 +2248,7 @@ let triangle3_class = class triangle3 extends Array {
 		this[2][0] = a[i+6]
 		this[2][1] = a[i+7]
 		this[2][2] = a[i+8]
+		return this
 	}
 
 	to_array(a, i) {
@@ -2260,6 +2261,7 @@ let triangle3_class = class triangle3 extends Array {
 		a[i+6] = this[2][0]
 		a[i+7] = this[2][1]
 		a[i+8] = this[2][2]
+		return a
 	}
 
 	from_triangle3_array(a, i) { return this.from_array(a, 9 * i) }
@@ -2844,6 +2846,30 @@ let line3_class = class line3 extends Array {
 
 	at(t, out) {
 		return this.delta(out).muls(t).add(this[0])
+	}
+
+	to_array(a, i) {
+		this[0].to_array(a, i)
+		this[1].to_array(a, i+3)
+		return a
+	}
+
+	to_line3_array(a, i) {
+		this[0].to_v3_array(a, 2 * (i+0))
+		this[1].to_v3_array(a, 2 * (i+1))
+		return a
+	}
+
+	from_array(a, i) {
+		this[0].from_array(a, i)
+		this[1].from_array(a, i+3)
+		return this
+	}
+
+	from_line3_array(a, i) {
+		this[0].from_v3_array(a, 2 * (i+0))
+		this[1].from_v3_array(a, 2 * (i+1))
+		return this
 	}
 
 	closest_point_to_point_t(p, clamp_to_line) {

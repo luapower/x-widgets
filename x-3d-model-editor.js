@@ -1,7 +1,7 @@
 /*
 
 	3D model editor widget.
-	Written by Cosmin Apreutesei. Public Domain.
+	Written by Cosmin Apreutesei. Public domain.
 
 */
 
@@ -135,15 +135,16 @@ component('x-modeleditor', function(e) {
 	})
 
 	function draw(prog) {
-		gl.start_trace()
+		if (DEBUG)
+			gl.start_trace()
 		let t0 = time()
 		skybox.draw(prog)
 		axes_rr.draw(prog)
 		//ground_rr.draw(prog)
 		e.model.draw(prog)
-		print(gl.stop_trace())
-		helper_fat_lines_rr.draw(prog)
-		helper_dashed_lines_rr.draw(prog)
+		if (DEBUG)
+			print(gl.stop_trace())
+		helper_lines_rr.draw(prog)
 	}
 
 	let raf_id
@@ -240,75 +241,12 @@ component('x-modeleditor', function(e) {
 
 	// colored fat helper lines -----------------------------------------------
 
-	let helper_fat_lines_rr    = gl.fat_lines_renderer({})
-	let helper_dashed_lines_rr = gl.dashed_lines_renderer({dash: 5, gap: 3})
+	let helper_lines_rr = gl.helper_lines_renderer()
 
-	e.line = function(name, line, dotted, color) {
-
-		color = color || 0
-
-		let e, mat
-
-		if (dotted) {
-
-			mat = dashed_line_material({color: color})
-
-			function resized(r) {
-				mat.uniforms.canvas.value.x = r.w
-				mat.uniforms.canvas.value.y = r.h
-			}
-
-			pe.on('resize', resized)
-
-			mat.set_color = function(color) {
-				this.uniforms.color.value.set(color)
-			}
-
-			mat.set_color(color)
-
-			mat.free = function() {
-				pe.off('resize', resized)
-			}
-
-		} else {
-
-			mat = new THREE.LineBasicMaterial({color: color})
-
-			mat.set_color = function(color) {
-				this.color.set(color)
-			}
-
-			mat.free = noop
-
-		}
-
-		let geo = new THREE.BufferGeometry().setFromPoints([line[0], line[1]])
-
-		e = new THREE.LineSegments(geo, mat)
-		e.line = line
-		e.name = name
-
-		property(e, 'color', () => color, function(color1) {
-			color = color1
-			mat.set_color(color)
-		})
-
-		e.free = function() {
-			//
-		}
-
-		e.update = function() {
-			//
-		}
-
-		e.update_endpoints = function(p1, p2) {
-			e.line.set(p1, p2)
-			e.update()
-			e.visible = true
-		}
-
-		return e
-
+	e.line = function(name, line, color, dashed, visible) {
+		line = helper_lines_rr.line(line, color, dashed, visible)
+		line.name = name
+		return line
 	}
 
 	// html-rendered helper dots ----------------------------------------------
@@ -674,30 +612,14 @@ component('x-modeleditor', function(e) {
 
 	// current point hit-testing and snapping ---------------------------------
 
-	function mouse_hit_faces() {
-		let hit = e.raycaster.intersectObject(e.model.group, true)[0]
-		if (!(hit && hit.object.type == 'Mesh'))
-			return
-		// print(hit.object.name == 'smooth_faces')
-		// print(hit.faceIndex)
-
-		hit.point.face = hit.object.face
-		hit.point.snap = 'face'
-		return hit.point
-	}
-
 	function mouse_hit_model(axes_origin, hit_void) {
 
-		let p = mouse_hit_faces()
-
-		if (p) {
+		if (mouse.face) {
 
 			// we've hit a face, but we still have to hit any lines
 			// that lie in front of it, on it, or intersecting it.
 
-			let p0 = e.raycaster.ray.origin
-			let ray = line3(p0, e.raycaster.ray.direction.clone().setLength(2 * e.max_distance).add(p0))
-			let plane = p.face.plane()
+			let plane = mouse.face.plane()
 
 			// preliminary line filter before hit-testing.
 			// this can filter a lot or very little depending on context.
@@ -724,7 +646,7 @@ component('x-modeleditor', function(e) {
 				}
 			}
 
-			let p1 = e.model.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true,
+			let p1 = e.model.line_hit_lines(mouse.ray, e.hit_d, canvas_p2p_distance2, true,
 				is_intersecting_line_valid, null, is_line_not_behind_face_plane)
 
 			if (p1) {
@@ -757,10 +679,7 @@ component('x-modeleditor', function(e) {
 		} else {
 
 			// we haven't hit a face: hit the line closest to the ray regardless of depth.
-			let p0 = e.raycaster.ray.origin
-			let p1 = e.raycaster.ray.direction
-			let ray = line3(p0, p1.clone().setLength(2 * e.max_distance).add(p0))
-			p = e.model.line_hit_lines(ray, e.hit_d, canvas_p2p_distance2, true)
+			p = e.model.line_hit_lines(mouse.ray, e.hit_d, canvas_p2p_distance2, true)
 
 			if (p) {
 
@@ -800,16 +719,13 @@ component('x-modeleditor', function(e) {
 			cur_point = e.dot(endp)
 			cur_point.visible = false
 
-			cur_line = e.line('cur_line', line3(v3(), endp))
-			cur_line.color = black
-			cur_line.visible = false
+			cur_line = e.line('cur_line', line3(v3(), endp), black, false, false)
 
 			ref_point = e.dot()
 			ref_point.point.snap = 'ref_point'
 			ref_point.visible = false
 
-			ref_line = e.line('ref_line', line3(), true)
-			ref_line.visible = false
+			ref_line = e.line('ref_line', line3(), black, true, false)
 		} else {
 			cur_point = cur_point.free()
 			cur_line  = cur_line.free()
@@ -821,8 +737,10 @@ component('x-modeleditor', function(e) {
 	tools.line.cancel = function() {
 		e.tooltip = ''
 		cur_line.visible = false
+		cur_line.update()
 		ref_point.visible = false
 		ref_line.visible = false
+		reF_line.update()
 	}
 
 	let snap_tooltips = {
@@ -850,9 +768,8 @@ component('x-modeleditor', function(e) {
 
 	tools.line.pointermove = function() {
 
-		let cline = cur_line.line
-		let p1 = cline[0]
-		let p2 = cline[1]
+		let p1 = cur_line[0]
+		let p2 = cur_line[1]
 		p2.i = null
 		p2.face = null
 		p2.li = null
@@ -872,7 +789,7 @@ component('x-modeleditor', function(e) {
 
 			// change the ref point.
 			if ((p.snap == 'point' || p.snap == 'line_middle')
-				&& (p.i == null || !cur_line.visible || p.i != cline[0].i)
+				&& (p.i == null || !cur_line.visible || p.i != cur_line[0].i)
 			) {
 				assign(future_ref_point, p)
 				ref_point_update_after(.5)
@@ -908,7 +825,7 @@ component('x-modeleditor', function(e) {
 					if (ref_point.visible) {
 						assign(p2, p)
 						let p_line_snap = p.line_snap
-						let axes_int_p = axes_hit_line(ref_point.point, p, cline)
+						let axes_int_p = axes_hit_line(ref_point.point, p, cur_line)
 						if (axes_int_p && canvas_p2p_distance2(axes_int_p, p) <= e.hit_d ** 2) {
 							assign(p, axes_int_p)
 							ref_line.snap = axes_int_p.line_snap
@@ -945,21 +862,22 @@ component('x-modeleditor', function(e) {
 
 	tools.line.pointerdown = function() {
 		e.tooltip = ''
-		let cline = cur_line.line
 		if (cur_line.visible) {
-			let closing = cline[1].i != null || cline[1].li != null
-			e.model.draw_line(cline)
+			let closing = cur_line[1].i != null || cur_line[1].li != null
+			e.model.draw_line(cur_line)
 			ref_point.visible = false
 			if (closing) {
 				tools.line.cancel()
 			} else {
-				cline[0].set(cline[1])
-				cline[0].i = cline[1].i
+				cur_line[0].set(cur_line[1])
+				cur_line[0].i = cur_line[1].i
+				cur_line.update()
 			}
 		} else {
-			if (cline[0].i != null && ref_point.point.i == cline[0].i)
+			if (cur_line[0].i != null && ref_point.point.i == cur_line[0].i)
 				ref_point.visible = false
 			cur_line.visible = true
+			cur_line.update()
 		}
 	}
 

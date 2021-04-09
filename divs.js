@@ -1,7 +1,7 @@
 /*
 
 	DOM manipulation & extensions.
-	Written by Cosmin Apreutesei. Public Domain.
+	Written by Cosmin Apreutesei. Public domain.
 
 	Dependencies: glue.js.
 

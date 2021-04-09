@@ -1,7 +1,7 @@
 /*
 
 	WebGL 2 wrapper.
-	Written by Cosmin Apreutesei.
+	Written by Cosmin Apreutesei. Public domain.
 
 	Canvas
 
@@ -24,24 +24,20 @@
 			type: u8|u16|u32
 		gl.dyn_arr_vertex_buffer({name->type}) -> davb
 
-		b.upload(in_arr, [offset=0], [len], [in_offset=0])
-		b.download(out_arr, [offset=0], [len], [out_offset=0])
-		b.set(in_b, [offset=0], [len], [in_offset=0])
+		b.upload(in_arr, [offset=0], [len=1/0], [in_offset=0])
+		b.download(out_arr, [offset=0], [len=1/0], [out_offset=0]) -> out_arr
+		b.set(offset, in_b, [len=1/0], [in_offset=0])
 		b.arr([data|len]) -> a
 		b.len
 
-		db.buffer
+		db.len db.buffer
 		db.grow_type(arr|[...]|u8arr|u16arr|u32arr|max_idx)
-		db.len
 
-		dab.buffer
-		dab.array
-		dab.grow_type
-		dab.len
-		dab.set
-		dab.get
-		dab.invalidate
-		dab.upload
+		dab.len dab.buffer dab.array
+		dab.grow_type(type|max_idx)
+		dab.set(offset, in_arr, [len=1/0], [in_offset=0])
+		dab.invalidate([offset=0], [len=1/0])
+		dab.upload()
 
 		davb.len
 		davb.<name> -> dab
@@ -475,38 +471,70 @@ prog.set_uni = function(name, x, y, z, w) {
 		return this
 
 	let loc = u.location
+	let t = u.type
 
-	if (u.type == gl.FLOAT) {
-		gl.uniform1f(loc, x || 0)
-	} else if (u.type == gl.INT || u.type == gl.BOOL) {
-		gl.uniform1i(loc, x || 0)
-	} else if (u.type == gl.FLOAT_VEC2) {
-		if (x && (x.is_v2 || x.is_v3 || x.is_v4)) {
-			let p = x
-			x = p.x
-			y = p.y
+	if (t == gl.FLOAT || t == gl.INT || t == gl.BOOL) {
+		x = x || 0
+		if (u.value == null || x != u.value) {
+			if (t == gl.FLOAT)
+				gl.uniform1f(loc, x)
+			else
+				gl.uniform1i(loc, x)
+			u.value = x
 		}
-		gl.uniform2f(loc, x || 0, y || 0)
-	} else if (u.type == gl.FLOAT_VEC3) {
-		if (x && (x.is_v3 || x.is_v4)) {
+	} else if (t == gl.FLOAT_VEC2) {
+		if (x == null) {
+			x = 0
+			y = 0
+		} else if (x.is_v2 || x.is_v3 || x.is_v4) {
 			let p = x
-			x = p.x
-			y = p.y
-			z = p.z
+			x = p[0]
+			y = p[1]
+		}
+		let v = u.value
+		if (!v || x != v[0] || y != v[1]) {
+			gl.uniform2f(loc, x, y)
+			if (v)
+				v.set(x, y)
+			else
+				u.value = v2(x, y)
+		}
+	} else if (t == gl.FLOAT_VEC3) {
+		if (x == null) {
+			x = 0
+			y = 0
+			z = 0
+		} else if (x.is_v3 || x.is_v4) {
+			let p = x
+			x = p[0]
+			y = p[1]
+			z = p[2]
 		} else if (isnum(x) && y == null) { // 0xRRGGBB -> (r, g, b)
 			let c = x
 			x = (c >> 16 & 0xff) / 255
 			y = (c >>  8 & 0xff) / 255
 			z = (c       & 0xff) / 255
 		}
-		gl.uniform3f(loc, x || 0, y || 0, z || 0)
-	} else if (u.type == gl.FLOAT_VEC4) {
-		if (x && (x.is_v3 || x.is_v4)) {
+		let v = u.value
+		if (!v || x != v[0] || y != v[1] || z != v[2]) {
+			gl.uniform3f(loc, x, y, z)
+			if (v)
+				v.set(x, y, z)
+			else
+				u.value = v3(x, y, z)
+		}
+	} else if (t == gl.FLOAT_VEC4) {
+		if (x == null) {
+			x = 0
+			y = 0
+			z = 0
+			w = 1
+		} else if (x.is_v3 || x.is_v4) {
 			let p = x
-			x = p.x
-			y = p.y
-			z = p.z
-			w = p.w
+			x = p[0]
+			y = p[1]
+			z = p[2]
+			w = p[3]
 		} else if (isnum(x) && y == null) { // 0xRRGGBBAA -> (r, g, b, a)
 			let c = x
 			x = (c >> 24       ) / 255
@@ -514,12 +542,32 @@ prog.set_uni = function(name, x, y, z, w) {
 			z = (c >>  8 & 0xff) / 255
 			w = (c       & 0xff) / 255
 		}
-		gl.uniform4f(loc, x || 0, y || 0, z || 0, or(w, 1))
-	} else if (u.type == gl.FLOAT_MAT3) {
-		gl.uniformMatrix3fv(loc, false, x || mat3f32.identity)
-	} else if (u.type == gl.FLOAT_MAT4) {
-		gl.uniformMatrix4fv(loc, false, x || mat4f32.identity)
-	} else if (u.type == gl.SAMPLER_2D || u.type == gl.SAMPLER_CUBE) {
+		w = or(w, 1)
+		let v = u.value
+		if (!v || x != v[0] || y != v[1] || z != v[2] || w != v[3]) {
+			gl.uniform4f(loc, x, y, z, w)
+			if (v)
+				v.set(x, y, z, w)
+			else
+				u.value = v4(x, y, z, w)
+		}
+	} else if (t == gl.FLOAT_MAT3) {
+		let changed = !u.value || !u.value.equals(x)
+		if (u.value)
+			u.value.set(x)
+		else
+			u.value = mat3f32(...x)
+		if (changed)
+			gl.uniformMatrix3fv(loc, false, u.value)
+	} else if (t == gl.FLOAT_MAT4) {
+		let changed = !u.value || !u.value.equals(x)
+		if (u.value)
+			u.value.set(x)
+		else
+			u.value = mat4f32(...x)
+		if (changed)
+			gl.uniformMatrix4fv(loc, false, u.value)
+	} else if (t == gl.SAMPLER_2D || t == gl.SAMPLER_CUBE) {
 		let tex = x
 		let tex0 = u.value
 		if (tex == tex0)
@@ -532,7 +580,7 @@ prog.set_uni = function(name, x, y, z, w) {
 		gl.uniform1i(loc, u.tex_unit)
 	} else {
 		assert(false, 'NYI: {2} uniform (program {0}, uniform {1})',
-			this.name, name, C[u.type])
+			this.name, name, C[t])
 	}
 
 	return this
@@ -585,9 +633,6 @@ gl.ubo = function(ub_name) {
 			) {
 				assert(val.length == bt_by_gl_type[gl_type].nc)
 				arr_f32.set(val, offset)
-			} else if (gl_type == gl.SAMPLER_2D || gl_type == gl.SAMPLER_CUBE) {
-				arr_i32[offset] = u.tex_unit
-				gl.bind_texture(u.tex_type, val, u.tex_unit)
 			} else {
 				assert(false, 'NYI: {3} field', C[gl_type])
 			}
@@ -1013,13 +1058,11 @@ buf.download = function(out_arr, offset, len, out_offset) {
 	return out_arr
 }
 
-buf.set = function(in_buf, offset, len, in_offset) {
+buf.set = function(offset, in_buf, len, in_offset) {
 	let gl = this.gl
 	let nc = this.nc
 	check_arr_type(in_buf, this.arr_type)
 	check_arr_nc(in_buf, nc)
-	offset = offset || 0
-	in_offset = in_offset || 0
 	assert(offset >= 0)
 	assert(out_offset >= 0)
 	if (len == null)
@@ -1085,7 +1128,7 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 			let b0 = this.buffer
 			let b1 = gl.buffer(cap, type, inst_div, for_index)
 			if (b0) {
-				b1.set(b0)
+				b1.set(0, b0)
 				b0.free()
 			}
 			this.buffer = b1
@@ -1148,8 +1191,8 @@ gl.dyn_arr_buffer = function(type, data_or_cap, inst_div, for_index) {
 		return this
 	}
 
-	dab.set = function(in_arr, offset, len, in_offset) {
-		da.set(in_arr, offset, len, in_offset)
+	dab.set = function(offset, in_arr, len, in_offset) {
+		da.set(offset, in_arr, len, in_offset)
 		return this
 	}
 
@@ -1594,8 +1637,10 @@ gl.set_draw_buffers = function(attachments) {
 
 fbo.bind = function(mode, attachments, color_unit) {
 	let gl = this.gl
-	assert(!gl.active_vao)
-	assert(!gl.active_program)
+	if (gl.active_vao)
+		gl.active_vao.unuse()
+	else if (gl.active_program)
+		gl.active_program.unuse()
 	let gl_target
 	if (mode == 'read') {
 		if (this != gl.read_fbo) {
@@ -1744,8 +1789,10 @@ fbo.gl_target = function() {
 
 fbo.unbind = function() {
 	let gl = this.gl
-	assert(!gl.active_vao)
-	assert(!gl.active_program)
+	if (gl.active_vao)
+		gl.active_vao.unuse()
+	else if (gl.active_program)
+		gl.active_program.unuse()
 	if (this == gl.read_fbo) {
 		gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null)
 		gl.read_fbo = null

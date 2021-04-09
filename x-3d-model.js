@@ -1,22 +1,11 @@
 /*
 
 	Polygon-based editable 3D models.
-	Written by Cosmin Apreutesei. Public Domain.
+	Written by Cosmin Apreutesei. Public domain.
 
 */
 
 (function() {
-
-// Models are comprised primarily of polygons enclosed and connected by lines
-// defined over a common point cloud. A model can contain instances of other
-// models at their own transform matrix, and can also contain standalone lines.
-
-// The editing API implements the direct manipulation UI and is designed to
-// perform automatic creation/removal/intersection of points/lines/polygons
-// while keeping the model numerically stable and clean. In particular:
-// - editing operations never leave duplicate points/lines/polygons.
-// - existing points are never moved when adding new geometry.
-// - when existing lines are cut, straightness is preserved to best accuracy.
 
 function real_p2p_distance2(p1, p2) { // stub
 	return p1.distance2(p2)
@@ -86,16 +75,6 @@ model3 = function(e) {
 
 	let root_inst
 
-	function each_child_inst(children, f) {
-		if (children)
-			for (let child_inst of children)
-				each_child_inst(child_inst, inst)
-	}
-
-	function each_instance(f) {
-		each_child_inst(root_inst.comp.children, f)
-	}
-
 	function child_added(parent_comp, inst) {
 		instances_valid = false
 	}
@@ -111,19 +90,19 @@ model3 = function(e) {
 
 	let _m = mat4()
 
-	function update_instance_matrix(inst, parent_inst) {
+	function update_instance_matrices_for(inst, parent_inst) {
 		let dab = inst.comp.model_dab
 		let i = dab.len
 		dab.len = i + 1
-		_m.set(inst).mul(parent_inst).to_mat4_array(dab.array, i)
+		_m.set(inst).mul(parent_inst || mat4.identity).to_mat4_array(dab.array, i)
 
+		inst.parent_inst = parent_inst
 		let children = inst.comp.children
 		if (children)
 			for (let child_inst of children)
 				if (child_inst.layer.visible)
-					update_instance_matrix(child_inst, inst)
+					update_instance_matrices_for(child_inst, inst)
 	}
-
 	function update_instance_matrices() {
 
 		if (instances_valid)
@@ -135,12 +114,30 @@ model3 = function(e) {
 			else
 				comp.model_dab = gl.dyn_arr_mat4_instance_buffer()
 
-		update_instance_matrix(root_inst, mat4.identity)
+		update_instance_matrices_for(root_inst)
 
 		for (let comp of comps)
 			comp.model_dab.upload()
 
 		instances_valid = true
+	}
+
+	function instance_path_for(target_comp, target_inst_id, inst, path) {
+		path.push(inst)
+		if (target_comp == inst.comp && target_inst_id == target_comp._inst_id)
+			return path
+		inst.comp._inst_id++
+		for (let child_inst of inst.comp.children) {
+			if (instance_path_for(target_comp, target_inst_id, child_inst, path))
+				return path
+		}
+		path.pop(inst)
+	}
+	function instance_path(comp, inst_id) {
+		for (let comp of comps)
+			comp._inst_id = 0
+		let path = []
+		return instance_path_for(comp, inst_id, root_inst, path)
 	}
 
 	function init_root() {
@@ -169,10 +166,23 @@ model3 = function(e) {
 
 	// rendering --------------------------------------------------------------
 
-	function draw(prog) {
+	function update() {
 		update_instance_matrices()
 		for (let comp of comps)
-			comp.draw(prog, comp.model_dab.buffer)
+			comp.update(comp.model_dab.buffer)
+	}
+
+	function draw(prog) {
+		update()
+		for (let i = 0, n = comps[0] && comps[0].renderers.length || 0; i < n; i++)
+			for (let comp of comps)
+				comp.renderers[i].draw(prog)
+	}
+
+	function draw_faces(prog) {
+		update()
+		for (let comp of comps)
+			comp.face_renderer.draw(prog)
 	}
 
 	e.draw = draw
@@ -182,7 +192,8 @@ model3 = function(e) {
 	let face_id_rr = gl.face_id_renderer()
 
 	function update_mouse() {
-		face_id_rr.render(draw)
+		update()
+		face_id_rr.render(draw_faces)
 	}
 
 	{
@@ -198,6 +209,7 @@ model3 = function(e) {
 			out.comp = comp
 			out.inst = inst
 			out.face = comp.face_at(fi)
+			out.inst_path = instance_path(comp, hit.inst_id)
 			return out
 		}
 	}}
@@ -277,6 +289,18 @@ model3 = function(e) {
 	return e
 
 }
+
+// Comoonents are comprised primarily of polygons enclosed and connected by
+// lines defined over a common point cloud. A component can contain instances
+// of other components with their own relative transform matrix. A component
+// can also contain standalone lines.
+
+// The editing API implements the direct manipulation UI and is performs
+// automatic creation/removal/intersection of points/lines/polygons
+// while keeping the model numerically stable and clean. In particular:
+// - editing operations never leave duplicate points/lines/polygons.
+// - existing points are never moved when adding new geometry.
+// - when existing lines are cut, straightness is preserved to best accuracy.
 
 model3_component = function(e) {
 
@@ -1461,7 +1485,7 @@ model3_component = function(e) {
 			_pa[0] = x
 			_pa[1] = y
 			_pa[2] = z
-			points_dab.set(_pa, pi).upload()
+			points_dab.set(pi, _pa).upload()
 		} else {
 			points_changed = true
 		}
@@ -1486,11 +1510,11 @@ model3_component = function(e) {
 				f(get_line(li))
 	}
 
-	function draw(prog, models_buf) {
+	function update(models_buf) {
 
 		if (points_changed) {
 			points_dab.len = point_count()
-			points_dab.set(points).upload()
+			points_dab.set(0, points).upload()
 
 			points_rr             .pos = points_dab.buffer
 			black_thin_lines_rr   .pos = points_dab.buffer
@@ -1604,27 +1628,26 @@ model3_component = function(e) {
 		black_fat_lines_rr    .model = models_buf
 		blue_fat_lines_rr     .model = models_buf
 
-		if (prog && prog.name == 'face_id') {
-			faces_rr.draw(prog)
-		} else {
-			points_rr             .draw(prog)
-			faces_rr              .draw(prog)
-			black_thin_lines_rr   .draw(prog)
-			black_dashed_lines_rr .draw(prog)
-			blue_dashed_lines_rr  .draw(prog)
-			black_fat_lines_rr    .draw(prog)
-			blue_fat_lines_rr     .draw(prog)
-		}
-
 		points_changed      = false
 		used_points_changed = false
 		used_lines_changed  = false
 		sel_lines_changed   = false
 
+		return e
 	}
 
+	e.renderers = [
+		faces_rr,
+		points_rr,
+		black_thin_lines_rr,
+		black_dashed_lines_rr,
+		blue_dashed_lines_rr,
+		black_fat_lines_rr,
+		blue_fat_lines_rr,
+	]
+	e.face_renderer = faces_rr
 	e.free = free
-	e.draw = draw
+	e.update = update
 
 	return e
 }
