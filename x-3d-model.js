@@ -1,15 +1,23 @@
 /*
 
-	Polygon-based editable 3D models.
+	Polygon-based editable 3D model components.
 	Written by Cosmin Apreutesei. Public domain.
+
+	Comoonents are made primarily of polygons enclosed and connected by
+	lines defined over a common point cloud. A component can contain instances
+	of other components at relative transforms. A component can also contain
+	standalone lines.
+
+	The editing API implements the direct manipulation UI and is performs
+	automatic creation/removal/intersection of points/lines/polygons
+	while keeping the model numerically stable and clean. In particular:
+	- editing operations never leave duplicate points/lines/polygons.
+	- existing points are never moved when adding new geometry.
+	- when existing lines are cut, straightness is preserved to best accuracy.
 
 */
 
 (function() {
-
-function real_p2p_distance2(p1, p2) { // stub
-	return p1.distance2(p2)
-}
 
 function set_xyz(a, pi, x, y, z) {
 	a[3*pi+0] = x
@@ -17,298 +25,12 @@ function set_xyz(a, pi, x, y, z) {
 	a[3*pi+2] = z
 }
 
-model3 = function(e) {
+model3_component = function(pe) {
 
-	e = e || {}
-	let gl = e.gl
-
-	let instances_valid
-
-	// layers -----------------------------------------------------------------
-
-	let layers = []
-	let next_layer_num = 0
-
-	function add_layer(opt) {
-		layer = assign({name: 'layer '+(next_layer_num++), visible: true, can_hide: true}, opt)
-		layers.push(layer)
-		instances_valid = false
-		return layer
-	}
-
-	function remove_layer(layer) {
-		// TODO: move tbis layer's instances to the default layer.
-		layers.remove_value(layer)
-		instances_valid = false
-	}
-
-	function layer_set_visibile(layer, visible) {
-		layer.visible = !!visible
-		instances_valid = false
-	}
-
-	// components -------------------------------------------------------------
-
-	let comps         = [] // [comp1,...]
-	let free_comp_ids = [] // [ci1,...]
-	let comp_by_id = map() // {ci -> comp}
-
-	function add_component(comp) {
-		let id = free_comp_ids.pop()
-		if (id == null)
-			id = comps.length
-		comps[id] = comp
-		comp.id = id
-		comp_by_id.set(id, comp)
-	}
-
-	function remove_component(comp) {
-		comps[comp.id] = null
-		free_comp_ids.push(comp.id)
-	}
-
-	e.add_component = add_component
-
-	// component instances ----------------------------------------------------
-
-	// NOTE: instance objects are mat4's, that's ok, don't sweat it.
-
-	let root_inst
-
-	function child_added(parent_comp, inst) {
-		instances_valid = false
-	}
-
-	function child_removed(parent_comp, inst) {
-		instances_valid = false
-	}
-
-	function child_changed(inst) {
-		//
-		instances_valid = false
-	}
-
-	let _m = mat4()
-
-	function update_instance_matrices_for(inst, parent_inst) {
-		let dab = inst.comp.model_dab
-		let i = dab.len
-		dab.len = i + 1
-		_m.set(inst).mul(parent_inst || mat4.identity).to_mat4_array(dab.array, i)
-
-		inst.parent_inst = parent_inst
-		let children = inst.comp.children
-		if (children)
-			for (let child_inst of children)
-				if (child_inst.layer.visible)
-					update_instance_matrices_for(child_inst, inst)
-	}
-	function update_instance_matrices() {
-
-		if (instances_valid)
-			return
-
-		for (let comp of comps)
-			if (comp.model_dab)
-				comp.model_dab.len = 0
-			else
-				comp.model_dab = gl.dyn_arr_mat4_instance_buffer()
-
-		update_instance_matrices_for(root_inst)
-
-		for (let comp of comps)
-			comp.model_dab.upload()
-
-		instances_valid = true
-	}
-
-	function instance_path_for(target_comp, target_inst_id, inst, path) {
-		path.push(inst)
-		if (target_comp == inst.comp && target_inst_id == target_comp._inst_id)
-			return path
-		inst.comp._inst_id++
-		for (let child_inst of inst.comp.children) {
-			if (instance_path_for(target_comp, target_inst_id, child_inst, path))
-				return path
-		}
-		path.pop(inst)
-	}
-	function instance_path(comp, inst_id) {
-		for (let comp of comps)
-			comp._inst_id = 0
-		let path = []
-		return instance_path_for(comp, inst_id, root_inst, path)
-	}
-
-	function init_root() {
-		e.root = e.root || model3_component({model: e})
-		root_inst = mat4()
-		root_inst.comp = e.root
-		e.default_layer = add_layer({name: 'default', can_hide: false})
-	}
-
-	function gc_components() {
-		for (let [comp, insts] of instances) {
-			if (!insts.length) {
-				if (insts.dab)
-					insts.dab.free()
-				instances.delete(comp)
-				remove_component(comp)
-				comp.free()
-			}
-		}
-	}
-
-	e.child_added = child_added
-	e.child_removed = child_removed
-	e.child_changed = child_changed
-	e.gc_components = gc_components
-
-	// rendering --------------------------------------------------------------
-
-	function update() {
-		update_instance_matrices()
-		for (let comp of comps)
-			comp.update(comp.model_dab.buffer)
-	}
-
-	function draw(prog) {
-		update()
-		for (let i = 0, n = comps[0] && comps[0].renderers.length || 0; i < n; i++)
-			for (let comp of comps)
-				comp.renderers[i].draw(prog)
-	}
-
-	function draw_faces(prog) {
-		update()
-		for (let comp of comps)
-			comp.face_renderer.draw(prog)
-	}
-
-	e.draw = draw
-
-	// hit-testing ------------------------------------------------------------
-
-	let face_id_rr = gl.face_id_renderer()
-
-	function update_mouse() {
-		update()
-		face_id_rr.render(draw_faces)
-	}
-
-	{
-	let hit = {}
-	let inst = mat4()
-	function hit_test(mx, my, out) {
-		let inst_model, inst_point, face
-		if (face_id_rr.hit_test(mx, my, hit)) {
-			let comp_id = hit.face_id >>> 18 // 32K components
-			let fi      = hit.face_id & ((1 << 18) - 1) // 500K faces each
-			let comp = comp_by_id.get(comp_id)
-			inst.from_mat4_array(comp.model_dab.array, hit.inst_id)
-			out.comp = comp
-			out.inst = inst
-			out.face = comp.face_at(fi)
-			out.inst_path = instance_path(comp, hit.inst_id)
-			return out
-		}
-	}}
-
-	e.update_mouse = update_mouse
-	e.hit_test     = hit_test
-
-	// materials --------------------------------------------------------------
-
-	let materials = [] //[{diffuse_color:, diffuse_map:, uv: , opacity: , faces: [face1,...]},...]
-
-	function add_material(opt) {
-		let mat = assign({
-			diffuse_color: 0xffffff,
-			uv: v2(1, 1),
-			opacity: 1,
-		}, opt)
-		mat.opacity = clamp(mat.opacity, 0, 1)
-		materials.push(mat)
-		return mat
-	}
-
-	e.add_material = add_material
-
-	e.default_material = add_material({diffuse_color: 0xffffff})
-
-	// undo/redo stacks -------------------------------------------------------
-
-	let undo_groups = [] // [i1, ...] indices in undo_stack where groups start
-	let undo_stack  = [] // [args1...,argc1,f1, ...]
-	let redo_groups = [] // same
-	let redo_stack  = [] // same
-
-	function start_undo() {
-		undo_groups.push(undo_stack.length)
-	}
-
-	function push_undo(f, ...args) {
-		undo_stack.push(...args, args.length, f)
-	}
-
-	function undo_from(stack, start) {
-		start_undo()
-		while (stack.length >= start) {
-			let f = stack.pop()
-			let argc = stack.pop()
-			f(...stack.splice(-argc))
-		}
-	}
-
-	function undo() {
-		let stack  = undo_stack
-		let groups = undo_groups
-		let start  = groups.pop()
-		if (start == null)
-			return
-		undo_groups = redo_groups
-		undo_stack  = redo_stack
-		undo_from(stack, start)
-		undo_groups = groups
-		undo_stack  = stack
-	}
-
-	function redo() {
-		undo_from(redo_stack, redo_groups.pop())
-	}
-
-	e.start_undo = start_undo
-	e.undo = undo
-	e.redo = redo
-	e.push_undo = push_undo
-
-	// init -------------------------------------------------------------------
-
-	init_root()
-
-	return e
-
-}
-
-// Comoonents are comprised primarily of polygons enclosed and connected by
-// lines defined over a common point cloud. A component can contain instances
-// of other components with their own relative transform matrix. A component
-// can also contain standalone lines.
-
-// The editing API implements the direct manipulation UI and is performs
-// automatic creation/removal/intersection of points/lines/polygons
-// while keeping the model numerically stable and clean. In particular:
-// - editing operations never leave duplicate points/lines/polygons.
-// - existing points are never moved when adding new geometry.
-// - when existing lines are cut, straightness is preserved to best accuracy.
-
-model3_component = function(e) {
-
-	let model = assert(e.model)
-	let gl = e.model.gl
-	let push_undo = model.push_undo
-
-	model.add_component(e)
+	assert(pe)
+	let e = {name: pe.name, editor: pe.editor}
+	let gl = assert(pe.gl)
+	let push_undo = pe.push_undo
 
 	function log(s, ...args) {
 		assert(DEBUG)
@@ -418,9 +140,9 @@ model3_component = function(e) {
 	let line_count = () => lines.length / 5
 
 	{
-	let line = line3()
+	let _line = line3()
 	function get_line(li, out) {
-		out = out || line
+		out = out || _line
 		let p1i = lines[5*li+0]
 		let p2i = lines[5*li+1]
 		get_point(p1i, out[0])
@@ -552,7 +274,7 @@ model3_component = function(e) {
 
 	face.each_edge = function(f) {
 		for (let ei = 0, n = this.length; ei < n; ei++)
-			f(face.get_edge(ei))
+			f(this.get_edge(ei))
 	}
 
 	face.is_flat = function() {
@@ -567,7 +289,7 @@ model3_component = function(e) {
 	let mat_faces_map = map() // {material -> [face1,...]}
 
 	function material_instance(mat) {
-		mat = mat || model.default_material
+		mat = mat || pe.default_material
 		let mat_insts = attr(mat_faces_map, mat, Array)
 		mat_insts.material = mat
 		return mat_insts
@@ -774,11 +496,11 @@ model3_component = function(e) {
 
 	function add_child(comp, mat, layer) {
 		assert(mat.is_mat4)
-		assert(comp.model == model)
+		assert(comp.editor == pe.editor)
 		mat.comp = comp
-		mat.layer = layer || model.default_layer
+		mat.layer = layer || pe.default_layer
 		children.push(mat)
-		model.child_added(e, mat)
+		pe.child_added(e, mat)
 		if (DEBUG)
 			log('add_child', mat)
 		return mat
@@ -786,14 +508,14 @@ model3_component = function(e) {
 
 	function remove_child(mat) {
 		assert(children.remove_value(mat) != -1)
-		model.child_removed(e, mat)
+		pe.child_removed(e, mat)
 	}
 
-	function set_child_layer(mat, layer) {
-		assert(mat.comp == this)
-		mat.layer = layer
-		model.layer_changed(mat)
-		return mat
+	function set_child_layer(node, layer) {
+		assert(node.comp == this)
+		node.layer = layer
+		pe.layer_changed(e, node)
+		return node
 	}
 
 	function set_child_matrix(nat, mat1) {
@@ -865,20 +587,6 @@ model3_component = function(e) {
 
 	// hit testing & snapping -------------------------------------------------
 
-	function line_intersect_face_plane(line, face) {
-		let plane = face.plane()
-		let d1 = plane.distance_to_point(line[0])
-		let d2 = plane.distance_to_point(line[1])
-		if ((d1 < -NEARD && d2 > NEARD) || (d2 < -NEARD && d1 > NEARD)) {
-			let int_p = plane.intersect_line(line, v3())
-			if (int_p) {
-				int_p.face = face
-				int_p.snap = 'line_plane_intersection'
-				return int_p
-			}
-		}
-	}
-
 	// return the line from target line to its closest point
 	// with the point index in line[1].i.
 	function line_hit_points(target_line, max_d, p2p_distance2, f) {
@@ -910,37 +618,6 @@ model3_component = function(e) {
 		return min_int_line
 	}
 
-	function snap_point_on_line(p, line, max_d, p2p_distance2, plane_int_p, axes_int_p) {
-
-		p.i = null
-		p.li = line.i
-		p.snap = 'line'
-
-		max_d = max_d ** 2
-		let mp = line.at(.5, v3())
-		let d1 = p2p_distance2(p, line[0])
-		let d2 = p2p_distance2(p, line[1])
-		let dm = p2p_distance2(p, mp)
-		let dp = plane_int_p ? p2p_distance2(p, plane_int_p) : 1/0
-		let dx = axes_int_p  ? p2p_distance2(p, axes_int_p ) : 1/0
-
-		if (d1 <= max_d && d1 <= d2 && d1 <= dm && d1 <= dp && d1 <= dx) {
-			assign(p, line[0]) // comes with its own point index.
-			p.snap = 'point'
-		} else if (d2 <= max_d && d2 <= d1 && d2 <= dm && d2 <= dp && d2 <= dx) {
-			assign(p, line[1]) // comes with its own point index.
-			p.snap = 'point'
-		} else if (dp <= max_d && dp <= d1 && dp <= d2 && dp <= dm && dp <= dx) {
-			assign(p, plane_int_p) // comes with its own snap flags and indices.
-		} else if (dm <= max_d && dm <= d1 && dm <= d2 && dm <= dp && dm <= dx) {
-			line.at(.5, p)
-			p.snap = 'line_middle'
-		} else if (dx <= max_d && dx <= d1 && dx <= d2 && dx <= dm && dx <= dp) {
-			assign(p, axes_int_p) // comes with its own snap flags and indices.
-		}
-
-	}
-
 	// return the point on closest line from target point.
 	function point_hit_lines(p, max_d, p2p_distance2, f, each_line_f) {
 		let min_ds = 1/0
@@ -969,48 +646,57 @@ model3_component = function(e) {
 	}
 
 	// return the projected point on closest line from target line.
-	function line_hit_lines(target_line, max_d, p2p_distance2, clamp, f, each_line_f, is_line_valid) {
+	{
+	let _l0 = line3()
+	function line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid, out) {
+		assert(out.is_v3)
+		out.li = null
+		out.int_line = null
 		let min_ds = 1/0
-		let line = line3()
-		let int_line = line3()
 		let min_int_p
-		each_line_f = each_line_f || each_line
 		is_line_valid = is_line_valid || return_true
-		each_line_f(function(line) {
-			if (is_line_valid(line)) {
-				let p1i = line[0].i
-				let p2i = line[1].i
-				let q1i = target_line[0].i
-				let q2i = target_line[1].i
-				let touch1 = p1i == q1i || p1i == q2i
-				let touch2 = p2i == q1i || p2i == q2i
-				if (touch1 != touch2) {
-					// skip lines with a single endpoint common with the target line.
-				} else if (touch1 && touch2) {
-					//
-				} else {
-					if (target_line.intersectLine(line, clamp, int_line)) {
-						let ds = p2p_distance2(int_line[0], int_line[1])
-						if (ds <= max_d ** 2) {
-							int_line[1].li = line.i
-							int_line[1].snap = 'line'
-							if (!(f && f(int_line[1], line) === false)) {
-								if (ds < min_ds) {
-									min_ds = ds
-									min_int_p = assign(min_int_p || v3(), int_line[1])
+		is_int_line_valid = is_int_line_valid || return_true
+		for (let li = 0, n = line_count(); li < n; li++) {
+			if (lines[5*li+2]) { // ref count: used.
+				let line = get_line(li).transform(model)
+				if (is_line_valid(line)) {
+					let p1i = line[0].i
+					let p2i = line[1].i
+					let q1i = target_line[0].i
+					let q2i = target_line[1].i
+					let touch1 = p1i == q1i || p1i == q2i
+					let touch2 = p2i == q1i || p2i == q2i
+					if (touch1 != touch2) {
+						// skip lines with a single endpoint common with the target line.
+					} else if (touch1 && touch2) {
+						//
+					} else {
+						let int_line = target_line.intersect_line(line, _l0, int_mode)
+						if (int_line) {
+							let ds = p2p_distance2(int_line[0], int_line[1])
+							if (ds <= max_d ** 2) {
+								let int_p = int_line[1]
+								int_p.li = li
+								int_p.int_line = int_line
+								if (is_int_line_valid(int_line)) {
+									if (ds < min_ds) {
+										min_ds = ds
+										min_int_p = min_int_p || out
+										min_int_p.set(int_p)
+										min_int_p.li = li
+										min_int_p.int_line = int_line.clone()
+									}
 								}
 							}
 						}
 					}
 				}
 			}
-		})
+		}
 		return min_int_p
-	}
+	}}
 
-	e.line_intersect_face_plane = line_intersect_face_plane
 	e.line_hit_points = line_hit_points
-	e.snap_point_on_line = snap_point_on_line
 	e.point_hit_lines = point_hit_lines
 	e.point_hit_edge = point_hit_edge
 	e.line_hit_lines = line_hit_lines
@@ -1047,7 +733,7 @@ model3_component = function(e) {
 	}
 
 	function select_edges(face, sel) {
-		e.each_edge(face, function(line) {
+		face.each_edge(function(line) {
 			e.select_line(line.i, sel)
 		})
 	}
@@ -1103,8 +789,6 @@ model3_component = function(e) {
 		sel_lines_changed = true
 	}
 
-	// model editing ----------------------------------------------------------
-
 	e.remove_selection = function() {
 
 		// remove all faces that selected lines are sides of.
@@ -1125,6 +809,8 @@ model3_component = function(e) {
 		update_face_lis()
 	}
 
+	// model editing ----------------------------------------------------------
+
 	e.draw_line = function(line) {
 
 		let p1 = line[0]
@@ -1132,7 +818,7 @@ model3_component = function(e) {
 
 		// check for min. line length for lines with new endpoints.
 		if (p1.i == null || p2.i == null) {
-			if (p1.distanceToSquared(p2) <= NEARD ** 2)
+			if (p1.distanceToSquared(p2) <= NEAR ** 2)
 				return
 		} else if (p1.i == p2.i) {
 			// check if end point was snapped to start end point.
@@ -1143,7 +829,7 @@ model3_component = function(e) {
 
 		// cut the line into segments at intersections with existing points.
 		line = line3(p1, p2)
-		e.line_hit_points(line, NEARD, real_p2p_distance2, function(int_line) {
+		e.line_hit_points(line, NEAR, real_p2p_distance2, function(int_line) {
 			let p = int_line[0]
 			let i = p.i
 			if (i !== p1.i && i !== p2.i) { // exclude end points.
@@ -1174,7 +860,7 @@ model3_component = function(e) {
 		for (let i = 0; i < line_ps_len-1; i++) {
 			seg[0] = line_ps[i]
 			seg[1] = line_ps[i+1]
-			e.line_hit_lines(seg, NEARD, real_p2p_distance2, true, function(p, line) {
+			e.line_hit_lines(seg, NEAR, real_p2p_distance2, function(p, line) {
 				let li = p.li
 				p = p.clone()
 				p.li = li
@@ -1266,7 +952,7 @@ model3_component = function(e) {
 
 					if (face != pull.face) { // not the pulled face.
 
-						if (abs(pull.face.plane.normal.dot(face.plane.normal)) < NEARD) { // face is pp.
+						if (abs(pull.face.plane.normal.dot(face.plane.normal)) < NEAR) { // face is pp.
 
 							let pull_li = pull.face.lis[pull_ei]
 							let face_ei = face.lis.indexOf(pull_li)
@@ -1284,7 +970,7 @@ model3_component = function(e) {
 									let side_ei = mod(face_ei - 1 + i * 2, face.length)
 									e.get_edge(face, side_ei, side_edge)
 
-									let is_side_edge_pp = abs(side_edge.delta(_p).dot(normal)) < NEARD
+									let is_side_edge_pp = abs(side_edge.delta(_p).dot(normal)) < NEAR
 
 									// figure out which endpoint of the pulled edge this side edge connects to.
 									let is_first  = side_edge[0].i == pull_edge[0].i || side_edge[1].i == pull_edge[0].i

@@ -7,7 +7,7 @@
 
 	v2 [x, y]
 		* add sub mul div
-		set(x,y|v2|v3|v4) assign sets clone equals from[_v2|_v3|_v4]_array to[_v2]_array
+		set(x,y|v2|v3|v4) assign to sets clone equals from[_v2|_v3|_v4]_array to[_v2]_array
 		len[2] set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
 		distance[2]_to
@@ -16,17 +16,17 @@
 
 	v3 [x, y, z]
 		* add sub mul div cross zero one
-		set(x,y,z|v2,z|v3|v4|mat4) assign sets clone equals
+		set(x,y,z|v2,z|v3|v4|mat4) assign to sets clone equals
 		from[_v3|_v4]_array to[_v3]_array from_rgb from_rgba from_hsl
 		len[2] set_len normalize
 		add adds sub subs negate mul muls div divs min max dot cross
 		angle_to distance[2]_to
-		transform(mat3|mat4|quaternion) rotate
+		transform(mat3|mat4|quaternion) rotate project
 		origin zero one up right x|y|z_axis black white
 
 	v4 [x, y, z, w]
 		* add sub mul div
-		set assign sets clone equals from[_v4]_array to[_v4]_array from_rgb from_rgba from_hsl
+		set assign to sets clone equals from[_v4]_array to[_v4]_array from_rgb from_rgba from_hsl
 		len[2] set_len normalize
 		add adds sub subs negate mul muls div divs min max dot
 		transform(mat4)
@@ -34,35 +34,35 @@
 
 	mat3, mat3f32 [e11, e21, e31, e12, e22, e32, e13, e23, e33]
 		* mul
-		set(mat3|mat4) assign reset clone equals from[_mat3]_array to[_mat3]_array
+		set(mat3|mat4) assign to reset clone equals from[_mat3]_array to[_mat3]_array
 		transpose det invert
 		mul premul muls scale rotate translate
 
 	mat4, mat4f32 [e11, e21, e31, e41, e12, e22, e32, e42, e13, e23, e33, e43, e14, e24, e34, e44]
 		* mul
-		set(mat3|mat4|v3|quat) assign reset clone equals from[_mat4]_array to[_mat4]_array
-		transpose det invert
+		set(mat3|mat4|v3|quat) assign to reset clone equals from[_mat4]_array to[_mat4]_array
+		transpose det invert normal
 		mul premul muls scale set_position translate rotate
 		frustum perspective ortho look_to compose rotation
 
 	quat [x, y, z, w]
-		set assign reset clone equals from[_quat]_array to[_quat]_array
+		set assign to reset clone equals from[_quat]_array to[_quat]_array
 		set_from_axis_angle set_from_rotation_matrix set_from_unit_vectors
 		len[2] normalize rotate_towards conjugate invert
 		angle_to dot mul premul slerp
 
 	plane[3] {constant:, normal:}
-		set assign clone equals
+		set assign to clone equals
 		set_from_normal_and_coplanar_point set_from_coplanar_points set_from_poly
 		normalize negate
 		distance_to_point project_point
-		intersect_line intersects_line
-		complanar_point translate
+		intersect_line intersects_line clip_line
+		origin translate transform
 
 	triangle3 [a, b, c]
 		* normal barycoord contains_point uv is_front_facing
-		set assign clone equals from[_triangle3]_array to[_triangle3]_array
-		area midpoint normal plane barycoord uv contains_point is_front_facing intersects_box
+		set assign to clone equals from[_triangle3]_array to[_triangle3]_array
+		area midpoint normal plane barycoord uv contains_point is_front_facing
 
 	poly3
 		% point_count get_point
@@ -70,7 +70,7 @@
 
 	line3 [p0, p1]
 		set(line | p1,p2) clone equals to|from[_line3]_array
-		center delta distance2 distance at
+		center delta distance2 distance at reverse len set_len
 		closest_point_to_point_t closest_point_to_point intersect_line intersect_plane intersects_plane
 		transform
 
@@ -109,6 +109,10 @@ let v2_class = class v extends Array {
 	assign(v) {
 		assert(v.is_v2)
 		return assign(this, v)
+	}
+
+	to(v) {
+		return v.set(this)
 	}
 
 	sets(s) {
@@ -237,7 +241,7 @@ let v2_class = class v extends Array {
 		)
 	}
 
-	distance2_to(v) {
+	distance2(v) {
 		let dx = this[0] - v[0]
 		let dy = this[1] - v[1]
 		return (
@@ -246,8 +250,8 @@ let v2_class = class v extends Array {
 		)
 	}
 
-	distance_to(v) {
-		return sqrt(this.distance2_to(v))
+	distance(v) {
+		return sqrt(this.distance2(v))
 	}
 
 	transform(arg) {
@@ -358,6 +362,8 @@ let v3_class = class v extends Array {
 			x = e[12]
 			y = e[13]
 			z = e[14]
+		} else if (y == null) {
+			return this.from_rgb(x)
 		}
 		this[0] = x
 		this[1] = y
@@ -368,6 +374,10 @@ let v3_class = class v extends Array {
 	assign(v) {
 		assert(v.is_v3)
 		return assign(this, v)
+	}
+
+	to(v) {
+		return v.set(this)
 	}
 
 	sets(s) {
@@ -541,7 +551,7 @@ let v3_class = class v extends Array {
 		return acos(clamp(theta, -1, 1))
 	}
 
-	distance2_to(v) {
+	distance2(v) {
 		let dx = this[0] - v[0]
 		let dy = this[1] - v[1]
 		let dz = this[2] - v[2]
@@ -552,8 +562,8 @@ let v3_class = class v extends Array {
 		)
 	}
 
-	distance_to(v) {
-		return sqrt(this.distance2_to(v))
+	distance(v) {
+		return sqrt(this.distance2(v))
 	}
 
 	transform(arg) {
@@ -601,6 +611,10 @@ let v3_class = class v extends Array {
 
 	rotate(axis, angle) {
 		return this.transform(_q0.set_from_axis_angle(axis, angle))
+	}
+
+	project(plane, out) {
+		return plane.project_point(this, out)
 	}
 
 }
@@ -701,6 +715,8 @@ let v4_class = class v extends Array {
 			w = or(z, 1)
 			x = v[0]
 			y = v[1]
+		} else if (y == null) {
+			return this.from_rgba(x)
 		}
 		this[0] = x
 		this[1] = y
@@ -712,6 +728,10 @@ let v4_class = class v extends Array {
 	assign(v) {
 		assert(v.is_v4)
 		return assign(this, v)
+	}
+
+	to(v) {
+		return v.set(this)
 	}
 
 	sets(s) {
@@ -793,8 +813,8 @@ let v4_class = class v extends Array {
 		return this.divs(this.len() || 1)
 	}
 
-	set_len(len) {
-		return this.normalize().muls(len)
+	set_len(v) {
+		return this.normalize().muls(v)
 	}
 
 	add(v, s) {
@@ -995,6 +1015,10 @@ let mat3_type = function(super_class, super_args) {
 			assert(m.is_mat3)
 			assign(this, m)
 			return this
+		}
+
+		to(v) {
+			return v.set(this)
 		}
 
 		reset() {
@@ -1269,6 +1293,10 @@ let mat4_type = function(super_class, super_args) {
 			return this
 		}
 
+		to(v) {
+			return v.set(this)
+		}
+
 		reset() {
 			return this.set(
 				1, 0, 0, 0,
@@ -1392,6 +1420,10 @@ let mat4_type = function(super_class, super_args) {
 			this[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det
 			this[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det
 			return this
+		}
+
+		normal(out) {
+			return out.set(this).invert().transpose()
 		}
 
 		mul(m) {
@@ -1634,10 +1666,10 @@ let mat4_type = function(super_class, super_args) {
 		}
 
 		compose(pos, quat, scale) {
-			let x = quat.x
-			let y = quat.y
-			let z = quat.z
-			let w = quat.w
+			let x = quat[0]
+			let y = quat[1]
+			let z = quat[2]
+			let w = quat[3]
 			let x2 = x + x
 			let y2 = y + y
 			let z2 = z + z
@@ -1650,9 +1682,9 @@ let mat4_type = function(super_class, super_args) {
 			let wx = w * x2
 			let wy = w * y2
 			let wz = w * z2
-			let sx = scale.x
-			let sy = scale.y
-			let sz = scale.z
+			let sx = scale[0]
+			let sy = scale[1]
+			let sz = scale[2]
 			this[ 0] = (1 - (yy + zz)) * sx
 			this[ 1] = (xy + wz) * sx
 			this[ 2] = (xz - wy) * sx
@@ -1665,9 +1697,9 @@ let mat4_type = function(super_class, super_args) {
 			this[ 9] = (yz - wx) * sz
 			this[10] = (1 - (xx + yy)) * sz
 			this[11] = 0
-			this[12] = pos.x
-			this[13] = pos.y
-			this[14] = pos.z
+			this[12] = pos[0]
+			this[13] = pos[1]
+			this[14] = pos[2]
 			this[15] = 1
 			return this
 		}
@@ -1677,9 +1709,9 @@ let mat4_type = function(super_class, super_args) {
 			let c = cos(angle)
 			let s = sin(angle)
 			let t = 1 - c
-			let x = axis.x
-			let y = axis.y
-			let z = axis.z
+			let x = axis[0]
+			let y = axis[1]
+			let z = axis[2]
 			let tx = t * x
 			let ty = t * y
 			this.set(
@@ -1804,9 +1836,13 @@ let quat_class = class q extends Array {
 		return this
 	}
 
-	assign(q) {
-		assert(q.is_quat)
-		return assign(this, q)
+	assign(v) {
+		assert(v.is_quat)
+		return assign(this, v)
+	}
+
+	to(v) {
+		return v.set(this)
 	}
 
 	reset() {
@@ -1972,7 +2008,7 @@ let quat_class = class q extends Array {
 	}
 
 	dot(v) {
-		return this.x * v.x + this.y * v.y + this.z * v.z + this.w * v.w
+		return this[0] * v[0] + this[1] * v[1] + this[2] * v[2] + this[3] * v[3]
 	}
 
 	mul(q, p) {
@@ -1987,10 +2023,10 @@ let quat_class = class q extends Array {
 	slerp(qb, t) {
 		if (t === 0) return this
 		if (t === 1) return this.set(qb)
-		let x = this.x
-		let y = this.y
-		let z = this.z
-		let w = this.w
+		let x = this[0]
+		let y = this[1]
+		let z = this[2]
+		let w = this[3]
 
 		let cos_half_angle = w * qb.w + x * qb.x + y * qb.y + z * qb.z
 
@@ -2074,7 +2110,7 @@ let _m3_1 = mat3()
 let plane_class = class plane {
 
 	constructor(normal, constant) {
-		this.normal = normal || v3(1, 0, 0)
+		this.normal = normal || v3.up.clone()
 		this.constant = constant || 0
 	}
 
@@ -2090,23 +2126,27 @@ let plane_class = class plane {
 		return this
 	}
 
-	assign(p) {
-		assert(p.is_plane)
-		assign(this, p)
-		p.normal = p.normal.clone()
+	assign(v) {
+		assert(v.is_plane)
+		assign(this, v)
+		v.normal = v.normal.clone()
+	}
+
+	to(v) {
+		return v.set(this)
 	}
 
 	clone() {
 		return new plane(this.normal, this.constant)
 	}
 
-	equals(pl) {
-		return pl.normal.equals(this.normal) && pl.constant === this.constant
+	equals(v) {
+		return v.normal.equals(this.normal) && v.constant === this.constant
 	}
 
-	set_from_normal_and_coplanar_point(normal, p) {
+	set_from_normal_and_coplanar_point(normal, v) {
 		this.normal.set(normal)
-		this.constant = -p.dot(this.normal)
+		this.constant = -v.dot(this.normal)
 		return this
 	}
 
@@ -2152,39 +2192,66 @@ let plane_class = class plane {
 	}
 
 	project_point(p, out) {
+		assert(p != out)
 		return out.set(this.normal).muls(-this.distance_to_point(p)).add(p)
 	}
 
-	intersect_line(line, strict, out) {
+	intersect_line(line, out, mode) {
 		let dir = line.delta(_v1)
 		let denom = this.normal.dot(dir)
 		if (abs(denom) < NEAR)
 			return // line is on the plane
 		let t = -(line[0].dot(this.normal) + this.constant) / denom
 		let p = out.set(dir).muls(t).add(line[0])
-		if (strict && (t < 0 || t > 1))
+		if (mode == 'strict' && (t < 0 || t > 1))
 			return // intersection point is outside of the line segment.
 		p.t = t
 		return p
 	}
 
-	// Note: this tests if a line intersects the plane, not whether it
-	// (or its end-points) are coplanar with it.
 	intersects_line(line) {
 		let d1 = this.distance_to_point(line[0])
 		let d2 = this.distance_to_point(line[1])
 		return (
-			(d1 < -NEAR && d2 > NEAR) ||
-			(d2 < -NEAR && d1 > NEAR)
+			(d2 < -NEAR && d1 > NEAR && 'through-front') ||
+			(d1 < -NEAR && d2 > NEAR && 'through-back') ||
+			(d1 >= -NEAR && d2 >= -NEAR && 'in-front') || 'behind'
 		)
 	}
 
-	coplanar_point(out) {
+	// shorten line to only the part that's in front of the plane.
+	clip_line(line) {
+		let hit = this.intersects_line(line)
+		line.clip = hit
+		if (hit == 'in-front')
+			return line
+		if (hit == 'behind')
+			return
+		let int_p = this.intersect_line(line, _v4, 'strict')
+		if (!int_p) // line is on the plane or not intersecting the plane.
+			return line
+		if (hit == 'through-front')
+			line[1].set(int_p)
+		else
+			line[0].set(int_p)
+		return line
+	}
+
+	// project the plane's normal at origin onto the plane.
+	origin(out) {
 		return out.set(this.normal).muls(-this.constant)
 	}
 
 	translate(offset) {
 		this.constant -= offset.dot(this.normal)
+		return this
+	}
+
+	transform(m) {
+		let nm = m.normal(_m3_1)
+		let ref_p = this.origin(_v0).transform(m)
+		let normal = this.normal.transform(nm).normalize()
+		this.constant = -ref_p.dot(normal)
 		return this
 	}
 
@@ -2218,12 +2285,16 @@ let triangle3_class = class triangle3 extends Array {
 		return this
 	}
 
-	assign(t) {
-		assert(t.is_triangle)
-		assign(this, t)
+	assign(v) {
+		assert(v.is_triangle)
+		assign(this, v)
 		this[0] = this[0].clone()
 		this[1] = this[1].clone()
 		this[2] = this[2].clone()
+	}
+
+	to(v) {
+		return v.set(this)
 	}
 
 	clone() {
@@ -2302,10 +2373,6 @@ let triangle3_class = class triangle3 extends Array {
 		return triangle3.is_front_facing(this[0], this[1], this[2], direction)
 	}
 
-	intersects_box(box) {
-		return box.intersects_box(this)
-	}
-
 }
 
 triangle3_class.prototype.is_triangle3 = true
@@ -2344,23 +2411,25 @@ triangle3.barycoord = function barycoord(p, a, b, c, out) {
 }
 
 triangle3.contains_point = function contains_point(p, a, b, c) {
-	this.barycoord(p, a, b, c, _v3)
-	return _v3.x >= 0 && _v3.y >= 0 && _v3.x + _v3.y <= 1
+	let bc = this.barycoord(p, a, b, c, _v3)
+	let x = bc[0]
+	let y = bc[1]
+	return x >= 0 && y >= 0 && x + y <= 1
 }
 
 triangle3.uv = function uv(p, p1, p2, p3, uv1, uv2, uv3, out) {
-	this.barycoord(p, p1, p2, p3, _v3)
+	let bc = this.barycoord(p, p1, p2, p3, _v3)
 	out.set(0, 0)
-	out.add(uv1, _v3.x)
-	out.add(uv2, _v3.y)
-	out.add(uv3, _v3.z)
+	out.add(uv1, bc[0])
+	out.add(uv2, bc[1])
+	out.add(uv3, bc[2])
 	return out
 }
 
 triangle3.is_front_facing = function is_front_facing(a, b, c, direction) {
-	_v0.set(c).sub(b)
-	_v1.set(a).sub(b) // strictly front facing
-	return _v0.cross(_v1).dot(direction) < 0
+	let p = _v0.set(c).sub(b)
+	let q = _v1.set(a).sub(b) // strictly front facing
+	return p.cross(q).dot(direction) < 0
 }
 
 // poly3 ---------------------------------------------------------------------
@@ -2380,8 +2449,12 @@ let poly3_class = class poly3 extends Array {
 		poly3_cons(this, opt, elements)
 	}
 
-	assign(poly) {
-		assign(this, poly)
+	assign(v) {
+		assign(this, v)
+	}
+
+	to(v) {
+		return v.set(this)
 	}
 
 }
@@ -2452,9 +2525,9 @@ poly3p.xy_quat = function() {
 		// compute the signed volume between ab, cb and ab x cb.
 		// the sign tells you the direction of the cross vector.
 		m.set(
-			v.x, a.x, c.x,
-			v.y, a.y, c.y,
-			v.z, a.z, c.z
+			v[0], a[0], c[0],
+			v[1], a[1], c[1],
+			v[2], a[2], c[2]
 		)
 		return sign(m.det())
 	}
@@ -2565,17 +2638,17 @@ poly3p.compute_smooth_normals = function(normals, normalize) {
 
 		let p = p1.cross(p2)
 
-		normals[3*p1i+0] += p.x
-		normals[3*p1i+1] += p.y
-		normals[3*p1i+2] += p.z
+		normals[3*p1i+0] += p[0]
+		normals[3*p1i+1] += p[1]
+		normals[3*p1i+2] += p[2]
 
-		normals[3*p2i+0] += p.x
-		normals[3*p2i+1] += p.y
-		normals[3*p2i+2] += p.z
+		normals[3*p2i+0] += p[0]
+		normals[3*p2i+1] += p[1]
+		normals[3*p2i+2] += p[2]
 
-		normals[3*p3i+0] += p.x
-		normals[3*p3i+1] += p.y
-		normals[3*p3i+2] += p.z
+		normals[3*p3i+0] += p[0]
+		normals[3*p3i+1] += p[1]
+		normals[3*p3i+2] += p[2]
 	}
 
 	if (normalize)
@@ -2599,17 +2672,20 @@ poly3p.contains_point = function(p) {
 }
 
 // (tex_uv) are 1 / (texture's (u, v) in world space).
+{
+let _v2_0 = v2()
+let _v2_1 = v2()
 poly3p.uv_at = function(i, uvm, tex_uv, out) {
 	let xy_quat = this.xy_quat()
-	let p0 = this.get_point(0, _v0).transform(xy_quat)
-	let pi = this.get_point(i, _v1).transform(xy_quat)
+	let p0 = _v2_0.set(this.get_point(0, _v0).transform(xy_quat))
+	let pi = _v2_1.set(this.get_point(i, _v1).transform(xy_quat))
 	pi.sub(p0).mul(tex_uv)
 	if (uvm)
 		pi.transform(uvm)
 	out[0] = pi[0]
 	out[1] = pi[1]
 	return out
-}
+}}
 
 poly3p.uvs = function(uvm, tex_uv, out) {
 	for (let i = 0, n = this.point_count(); i < n; i++) {
@@ -2618,36 +2694,6 @@ poly3p.uvs = function(uvm, tex_uv, out) {
 		out[2*i+1] = uv[1]
 	}
 	return out
-}
-
-poly3p.intersect_line = function(line, face) {
-	let plane = e.face_plane(face)
-	let d1 = plane.distanceToPoint(line.start)
-	let d2 = plane.distanceToPoint(line.end)
-	if ((d1 < -NEARD && d2 > NEARD) || (d2 < -NEARD && d1 > NEARD)) {
-		let int_p = plane.intersectLine(line, v3())
-		if (int_p) {
-			int_p.face = face
-			int_p.snap = 'line_plane_intersection'
-			return int_p
-		}
-	}
-}
-
-{
-	let _p = v3()
-	let ht = []
-	poly3.intersect_line = function(line, line_start_in_front_of_plane) {
-		let p1, p2
-		if (line_start_in_front_of_plane) {
-			p1 = line.start
-			p2 = line.end
-		} else {
-			p1 = line.end
-			p2 = line.start
-		}
-		let line_dir = _p.set(p2).sub(p1).setLength(1)
-	}
 }
 
 poly3p.update_if_invalid = function() {
@@ -2816,6 +2862,10 @@ let line3_class = class line3 extends Array {
 		return this
 	}
 
+	to(v) {
+		return v.set(this)
+	}
+
 	clone() {
 		let line = new line3()
 		return line.set(this[0], this[1])
@@ -2846,6 +2896,22 @@ let line3_class = class line3 extends Array {
 
 	at(t, out) {
 		return this.delta(out).muls(t).add(this[0])
+	}
+
+	reverse() {
+		let p0 = this[0]
+		this[0] = this[1]
+		this[1] = p0
+		return this
+	}
+
+	len() {
+		return this.delta(_v0).len()
+	}
+
+	set_len(len) {
+		this[1].set(this.delta(_v0).set_len(len).add(this[0]))
+		return this
 	}
 
 	to_array(a, i) {
@@ -2894,7 +2960,7 @@ let line3_class = class line3 extends Array {
 
 	// returns the smallest line that connects two (coplanar or skewed) lines.
 	// returns null for parallel lines.
-	intersect_line(lq, clamp, out) {
+	intersect_line(lq, out, mode) {
 		let lp = this
 		let rp = out[0]
 		let rq = out[1]
@@ -2920,28 +2986,32 @@ let line3_class = class line3 extends Array {
 		rp.set(p).add(mp.muls(detp / detm))
 		rq.set(q).add(mq.muls(detq / detm))
 
-		if (clamp) {
-			let p1 = _v3.set(lp[1]).sub(lp[0])
-			let p2 = _v4.set(rp).sub(lp[0])
+		if (mode == 't' || mode == 'clamp') {
+			let p1 = _v0.set(lp[1]).sub(lp[0])
+			let p2 = _v1.set(rp).sub(lp[0])
 			let tp = p2.len() / p1.len() * (p1.dot(p2) > 0 ? 1 : -1)
 			p1.set(lq[1]).sub(lq[0])
 			p2.set(rq).sub(lq[0])
 			let tq = p2.len() / p1.len() * (p1.dot(p2) > 0 ? 1 : -1)
-			if (tp < 0)
-				rp.set(lp[0])
-			else if (tp > 1)
-				rp.set(lp[1])
-			if (tq < 0)
-				rq.set(lq[0])
-			else if (tq > 1)
-				rq.set(lq[1])
+			rp.t = tp
+			rq.t = tq
+			if (mode == 'clamp') {
+				if (tp < 0)
+					rp.set(lp[0])
+				else if (tp > 1)
+					rp.set(lp[1])
+				if (tq < 0)
+					rq.set(lq[0])
+				else if (tq > 1)
+					rq.set(lq[1])
+			}
 		}
 
 		return out
 	}
 
-	intersect_plane(plane, strict, out) {
-		return plane.intersect_line(this, strict, out)
+	intersect_plane(plane, out, mode) {
+		return plane.intersect_line(this, out, mode)
 	}
 
 	intersects_plane(plane) {
@@ -2958,7 +3028,6 @@ line3 = function(p1, p2) { return new line3_class(p1, p2) }
 
 {
 let _v4_0 = v4()
-let _v4_1 = v4()
 camera = function(e) {
 	e = e || {}
 
@@ -2990,6 +3059,10 @@ camera = function(e) {
 		e.inv_view.set(c.inv_view)
 		e.view_proj.set(c.view_proj)
 		return e
+	}
+
+	e.to = function(v) {
+		return v.set(this)
 	}
 
 	e.clone = function() {
@@ -3069,18 +3142,19 @@ camera = function(e) {
 		return out.set(p).transform(e.proj)
 	}
 
-	e.clip_to_screen = function(p, out) {
-		assert(out.is_v2 || out.is_v3)
-		out[0] = round(( p[0] + 1) * e.view_size[0] / 2)
-		out[1] = round((-p[1] + 1) * e.view_size[1] / 2)
-		if (out.is_v3)
-			out[2] = 0
-		return out
-	}
-
 	e.world_to_clip = function(p, out) {
 		assert(out.is_v4)
 		return out.set(p).transform(e.view_proj)
+	}
+
+	e.clip_to_screen = function(p, out) {
+		assert(out.is_v2 || out.is_v3)
+		let w = p[3]
+		out[0] = round(( (p[0] / w) + 1) * e.view_size[0] / 2)
+		out[1] = round((-(p[1] / w) + 1) * e.view_size[1] / 2)
+		if (out.is_v3)
+			out[2] = 0
+		return out
 	}
 
 	e.world_to_screen = function(p, out) {
@@ -3138,14 +3212,14 @@ camera = function(e) {
 		return out
 	}
 
+	{
 	let _v2_0 = v2()
 	let _v2_1 = v2()
-
 	e.screen_distance2 = function(p1, p2) {
 		let p = e.world_to_screen(p1, _v2_0)
 		let q = e.world_to_screen(p2, _v2_1)
 		return p.distance2(q)
-	}
+	}}
 
 	e.screen_distance = function(p1, p2) {
 		return sqrt(e.distance2(p1, p2))

@@ -36,6 +36,7 @@
 		dab.len dab.buffer dab.array
 		dab.grow_type(type|max_idx)
 		dab.set(offset, in_arr, [len=1/0], [in_offset=0])
+		dab.remove(offset, [len=1])
 		dab.invalidate([offset=0], [len=1/0])
 		dab.upload()
 
@@ -113,6 +114,7 @@ for (let name in gl) {
 	else if (isnum(d.value))
 		C[d.value] = name
 }
+gl.C = C
 
 function count_call(name, args, t) {
 	if (name == 'useProgram' && args[0])
@@ -691,6 +693,19 @@ gl.draw_triangles = function(o, n) { return this.draw(gl.TRIANGLES, o, n) }
 gl.draw_points    = function(o, n) { return this.draw(gl.POINTS   , o, n) }
 gl.draw_lines     = function(o, n) { return this.draw(gl.LINES    , o, n) }
 
+gl.cull = function(which) {
+	if (which == this.cull_mode)
+		return this
+	if (!which) {
+		this.disable(gl.CULL_FACE)
+	} else {
+		this.enable(gl.CULL_FACE)
+		this.cullFace(which == 'back' ? gl.BACK : gl.FRONT)
+	}
+	this.cull_mode = which
+	return this
+}
+
 // VAOs ----------------------------------------------------------------------
 
 let vao = WebGLVertexArrayObject.prototype
@@ -861,7 +876,7 @@ vao.set_index = function(b) {
 	if (!bound)
 		this.bind()
 	if (this.index_buffer != b) {
-		assert(b.for_index, 'not an index buffer')
+		assert(!b || b.for_index, 'not an index buffer')
 		this.index_buffer = b
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b)
 	}
@@ -965,10 +980,15 @@ gl.buffer = function(data_or_cap, type, inst_div, for_index) {
 		len = cap
 	}
 
+	let ib0 = for_index && gl.active_vao && gl.active_vao.index_buffer
+
 	let gl_target = for_index ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER
 	let b = gl.createBuffer()
 	gl.bindBuffer(gl_target, b)
 	gl.bufferData(gl_target, data_or_cap, gl.STATIC_DRAW)
+
+	if (ib0) // TODO: decide if OpenGL was made by psychotic apes.
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib0)
 
 	b.gl = gl
 	b.capacity = cap
@@ -1061,10 +1081,12 @@ buf.download = function(out_arr, offset, len, out_offset) {
 buf.set = function(offset, in_buf, len, in_offset) {
 	let gl = this.gl
 	let nc = this.nc
-	check_arr_type(in_buf, this.arr_type)
+	assert(in_buf.arr_type == this.arr_type,
+		'different arr_type {0}, expected {1}', in_buf.arr_type.name, this.arr_type.name)
 	check_arr_nc(in_buf, nc)
+	in_offset = in_offset || 0
 	assert(offset >= 0)
-	assert(out_offset >= 0)
+	assert(in_offset >= 0)
 	if (len == null)
 		len = in_buf.len - in_offset
 	let bpe = this.BYTES_PER_ELEMENT
@@ -1107,8 +1129,7 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 			if (this.len > 0) {
 				let a0 = this.buffer.download(this.buffer.arr())
 				let a1 = new bt.arr_type(this.len)
-				for (let i = 0, n = a0.length; i < n; i++)
-					a1[i] = a0[i]
+				a1.set(a0)
 			}
 			let cap = this.buffer.capacity
 			this.buffer.free()
@@ -1196,8 +1217,9 @@ gl.dyn_arr_buffer = function(type, data_or_cap, inst_div, for_index) {
 		return this
 	}
 
-	dab.get = function(out_arr, offset, len, out_offset) {
-		return da.get(out_arr, offset, len, out_offset)
+	dab.remove = function(offset, len) {
+		da.remove(offset, len)
+		return this
 	}
 
 	dab.invalidate = function(offset, len) {
@@ -1280,14 +1302,16 @@ vao.dab = function(name, cap) {
 
 gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 
-	let e = {dabs: {}, is_dyn_arr_vertex_buffer: true}
+	let e = {dabs: {}, dabs_list: [], is_dyn_arr_vertex_buffer: true}
 
 	let dab0
 	for (let name in attrs) {
 		let type = attrs[name]
 		let bt = get_bt(type)
 		let dab = this.dyn_arr_buffer(bt.type, cap)
+		dab.name = name
 		e.dabs[name] = dab
+		e.dabs_list.push(dab)
 		e[name] = dab
 		dab0 = dab0 || dab
 	}
@@ -1297,26 +1321,29 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 			return dab0.len
 		},
 		function(len) {
-			for (let name in e.dabs) {
-				let dab = e.dabs[name]
+			for (let dab of e.dabs_list)
 				dab.len = len
-			}
 		}
 	)
 
+	e.remove = function(offset, len) {
+		for (let dab of e.dabs_list)
+			dab.remove(offset, len)
+	}
+
 	e.upload = function() {
-		for (let name in e.dabs)
-			e.dabs[name].upload()
+		for (let dab of e.dabs_list)
+			dab.upload()
 	}
 
 	e.to_vao = function(vao) {
-		for (let name in e.dabs)
-			vao.set_attr(name, e.dabs[name].buffer)
+		for (let dab of e.dabs_list)
+			vao.set_attr(dab.name, dab.buffer)
 	}
 
 	e.free = function() {
-		for (let name in e.dabs)
-			e.dabs[name].free()
+		for (let dab of e.dabs_list)
+			dab.free()
 	}
 
 	return e

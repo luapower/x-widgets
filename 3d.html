@@ -66,11 +66,11 @@ materials.set(mat1, faces)
 function scale_texture(tex) {
 	print('scale_texture')
 	let pi = 0
+	let _uv = v2()
 	for (let face of faces) {
 		for (let i = 0, tris = face.triangles(), n = tris.length; i < n; i++) {
-			let uv = face.uv_at(tris[i], face.uvm, tex.uv)
-			print(uv)
-			uv.to_array(uvs, 2*pi)
+			let uv = face.uv_at(tris[i], face.uvm, tex.uv, _uv)
+			//uv.to_array(uvs, 2*pi)
 			pi++
 		}
 	}
@@ -136,12 +136,12 @@ canvas_resized()
 
 function hit_test(mx, my) {
 	let ray = camera.raycast(mx, my, line3())
-	let hit = {}
-	if (face_id_rr.hit_test(mx, my, hit)) {
+	let hit = hit_test_rr.hit_test(mx, my)
+	if (hit) {
 		let model = mat4().from_mat4_array(inst_mats, hit.inst_id)
 		let inv_model = mat4().set(model).invert()
 		ray.transform(inv_model)
-		let face = faces[hit.face_id]
+		let face = faces[hit.geom_id]
 		let target = face.plane().intersect_line(ray, null, v3())
 		return target && target.transform(model)
 	} else {
@@ -247,7 +247,7 @@ let scene_rr = gl.scene_renderer({
 	camera: camera,
 })
 
-let face_id_rr = gl.face_id_renderer()
+let hit_test_rr = gl.hit_test_renderer()
 
 skybox = gl.skybox({
 	images: {
@@ -261,7 +261,7 @@ skybox = gl.skybox({
 })
 
 let axes_rr = gl.axes_renderer()
-axes_rr.upload_model(axes_rr.add_instance(), mat4f32())
+let axes = axes_rr.axes()
 
 let tq
 
@@ -290,7 +290,7 @@ function animate() {
 		scene_rr.sunlight_dir.set(camera.dir)
 	scene_rr.update()
 	scene_rr.render(draw)
-	face_id_rr.render(draw)
+	hit_test_rr.render(draw)
 	raf(animate)
 }
 
@@ -299,7 +299,7 @@ canvas.on('pointermove', function(ev, mx, my) {
 	mx -= r.x
 	my -= r.y
 	let hit = {}
-	face_id_rr.hit_test(mx, my, hit)
+	hit_test_rr.hit_test(mx, my, hit)
 	//print(hit)
 })
 

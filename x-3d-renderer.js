@@ -249,8 +249,7 @@ gl.scene_renderer = function(r) {
 			sdm_fbo.bind('draw', 'none')
 			gl.viewport(0, 0, sdm_res, sdm_res)
 			gl.clearDepth(1)
-			gl.enable(gl.CULL_FACE)
-			gl.cullFace(gl.FRONT) // to get rid of peter paning.
+			gl.cull('front') // to get rid of peter paning.
 			gl.clear(gl.DEPTH_BUFFER_BIT)
 			draw(sdm_prog)
 			sdm_fbo.unbind()
@@ -261,12 +260,7 @@ gl.scene_renderer = function(r) {
 		let ch = gl.canvas.ch
 		gl.viewport(0, 0, cw, ch)
 		gl.clear_all(...r.background_color)
-		if (r.show_back_faces) {
-			gl.disable(gl.CULL_FACE)
-		} else {
-			gl.enable(gl.CULL_FACE)
-			gl.cullFace(gl.BACK)
-		}
+		gl.cull(r.show_back_faces ? false : 'back')
 		draw()
 	}
 
@@ -279,54 +273,94 @@ gl.scene_renderer = function(r) {
 
 // render-based hit testing --------------------------------------------------
 
-gl.face_id_renderer = function(r) {
+gl.module('hit_test_render.vs', `
+
+	#include mesh.vs
+
+	in uint geom_id;
+
+	flat out uint v_geom_id;
+	flat out uint v_inst_id;
+
+	void do_hit_test_render() {
+		v_geom_id = geom_id;
+		v_inst_id = uint(gl_InstanceID);
+	}
+
+`)
+
+gl.module('hit_test_render.fs', `
+
+	#version 300 es
+
+	precision highp float;
+	precision highp int;
+
+	flat in uint v_geom_id;
+	flat in uint v_inst_id;
+
+	layout (location = 0) out uvec4 frag_color;
+
+	void do_hit_test_render() {
+		frag_color.r = v_geom_id >> 16;
+		frag_color.g = v_geom_id & 0xffffu;
+		frag_color.b = v_inst_id >> 16;
+		frag_color.a = v_inst_id & 0xffffu;
+	}
+
+`)
+
+gl.hit_test_renderer = function(r) {
 
 	let gl = this
 
 	r = r || {}
 
-	let face_id_prog = gl.program('face_id', `
+	let face_prog = gl.program('hit_face', `
 
-		#include mesh.vs
-
-		in uint face_id;
-
-		flat out uint v_face_id;
-		flat out uint v_inst_id;
+		#include hit_test_render.vs
 
 		void main() {
 			gl_Position = mvp(pos);
-			v_face_id = face_id;
-			v_inst_id = uint(gl_InstanceID);
+			do_hit_test_render();
 		}
 
 	`, `
 
-		#version 300 es
-
-		precision highp float;
-		precision highp int;
-
-		flat in uint v_face_id;
-		flat in uint v_inst_id;
-
-		layout (location = 0) out uvec4 frag_color;
+		#include hit_test_render.fs
 
 		void main() {
-			frag_color.r = v_face_id >> 16;
-			frag_color.g = v_face_id & 0xffffu;
-			frag_color.b = v_inst_id >> 16;
-			frag_color.a = v_inst_id & 0xffffu;
+			do_hit_test_render();
+		}
+
+	`)
+
+	// NOTE: not used (we do line hit-testing geometrically).
+	let line_prog = gl.program('hit_line', `
+
+		#include fat_line.vs
+		#include hit_test_render.vs
+
+		void main() {
+			gl_Position = fat_line_pos();
+			do_hit_test_render();
+		}
+
+	`, `
+
+		#include hit_test_render.fs
+
+		void main() {
+			do_hit_test_render();
 		}
 
 	`)
 
 	let w, h
-	let face_id_map = gl.texture()
+	let hit_test_map = gl.texture()
 	let depth_map = gl.rbo()
 	let fbo = gl.fbo()
-	let face_id_arr
-	let inst_id_arr
+	let hit_test_arr
 
 	r.render = function(draw) {
 		let w1 = gl.canvas.cw
@@ -334,40 +368,42 @@ gl.face_id_renderer = function(r) {
 		if (w1 != w || h1 != h) {
 			w = w1
 			h = h1
-			face_id_map.set_rgba16(w, h)
-			face_id_arr = new u16arr(4 * w * h)
+			hit_test_map.set_rgba16(w, h)
+			hit_test_arr = new u16arr(4 * w * h)
 			depth_map.set_depth(w, h, true)
 		}
 		fbo.bind('draw', ['color'])
-		fbo.attach(face_id_map, 'color')
+		fbo.attach(hit_test_map, 'color')
 		fbo.attach(depth_map)
 		fbo.clear_color(0, 0xffff, 0xffff, 0xffff, 0xffff)
 		gl.clear_all()
-		draw(face_id_prog)
+		draw(face_prog)
+		//draw(line_prog)
 		fbo.unbind()
-		fbo.read_pixels('color', 0, face_id_arr)
+		fbo.read_pixels('color', 0, hit_test_arr)
 	}
 
-	r.hit_test = function(x, y, out) {
-		out.inst_id = null
-		out.face_id = null
-		if (!face_id_arr)
+	let hit = {}
+	r.hit_test = function(x, y) {
+		hit.inst_id = null
+		hit.geom_id = null
+		if (!hit_test_arr)
 			return
 		if (x < 0 || x >= w || y < 0 || y >= h)
 			return
 		y = (h-1) - y // textures are read upside down...
 		let i = 4 * (y * w + x)
-		let r = face_id_arr[i+0]
-		let g = face_id_arr[i+1]
-		let b = face_id_arr[i+2]
-		let a = face_id_arr[i+3]
-		let face_id = ((r << 16) | g) >>> 0
+		let r = hit_test_arr[i+0]
+		let g = hit_test_arr[i+1]
+		let b = hit_test_arr[i+2]
+		let a = hit_test_arr[i+3]
+		let geom_id = ((r << 16) | g) >>> 0
 		let inst_id = ((b << 16) | a) >>> 0
-		if (face_id == 0xffffffff || inst_id == 0xffffffff)
+		if (geom_id == 0xffffffff || inst_id == 0xffffffff)
 			return
-		out.inst_id = inst_id
-		out.face_id = face_id
-		return true
+		hit.inst_id = inst_id
+		hit.geom_id = geom_id
+		return hit
 	}
 
 	return r
@@ -429,7 +465,7 @@ gl.faces_renderer = function() {
 		normal   : 'v3',
 		uv       : 'v2',
 		selected : 'i32',
-		face_id  : 'u32',
+		geom_id  : 'u32',
 	})
 
 	let index_dab = gl.dyn_arr_index_buffer()
@@ -461,7 +497,7 @@ gl.faces_renderer = function() {
 		let normal   = davb.normal   .array
 		let uv       = davb.uv       .array
 		let selected = davb.selected .array
-		let face_id  = davb.face_id  .array
+		let geom_id  = davb.geom_id  .array
 		let index    = index_dab     .array
 		let j = 0
 		let k = 0
@@ -484,7 +520,7 @@ gl.faces_renderer = function() {
 					uv[2*j+0] = uv[0]
 					uv[2*j+1] = uv[1]
 					selected[j] = face.selected
-					face_id[j] = face.id
+					geom_id[j] = face.id
 				}
 				let tris = face.triangles()
 				for (i = 0, n = tris.length; i < n; i++, k++) {
@@ -504,6 +540,8 @@ gl.faces_renderer = function() {
 
 	e.draw = function(prog1) {
 		if (prog1) {
+			if (!(prog1.name == 'hit_face' || prog1.name == 'shadow_map'))
+				return
 			let vao = vao_set.vao(prog1)
 			vao.use()
 			vao.set_attrs(davb)
@@ -633,7 +671,8 @@ gl.points_renderer = function(e) {
 
 	e.draw = function(prog1, has_index) {
 		if (prog1)
-			return // no shadows or hit testing.
+			if (prog1.name != 'hit_point')
+				return // no shadows.
 		if (!e.index && has_index !== false)
 			return
 		vao.use()
@@ -733,6 +772,47 @@ gl.dashed_lines_renderer = function(e) {
 
 // fat lines rendering -------------------------------------------------------
 
+gl.module('fat_line.vs', `
+
+	#include mesh.vs
+
+	uniform vec3 base_color;
+	in vec3 color;
+	in vec3 q; // line's other end-point.
+	in float dir;
+
+	vec4 shorten_line(vec4 p1, vec4 p2, float cut_w) {
+		float t = (cut_w - p2.w) / (p1.w - p2.w);
+		return mix(p2, p1, t);
+	}
+
+	vec4 fat_line_pos() {
+
+		// line points in NDC.
+		vec4 p1 = mvp(pos);
+		vec4 p2 = mvp(q);
+
+		// cut the line at near-plane if one of its end-points has w < 0.
+		float cut_w = view_near * .5;
+		if (p1.w < cut_w && p2.w > cut_w) {
+			p1 = shorten_line(p1, p2, cut_w);
+		} else if (p2.w < cut_w && p1.w > cut_w) {
+			p2 = shorten_line(p2, p1, cut_w);
+		}
+
+		// line normal in screen space.
+		vec2 s1 = p1.xy / p1.w;
+		vec2 s2 = p2.xy / p2.w;
+		float nx = s2.x - s1.x;
+		float ny = s1.y - s2.y;
+		vec2 n = normalize(vec2(ny, nx) * dir) / view_size * 2.0 * p1.w;
+
+		return p1 + vec4(n, 0.0, 0.0);
+
+	}
+
+`)
+
 gl.fat_lines_renderer = function(e) {
 
 	let gl = this
@@ -742,44 +822,13 @@ gl.fat_lines_renderer = function(e) {
 
 	let prog = gl.program('fat_line', `
 
-		#include mesh.vs
+		#include fat_line.vs
 
-		uniform vec3 base_color;
-		in vec3 color;
-		in vec3 q; // line's other end-point.
-		in float dir;
 		flat out vec4 v_color;
 
-		vec4 shorten_line(vec4 p1, vec4 p2, float cut_w) {
-			float t = (cut_w - p2.w) / (p1.w - p2.w);
-			return mix(p2, p1, t);
-		}
-
 		void main() {
-
-			// line points in NDC.
-			vec4 p1 = mvp(pos);
-			vec4 p2 = mvp(q);
-
-			// cut the line at near-plane if one of its end-points has w < 0.
-			float cut_w = view_near * .5;
-			if (p1.w < cut_w && p2.w > cut_w) {
-				p1 = shorten_line(p1, p2, cut_w);
-			} else if (p2.w < cut_w && p1.w > cut_w) {
-				p2 = shorten_line(p2, p1, cut_w);
-			}
-
-			// line normal in screen space.
-			vec2 s1 = p1.xy / p1.w;
-			vec2 s2 = p2.xy / p2.w;
-			float nx = s2.x - s1.x;
-			float ny = s1.y - s2.y;
-			vec2 n = normalize(vec2(ny, nx) * dir) / view_size * 2.0 * p1.w;
-
-			gl_Position = p1 + vec4(n, 0.0, 0.0);
-
+			gl_Position = fat_line_pos();
 			v_color = vec4(base_color + color, 1.0);
-
 		}
 
 	`, `
@@ -846,10 +895,8 @@ gl.fat_lines_renderer = function(e) {
 		let ps = davb.pos.array
 		let qs = davb.q.array
 		set_line_pos(line, i * 4, ps, qs)
-		davb.pos.invalidate(i * 4, 1)
-		davb.q  .invalidate(i * 4, 1)
-		davb.pos.update_invalid()
-		davb.q  .update_invalid()
+		davb.pos.invalidate(i * 4, 4).upload_invalid()
+		davb.q  .invalidate(i * 4, 4).upload_invalid()
 	}
 
 	e.update = function(each_line, line_count) {
@@ -900,7 +947,8 @@ gl.fat_lines_renderer = function(e) {
 
 	e.draw = function(prog1) {
 		if (prog1)
-			return // no shadows or hit-testing
+			if (prog1.name != 'hit_line')
+				return // no shadows
 		if (!ib.buffer)
 			return
 		vao.use()
@@ -938,7 +986,7 @@ gl.fat_lines_renderer = function(e) {
 		-.5,   .5,   .5,
 	])
 
-	let triangle_pis = new u8arr([
+	let triangle_pis_front = new u8arr([
 		3, 2, 1,  1, 0, 3,
 		6, 7, 4,  4, 5, 6,
 		2, 3, 7,  7, 6, 2,
@@ -947,16 +995,26 @@ gl.fat_lines_renderer = function(e) {
 		2, 6, 5,  5, 1, 2,
 	])
 
-	triangle_pis.max_index = pos_template.length - 1
+	let triangle_pis_back = new u8arr(triangle_pis_front)
+	for (let i = 0, a = triangle_pis_back, n = a.length; i < n; i += 3) {
+		let t = a[i]
+		a[i] = a[i+1]
+		a[i+1] = t
+	}
+
+	triangle_pis_front.max_index = 7
+	triangle_pis_back .max_index = 7
 
 	let len = 6 * 3 * 2
 	let pos = new f32arr(len * 3)
 
-	gl.box_geometry = function() {
+	gl.box_geometry = function(reverse_faces) {
 
 		let pos = new f32arr(pos_template.length)
 		pos.type = 'v3'
 		pos.nc = 3
+
+		let triangle_pis = reverse_faces ? triangle_pis_back : triangle_pis_front
 
 		let e = {
 			pos: pos,
@@ -1021,21 +1079,21 @@ gl.skybox = function(opt) {
 
 	`)
 
-	let geo = gl.box_geometry().set(1, 1, 1)
-	let vao = prog.vao()
+	let geo = gl.box_geometry(true).set(1, 1, 1)
 	let pos_buf = gl.buffer(geo.pos)
-	let model = mat4f32().scale(FAR)
-	let inst_buf = gl.mat4_instance_buffer(model)
+	let model = mat4f32()
+	let model_buf = gl.mat4_instance_buffer(model)
 	let index_buf = gl.index_buffer(geo.index)
+	let vao = prog.vao()
 	vao.set_attr('pos', pos_buf)
-	vao.set_attr('model', inst_buf)
+	vao.set_attr('model', model_buf)
 	vao.set_index(index_buf)
 
 	let cube_map_tex
 
 	e.update_view = function(view_pos) {
 		model.reset().set_position(view_pos).scale(FAR)
-		inst_buf.upload(model, 0)
+		model_buf.upload(model)
 	}
 
 	e.update = function() {
@@ -1108,26 +1166,27 @@ gl.helper_lines_renderer = function() {
 	}
 
 	function update_fl_for(line) {
-		fl_rr.update_at(line.hli, line)
+		fl_rr.update_at(fl.indexOf(line), line)
 	}
 
-	let dl_dab_pos   = gl.dyn_arr_buffer('v3')
-	let dl_dab_color = gl.dyn_arr_buffer('v3')
+	let dl_dab_pos   = gl.dyn_arr_v3_buffer()
+	let dl_dab_color = gl.dyn_arr_v3_buffer()
 
-	let dl_dab_model = gl.dyn_arr_buffer('mat4')
-	dl_dab_model.set(0, mat4f32.identity)
-	dl_dab_model.upload_invalid()
-	dl_rr.model = dl_dab_model.buffer
+	let dab_model = gl.dyn_arr_mat4_instance_buffer()
+	dab_model.set(0, mat4f32.identity)
+	dab_model.upload_invalid()
+	fl_rr.model = dab_model.buffer
+	dl_rr.model = dab_model.buffer
 
+	{
 	let _v = v3()
-	function set_dl(line) {
-		let i = line.hli
-		dl_dab_pos.set(2 * (i+0), dl[i][0])
-		dl_dab_pos.set(2 * (i+1), dl[i][1])
-		let c = _v.set(dl[i].color)
-		dl_dab_color.set(2 * (i+0), c)
-		dl_dab_color.set(2 * (i+1), c)
-	}
+	function set_dl(i, line) {
+		dl_dab_pos.set(2*i+0, line[0])
+		dl_dab_pos.set(2*i+1, line[1])
+		let c = _v.set(line.color)
+		dl_dab_color.set(2*i+0, c)
+		dl_dab_color.set(2*i+1, c)
+	}}
 
 	function update_dl() {
 
@@ -1135,16 +1194,8 @@ gl.helper_lines_renderer = function() {
 		dl_dab_color.len = dl.length
 
 		let i = 0
-		for (line of dl) {
-			if (line.visible)	{
-				line.hli = i++
-				set_dl(line)
-			}
-			line._visible = line.visible
-		}
-
-		dl_dab_pos  .len = i
-		dl_dab_color.len = i
+		for (line of dl)
+			set_dl(i++, line)
 
 		dl_dab_pos  .upload()
 		dl_dab_color.upload()
@@ -1154,7 +1205,7 @@ gl.helper_lines_renderer = function() {
 	}
 
 	function update_dl_for(line) {
-		set_dl(line)
+		set_dl(dl.indexOf(line), line)
 		dl_dab_pos  .upload_invalid()
 		dl_dab_color.upload_invalid()
 	}
@@ -1168,18 +1219,24 @@ gl.helper_lines_renderer = function() {
 		let update_lines = dashed ? update_dl     : update_fl
 		let update_line  = dashed ? update_dl_for : update_fl_for
 
-		lines.push(line)
-
 		line.free = function() {
-			lines.remove_value(line)
-			update_lines()
+			if (line._visible) {
+				lines.remove_value(line)
+				update_lines()
+			}
 		}
 
 		line.update = function() {
-			if (line._visible != line.visible)
+			if (line._visible != line.visible) {
+				if (line.visible)
+					lines.push(line)
+				else
+					lines.remove_value(line)
+				line._visible = line.visible
 				update_lines()
-			else
+			} else if (line.visible) {
 				update_line(line)
+			}
 		}
 
 		update_lines()
@@ -1199,6 +1256,100 @@ gl.helper_lines_renderer = function() {
 
 	return e
 
+}
+
+// axes prop -----------------------------------------------------------------
+
+gl.axes_renderer = function(opt) {
+
+	let gl = this
+
+	let e = assign({
+		x_color: 0x990000,
+		y_color: 0x000099,
+		z_color: 0x006600,
+	}, opt)
+
+	let lines_rr  = gl.solid_lines_renderer()
+	let dashed_rr = gl.dashed_lines_renderer()
+
+	let pos_poz = [
+		...v3.zero, ...v3(FAR,   0,   0),
+		...v3.zero, ...v3(  0, FAR,   0),
+		...v3.zero, ...v3(  0,   0, FAR),
+	]
+	pos_poz = gl.v3_buffer(pos_poz)
+
+	let pos_neg = [
+		...v3.zero, ...v3(-FAR,    0,    0),
+		...v3.zero, ...v3(   0, -FAR,    0),
+		...v3.zero, ...v3(   0,    0, -FAR),
+	]
+	pos_neg = gl.v3_buffer(pos_neg)
+
+	let color = [
+		...v3().from_rgb(e.x_color),
+		...v3().from_rgb(e.x_color),
+		...v3().from_rgb(e.y_color),
+		...v3().from_rgb(e.y_color),
+		...v3().from_rgb(e.z_color),
+		...v3().from_rgb(e.z_color),
+	]
+	color = gl.v3_buffer(color)
+
+	let model_dab = gl.dyn_arr_mat4_instance_buffer()
+	let axes_list = []
+
+	e.axes = function() {
+
+		let axes = {model: mat4()}
+		axes_list.push(axes)
+
+		axes.update = function() {
+			let i = axes_list.indexOf(axes)
+			model_dab.set(i, axes.model)
+			model_dab.upload_invalid()
+			lines_rr .model = model_dab.buffer
+			dashed_rr.model = model_dab.buffer
+		}
+
+		axes.free = function() {
+			let i = axes_list.remove_value(axes)
+			model_dab.remove(i)
+			model_dab.upload_invalid()
+			lines_rr .model = model_dab.buffer
+			dashed_rr.model = model_dab.buffer
+		}
+
+		axes.update()
+
+		return axes
+	}
+
+	lines_rr.pos = pos_poz
+	lines_rr.color = color
+
+	dashed_rr.pos = pos_neg
+	dashed_rr.color = color
+
+	e.draw = function(prog1) {
+		lines_rr .draw(prog1, false)
+		dashed_rr.draw(prog1, false)
+	}
+
+	e.free = function() {
+		lines_rr .free()
+		dashed_rr.free()
+	}
+
+	e.clear = function() {
+		axes_list.length = 0
+		model_dab.len = 0
+	}
+
+	e.axes_list = axes_list
+
+	return e
 }
 
 // ground plane with shadows -------------------------------------------------
@@ -1249,12 +1400,10 @@ gl.ground_plane_renderer = function() {
 	rr.update([poly])
 
 	e.draw = function(prog1) {
-		if (prog1 && prog1.name == 'face_id')
-			return // not hit-testable.
-		gl.enable(gl.CULL_FACE)
-		gl.cullFace(gl.BACK)
+		if (prog1)
+			if (prog1.name == 'hit_face')
+				return // not hit-testable.
 		rr.draw(prog1 || prog)
-		gl.disable(gl.CULL_FACE)
 	}
 
 	return e
@@ -1329,70 +1478,38 @@ gl.shadow_map_quad = function(tex, imat) {
 	return e
 }
 
-// axes prop -----------------------------------------------------------------
+// immediate-mode drawing ----------------------------------------------------
 
-gl.axes_renderer = function(opt) {
-	let gl = this
-	let e = assign({
-		x_color: 0x990000,
-		y_color: 0x000099,
-		z_color: 0x006600,
-	}, opt)
+gl.im_draw = function() {
 
-	let lines_r = gl.solid_lines_renderer()
-	let dashed_r = gl.dashed_lines_renderer()
+	let e = {}
 
-	let pos_poz = [
-		...v3.zero, ...v3(FAR,   0,   0),
-		...v3.zero, ...v3(  0, FAR,   0),
-		...v3.zero, ...v3(  0,   0, FAR),
-	]
-	pos_poz = gl.v3_buffer(pos_poz)
 
-	let pos_neg = [
-		...v3.zero, ...v3(-FAR,    0,    0),
-		...v3.zero, ...v3(   0, -FAR,    0),
-		...v3.zero, ...v3(   0,    0, -FAR),
-	]
-	pos_neg = gl.v3_buffer(pos_neg)
 
-	let color = [
-		...v3().from_rgb(e.x_color),
-		...v3().from_rgb(e.x_color),
-		...v3().from_rgb(e.y_color),
-		...v3().from_rgb(e.y_color),
-		...v3().from_rgb(e.z_color),
-		...v3().from_rgb(e.z_color),
-	]
-	color = gl.v3_buffer(color)
-
-	let model = gl.dyn_mat4_instance_buffer()
-
-	e.add_instance = function() {
-		let i = model.len
-		model.len = i+1
-		e.upload_model(i, mat4f32())
-		lines_r.model = model.buffer
-		dashed_r.model = model.buffer
-		return i
+	e.line = function(p1, p2, color) {
+		//
 	}
 
-	e.upload_model = function(i, m) {
-		model.buffer.upload(m, i)
+	e.dot = function(p) {
+		//
 	}
 
-	lines_r.pos = pos_poz
-	lines_r.color = color
-
-	dashed_r.pos = pos_neg
-	dashed_r.color = color
+	e.poly = function(poly) {
+		//
+	}
 
 	e.draw = function(prog1) {
-		lines_r.draw(prog1, false)
-		dashed_r.draw(prog1, false)
+		if (prog1)
+			return
+
+	}
+
+	e.free = function() {
+
 	}
 
 	return e
+
 }
 
 }()) // module scope.

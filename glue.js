@@ -323,6 +323,13 @@ method(Array, 'extend', function(a) {
 		this[i0+i] = a[i]
 })
 
+method(Array, 'set', function(a) {
+	let n = a.length
+	this.length = n
+	for (let i = 0; i < n; i++)
+		this[i] = a[i]
+})
+
 method(Array, 'insert', function(i, v) {
 	if (i >= this.length)
 		this[i] = v
@@ -535,8 +542,14 @@ class dyn_arr_class {
 
 		// check/clamp/slice source.
 		data_offset = data_offset || 0
-		let data_len = data.length * this.inv_nc
-		assert(data_len == floor(data_len), 'source array length not multiple of {0}', this.nc)
+		let data_len
+		if (data.nc != null) {
+			assert(data.nc == this.nc, 'source array nc is {0}, expected {1}', data.nc, this.nc)
+			data_len = or(data.len, data.length)
+		} else {
+			data_len = data.length * this.inv_nc
+			assert(data_len == floor(data_len), 'source array length not multiple of {0}', this.nc)
+		}
 		assert(data_offset >= 0 && data_offset <= data_len, 'source offset out of range')
 		len = clamp(or(len, 1/0), 0, data_len - data_offset)
 		if (data_offset != 0 || len != data_len)
@@ -545,9 +558,21 @@ class dyn_arr_class {
 		assert(offset >= 0, 'offset out of range')
 
 		this._set_len(max(this.len, offset + len))
-		this.array.set(data, offset)
+		this.array.set(data, offset * this.nc)
 		this.invalidate(offset, len)
 
+		return this
+	}
+
+	remove(offset, len) {
+		assert(offset >= 0, 'offset out of range')
+		len = max(0, min(or(len, 1), this.len - offset))
+		if (len == 0)
+			return
+		for (let a = this.array, o1 = offset, o2 = offset + len, i = 0; i < len; i++)
+			a[o1+i] = a[o2+i]
+		this._len -= len
+		this.invalidate(offset)
 		return this
 	}
 
@@ -603,13 +628,13 @@ dyn_arr.index_arr_type = index_arr_type
 			return new dyn_arr_class(arr_type, data_or_cap, nc)
 		}
 	}
-	dyn_f32arr = dyn_arr_func(Float32Array)
-	dyn_i8arr  = dyn_arr_func(Int8Array)
-	dyn_u8arr  = dyn_arr_func(Uint8Array)
-	dyn_i16arr = dyn_arr_func(Int16Array)
-	dyn_u16arr = dyn_arr_func(Uint16Array)
-	dyn_i32arr = dyn_arr_func(Int32Array)
-	dyn_u32arr = dyn_arr_func(Uint32Array)
+	dyn_f32arr = dyn_arr_func(f32arr)
+	dyn_i8arr  = dyn_arr_func(i8arr)
+	dyn_u8arr  = dyn_arr_func(u8arr)
+	dyn_i16arr = dyn_arr_func(i16arr)
+	dyn_u16arr = dyn_arr_func(u16arr)
+	dyn_i32arr = dyn_arr_func(i32arr)
+	dyn_u32arr = dyn_arr_func(u32arr)
 }
 
 // events --------------------------------------------------------------------
