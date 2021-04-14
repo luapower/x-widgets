@@ -298,13 +298,14 @@ component('x-modeleditor', function(e) {
 	{
 	let _m0 = mat4()
 	function update_instance_matrices_for(node, parent) {
-		let dab = node.comp.model_dab
-		let i = dab.len
-		dab.len = i + 1
+		let davib = node.comp.davib
+		let i = davib.len
+		davib.len = i + 1
 		_m0.set(node)
 		if (parent)
 			_m0.mul(parent)
-		_m0.to_mat4_array(dab.array, i)
+		_m0.to_mat4_array(davib.dabs.model.array, i)
+		davib.dabs.disabled.set(i, [1])
 
 		node.parent = parent
 		let children = node.comp.children
@@ -320,15 +321,15 @@ component('x-modeleditor', function(e) {
 			return
 
 		for (let comp of comps)
-			if (comp.model_dab)
-				comp.model_dab.len = 0
+			if (comp.davib)
+				comp.davib.len = 0
 			else
-				comp.model_dab = gl.dyn_arr_mat4_instance_buffer()
+				comp.davib = gl.dyn_arr_vertex_instance_buffer({model: 'mat4', disabled: 'u8'})
 
 		update_instance_matrices_for(root)
 
 		for (let comp of comps)
-			comp.model_dab.upload()
+			comp.davib.upload()
 
 		instances_valid = true
 	}
@@ -357,7 +358,9 @@ component('x-modeleditor', function(e) {
 	function update_model() {
 		update_instance_matrices()
 		for (let comp of comps)
-			comp.update(comp.model_dab.buffer)
+			comp.update(
+				comp.davib.dabs.model.buffer,
+				comp.davib.dabs.disabled.buffer)
 	}
 
 	function draw_model(prog) {
@@ -402,7 +405,7 @@ component('x-modeleditor', function(e) {
 
 	function inst_model(comp, inst_id, out) {
 		out.inst_id = inst_id
-		return out.from_mat4_array(comp.model_dab.array, inst_id)
+		return out.from_mat4_array(comp.davib.dabs.model.array, inst_id)
 	}
 
 	function inst_inv_model(comp, inst_id, out) {
@@ -419,7 +422,7 @@ component('x-modeleditor', function(e) {
 		if (!max_d)
 			return
 		for (let comp of comps) {
-			for (let i = 0, n = comp.model_dab.len; i < n; i++) {
+			for (let i = 0, n = comp.davib.len; i < n; i++) {
 				let model = inst_model(comp, i, _m0)
 				let int_p = comp.line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid, _v0)
 				if (int_p) {
@@ -632,7 +635,7 @@ component('x-modeleditor', function(e) {
 
 	let hit_max_distances = {
 		snap: 20,   // max pixel distance for snapping
-		select: 6,  // max pixel distance for selecting
+		select: 8,  // max pixel distance for selecting
 	}
 
 	let screen_p2p_distance2 = camera.screen_distance2
@@ -823,8 +826,11 @@ component('x-modeleditor', function(e) {
 
 	{
 	let offsets = {
-		line: [0, 25],
-		select: [5, 12],
+		line          : [0, 25],
+		select        : [5, 12],
+		select_add    : [5, 12],
+		select_remove : [5, 12],
+		select_toggle : [5, 12],
 	}
 	let cursor
 	e.property('cursor', () => cursor, function(name) {

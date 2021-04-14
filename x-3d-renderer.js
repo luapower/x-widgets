@@ -44,10 +44,12 @@ gl.module('mesh.vs', `
 	in vec3 pos;
 	in vec3 normal;
 	in vec2 uv;
+	in float disabled;
 
 	out vec3 v_pos;
 	out vec3 v_normal;
 	out vec2 v_uv;
+	flat out float v_disabled;
 
 	vec4 mvp(vec3 pos) {
 		return view_proj * model * vec4(pos, 1.0);
@@ -70,6 +72,7 @@ gl.module('mesh.fs', `
 	in vec3 v_pos;
 	in vec3 v_normal;
 	in vec2 v_uv;
+	flat in float v_disabled;
 
 	layout (location = 0) out vec4 frag_color;
 
@@ -88,6 +91,7 @@ gl.module('phong.vs', `
 		v_pos_sdm_view_proj = sdm_view_proj * vec4(v_pos, 1.0);
 		v_normal = inverse(transpose(mat3(model))) * normal; /* model must be affine! */
 		v_uv = uv;
+		v_disabled = disabled;
 		gl_Position = view_proj * vec4(v_pos, 1.0);
 	}
 
@@ -141,8 +145,10 @@ gl.module('phong.fs', `
 
 		vec4 b_color = vec4(diffuse_color, 1.0);
 		vec4 t_color = texture(diffuse_map, v_uv);
+		vec4 color = mix(b_color + t_color, vec4(1.0, 1.0, 1.0, 1.0), v_disabled);
+		vec4 disabled_color = vec4(0.7, 0.7, 0.7, 1.0);
 
-		frag_color = vec4(light * sunlight_color, 1.0) * (b_color + t_color);
+		frag_color = mix(vec4(light * sunlight_color, 1.0) * color, disabled_color, 0.7 * v_disabled);
 
 	}
 
@@ -427,30 +433,32 @@ gl.faces_renderer = function() {
 		#include phong.vs
 
 		in int selected;
-		flat out int frag_selected;
+		flat out int v_selected;
 
 		void main() {
 			do_phong();
-			frag_selected = selected;
+			v_selected = selected;
 		}
 
 	`, `
 
 		#include phong.fs
 
-		flat in int frag_selected;
+		flat in int v_selected;
 
 		void main() {
 
 			do_phong();
 
-			if (frag_selected == 1) {
+			if (v_selected == 1) {
 				float x = mod(gl_FragCoord.x, 4.0);
 				float y = mod(gl_FragCoord.y, 8.0);
+				vec4 disabled_color = vec4(0.7, 0.7, 0.7, 1.0);
+				vec4 selected_color = vec4(0.0, 0.0, .8, 1.0);
 				frag_color =
 					((x >= 0.0 && x <= 1.1 && y >= 0.0 && y <= 0.5) ||
 					 (x >= 2.0 && x <= 3.1 && y >= 4.0 && y <= 4.5))
-					? vec4(0.0, 0.0, .8, 1.0) : frag_color;
+					? mix(selected_color, disabled_color, 0.7 * v_disabled) : frag_color;
 			}
 		}
 
@@ -546,14 +554,15 @@ gl.faces_renderer = function() {
 			vao.use()
 			vao.set_attrs(davb)
 			vao.set_index(index_dab.buffer)
-			vao.set_attr('model'  , e.model)
-			vao.set_attr('inst_id', e.inst_id)
+			vao.set_attr('model'   , e.model)
+			vao.set_attr('inst_id' , e.inst_id)
 			gl.draw_triangles()
 		} else {
 			vao.use()
 			vao.set_attrs(davb)
 			vao.set_index(index_dab.buffer)
-			vao.set_attr('model', e.model)
+			vao.set_attr('model'    , e.model)
+			vao.set_attr('disabled' , e.disabled)
 			for (let [mat, offset, len] of draw_ranges) {
 				prog.set_uni('specular_strength' , or(mat.specular_strength, e.specular_strength))
 				prog.set_uni('shininess'         , 1 << or(mat.shininess, e.shininess)) // keep this a pow2.
@@ -592,6 +601,7 @@ gl.solid_lines_renderer = function() {
 		void main() {
 			gl_Position = mvp(pos);
 			v_color = vec4(base_color + color, 1.0);
+			v_disabled = disabled;
 		}
 
 	`, `
@@ -601,7 +611,7 @@ gl.solid_lines_renderer = function() {
 		flat in vec4 v_color;
 
 		void main() {
-			frag_color = v_color;
+			frag_color = mix(v_color, vec4(0.7, 0.7, 0.7, 1.0), 0.7 * v_disabled);
 		}
 
 	`)
@@ -616,6 +626,7 @@ gl.solid_lines_renderer = function() {
 		vao.use()
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
+		vao.set_attr('disabled', e.disabled)
 		vao.set_index(e.index)
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
@@ -653,6 +664,7 @@ gl.points_renderer = function(e) {
 			gl_Position = mvp(pos);
 			gl_PointSize = point_size;
 			v_color = vec4(base_color + color, 1.0);
+			v_disabled = disabled;
 		}
 
 	`, `
@@ -662,7 +674,7 @@ gl.points_renderer = function(e) {
 		flat in vec4 v_color;
 
 		void main() {
-			frag_color = v_color;
+			frag_color = mix(v_color, vec4(0.7, 0.7, 0.7, 1.0), 0.7 * v_disabled);
 		}
 
 	`)
@@ -679,6 +691,7 @@ gl.points_renderer = function(e) {
 		prog.set_uni('point_size', e.point_size)
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
+		vao.set_attr('disabled', e.disabled)
 		vao.set_index(e.index)
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
@@ -720,6 +733,7 @@ gl.dashed_lines_renderer = function(e) {
 			v_p2 = p;
 			v_color = vec4(base_color + color, 1.0);
 			gl_Position = p;
+			v_disabled = disabled;
 		}
 
 	`, `
@@ -739,7 +753,7 @@ gl.dashed_lines_renderer = function(e) {
 			float dist = length((p1 - p2) * view_size.xy * 0.5);
 			if (fract(dist / (dash + gap)) > dash / (dash + gap))
 				discard;
-			frag_color = v_color;
+			frag_color = mix(v_color, vec4(0.7, 0.7, 0.7, 1.0), 0.7 * v_disabled);
 		}
 
 	`)
@@ -756,6 +770,7 @@ gl.dashed_lines_renderer = function(e) {
 		prog.set_uni('gap', e.gap)
 		vao.set_attr('pos', e.pos)
 		vao.set_attr('model', e.model)
+		vao.set_attr('disabled', e.disabled)
 		vao.set_index(e.index)
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)
@@ -829,6 +844,7 @@ gl.fat_lines_renderer = function(e) {
 		void main() {
 			gl_Position = fat_line_pos();
 			v_color = vec4(base_color + color, 1.0);
+			v_disabled = disabled;
 		}
 
 	`, `
@@ -838,7 +854,7 @@ gl.fat_lines_renderer = function(e) {
 		flat in vec4 v_color;
 
 		void main() {
-			frag_color = v_color;
+			frag_color = mix(v_color, vec4(0.7, 0.7, 0.7, 1.0), 0.7 * v_disabled);
 		}
 
 	`)
@@ -954,6 +970,7 @@ gl.fat_lines_renderer = function(e) {
 		vao.use()
 		vao.set_attrs(davb)
 		vao.set_attr('model', e.model)
+		vao.set_attr('disabled', e.disabled)
 		vao.set_index(ib.buffer)
 		prog.set_uni('base_color', e.base_color)
 		vao.set_attr('color', e.color)

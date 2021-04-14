@@ -1300,7 +1300,7 @@ vao.dab = function(name, cap) {
 	return dab
 }
 
-gl.dyn_arr_vertex_buffer = function(attrs, cap) {
+gl.dyn_arr_vertex_buffer = function(attrs, cap, inst_div) {
 
 	let e = {dabs: {}, dabs_list: [], is_dyn_arr_vertex_buffer: true}
 
@@ -1308,7 +1308,7 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 	for (let name in attrs) {
 		let type = attrs[name]
 		let bt = get_bt(type)
-		let dab = this.dyn_arr_buffer(bt.type, cap)
+		let dab = this.dyn_arr_buffer(bt.type, cap, inst_div)
 		dab.name = name
 		e.dabs[name] = dab
 		e.dabs_list.push(dab)
@@ -1347,6 +1347,10 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap) {
 	}
 
 	return e
+}
+
+gl.dyn_arr_vertex_instance_buffer = function(attrs, cap) {
+	return this.dyn_arr_vertex_buffer(attrs, cap, 1)
 }
 
 // textures ------------------------------------------------------------------

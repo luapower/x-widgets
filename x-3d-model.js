@@ -1196,7 +1196,7 @@ model3_component = function(pe) {
 				f(get_line(li))
 	}
 
-	function update(models_buf) {
+	function update(models_buf, disabled_buf) {
 
 		if (points_changed) {
 			points_dab.len = point_count()
@@ -1313,6 +1313,14 @@ model3_component = function(pe) {
 		blue_dashed_lines_rr  .model = models_buf
 		black_fat_lines_rr    .model = models_buf
 		blue_fat_lines_rr     .model = models_buf
+
+		points_rr             .disabled = disabled_buf
+		faces_rr              .disabled = disabled_buf
+		black_thin_lines_rr   .disabled = disabled_buf
+		black_dashed_lines_rr .disabled = disabled_buf
+		blue_dashed_lines_rr  .disabled = disabled_buf
+		black_fat_lines_rr    .disabled = disabled_buf
+		blue_fat_lines_rr     .disabled = disabled_buf
 
 		points_changed      = false
 		used_points_changed = false
