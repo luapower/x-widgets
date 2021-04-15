@@ -297,7 +297,8 @@ component('x-modeleditor', function(e) {
 
 	{
 	let _m0 = mat4()
-	function update_instance_matrices_for(node, parent) {
+	let disabled_arr = [0]
+	function update_instance_matrices_for(node, parent, path_depth, on_cur_path) {
 		let davib = node.comp.davib
 		let i = davib.len
 		davib.len = i + 1
@@ -305,14 +306,21 @@ component('x-modeleditor', function(e) {
 		if (parent)
 			_m0.mul(parent)
 		_m0.to_mat4_array(davib.dabs.model.array, i)
-		davib.dabs.disabled.set(i, [1])
+		disabled_arr[0] = !on_cur_path
+		davib.dabs.disabled.set(i, disabled_arr)
 
 		node.parent = parent
 		let children = node.comp.children
-		if (children)
+		if (children) {
+			let cur_child = cur_path[path_depth + 1]
 			for (let child of children)
-				if (child.layer.visible)
-					update_instance_matrices_for(child, node)
+				if (child.layer.visible) {
+					update_instance_matrices_for(child, node,
+							path_depth + 1,
+							cur_child == null || cur_child == child
+						)
+				}
+		}
 	}}
 
 	function update_instance_matrices() {
@@ -324,9 +332,9 @@ component('x-modeleditor', function(e) {
 			if (comp.davib)
 				comp.davib.len = 0
 			else
-				comp.davib = gl.dyn_arr_vertex_instance_buffer({model: 'mat4', disabled: 'u8'})
+				comp.davib = gl.dyn_arr_vertex_instance_buffer({model: 'mat4', disabled: 'i8'})
 
-		update_instance_matrices_for(root)
+		update_instance_matrices_for(root, null, 0, true)
 
 		for (let comp of comps)
 			comp.davib.upload()
@@ -794,6 +802,8 @@ component('x-modeleditor', function(e) {
 			axes.update()
 		}
 		cur_inv_model.set(m).invert()
+		instances_valid = false
+		render()
 	}
 
 	function from_world(v, out) {
@@ -1572,7 +1582,7 @@ component('x-modeleditor', function(e) {
 
 	// test cube --------------------------------------------------------------
 
-	function draw_test_cube() {
+	function create_test_objects() {
 
 		let mat1 = e.add_material({diffuse_color: 0xff9900})
 		let mat2 = e.add_material({diffuse_color: 0x0099ff})
@@ -1614,21 +1624,26 @@ component('x-modeleditor', function(e) {
 		root.comp.set_line_opacity(0, 0)
 		root.comp.set_line_opacity(2, 0)
 
+		let c0 = root.comp
 		let c1 = e.create_component({name: 'c1'})
+		let c2 = e.create_component({name: 'c2'})
 
 		m.faces[0].material = null
 		m.faces[1].material = null
-		m.faces[2].material = null
 
 		c1.set(m)
 
-		root.comp.add_child(c1, mat4().translate(3, 0, 0))
-		root.comp.add_child(c1, mat4().translate(4, 3, 0))
+		m.faces[2].material = null
+
+		c2.set(m)
+
+		c0.add_child(c1, mat4().translate(3, 0, 0))
+		c1.add_child(c2, mat4().translate(3, 0, 0))
 
 		for (let i = 0; i < 2; i++)
 			for (let j = 0; j < 2; j++)
 				for (let k = 0; k < 2; k++)
-					root.comp.add_child(c1, mat4().translate(0 + i * 3, 3 + j * 3, -5 - k * 3))
+					c1.add_child(c2, mat4().translate(0 + i * 3, 3 + j * 3, -5 - k * 3))
 
 	}
 
@@ -1637,10 +1652,9 @@ component('x-modeleditor', function(e) {
 	init_layers()
 	init_root()
 	init_renderer()
-	enter_edit([root])
 	update_sun_pos()
-
-	draw_test_cube()
+	create_test_objects()
+	enter_edit([root, root.comp.children[0], root.comp.children[0].comp.children[1]])
 
 	e.tool = 'orbit'
 	render()
