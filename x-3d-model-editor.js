@@ -306,7 +306,7 @@ component('x-modeleditor', function(e) {
 		if (parent)
 			_m0.mul(parent)
 		_m0.to_mat4_array(davib.dabs.model.array, i)
-		disabled_arr[0] = !on_cur_path
+		disabled_arr[0] = !on_cur_path || cur_path.length-1 > path_depth
 		davib.dabs.disabled.set(i, disabled_arr)
 
 		node.parent = parent
@@ -790,18 +790,16 @@ component('x-modeleditor', function(e) {
 	let cur_inv_model = mat4()
 
 	let axes_rr = gl.axes_renderer()
+	let axes = axes_rr.axes()
 
 	function enter_edit(path) {
 		cur_path.set(path)
-		axes_rr.clear()
-		let m = cur_model.reset()
-		for (let node of cur_path) {
-			m.mul(node)
-			let axes = axes_rr.axes()
-			axes.model.set(m)
-			axes.update()
-		}
-		cur_inv_model.set(m).invert()
+		cur_model.reset()
+		for (node of path)
+			cur_model.mul(node)
+		cur_inv_model.set(cur_model).invert()
+		axes.model.set(cur_model)
+		axes.update()
 		instances_valid = false
 		render()
 	}

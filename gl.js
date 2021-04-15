@@ -1060,7 +1060,7 @@ buf.upload = function(in_arr, offset, len, in_offset) {
 }
 
 buf.download = function(out_arr, offset, len, out_offset) {
-	let gl = this
+	let gl = this.gl
 	let nc = this.nc
 	check_arr_type(out_arr, this.arr_type)
 	check_arr_nc(out_arr, nc)
@@ -1089,7 +1089,7 @@ buf.set = function(offset, in_buf, len, in_offset) {
 	assert(in_offset >= 0)
 	if (len == null)
 		len = in_buf.len - in_offset
-	let bpe = this.BYTES_PER_ELEMENT
+	let bpe = this.arr_type.BYTES_PER_ELEMENT
 
 	gl.bindBuffer(gl.COPY_READ_BUFFER, in_buf)
 	gl.bindBuffer(gl.COPY_WRITE_BUFFER, this)
@@ -1239,13 +1239,14 @@ gl.dyn_arr_buffer = function(type, data_or_cap, inst_div, for_index) {
 		if (!da.invalid)
 			return
 		db.len = da.len
-		db.buffer.upload(da.array, da.invalid_offset1, da.invalid_offset2 - da.invalid_offset1)
+		db.buffer.upload(da.array, da.invalid_offset1, da.invalid_offset2 - da.invalid_offset1, da.invalid_offset1)
 		da.validate()
 		return this
 	}
 
 	property(dab, 'array', () => da.array)
 	property(dab, 'buffer', () => db.buffer)
+	property(dab, 'da', () => da)
 
 	return dab
 }

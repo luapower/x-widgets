@@ -552,7 +552,7 @@ class dyn_arr_class {
 		}
 		assert(data_offset >= 0 && data_offset <= data_len, 'source offset out of range')
 		len = clamp(or(len, 1/0), 0, data_len - data_offset)
-		if (data_offset != 0 || len != data_len)
+		if (data_offset != 0 || len != data_len) // gotta make garbage here...
 			data = data.subarray(data_offset * this.nc, (data_offset + len) * this.nc)
 
 		assert(offset >= 0, 'offset out of range')

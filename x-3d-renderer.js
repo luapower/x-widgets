@@ -1325,7 +1325,9 @@ gl.axes_renderer = function(opt) {
 		axes.update = function() {
 			let i = axes_list.indexOf(axes)
 			model_dab.set(i, axes.model)
+			TT=1
 			model_dab.upload_invalid()
+			TT=0
 			lines_rr .model = model_dab.buffer
 			dashed_rr.model = model_dab.buffer
 		}
