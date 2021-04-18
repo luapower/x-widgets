@@ -653,6 +653,7 @@ model3_component = function(pe) {
 	// return the projected point on closest line from target line.
 	{
 	let _l0 = line3()
+	let _l1 = line3()
 	function line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid, out) {
 		assert(out.is_v3)
 		out.li = null
@@ -682,6 +683,7 @@ model3_component = function(pe) {
 							if (ds <= max_d ** 2) {
 								let int_p = int_line[1]
 								int_p.li = li
+								int_p.line = line
 								int_p.int_line = int_line
 								if (is_int_line_valid(int_line)) {
 									if (ds < min_ds) {
@@ -689,6 +691,7 @@ model3_component = function(pe) {
 										min_int_p = min_int_p || out
 										min_int_p.set(int_p)
 										min_int_p.li = li
+										min_int_p.line = line.to(_l1)
 										min_int_p.int_line = int_line.clone()
 									}
 								}
@@ -845,7 +848,7 @@ model3_component = function(pe) {
 
 		// check for min. line length for lines with new endpoints.
 		if (p1.i == null || p2.i == null) {
-			if (p1.distanceToSquared(p2) <= NEAR ** 2)
+			if (p1.distance2(p2) <= NEAR ** 2)
 				return
 		} else if (p1.i == p2.i) {
 			// check if end point was snapped to start end point.
@@ -871,8 +874,8 @@ model3_component = function(pe) {
 		function sort_line_ps() {
 			if (line_ps.length)
 				line_ps.sort(function(sp1, sp2) {
-					let ds1 = p1.distanceToSquared(sp1)
-					let ds2 = p1.distanceToSquared(sp2)
+					let ds1 = p1.distance2(sp1)
+					let ds2 = p1.distance2(sp2)
 					return ds1 < ds2
 				})
 		}

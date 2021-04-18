@@ -74,6 +74,7 @@
 	--x-bg-info         : #069;  /* bg for info bubbles */
 	--x-fg-error        : #a33;  /* bg for invalid inputs and error bubbles */
 	--x-bg-error        : #a33;  /* bg for invalid inputs and error bubbles */
+	--x-bg-tooltip      : #ffffcc; /* bg for cursor-kind tooltips */
 	--x-bg-today        : #f33;
 
 	--x-bg-button                 : #eff3f6;
@@ -460,6 +461,9 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	animation-timing-function: ease-out;
 	animation-fill-mode: forwards;
 
+	/* behavior */
+	pointer-events: none;
+	user-select: none;
 }
 
 .x-tooltip-body {
@@ -523,6 +527,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	color: var(--x-bg-popup);
 }
 
+.x-tooltip-icon {
+	vertical-align: top;
+	margin: .2em 0 0 1em;
+	font-size: 1em;
+	line-height: inherit !important; /* override fontawesome's !important */
+}
+
 .x-tooltip[side=left]   > .x-tooltip-tip { border-left-color   : inherit; }
 .x-tooltip[side=right]  > .x-tooltip-tip { border-right-color  : inherit; }
 .x-tooltip[side=top]    > .x-tooltip-tip { border-top-color    : inherit; }
@@ -541,11 +552,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-tooltip[side=right]  > .x-tooltip-body,
 .x-tooltip[side=bottom] > .x-tooltip-body { order: 2; }
 
-.x-tooltip[side=top][align=center] > .x-tooltip-content,
-.x-tooltip[side=bottom][align=center] > .x-tooltip-content { text-align: center; }
+.x-tooltip[side=top][align=center] > .x-tooltip-body > .x-tooltip-content,
+.x-tooltip[side=bottom][align=center] > .x-tooltip-body > .x-tooltip-content { text-align: center; }
 
-.x-tooltip[side=top][align=end] > .x-tooltip-content,
-.x-tooltip[side=bottom][align=end] > .x-tooltip-content { text-align: right; }
+.x-tooltip[side=top][align=end] > .x-tooltip-body > .x-tooltip-content,
+.x-tooltip[side=bottom][align=end] > .x-tooltip-body > .x-tooltip-content { text-align: right; }
 
 .x-tooltip[side=top] > .x-tooltip-tip,
 .x-tooltip[side=bottom] > .x-tooltip-tip { margin: 0 .5em; }
@@ -573,12 +584,27 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
 .x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton:hover { color: var(--x-fg-inverted); }
 
-.x-tooltip-icon {
-	vertical-align: top;
-	margin: .2em 0 0 1em;
-	font-size: 1em;
-	line-height: inherit !important; /* override fontawesome's !important */
+.x-tooltip[kind=cursor] {
+	margin-left: .75em;
+	margin-top : .75em;
 }
+
+.x-tooltip[kind=cursor] > .x-tooltip-body {
+	padding: .15em 0;
+	border: 1px solid #aaaa99;
+	color: #333;
+	background-color: var(--x-bg-tooltip);
+	font-family: sans-serif;
+	font-size: 12px;
+	border-radius: 0;
+}
+
+.x-tooltip[kind=cursor] > .x-tooltip-body > .x-tooltip-content {
+	padding: 0 .5em;
+	white-space: pre !important;
+}
+
+.x-tooltip[kind=cursor] > .x-tooltip-tip { display: none; }
 
 /* checkbox --------------------------------------------------------------- */
 

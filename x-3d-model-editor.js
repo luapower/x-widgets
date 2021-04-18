@@ -465,13 +465,19 @@ component('x-modeleditor', function(e) {
 		main_axis_snap, main_axis, main_axis_snap_tooltip
 	) {
 
+		let e = {}
 		let plane = plane3(normal)
 
 		{
 		let _l0 = line3()
+		let _pl0 = plane3()
+		let _p0 = v3()
+		let _p1 = v3()
 		e.mouse_hit_plane = function(model) {
-			let ray = mouse.ray.to(_l0).transform(model)
-			let angle = camera.dir.angle_to(normal)
+			let p = plane.to(_pl0).transform(model).intersect_line(mouse.ray, _p0)
+			if (!p || p.t < 0)
+				return
+			let angle = mouse.ray.delta(_p1).angle_to(normal)
 			if (angle > PI / 2)
 				angle = abs(angle - PI)
 			p.angle = angle
@@ -572,10 +578,10 @@ component('x-modeleditor', function(e) {
 	let cmp_ps = function(p1, p2) {
 		return p1.ds == p2.ds ? 0 : (p1.ds < p2.ds ? -1 : 1)
 	}
-	function mouse_hit_axes(model) {
+	function mouse_hit_axes(model, max_hit_distance) {
 		let i = 0
 		for (let plane of ref_planes)
-			plane.mouse_hit_main_axis(model, ps[i++])
+			plane.mouse_hit_main_axis(model, max_hit_distance, ps[i++])
 		ps.sort(cmp_ps)
 		return ps[0].line_snap ? ps[0] : null
 	}}
@@ -611,6 +617,11 @@ component('x-modeleditor', function(e) {
 
 	function render_model_for_hit_test() {
 		hit_test_rr.render(draw_model_for_hit_test)
+	}
+
+	let max_hit_distances = {
+		snap: 20,   // max pixel distance for snapping
+		select: 8,  // max pixel distance for selecting
 	}
 
 	// connect geom_id/inst_id back to the model.
@@ -652,11 +663,6 @@ component('x-modeleditor', function(e) {
 
 	}}
 
-	let hit_max_distances = {
-		snap: 20,   // max pixel distance for snapping
-		select: 8,  // max pixel distance for selecting
-	}
-
 	let screen_p2p_distance2 = camera.screen_distance2
 	let real_p2p_distance2 = (p1, p2) => p1.distance2(p2)
 
@@ -696,7 +702,7 @@ component('x-modeleditor', function(e) {
 	function mouse_hit_model(opt) {
 
 		let int_p = mouse_hit_faces()
-		let hit_d = hit_max_distances[opt.distance]
+		let hit_d = max_hit_distances[opt.distance]
 		let axes_model = opt.axes_model
 		let mode = opt.mode
 
@@ -721,7 +727,7 @@ component('x-modeleditor', function(e) {
 			if (line_int_p) {
 
 				// we've hit a line. snap to it.
-				let hit_line = line_int_p.comp.get_line(line_int_p.li)
+				let hit_line = line_int_p.line
 
 				// check if the hit line intersects the face plane: that's a snap point.
 				let plane_int_p = face_plane.intersect_line(hit_line, _v0, 'strict')
@@ -763,7 +769,7 @@ component('x-modeleditor', function(e) {
 				int_p.path = instance_path(int_p.comp, int_p.inst_id)
 
 				// we've hit a line. snap to it.
-				let hit_line = int_p.comp.get_line(int_p.li)
+				let hit_line = int_p.line
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
 				let axes_int_p = axes_model && axes_hit_line(axes_model, int_p, hit_line)
@@ -781,7 +787,7 @@ component('x-modeleditor', function(e) {
 			} else if (mode == 'draw') {
 
 				// we've hit squat: hit the axes and the ref planes.
-				int_p = axes_model && mouse_hit_axes(axes_model) || hit_ref_planes(axes_model || cur_model)
+				int_p = axes_model && mouse_hit_axes(axes_model, hit_d) || hit_ref_planes(axes_model || cur_model)
 
 			} else if (mode == 'select') {
 
@@ -876,37 +882,27 @@ component('x-modeleditor', function(e) {
 	// cursor tooltip ---------------------------------------------------------
 
 	{
-	let tooltip_text = ''
-	let tooltip = div({style: `
-		position: absolute;
-		white-space: nowrap;
-		user-select: none;
-		margin-left: .5em;
-		margin-top : .5em;
-		padding: .25em .5em;
-		border: 1px solid #aaaa99;
-		color: #333;
-		background-color: #ffffcc;
-		font-family: sans-serif;
-		font-size: 12px;
-	`}, tooltip_text)
+	let tt = tooltip({kind: 'cursor', //timeout: 'auto',
+		side: 'inner-top', align: 'start',
+		target: e})
+	tt.hide()
 
-	tooltip.hide()
-	e.add(tooltip)
-
-	let show_tooltip_after = timer(function() {
-		tooltip.show()
+	let tt_text = ''
+	let show_after = timer(function() {
+		tt.text = tt_text
+		tt.show()
 	})
 
 	e.property('tooltip', () => tooltip_text, function(s) {
-		tooltip.hide()
+		tt.update()
 		if (s) {
-			tooltip.set(s)
-			tooltip.x = mouse.x
-			tooltip.y = mouse.y
-			show_tooltip_after(.2)
+			tt_text = s
+			tt.px = mouse.x
+			tt.py = mouse.y
+			tt.hide()
+			show_after(.2)
 		} else {
-			show_tooltip_after(false)
+			show_after(false)
 		}
 	})
 	}
@@ -916,14 +912,14 @@ component('x-modeleditor', function(e) {
 	let helper_lines_rr = gl.helper_lines_renderer()
 
 	let helper_lines = {}
-	e.line = function(name, line1, color, dashed, visible) {
+	function helper_line(name, line1, opt) {
 		line = helper_lines[name]
 		if (!line) {
-			line = helper_lines_rr.line(line1, color, dashed, visible)
+			line = helper_lines_rr.line(line1, opt.color, opt.dashed, opt.visible)
 			line.name = name
 			helper_lines[name] = line
 		} else {
-			line.color = color
+			line.color = opt.color
 			line.set(line1)
 			line.update()
 		}
@@ -933,7 +929,7 @@ component('x-modeleditor', function(e) {
 
 	// html-rendered helper dots ----------------------------------------------
 
-	function dot(point, text, text_class) {
+	function helper_dot(point, text, text_class) {
 
 		let s = 'model-editor-dot'
 		let e = div({class: (text != null ? s+'-debug '+s+'-debug-'+text_class : s)})
@@ -977,44 +973,6 @@ component('x-modeleditor', function(e) {
 		for (let ce of e.at)
 			if (ce.update)
 				ce.update()
-	}
-
-	// helper vectors ---------------------------------------------------------
-
-	let helpers = {}
-
-	function v3d(id, vector, origin) {
-		let e = helpers[id]
-		if (!e) {
-			e = new THREE.Group()
-			e.line = pe.line(id, line3())
-			let geo = new THREE.ConeGeometry(.01, .04)
-			geo.translate(0, -.04 / 2, 0)
-			geo.rotateX(PI / 2)
-			let mat = new THREE.MeshPhongMaterial({color: 0x333333})
-			e.cone = new THREE.Mesh(geo, mat)
-			e.add(e.line)
-			e.add(e.cone)
-			e.origin = v3()
-			e.vector = v3()
-			e.update = function() {
-				let len = e.vector.length()
-				e.line.line[1].z = len
-				e.cone.position.z = len
-				e.line.update()
-				let p = e.position.clone()
-				e.position.set(v3())
-				e.lookAt(e.vector)
-				e.position.set(p)
-			}
-			helpers[id] = e
-			pe.scene.add(e)
-		}
-		if (vector)
-			e.vector.set(vector)
-		if (origin)
-			e.position.set(origin)
-		e.update()
 	}
 
 	// direct-manipulation tools ==============================================
@@ -1176,27 +1134,29 @@ component('x-modeleditor', function(e) {
 
 	tools.line = {}
 
-	let cur_point, cur_line, ref_point, ref_line
+	let cur_point, cur_line, ref_point, ref_line, cur_axes_model
+
+	function init_line_tool() {
+
+		let endp = v3()
+		cur_point = helper_dot(endp)
+		cur_point.visible = false
+
+		cur_line = helper_line('cur_line', line3(v3(), endp), {color: black, visible: false})
+
+		ref_point = helper_dot()
+		ref_point.point.snap = 'ref_point'
+		ref_point.visible = false
+
+		ref_line = helper_line('ref_line', line3(), {color: black, dashed: true, visible: false})
+
+		cur_axes_model = mat4()
+
+		init_line_tool = noop
+	}
 
 	tools.line.bind = function(on) {
-		if (on) {
-			let endp = v3()
-			cur_point = e.dot(endp)
-			cur_point.visible = false
-
-			cur_line = e.line('cur_line', line3(v3(), endp), black, false, false)
-
-			ref_point = e.dot()
-			ref_point.point.snap = 'ref_point'
-			ref_point.visible = false
-
-			ref_line = e.line('ref_line', line3(), black, true, false)
-		} else {
-			cur_point = cur_point.free()
-			cur_line  = cur_line.free()
-			ref_point = ref_point.free()
-			ref_line  = ref_line.free()
-		}
+		init_line_tool()
 	}
 
 	tools.line.cancel = function() {
@@ -1247,8 +1207,8 @@ component('x-modeleditor', function(e) {
 
 		ref_point_update_after(false)
 
-		e.hit_d = snap_distance
-		let p = mouse_hit_model(cur_line.visible ? p1 : null, true)
+		let p = mouse_hit_model({mode: 'draw', distance: 'snap',
+				axes_model: cur_line.visible ? cur_axes_model : null})
 
 		if (p) {
 
@@ -1266,7 +1226,7 @@ component('x-modeleditor', function(e) {
 
 					// snap point to axes originating at the ref point.
 					if (ref_point.visible) {
-						let axes_int_p = hit_axes(ref_point.point)
+						let axes_int_p = mouse_hit_axes(cur_axes_model, max_hit_distances.snap)
 						if (axes_int_p) {
 							p = axes_int_p
 							ref_line.snap = p.line_snap
@@ -1335,6 +1295,7 @@ component('x-modeleditor', function(e) {
 				tools.line.cancel()
 			} else {
 				cur_line[0].set(cur_line[1])
+				cur_axes_model.reset().translate(cur_line[0])
 				cur_line[0].i = cur_line[1].i
 				cur_line.update()
 			}
@@ -1675,5 +1636,9 @@ component('x-modeleditor', function(e) {
 
 	e.tool = 'orbit'
 	render()
+
+	e.on('bind', function(on) {
+		// TODO: init/free DOM things...
+	})
 
 })
