@@ -15,6 +15,7 @@
 		strict_or(x, z)
 		repl(x, v, z)
 	math:
+		inf
 		floor(x) ceil(x) round(x)
 		abs(x)
 		min(x, y) max(x, y)
@@ -75,7 +76,9 @@
 		[dyn_][f32|i8|u8|i16|u16|i32|u32]arr(arr|[...]|capacity, [nc])
 			set(in_arr, [offset=0], [len], [in_offset=0])
 			invalidate([offset=0], [len])
-			grow_type(arr_type|max_index|[...]|arr)
+			grow(cap, [preserve_contents=true], [pow2=true])
+			grow_type(arr_type|max_index|[...]|arr, [preserve_contents=true])
+			setlen(len)
 	events:
 		events_mixin(o)
 	timestamps:
@@ -143,6 +146,7 @@ function repl(x, v, z) { return x === v ? z : x }
 
 // math ----------------------------------------------------------------------
 
+inf = Infinity
 floor = Math.floor
 ceil = Math.ceil
 round = Math.round
@@ -370,6 +374,15 @@ property(Array, 'last', {
 	set: function(v) { this[this.length-1] = v }
 })
 
+method(Array, 'equals', function(a, i0, i1) {
+	i0 = i0 || 0
+	i1 = i1 || max(this.length, a.length)
+	for (let i = i0; i < i1; i++)
+		if (this[i] !== a[i])
+			return false
+	return true
+})
+
 // binary search for an insert position that keeps the array sorted.
 // using '<' gives the first insert position, while '<=' gives the last.
 {
@@ -493,7 +506,7 @@ class dyn_arr_class {
 		if (data_or_cap != null) {
 			if (isnum(data_or_cap)) {
 				let cap = data_or_cap
-				this._grow(cap, false)
+				this.grow(cap, false, false)
 			} else if (data_or_cap) {
 				let data = data_or_cap
 				let data_len = data.length * this.inv_nc
@@ -506,7 +519,7 @@ class dyn_arr_class {
 
 	}
 
-	_grow(cap, pow2) {
+	grow(cap, preserve_contents, pow2) {
 		cap = max(0, cap)
 		if (this.capacity < cap) {
 			if (pow2 !== false)
@@ -514,22 +527,23 @@ class dyn_arr_class {
 			let array = new this.arr_type(cap * this.nc)
 			array.nc = this.nc
 			array.len = this.len
-			if (this.array)
+			if (preserve_contents !== false && this.array)
 				array.set(this.array)
 			this.array = array
 		}
 		return this
 	}
 
-	grow_type(arg) {
+	grow_type(arg, preserve_contents) {
 		let arr_type1 = index_arr_type(arg)
 		if (arr_type1.BYTES_PER_ELEMENT <= this.arr_type.BYTES_PER_ELEMENT)
 			return
 		if (this.array) {
 			let this_len = this.len
 			let array1 = new arr_type1(this.capacity)
-			for (let i = 0, n = this_len * this.nc; i < n; i++)
-				array1[i] = this.array[i]
+			if (preserve_contents !== false)
+				for (let i = 0, n = this_len * this.nc; i < n; i++)
+					array1[i] = this.array[i]
 			array1.nc = this.nc
 			array1.len = this_len
 			this.array = array1
@@ -557,7 +571,7 @@ class dyn_arr_class {
 
 		assert(offset >= 0, 'offset out of range')
 
-		this._set_len(max(this.len, offset + len))
+		this.setlen(max(this.len, offset + len))
 		this.array.set(data, offset * this.nc)
 		this.invalidate(offset, len)
 
@@ -576,15 +590,16 @@ class dyn_arr_class {
 		return this
 	}
 
-	_set_len = function(len) {
+	setlen(len) {
 		len = max(0, len)
-		let arr = this._grow(len).array
+		let arr = this.grow(len).array
 		if (arr)
 			arr.len = len
 		if (this.invalid) {
 			this.invalid_offset1 = min(this.invalid_offset1, len)
 			this.invalid_offset2 = min(this.invalid_offset2, len)
 		}
+		return this
 	}
 
 	invalidate(offset, len) {
@@ -613,7 +628,7 @@ property(dyn_arr_class, 'capacity',
 
 property(dyn_arr_class, 'len',
 	function() { return this.array ? this.array.len : 0 },
-	function(len) { this._set_len(len) }
+	function(len) { this.setlen(len) }
 )
 
 function dyn_arr(arr_type, data_or_cap, nc) {
@@ -635,6 +650,77 @@ dyn_arr.index_arr_type = index_arr_type
 	dyn_u16arr = dyn_arr_func(u16arr)
 	dyn_i32arr = dyn_arr_func(i32arr)
 	dyn_u32arr = dyn_arr_func(u32arr)
+}
+
+// data structures -----------------------------------------------------------
+
+function freelist(create, init, destroy) {
+	let e = []
+	e.alloc = function() {
+		let e = this.pop()
+		if (e)
+			init(e)
+		else
+			e = create()
+		return e
+	}
+	e.release = function(e) {
+		destroy(e)
+		this.push(e)
+	}
+	return e
+}
+
+// dynamic array with stable element indices.
+function stable_index_array(I) {
+	I = I || 'i'
+	let e = []
+	let free = []
+	e.add = function(e) {
+		let i = free.pop()
+		if (i == null)
+			i = this.length
+		this[i] = e
+		e[I] = i
+		return e
+	}
+	e.remove = function(e) {
+		assert(e[I] != null)
+		free.push(e[I])
+		this[i] = undefined
+		e[I] = null
+		return e
+	}
+	e.clear = function() {
+		for (let e of this)
+			if (e)
+				e[I] = null
+		this.length = 0
+		free.length = 0
+	}
+	return e
+}
+
+// stack with freelist.
+function freelist_stack(create, init, destroy) {
+	let e = {}
+	let stack = []
+	let fl = freelist(create, init, destroy)
+	e.push = function() {
+		let e = fl.alloc()
+		stack.push(e)
+		return e
+	}
+	e.pop = function() {
+		let e = stack.pop()
+		fl.release(e)
+		return e
+	}
+	e.clear = function() {
+		while (this.pop());
+	}
+	e.stack = stack
+	return e
 }
 
 // events --------------------------------------------------------------------
@@ -827,7 +913,7 @@ function week_start_offset() {
 
 }
 
-// arcs ----------------------------------------------------------------------
+// geometry ------------------------------------------------------------------
 
 // point at a specified angle on a circle.
 function point_around(cx, cy, r, angle) {

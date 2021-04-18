@@ -495,10 +495,9 @@ gl.faces_renderer = function() {
 		}
 
 		// resize buffers and arrays to fit.
-		davb.len = pt_n
-		index_dab.len = 0
-		index_dab.grow_type(pt_n)
-		index_dab.len = pi_n
+		davb.grow(pt_n, false)
+		index_dab.grow_type(pt_n, false)
+		index_dab.grow(pi_n, false)
 
 		// populate the arrays.
 		let pos      = davb.pos      .array
@@ -539,8 +538,8 @@ gl.faces_renderer = function() {
 		}
 
 		// upload all to the GPU.
-		davb.upload()
-		index_dab.upload()
+		davb.setlen(pt_n).upload()
+		index_dab.setlen(pi_n).upload()
 
 	}
 
@@ -915,16 +914,15 @@ gl.fat_lines_renderer = function(e) {
 		davb.q  .invalidate(i * 4, 4).upload_invalid()
 	}
 
-	e.update = function(each_line, line_count) {
+	e.update = function(each_line, max_line_count) {
 
-		let vertex_count = 4 * line_count
-		let index_count  = 6 * line_count
+		let vertex_count = 4 * max_line_count
+		let index_count  = 6 * max_line_count
 
-		davb.len = vertex_count
+		davb.grow(vertex_count, false)
 
-		ib.len = 0
-		ib.grow_type(vertex_count-1)
-		ib.len = index_count
+		ib.grow_type(vertex_count-1, false)
+		ib.grow(index_count, false)
 
 		let ps = davb.pos.array
 		let qs = davb.q.array
@@ -955,8 +953,8 @@ gl.fat_lines_renderer = function(e) {
 			j += 6
 		})
 
-		davb.upload()
-		ib.upload()
+		davb.setlen(i).upload()
+		ib.setlen(j).upload()
 	}
 
 	let vao = prog.vao()
@@ -992,46 +990,17 @@ gl.fat_lines_renderer = function(e) {
 // parametric geometry generators --------------------------------------------
 
 {
-	let pos_template = new f32arr([
-		-.5,  -.5,  -.5,
-		 .5,  -.5,  -.5,
-		 .5,   .5,  -.5,
-		-.5,   .5,  -.5,
-		-.5,  -.5,   .5,
-		 .5,  -.5,   .5,
-		 .5,   .5,   .5,
-		-.5,   .5,   .5,
-	])
-
-	let triangle_pis_front = new u8arr([
-		3, 2, 1,  1, 0, 3,
-		6, 7, 4,  4, 5, 6,
-		2, 3, 7,  7, 6, 2,
-		1, 5, 4,  4, 0, 1,
-		7, 3, 0,  0, 4, 7,
-		2, 6, 5,  5, 1, 2,
-	])
-
-	let triangle_pis_back = new u8arr(triangle_pis_front)
-	for (let i = 0, a = triangle_pis_back, n = a.length; i < n; i += 3) {
-		let t = a[i]
-		a[i] = a[i+1]
-		a[i+1] = t
-	}
-
-	triangle_pis_front.max_index = 7
-	triangle_pis_back .max_index = 7
 
 	let len = 6 * 3 * 2
 	let pos = new f32arr(len * 3)
 
 	gl.box_geometry = function(reverse_faces) {
 
-		let pos = new f32arr(pos_template.length)
+		let pos = new f32arr(box3.points.length)
 		pos.type = 'v3'
 		pos.nc = 3
 
-		let triangle_pis = reverse_faces ? triangle_pis_back : triangle_pis_front
+		let triangle_pis = reverse_faces ? box3.triangle_pis_back : box3.triangle_pis_front
 
 		let e = {
 			pos: pos,
@@ -1041,9 +1010,9 @@ gl.fat_lines_renderer = function(e) {
 
 		e.set = function(xd, yd, zd) {
 			for (let i = 0; i < len * 3; i += 3) {
-				pos[i+0] = pos_template[i+0] * xd
-				pos[i+1] = pos_template[i+1] * yd
-				pos[i+2] = pos_template[i+2] * zd
+				pos[i+0] = box3.points[i+0] * xd
+				pos[i+1] = box3.points[i+1] * yd
+				pos[i+2] = box3.points[i+2] * zd
 			}
 			return this
 		}
@@ -1051,6 +1020,8 @@ gl.fat_lines_renderer = function(e) {
 		return e
 	}
 }
+
+
 
 // skybox --------------------------------------------------------------------
 
@@ -1207,15 +1178,15 @@ gl.helper_lines_renderer = function() {
 
 	function update_dl() {
 
-		dl_dab_pos  .len = dl.length
-		dl_dab_color.len = dl.length
+		dl_dab_pos  .grow(dl.length, false)
+		dl_dab_color.grow(dl.length, false)
 
 		let i = 0
 		for (line of dl)
 			set_dl(i++, line)
 
-		dl_dab_pos  .upload()
-		dl_dab_color.upload()
+		dl_dab_pos  .setlen(dl.length).upload()
+		dl_dab_color.setlen(dl.length).upload()
 
 		dl_rr.pos   = dl_dab_pos  .buffer
 		dl_rr.color = dl_dab_color.buffer
@@ -1325,9 +1296,7 @@ gl.axes_renderer = function(opt) {
 		axes.update = function() {
 			let i = axes_list.indexOf(axes)
 			model_dab.set(i, axes.model)
-			TT=1
 			model_dab.upload_invalid()
-			TT=0
 			lines_rr .model = model_dab.buffer
 			dashed_rr.model = model_dab.buffer
 		}

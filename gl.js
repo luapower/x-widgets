@@ -30,17 +30,20 @@
 		b.arr([data|len]) -> a
 		b.len
 
-		db.len db.buffer
-		db.grow_type(arr|[...]|u8arr|u16arr|u32arr|max_idx)
+		db.setlen(len) db.len db.buffer
+		db.grow_type(arr|[...]|u8arr|u16arr|u32arr|max_idx, [preserve_contents=true])
+		db.grow(cap, [preserve_contents=true], [pow2=true])
 
-		dab.len dab.buffer dab.array
-		dab.grow_type(type|max_idx)
+		dab.setlen(len) dab.len dab.buffer dab.array
+		dab.grow_type(type|max_idx, [preserve_contents=true])
+		dab.grow(cap, [preserve_contents=true], [pow2=true])
 		dab.set(offset, in_arr, [len=1/0], [in_offset=0])
 		dab.remove(offset, [len=1])
 		dab.invalidate([offset=0], [len=1/0])
 		dab.upload()
 
-		davb.len
+		davb.setlen(len) davb.len
+		davb.grow(cap, [preserve_contents=true], [pow2=true])
 		davb.<name> -> dab
 		davb.to_vao(vao)
 
@@ -742,7 +745,6 @@ prog.vao = function() {
 	vao.gl = gl
 	vao.program = this
 	vao.attrs = this.attrs
-	vao.config  = [] // {loc->true}
 	vao.buffers = [] // {loc->buffer}
 	if (!this.vaos)
 		this.vaos = []
@@ -815,7 +817,7 @@ vao.set_attr = function(name, b) {
 	}
 
 
-	if (b && this.config[loc] != b.type) {
+	if (b) {
 		assert(b.nc == nc && b.nloc == nloc,
 			'type mismatch {0}, expected {1} for {2}', b.type, a.type, name)
 		if (b.type == 'i32' || b.type == 'u32') {
@@ -830,7 +832,6 @@ vao.set_attr = function(name, b) {
 				gl.vertexAttribPointer(loc+i, nc_per_loc, b.val_gl_type, false, stride, offset)
 			}
 		}
-		this.config[loc] = b.type
 	}
 
 	if ((b && b.inst_div || 0) != (b0 && b0.inst_div || 0))
@@ -1000,14 +1001,6 @@ gl.buffer = function(data_or_cap, type, inst_div, for_index) {
 	return b
 }
 
-property(WebGLBuffer, 'len',
-	function() { return this._len },
-	function(len) {
-		assert(len <= this.capacity, 'len exceeds capacity')
-		this._len = len
-	}
-)
-
 function index_bt(data_or_cap, type_or_max_idx) {
 	if (!isnum(type_or_max_idx))
 		type_or_max_idx = get_bt(type_or_max_idx || 'u8').arr_type
@@ -1021,6 +1014,14 @@ gl.index_buffer = function(data_or_cap, type_or_max_idx) {
 }
 
 let buf = WebGLBuffer.prototype
+
+buf.setlen = function(len) {
+	assert(len <= this.capacity, 'len exceeds capacity')
+	this._len = len
+	return this
+}
+
+property(buf, 'len', function() { return this._len }, buf.setlen)
 
 buf.arr = function(data_or_len) {
 	if (data_or_len == null)
@@ -1051,9 +1052,11 @@ buf.upload = function(in_arr, offset, len, in_offset) {
 	len = check_arr_len(nc, in_arr, len, in_offset)
 	let bpe = in_arr.BYTES_PER_ELEMENT
 
+	if (!len)
+		return this
+
 	gl.bindBuffer(gl.COPY_WRITE_BUFFER, this)
 	gl.bufferSubData(gl.COPY_WRITE_BUFFER, offset * nc * bpe, in_arr, in_offset * nc, len * nc)
-
 	this._len = max(this._len, offset + len)
 
 	return this
@@ -1119,14 +1122,14 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 		buffer_replaced: noop, // event handler stub
 	}, get_bt(type))
 
-	db.grow_type = function(type_or_max_idx) {
+	db.grow_type = function(type_or_max_idx, preserve_contents) {
 		assert(for_index, 'not an index buffer')
 		let bt = index_bt(null, type_or_max_idx)
 		if (bt.arr_type.BYTES_PER_ELEMENT <= this.arr_type.BYTES_PER_ELEMENT)
 			return
 		if (this.buffer) {
 			let a1
-			if (this.len > 0) {
+			if (preserve_contents !== false && this.len > 0) {
 				let a0 = this.buffer.download(this.buffer.arr())
 				let a1 = new bt.arr_type(this.len)
 				a1.set(a0)
@@ -1138,10 +1141,12 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 				this.buffer.upload(a1)
 			this.buffer_replaced(this.buffer)
 		}
+		type = bt.type
 		assign(this, bt)
+		return this
 	}
 
-	db._grow = function(cap, pow2) {
+	db.grow = function(cap, preserve_contents, pow2) {
 		cap = max(0, cap)
 		if ((this.buffer ? this.buffer.capacity : 0) < cap) {
 			if (pow2 !== false)
@@ -1149,7 +1154,8 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 			let b0 = this.buffer
 			let b1 = gl.buffer(cap, type, inst_div, for_index)
 			if (b0) {
-				b1.set(0, b0)
+				if (preserve_contents !== false)
+					b1.set(0, b0)
 				b0.free()
 			}
 			this.buffer = b1
@@ -1159,25 +1165,28 @@ gl.dyn_buffer = function(type, data_or_cap, inst_div, for_index) {
 	}
 
 	db.free = function() {
+		if (!this.buffer)
+			return
 		this.buffer.free()
 		this.buffer = null
 	}
 
+	db.setlen = function(len) {
+		len = max(0, len)
+		let buffer = db.grow(len).buffer
+		if (buffer)
+			buffer.len = len
+		return this
+	}
+
 	property(db, 'len',
-		function() {
-			return db.buffer && db.buffer.len || 0
-		},
-		function(len) {
-			len = max(0, len)
-			let buffer = db._grow(len).buffer
-			if (buffer)
-				buffer.len = len
-		}
+		function() { return db.buffer && db.buffer.len || 0 },
+		db.setlen,
 	)
 
 	if (data_or_cap != null) {
 		if (isnum(data_or_cap)) {
-			db._grow(data_or_cap)
+			db.grow(data_or_cap, false)
 		} else {
 			db.buffer = gl.buffer(data_or_cap, type, inst_div, for_index)
 		}
@@ -1201,15 +1210,24 @@ gl.dyn_arr_buffer = function(type, data_or_cap, inst_div, for_index) {
 	dab.buffer_replaced = noop
 	db.buffer_replaced = function(b) { dab.buffer_replaced(b) }
 
+	dab.setlen = function(len) {
+		da.len = len
+		return this
+	}
+
 	property(dab, 'len',
 		function() { return da.len },
-		function(len) { da.len = len }
+		dab.setlen,
 	)
 
-	dab.grow_type = function(type_or_max_idx) {
-		da.grow_type(type_or_max_idx)
-		db.grow_type(type_or_max_idx)
+	dab.grow_type = function(type_or_max_idx, preserve_contents) {
+		da.grow_type(type_or_max_idx, preserve_contents)
+		db.grow_type(type_or_max_idx, preserve_contents)
 		return this
+	}
+
+	dab.grow = function(cap, preserve_contents, pow2) {
+		da.grow(cap, preserve_contents, pow2)
 	}
 
 	dab.set = function(offset, in_arr, len, in_offset) {
@@ -1246,7 +1264,6 @@ gl.dyn_arr_buffer = function(type, data_or_cap, inst_div, for_index) {
 
 	property(dab, 'array', () => da.array)
 	property(dab, 'buffer', () => db.buffer)
-	property(dab, 'da', () => da)
 
 	return dab
 }
@@ -1317,15 +1334,23 @@ gl.dyn_arr_vertex_buffer = function(attrs, cap, inst_div) {
 		dab0 = dab0 || dab
 	}
 
+	e.setlen = function(len) {
+		for (let dab of e.dabs_list)
+			dab.len = len
+		return this
+	}
+
 	property(e, 'len',
 		function() {
 			return dab0.len
 		},
-		function(len) {
-			for (let dab of e.dabs_list)
-				dab.len = len
-		}
+		e.setlen,
 	)
+
+	e.grow = function(cap, preserve_contents, pow2) {
+		for (let dab of e.dabs_list)
+			dab.grow(cap, preserve_contents, pow2)
+	}
 
 	e.remove = function(offset, len) {
 		for (let dab of e.dabs_list)

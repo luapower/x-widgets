@@ -74,6 +74,11 @@
 		closest_point_to_point_t closest_point_to_point intersect_line intersect_plane intersects_plane
 		transform
 
+	box3 [min_p, max_p]
+	set to clone equals reset to_array to[_box3]_array from[_box3]_array add
+	is_empty center delta contains_point contains_box intersects_box
+	transform translate
+
 	camera[3]
 		view_size pos dir up perspective ortho dolly orbit
 		update proj view inv_view inv_proj view_proj
@@ -1455,7 +1460,7 @@ let mat4_type = function(super_class, super_args) {
 		}
 
 		scale(x, y, z) {
-			if (isarray(x)) {
+			if (x.is_v3 || x.is_v4) {
 				let v = x
 				x = v[0]
 				y = v[1]
@@ -2867,8 +2872,7 @@ let line3_class = class line3 extends Array {
 	}
 
 	clone() {
-		let line = new line3()
-		return line.set(this[0], this[1])
+		return new line3().set(this[0], this[1])
 	}
 
 	equals(line) {
@@ -3023,6 +3027,227 @@ let line3_class = class line3 extends Array {
 line3_class.prototype.is_line3 = true
 
 line3 = function(p1, p2) { return new line3_class(p1, p2) }
+
+// box3 ----------------------------------------------------------------------
+
+v3.inf = v3(inf, inf, inf)
+v3.minus_inf = v3(-inf, -inf, -inf)
+
+let box3_class = class box3 extends Array {
+
+	constructor(min, max) {
+		super(min || v3.inf.clone(), max || v3.minus_inf.clone())
+	}
+
+	set(min, max) {
+		if (min.is_box3) {
+			let b = min
+			min = b[0]
+			max = b[1]
+		}
+		this[0].set(min)
+		this[1].set(max)
+		return this
+	}
+
+	to(v) {
+		return v.set(this)
+	}
+
+	clone() {
+		return new box3().set(this)
+	}
+
+	equals(b) {
+		return (
+			this[0].equals(b[0]) &&
+			this[1].equals(b[1])
+		)
+	}
+
+	reset() {
+		this[0].set(v3.inf)
+		this[1].set(v3.minus_inf)
+		return this
+	}
+
+	to_array(a, i) {
+		this[0].to_array(a, i)
+		this[1].to_array(a, i+3)
+		return a
+	}
+
+	to_box3_array(a, i) {
+		this[0].to_v3_array(a, 2 * (i+0))
+		this[1].to_v3_array(a, 2 * (i+1))
+		return a
+	}
+
+	from_array(a, i) {
+		this[0].from_array(a, i)
+		this[1].from_array(a, i+3)
+		return this
+	}
+
+	from_box3_array(a, i) {
+		this[0].from_v3_array(a, 2 * (i+0))
+		this[1].from_v3_array(a, 2 * (i+1))
+		return this
+	}
+
+
+	is_empty = function is_empty() {
+		return (
+			this[1][0] < this[0][0] ||
+			this[1][1] < this[0][1] ||
+			this[1][2] < this[0][2]
+		)
+	}
+
+	add(v) {
+		if (v.is_v3) {
+			this[0].min(v)
+			this[1].max(v)
+		} else if (v.is_line3 || v.is_box3) {
+			this[0].min(v[0]).min(v[1])
+			this[1].max(v[0]).max(v[1])
+		} else if (v.is_poly3) {
+			for (let i = 0, n = v.point_count(); i < n; i++) {
+				let p = v.get_point()
+				this[0].min(p)
+				this[1].max(p)
+			}
+		} else {
+			assert(false)
+		}
+		return this
+	}
+
+	center = function(out) {
+		return v3.add(this[0], this[1], .5)
+	}
+
+	delta(out) {
+		return v3.sub(this[1], this[0], out)
+	}
+
+	contains_point(p) {
+		return !(
+			p[0] < this[0][0] || p[0] > this[1][0] ||
+			p[1] < this[0][1] || p[1] > this[1][1] ||
+			p[2] < this[0][2] || p[2] > this[1][2]
+		)
+	}
+
+	contains_box(b) {
+		return (
+			this[0][0] <= b[0][0] && b[1][0] <= this[1][0] &&
+			this[0][1] <= b[0][1] && b[1][1] <= this[1][1] &&
+			this[0][2] <= b[0][2] && b[1][2] <= this[1][2]
+		)
+	}
+
+	intersects_box(b) {
+		// using 6 splitting planes to rule out intersections.
+		return !(
+			b[1][0] < this[0][0] || b[0][0] > this[1][0] ||
+			b[1][1] < this[0][1] || b[0][1] > this[1][1] ||
+			b[1][2] < this[0][2] || b[0][2] > this[1][2]
+		)
+	}
+
+	transform(m) {
+		if (this.is_empty())
+			return this
+		let v0 = this[0].to(_v0)
+		let v1 = this[1].to(_v1)
+		this.reset()
+		this.add(_v2.set(v0[0], v0[1], v0[2]).transform(m))
+		this.add(_v2.set(v0[0], v0[1], v1[2]).transform(m))
+		this.add(_v2.set(v0[0], v1[1], v0[2]).transform(m))
+		this.add(_v2.set(v0[0], v1[1], v1[2]).transform(m))
+		this.add(_v2.set(v1[0], v0[1], v0[2]).transform(m))
+		this.add(_v2.set(v1[0], v0[1], v1[2]).transform(m))
+		this.add(_v2.set(v1[0], v1[1], v0[2]).transform(m))
+		this.add(_v2.set(v1[0], v1[1], v1[2]).transform(m))
+		return this
+	}
+
+	translate(v) {
+		this[0].add(v)
+		this[1].add(v)
+		return this
+	}
+
+}
+
+box3_class.prototype.is_box3 = true
+
+property(box3_class, 'min', function() { return this[0] }, function(v) { this[0] = v })
+property(box3_class, 'max', function() { return this[1] }, function(v) { this[1] = v })
+
+box3 = function(x1, y1, x2, y2) { return new box3_class(x1, y1, x2, y2) }
+
+// templates for parametric modeling -----------------------------------------
+
+box3.points = new f32arr([
+	-.5,  -.5,  -.5,
+	 .5,  -.5,  -.5,
+	 .5,   .5,  -.5,
+	-.5,   .5,  -.5,
+	-.5,  -.5,   .5,
+	 .5,  -.5,   .5,
+	 .5,   .5,   .5,
+	-.5,   .5,   .5,
+])
+
+box3.line_pis = new u8arr([
+	0, 1,  1, 2,  2, 3,  3, 0,
+	4, 5,  5, 6,  6, 7,  7, 4,
+	0, 4,  1, 5,  2, 6,  3, 7,
+])
+
+{
+let _l0 = line3()
+box3.each_line = function(f) {
+	for (let i = 0, n = box3.line_pis.length; i < n; i += 2) {
+		_l0[0][0] = box3.points[3*box3.line_pis[i+0]+0]
+		_l0[0][1] = box3.points[3*box3.line_pis[i+0]+1]
+		_l0[0][2] = box3.points[3*box3.line_pis[i+0]+2]
+		_l0[1][0] = box3.points[3*box3.line_pis[i+1]+0]
+		_l0[1][1] = box3.points[3*box3.line_pis[i+1]+1]
+		_l0[1][2] = box3.points[3*box3.line_pis[i+1]+2]
+		f(_l0)
+	}
+}}
+
+box3.set_points = function(xd, yd, zd) {
+	for (let i = 0; i < len * 3; i += 3) {
+		pos[i+0] = box3.points[i+0] * xd
+		pos[i+1] = box3.points[i+1] * yd
+		pos[i+2] = box3.points[i+2] * zd
+	}
+	return this
+}
+
+box3.triangle_pis_front = new u8arr([
+	3, 2, 1,  1, 0, 3,
+	6, 7, 4,  4, 5, 6,
+	2, 3, 7,  7, 6, 2,
+	1, 5, 4,  4, 0, 1,
+	7, 3, 0,  0, 4, 7,
+	2, 6, 5,  5, 1, 2,
+])
+
+box3.triangle_pis_back = new u8arr(box3.triangle_pis_front)
+for (let i = 0, a = box3.triangle_pis_back, n = a.length; i < n; i += 3) {
+	let t = a[i]
+	a[i] = a[i+1]
+	a[i+1] = t
+}
+
+box3.triangle_pis_front.max_index = 7
+box3.triangle_pis_back .max_index = 7
 
 // camera --------------------------------------------------------------------
 

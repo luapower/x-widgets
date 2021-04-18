@@ -295,17 +295,25 @@ component('x-modeleditor', function(e) {
 		instances_valid = false
 	}
 
+	function mat4_stack() {
+		let e = {}
+
+	}
+
 	{
-	let _m0 = mat4()
+	let mstack = freelist_stack(() => mat4(), noop, noop)
 	let disabled_arr = [0]
 	function update_instance_matrices_for(node, parent, path_depth, on_cur_path) {
+
 		let davib = node.comp.davib
 		let i = davib.len
 		davib.len = i + 1
-		_m0.set(node)
-		if (parent)
-			_m0.mul(parent)
-		_m0.to_mat4_array(davib.dabs.model.array, i)
+
+		let parent_m = mstack.stack.last || mat4.identity
+		let m = mstack.push()
+		mat4.mul(parent_m, node, m)
+		m.to_mat4_array(davib.dabs.model.array, i)
+
 		disabled_arr[0] = !on_cur_path || cur_path.length-1 > path_depth
 		davib.dabs.disabled.set(i, disabled_arr)
 
@@ -316,11 +324,13 @@ component('x-modeleditor', function(e) {
 			for (let child of children)
 				if (child.layer.visible) {
 					update_instance_matrices_for(child, node,
-							path_depth + 1,
-							cur_child == null || cur_child == child
-						)
+						path_depth + 1,
+						cur_child == null || cur_child == child
+					)
 				}
 		}
+
+		mstack.pop()
 	}}
 
 	function update_instance_matrices() {
@@ -434,6 +444,7 @@ component('x-modeleditor', function(e) {
 				let model = inst_model(comp, i, _m0)
 				let int_p = comp.line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid, _v0)
 				if (int_p) {
+					int_p.inst_id = i
 					int_p.comp = comp
 					return int_p
 				}
@@ -443,9 +454,8 @@ component('x-modeleditor', function(e) {
 
 	// selection
 
-	function select_all(selected) {
-		for (let comp of comps)
-			comp.select_all(selected)
+	function select_all(sel, with_children) {
+		cur_path.last.comp.select_all(sel, with_children)
 	}
 
 	// reference planes -------------------------------------------------------
@@ -595,7 +605,7 @@ component('x-modeleditor', function(e) {
 				return true
 	}
 
-	// hybrid render+analitic hit-testing -------------------------------------
+	// hybrid render/analytic-based hit-testing -------------------------------
 
 	let hit_test_rr = gl.hit_test_renderer()
 
@@ -603,6 +613,7 @@ component('x-modeleditor', function(e) {
 		hit_test_rr.render(draw_model_for_hit_test)
 	}
 
+	// connect geom_id/inst_id back to the model.
 	{
 	let _v0 = v3()
 	let _l0 = line3()
@@ -749,6 +760,8 @@ component('x-modeleditor', function(e) {
 
 			if (int_p) {
 
+				int_p.path = instance_path(int_p.comp, int_p.inst_id)
+
 				// we've hit a line. snap to it.
 				let hit_line = int_p.comp.get_line(int_p.li)
 
@@ -793,6 +806,11 @@ component('x-modeleditor', function(e) {
 	let axes = axes_rr.axes()
 
 	function enter_edit(path) {
+		if (!path.length)
+			path = [root]
+		if (cur_path.equals(path))
+			return
+		select_all(false)
 		cur_path.set(path)
 		cur_model.reset()
 		for (node of path)
@@ -802,6 +820,10 @@ component('x-modeleditor', function(e) {
 		axes.update()
 		instances_valid = false
 		render()
+	}
+
+	function exit_edit() {
+		enter_edit(cur_path.slice(0, -1))
 	}
 
 	function from_world(v, out) {
@@ -1089,65 +1111,60 @@ component('x-modeleditor', function(e) {
 	tools.select = {}
 
 	{
-	let mode
-	let p
+	let cur_mode
 
-	let update_mode = function() {
-		mode = shift && ctrl && 'remove'
+	let update_cur_mode = function() {
+		cur_mode = shift && ctrl && 'remove'
 			|| shift && 'toggle' || ctrl && 'add' || null
-		e.cursor = 'select' + (mode && '_' + mode || '')
-		if (mode == 'remove') mode = false
-		if (mode == 'add') mode = true
+		e.cursor = 'select' + (cur_mode && '_' + cur_mode || '')
 	}
 
-	tools.select.keydown = function() {
-		update_mode()
+	tools.select.keydown = function(key) {
+		update_cur_mode()
+		if (key == 'Escape') {
+			exit_edit()
+			return false
+		}
 	}
 
 	tools.select.keyup = function() {
-		update_mode()
+		update_cur_mode()
 	}
 
 	tools.select.click = function(nclicks) {
 		if (nclicks > 3)
 			return
 		let p = mouse_hit_model({mode: 'select', distance: 'select'})
-		if (!p && nclicks == 1 && !mode) {
+		if (!p && nclicks == 1 && !cur_mode) {
 			select_all(false)
 		} else if (p && nclicks == 3) {
-			select_all(true)
+			select_all(true, false)
 		} else if (p && nclicks <= 2) {
-			if (!mode)
+			let mode = cur_mode
+			if (!mode) {
 				select_all(false)
-			if (p.li != null) {
-				p.comp.select_line(p.li, mode, nclicks == 2)
-			} else if (p.face != null) {
-				p.comp.select_face(p.face, mode, nclicks == 2)
+				mode = 'add'
+			}
+			if (p.path && p.path.equals(cur_path, 0, cur_path.length)) {
+				if (p.path.length == cur_path.length) { // we've hit current component's geometry.
+					if (p.li != null) {
+						p.comp.select_line(p.li, mode, nclicks == 2)
+					} else if (p.face != null) {
+						p.comp.select_face(p.face, mode, nclicks == 2)
+					}
+				} else { // we've hit a child instance.
+					if (nclicks == 2) { // edit it.
+						enter_edit(p.path.slice(0, cur_path.length + 1))
+					} else { // just select it.
+						let child = p.path[cur_path.length]
+						cur_path.last.comp.select_child(child, mode)
+					}
+				}
+			} else {
+				exit_edit()
 			}
 		}
 	}
-
-	/*
-	function is_int_line_valid(int_line) {
-		let int_p = int_line[1]
-		let t = int_p.t
-		//print('is_int_line_valid-2', int_p.li, t)
-		if (t < 0 || t > 1) return // not intersecting the segment.
-		return true
-	}
-
-	tools.select.pointermove = function() {
-
-		let line_int_p = line_hit_lines(
-			mouse.ray.clone(), 20, screen_p2p_distance2, 't',
-			null, is_int_line_valid)
-
-		if (line_int_p) {
-			e.line('int_line', line_int_p.int_line.clone(), 0, false)
-		}
-
-	}
-	*/
 
 	}
 
@@ -1625,6 +1642,7 @@ component('x-modeleditor', function(e) {
 		let c0 = root.comp
 		let c1 = e.create_component({name: 'c1'})
 		let c2 = e.create_component({name: 'c2'})
+		let cg = e.create_component({name: 'cg'})
 
 		m.faces[0].material = null
 		m.faces[1].material = null
@@ -1635,8 +1653,9 @@ component('x-modeleditor', function(e) {
 
 		c2.set(m)
 
-		c0.add_child(c1, mat4().translate(3, 0, 0))
-		c1.add_child(c2, mat4().translate(3, 0, 0))
+		c0.add_child(c1, mat4().translate(3, 0, 0).rotate(v3.y_axis, rad * 30))
+		c1.add_child(c2, mat4().translate(3, 0, 0).rotate(v3.y_axis, rad * 30))
+		//c1.add_child(cg, mat4())
 
 		for (let i = 0; i < 2; i++)
 			for (let j = 0; j < 2; j++)
@@ -1652,7 +1671,7 @@ component('x-modeleditor', function(e) {
 	init_renderer()
 	update_sun_pos()
 	create_test_objects()
-	enter_edit([root, root.comp.children[0], root.comp.children[0].comp.children[1]])
+	enter_edit([root, root.comp.children[0]])//, root.comp.children[0].comp.children[5]])
 
 	e.tool = 'orbit'
 	render()

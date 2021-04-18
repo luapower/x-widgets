@@ -52,11 +52,14 @@ model3_component = function(pe) {
 	let children  = [] // [mat1,...]
 
 	// model-to-view info (as in MVC).
-	let points_changed          // time to reload points_buf.
-	let used_points_changed     // time to reload the used_pis_buf.
-	let used_lines_changed      // time to reload *_edge_lis_buf.
+	let points_changed          // time to reload the points buffer.
+	let used_points_changed     // time to reload the used_pis buffer.
+	let used_lines_changed      // time to reload the *_edge_lis buffers.
 	let edge_line_count = 0     // number of face edge lines.
 	let nonedge_line_count = 0  // number of standalone lines.
+	let bbox_changed            // time to recompute the bbox.
+	let sel_children_count = 0
+
 
 	// low-level model editing API that:
 	// - records undo ops in the undo stack.
@@ -172,6 +175,7 @@ model3_component = function(pe) {
 		}
 		nonedge_line_count++
 		used_lines_changed = true
+		bbox_changed = true
 
 		if (need_li != null)
 			assert(li == need_li)
@@ -196,6 +200,7 @@ model3_component = function(pe) {
 
 			nonedge_line_count--
 			used_lines_changed = true
+			bbox_changed = true
 
 			let p1i = lines[5*li+0]
 			let p2i = lines[5*li+1]
@@ -703,13 +708,30 @@ model3_component = function(pe) {
 
 	// selection --------------------------------------------------------------
 
-	e.sel_lines = set() // {l1i,...}
+	{
+	let _bb0 = box3()
+	let _bb1 = box3()
+	e.bbox = function() {
+		let bb = _bb0
+		if (bbox_changed) {
+			bb.reset()
+			each_line(line => bb.add(line))
+			for (let child of children) {
+				let cbb = child.comp.bbox().to(_bb1).transform(child)
+				bb.add(cbb)
+			}
+			bbox_changed = false
+		}
+		return bb
+	}}
+
+	let sel_lines = set() // {l1i,...}
 	let sel_lines_changed
 
 	{
 	let _line = line3()
 	e.each_selected_line = function(f) {
-		for (let li in e.sel_lines) {
+		for (let li of sel_lines) {
 			get_line(li, _line)
 			f(_line)
 		}
@@ -718,9 +740,10 @@ model3_component = function(pe) {
 	function select_all_lines(sel) {
 		if (sel)
 			for (let i = 0, n = e.line_count(); i < n; i++)
-				e.sel_lines.add(i)
+				sel_lines.add(i)
 		else
-			e.sel_lines.clear()
+			sel_lines.clear()
+		sel_lines_changed = true
 	}
 
 	function face_set_selected(face, sel) {
@@ -732,67 +755,71 @@ model3_component = function(pe) {
 			face_set_selected(face, sel)
 	}
 
-	function select_edges(face, sel) {
+	function select_edges(face, mode) {
 		face.each_edge(function(line) {
-			e.select_line(line.i, sel)
+			e.select_line(line.i, mode)
 		})
 	}
 
-	function select_line_faces(li, sel) {
+	function select_line_faces(li, mode) {
 		e.each_line_face(li, function(face) {
-			e.select_face(face, sel)
+			e.select_face(face, mode)
 		})
 	}
 
 	e.select_face = function(face, mode, with_lines) {
-		if (mode == null) {
-			select_all_lines(false)
-			select_all_faces(false)
-			face_set_selected(face, true)
-			if (with_lines)
-				select_edges(face, true)
-			sel_lines_changed = true
-		} else if (mode === true || mode === false) {
-			face_set_selected(face, mode)
-			if (mode && with_lines) {
-				select_edges(face, true)
+		if (mode == 'add' || mode == 'remove') {
+			face_set_selected(face, mode == 'add')
+			if (mode == 'add' && with_lines) {
+				select_edges(face, mode)
 				sel_lines_changed = true
 			}
 		} else if (mode == 'toggle') {
-			e.select_face(face, !face.selected, with_lines)
-		}
+			e.select_face(face, face.selected ? 'remove' : 'add', with_lines)
+		} else
+			assert(false)
 	}
 
 	e.select_line = function(li, mode, with_faces) {
-		if (mode == null) {
-			select_all_faces(false)
-			e.sel_lines.clear()
-			e.sel_lines.add(li)
+		if (mode == 'add') {
+			sel_lines.add(li)
 			if (with_faces)
-				select_line_faces(li, true)
-		} else if (mode === true) {
-			e.sel_lines.add(li)
-			if (with_faces)
-				select_line_faces(li, true)
-		} else if (mode === false) {
-			e.sel_lines.delete(li)
+				select_line_faces(li, 'add')
+		} else if (mode == 'remove') {
+			sel_lines.delete(li)
 		} else if (mode == 'toggle') {
-			e.select_line(li, !e.sel_lines.has(li), with_faces)
-		}
+			e.select_line(li, sel_lines.has(li) ? 'remove' : 'add', with_faces)
+		} else
+			assert(false)
 		sel_lines_changed = true
 	}
 
-	e.select_all = function(sel) {
+	e.select_child = function(child, mode) {
+		let sel = mode == 'toggle' ? !child.selected : mode == 'add'
+		if (sel == !!child.selected)
+			return
+		child.selected = sel
+		sel_children_count += (sel ? 1 : -1)
+		sel_lines_changed = true
+	}
+
+	function select_all_children(sel) {
+		for (let child of children)
+			e.select_child(child, sel ? 'add' : 'remove')
+	}
+
+	e.select_all = function(sel, with_children) {
 		if (sel == null) sel = true
 		select_all_faces(sel)
 		select_all_lines(sel)
-		sel_lines_changed = true
+		if (with_children !== false)
+			select_all_children(sel)
 	}
 
 	e.remove_selection = function() {
 
 		// remove all faces that selected lines are sides of.
-		for (let li in e.sel_lines)
+		for (let li of sel_lines)
 			e.each_line_face(li, remove_face)
 
 		// remove all selected faces.
@@ -801,7 +828,7 @@ model3_component = function(pe) {
 				remove_face(face)
 
 		// remove all selected lines.
-		remove_lines(e.sel_lines)
+		remove_lines(sel_lines)
 
 		// TODO: merge faces.
 
@@ -1164,6 +1191,7 @@ model3_component = function(pe) {
 		camera_ubo            .free()
 	}
 
+	{
 	let _pa = new f32arr(3)
 	function upload_point(pi, x, y, z) {
 		let pn = point_count()
@@ -1175,7 +1203,8 @@ model3_component = function(pe) {
 		} else {
 			points_changed = true
 		}
-	}
+		bbox_changed = true
+	}}
 
 	e.show_invisible_lines = true
 
@@ -1191,16 +1220,41 @@ model3_component = function(pe) {
 	}
 
 	function each_sel_vis_line(f) {
-		for (li of e.sel_lines)
+		for (let li of sel_lines)
 			if (lines[5*li+4] > 0) // opacity: is visible.
 				f(get_line(li))
+	}
+
+	{
+	let _m0 = mat4()
+	let _v0 = v3()
+	function each_bbox_line(node, f) {
+		let bbox = node.comp.bbox()
+		let m = _m0.reset()
+			.mul(node)
+			.translate(bbox[0])
+			.scale(bbox.delta(_v0))
+			.translate(.5, .5, .5)
+		box3.each_line(function(line) {
+			f(line.transform(m))
+		})
+	}}
+
+	function each_blue_fat_line(f) {
+		each_sel_vis_line(f)
+		for (let node of children)
+			if (node.selected)
+				each_bbox_line(node, f)
+	}
+
+	function blue_fat_line_count() {
+		return sel_lines.size + sel_children_count * 12
 	}
 
 	function update(models_buf, disabled_buf) {
 
 		if (points_changed) {
-			points_dab.len = point_count()
-			points_dab.set(0, points).upload()
+			points_dab.set(0, points).setlen(point_count()).upload()
 
 			points_rr             .pos = points_dab.buffer
 			black_thin_lines_rr   .pos = points_dab.buffer
@@ -1210,7 +1264,7 @@ model3_component = function(pe) {
 
 		if (used_points_changed) {
 			let pn = point_count()
-			used_pis_dab.len = pn
+			used_pis_dab.grow(pn, false)
 
 			let i = 0
 			let is = used_pis_dab.array
@@ -1218,8 +1272,7 @@ model3_component = function(pe) {
 				if (prc[pi]) // is used
 					is[i++] = pi
 
-			used_pis_dab.len = i
-			used_pis_dab.upload()
+			used_pis_dab.setlen(i).upload()
 
 			points_rr.index = used_pis_dab.buffer
 		}
@@ -1231,8 +1284,8 @@ model3_component = function(pe) {
 			let vdab  = vis_edge_lis_dab
 			let idab  = inv_edge_lis_dab
 
-			vdab.len  = vln
-			idab.len  = iln
+			vdab.grow(vln, false)
+			idab.grow(iln, false)
 
 			let vi = 0
 			let ii = 0
@@ -1252,24 +1305,21 @@ model3_component = function(pe) {
 				}
 			}
 
-			vdab.len = vi
-			idab.len = ii
-
-			vdab.upload()
-			idab.upload()
+			vdab.setlen(vi).upload()
+			idab.setlen(ii).upload()
 
 			black_thin_lines_rr   .index = vdab.buffer
 			black_dashed_lines_rr .index = idab.buffer
 		}
 
-		if (e.show_invisible_lines) {
-			let ln = e.show_invisible_lines ? e.sel_lines.size : 0
+		if (e.show_invisible_lines && (used_lines_changed || sel_lines_changed)) {
+			let max_ln = e.show_invisible_lines ? sel_lines.size : 0
 			let dab = sel_inv_edge_lis_dab
-			dab.len = ln
+			dab.grow(max_ln * 2, false)
 			let i = 0
 			let is = dab.array
 			if (is) {
-				for (let li in e.sel_lines) {
+				for (let li of sel_lines) {
 					if (lines[5*li+4] == 0) { // opacity: is invisible.
 						let p1i = lines[5*li+0]
 						let p2i = lines[5*li+1]
@@ -1278,7 +1328,7 @@ model3_component = function(pe) {
 					}
 				}
 			}
-			dab.len = i
+			dab.setlen(i).upload()
 
 			blue_dashed_lines_rr.index = dab.buffer
 		}
@@ -1304,7 +1354,7 @@ model3_component = function(pe) {
 			black_fat_lines_rr.update(each_nonedge_line, nonedge_line_count)
 
 		if (points_changed || sel_lines_changed)
-			blue_fat_lines_rr.update(each_sel_vis_line, e.sel_lines.size)
+			blue_fat_lines_rr.update(each_blue_fat_line, blue_fat_line_count())
 
 		points_rr             .model = models_buf
 		faces_rr              .model = models_buf
