@@ -69,13 +69,13 @@
 		plane xy_quat is_convex_quad triangle_count triangles triangle contains_point
 
 	line3 [p0, p1]
-		set(line | p1,p2) clone equals to|from[_line3]_array
+		set(line | p1,p2) assign to clone equals to|from[_line3]_array
 		center delta distance2 distance at reverse len set_len
 		closest_point_to_point_t closest_point_to_point intersect_line intersect_plane intersects_plane
 		transform
 
 	box3 [min_p, max_p]
-	set to clone equals reset to_array to[_box3]_array from[_box3]_array add
+	set assign to clone equals reset to_array to[_box3]_array from[_box3]_array add
 	is_empty center delta contains_point contains_box intersects_box
 	transform translate
 
@@ -1018,8 +1018,7 @@ let mat3_type = function(super_class, super_args) {
 
 		assign(m) {
 			assert(m.is_mat3)
-			assign(this, m)
-			return this
+			return assign(this, m)
 		}
 
 		to(v) {
@@ -1294,8 +1293,7 @@ let mat4_type = function(super_class, super_args) {
 
 		assign(m) {
 			assert(m.is_mat4)
-			assign(this, m)
-			return this
+			return assign(this, m)
 		}
 
 		to(v) {
@@ -2133,8 +2131,9 @@ let plane_class = class plane {
 
 	assign(v) {
 		assert(v.is_plane)
+		let normal = this.normal
 		assign(this, v)
-		v.normal = v.normal.clone()
+		this.normal = normal.assign(v.normal)
 	}
 
 	to(v) {
@@ -2292,10 +2291,13 @@ let triangle3_class = class triangle3 extends Array {
 
 	assign(v) {
 		assert(v.is_triangle)
+		let p0 = this[0]
+		let p1 = this[0]
+		let p2 = this[0]
 		assign(this, v)
-		this[0] = this[0].clone()
-		this[1] = this[1].clone()
-		this[2] = this[2].clone()
+		this[0] = p0.assign(v[0])
+		this[1] = p1.assign(v[1])
+		this[2] = p2.assign(v[2])
 	}
 
 	to(v) {
@@ -2452,10 +2454,6 @@ let poly3_class = class poly3 extends Array {
 		else
 			super()
 		poly3_cons(this, opt, elements)
-	}
-
-	assign(v) {
-		assign(this, v)
 	}
 
 	to(v) {
@@ -2867,6 +2865,15 @@ let line3_class = class line3 extends Array {
 		return this
 	}
 
+	assign(v) {
+		let p0 = this[0]
+		let p1 = this[1]
+		assign(this, v)
+		this[0] = p0.assign(v[0])
+		this[1] = p1.assign(v[1])
+		return this
+	}
+
 	to(v) {
 		return v.set(this)
 	}
@@ -2952,8 +2959,8 @@ let line3_class = class line3 extends Array {
 	}
 
 	closest_point_to_point(p, clamp_to_line, out) {
-		let t = this.closest_point_to_point_t(p, clamp_to_line)
-		return this.delta(out).muls(t).add(this[0])
+		out.t = this.closest_point_to_point_t(p, clamp_to_line)
+		return this.delta(out).muls(out.t).add(this[0])
 	}
 
 	transform(m) {
@@ -3047,6 +3054,15 @@ let box3_class = class box3 extends Array {
 		}
 		this[0].set(min)
 		this[1].set(max)
+		return this
+	}
+
+	assign(v) {
+		let min = this[0]
+		let max = this[1]
+		assign(this, v)
+		this[0] = min.assign(v[0])
+		this[1] = max.assign(v[1])
 		return this
 	}
 

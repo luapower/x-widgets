@@ -5,7 +5,8 @@
 
 */
 
-DEBUG = 0
+TRACE = 0
+LOG   = 1
 
 component('x-modeleditor', function(e) {
 
@@ -64,11 +65,15 @@ component('x-modeleditor', function(e) {
 
 	function update_camera() {
 		camera.update()
-		fire_pointermove()
+
 		skybox.update_view(camera.pos)
+
 		update_dot_positions()
 		update_sunlight_pos()
 		update_renderer()
+
+		mouse.valid = false
+		fire_pointermove()
 	}
 
 	// shadows ----------------------------------------------------------------
@@ -111,13 +116,13 @@ component('x-modeleditor', function(e) {
 	// rendering --------------------------------------------------------------
 
 	function draw(prog) {
-		if (DEBUG)
+		if (TRACE)
 			gl.start_trace()
 		let t0 = time()
 		skybox.draw(prog)
 		//ground_rr.draw(prog)
 		draw_model(prog)
-		if (DEBUG)
+		if (TRACE)
 			print(gl.stop_trace())
 		helper_lines_rr.draw(prog)
 	}
@@ -140,7 +145,6 @@ component('x-modeleditor', function(e) {
 	function render() {
 		if (!raf_id)
 			raf_id = raf(do_render)
-		mouse.valid = false
 	}
 
 	function update_renderer() {
@@ -263,7 +267,6 @@ component('x-modeleditor', function(e) {
 		let id = comps.length
 		comps[id] = comp
 		comp.id = id
-		instances_valid = false
 		return comp
 	}
 
@@ -272,7 +275,15 @@ component('x-modeleditor', function(e) {
 		let id = 0
 		for (let comp of comps)
 			comp.id = id++
-		instances_valid = false
+	}
+
+	function update_comp(comp) {
+		if (
+			comp.update(
+				comp.davib.dabs.model.buffer,
+				comp.davib.dabs.disabled.buffer)
+		)
+			mouse.valid = false
 	}
 
 	// component instances ----------------------------------------------------
@@ -303,7 +314,7 @@ component('x-modeleditor', function(e) {
 	{
 	let mstack = freelist_stack(() => mat4(), noop, noop)
 	let disabled_arr = [0]
-	function update_instance_matrices_for(node, parent, path_depth, on_cur_path) {
+	function update_instances_for(node, parent, path_depth, on_cur_path) {
 
 		let davib = node.comp.davib
 		let i = davib.len
@@ -323,7 +334,7 @@ component('x-modeleditor', function(e) {
 			let cur_child = cur_path[path_depth + 1]
 			for (let child of children)
 				if (child.layer.visible) {
-					update_instance_matrices_for(child, node,
+					update_instances_for(child, node,
 						path_depth + 1,
 						cur_child == null || cur_child == child
 					)
@@ -333,7 +344,7 @@ component('x-modeleditor', function(e) {
 		mstack.pop()
 	}}
 
-	function update_instance_matrices() {
+	function update_instances() {
 
 		if (instances_valid)
 			return
@@ -344,10 +355,12 @@ component('x-modeleditor', function(e) {
 			else
 				comp.davib = gl.dyn_arr_vertex_instance_buffer({model: 'mat4', disabled: 'i8'})
 
-		update_instance_matrices_for(root, null, 0, true)
+		update_instances_for(root, null, 0, true)
 
 		for (let comp of comps)
 			comp.davib.upload()
+
+		mouse.valid = false
 
 		instances_valid = true
 	}
@@ -356,7 +369,6 @@ component('x-modeleditor', function(e) {
 		e.root = create_component({name: '<root>'})
 		root = mat4()
 		root.comp = e.root
-		cur_path.push(root)
 	}
 
 	function gc_components() {
@@ -373,16 +385,18 @@ component('x-modeleditor', function(e) {
 
 	// drawing
 
-	function update_model() {
-		update_instance_matrices()
+	function update() {
+		update_instances()
+		update_comp(cur_comp)
+	}
+
+	function update_all() {
+		update_instances()
 		for (let comp of comps)
-			comp.update(
-				comp.davib.dabs.model.buffer,
-				comp.davib.dabs.disabled.buffer)
+			update_comp(comp)
 	}
 
 	function draw_model(prog) {
-		update_model()
 		for (let i = 0, n = comps[0] && comps[0].renderers.length || 0; i < n; i++)
 			for (let comp of comps)
 				comp.renderers[i].draw(prog)
@@ -390,7 +404,6 @@ component('x-modeleditor', function(e) {
 	}
 
 	function draw_model_for_hit_test(prog) {
-		update_model()
 		for (let comp of comps)
 			comp.face_renderer.draw(prog)
 	}
@@ -435,14 +448,13 @@ component('x-modeleditor', function(e) {
 
 	{
 	let _m0 = mat4()
-	let _v0 = v3()
 	function line_hit_lines(target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid) {
 		if (!max_d)
 			return
 		for (let comp of comps) {
 			for (let i = 0, n = comp.davib.len; i < n; i++) {
 				let model = inst_model(comp, i, _m0)
-				let int_p = comp.line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid, _v0)
+				let int_p = comp.line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid)
 				if (int_p) {
 					int_p.inst_id = i
 					int_p.comp = comp
@@ -455,7 +467,9 @@ component('x-modeleditor', function(e) {
 	// selection
 
 	function select_all(sel, with_children) {
-		cur_path.last.comp.select_all(sel, with_children)
+		if (!cur_comp)
+			return
+		cur_comp.select_all(sel, with_children)
 	}
 
 	// reference planes -------------------------------------------------------
@@ -486,6 +500,7 @@ component('x-modeleditor', function(e) {
 		}}
 
 		{
+		let _l0 = line3()
 		let _l1 = line3()
 		let _l2 = line3()
 		let _l3 = line3()
@@ -497,8 +512,10 @@ component('x-modeleditor', function(e) {
 			out.line_snap = null
 			out.tooltip = null
 
-			let axis = _l1.set(v3.origin, main_axis).transform(model)
-			let int_p = axis.closest_point_to_point(mouse, false, out)
+			let axis = _l0.set(v3.origin, main_axis).transform(model)
+			camera.world_to_screen(axis[0], _l1[0])
+			camera.world_to_screen(axis[1], _l1[1])
+			let int_p = _l1.closest_point_to_point(mouse, false, out)
 			if (!int_p)
 				return
 
@@ -516,12 +533,15 @@ component('x-modeleditor', function(e) {
 			out.line_snap = main_axis_snap
 			out.tooltip = main_axis_snap_tooltip
 
+			return out
 		}}
 
 		{
-		let _p = v3()
+		let _p0 = v3()
+		let _p1 = v3()
 		e.point_along_main_axis = function(model, p) {
-			if (_p.set(p).sub(axis_position).cross(main_axis).length2() < NEAR ** 2) {
+			let abs_axis = main_axis.to(_p1).transform(model)
+			if (v3.cross(p, abs_axis, abs_axis).len2() < NEAR ** 2) {
 				p.line_snap = main_axis_snap
 				return true
 			}
@@ -590,13 +610,13 @@ component('x-modeleditor', function(e) {
 	{
 	let int_p = v3()
 	let ret = v3()
-	function axes_hit_line(model, p, line) {
+	function axes_hit_line(model, p, line, max_hit_distance) {
 		let min_ds = 1/0
 		let min_int_p
 		for (let plane of ref_planes) {
 			if (plane.main_axis_hit_line(model, line, int_p)) {
-				let ds = sqrt(canvas_p2p_distance2(p, int_p))
-				if (ds <= e.hit_d ** 2 && ds <= min_ds) {
+				let ds = sqrt(screen_p2p_distance2(p, int_p))
+				if (ds <= max_hit_distance ** 2 && ds <= min_ds) {
 					min_ds = ds
 					min_int_p = assign(min_int_p || v3(), int_p)
 				}
@@ -615,29 +635,33 @@ component('x-modeleditor', function(e) {
 
 	let hit_test_rr = gl.hit_test_renderer()
 
-	function render_model_for_hit_test() {
-		hit_test_rr.render(draw_model_for_hit_test)
-	}
-
 	let max_hit_distances = {
 		snap: 20,   // max pixel distance for snapping
 		select: 8,  // max pixel distance for selecting
 	}
 
-	// connect geom_id/inst_id back to the model.
+	// connect rendered comp_id/face_id/inst_id back to the model.
 	{
 	let _v0 = v3()
 	let _l0 = line3()
 	let _m0 = mat4()
 	let _pl0 = plane()
-	function mouse_hit_faces() {
+	function _mouse_hit_faces() {
+
+		if (!(mouse.valid || mouse.prevent_validate)) {
+			hit_test_rr.render(draw_model_for_hit_test)
+			mouse.valid = true
+		}
+
+		if (!mouse.valid)
+			return
 
 		let rr_hit = hit_test_rr.hit_test(mouse.x, mouse.y)
 		if (!rr_hit)
 			return
 
-		let comp_id = rr_hit.geom_id >>> 18 // 32K components
-		let face_id = rr_hit.geom_id & ((1 << 18) - 1) // 500K faces each
+		let comp_id = rr_hit.comp_id
+		let face_id = rr_hit.face_id
 		let inst_id = rr_hit.inst_id
 
 		let comp = comps[comp_id]
@@ -649,27 +673,22 @@ component('x-modeleditor', function(e) {
 		if (!int_p)
 			return
 
-		let path = instance_path(comp, inst_id)
-
-		int_p = int_p.clone() // do not reuse this!
 		int_p.comp = comp
 		int_p.inst_id = inst_id
 		int_p.model = model
 		int_p.plane = plane
 		int_p.face = face
-		int_p.path = path
+		int_p.snap = 'face'
 
 		return int_p
 
 	}}
 
 	let screen_p2p_distance2 = camera.screen_distance2
-	let real_p2p_distance2 = (p1, p2) => p1.distance2(p2)
 
 	function snap_point_on_line(p, line, max_d, p2p_distance2, plane_int_p, axes_int_p) {
 
 		p.i = null
-		p.li = line.i
 		p.snap = 'line'
 
 		max_d = max_d ** 2
@@ -681,18 +700,19 @@ component('x-modeleditor', function(e) {
 		let dx = axes_int_p  ? p2p_distance2(p, axes_int_p ) : 1/0
 
 		if (d1 <= max_d && d1 <= d2 && d1 <= dm && d1 <= dp && d1 <= dx) {
-			assign(p, line[0]) // comes with its own point index.
+			p.assign(line[0]) // comes with its own point index.
 			p.snap = 'point'
 		} else if (d2 <= max_d && d2 <= d1 && d2 <= dm && d2 <= dp && d2 <= dx) {
-			assign(p, line[1]) // comes with its own point index.
+			p.assign(line[1]) // comes with its own point index.
 			p.snap = 'point'
 		} else if (dp <= max_d && dp <= d1 && dp <= d2 && dp <= dm && dp <= dx) {
-			assign(p, plane_int_p) // comes with its own snap flags and indices.
+			p.assign(plane_int_p)
+			p.snap = 'line_plane_intersection'
 		} else if (dm <= max_d && dm <= d1 && dm <= d2 && dm <= dp && dm <= dx) {
 			line.at(.5, p)
 			p.snap = 'line_middle'
 		} else if (dx <= max_d && dx <= d1 && dx <= d2 && dx <= dm && dx <= dp) {
-			assign(p, axes_int_p) // comes with its own snap flags and indices.
+			p.assign(axes_int_p) // comes with its own snap flags and indices.
 		}
 
 	}
@@ -701,7 +721,11 @@ component('x-modeleditor', function(e) {
 	let _v0 = v3()
 	function mouse_hit_model(opt) {
 
-		let int_p = mouse_hit_faces()
+		let int_p = _mouse_hit_faces()
+
+		if (!mouse.valid)
+			return
+
 		let hit_d = max_hit_distances[opt.distance]
 		let axes_model = opt.axes_model
 		let mode = opt.mode
@@ -713,8 +737,7 @@ component('x-modeleditor', function(e) {
 
 			let face_plane = int_p.plane
 
-			function is_int_line_valid(int_line) {
-				let int_p = int_line[1]
+			function is_int_line_valid(int_p) {
 				let t = int_p.t
 				if (t < 0 || t > 1) return // not intersecting the segment.
 				return face_plane.distance_to_point(int_p) >= -NEAR // not behind the plane
@@ -733,16 +756,17 @@ component('x-modeleditor', function(e) {
 				let plane_int_p = face_plane.intersect_line(hit_line, _v0, 'strict')
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
-				let axes_int_p = axes_model && axes_hit_line(axes_model, line_int_p, hit_line)
+				let axes_int_p = axes_model && axes_hit_line(axes_model, line_int_p, hit_line, hit_d)
 
 				// snap the hit point along the hit line along with any additional snap points.
 				snap_point_on_line(line_int_p, hit_line, hit_d, screen_p2p_distance2, plane_int_p, axes_int_p)
+
 				if (axes_model)
 					check_point_on_axes(axes_model, line_int_p)
 
 				// if the snapped point is not behind the plane, use it, otherwise forget that we even hit the line.
 				if (face_plane.distance_to_point(line_int_p) >= -NEAR)
-					assign(int_p, line_int_p) // merge snap data.
+					int_p = line_int_p
 
 			} else {
 
@@ -752,8 +776,7 @@ component('x-modeleditor', function(e) {
 
 		} else {
 
-			function is_int_line_valid(int_line) {
-				let int_p = int_line[1]
+			function is_int_line_valid(int_p) {
 				let t = int_p.t
 				if (t < 0 || t > 1) return // not intersecting the segment.
 				return true
@@ -766,16 +789,15 @@ component('x-modeleditor', function(e) {
 
 			if (int_p) {
 
-				int_p.path = instance_path(int_p.comp, int_p.inst_id)
-
 				// we've hit a line. snap to it.
 				let hit_line = int_p.line
 
 				// check if the hit line intersects any axes originating at line start: that's a snap point.
-				let axes_int_p = axes_model && axes_hit_line(axes_model, int_p, hit_line)
+				let axes_int_p = axes_model && axes_hit_line(axes_model, int_p, hit_line, hit_d)
 
 				// snap the hit point along the hit line along with any additional snap points.
 				snap_point_on_line(int_p, hit_line, hit_d, screen_p2p_distance2, null, axes_int_p)
+
 				if (axes_model)
 					check_point_on_axes(axes_model, int_p)
 
@@ -787,7 +809,9 @@ component('x-modeleditor', function(e) {
 			} else if (mode == 'draw') {
 
 				// we've hit squat: hit the axes and the ref planes.
-				int_p = axes_model && mouse_hit_axes(axes_model, hit_d) || hit_ref_planes(axes_model || cur_model)
+				int_p = axes_model && mouse_hit_axes(axes_model, hit_d)
+				int_p ||= hit_ref_planes(axes_model || cur_model)
+
 
 			} else if (mode == 'select') {
 
@@ -798,6 +822,9 @@ component('x-modeleditor', function(e) {
 
 		}
 
+		if (int_p)
+			int_p.path = instance_path(int_p.comp, int_p.inst_id)
+
 		return int_p
 
 	}}
@@ -805,6 +832,7 @@ component('x-modeleditor', function(e) {
 	// currently editing instance ---------------------------------------------
 
 	let cur_path = []
+	let cur_comp = root
 	let cur_model = mat4()
 	let cur_inv_model = mat4()
 
@@ -819,13 +847,13 @@ component('x-modeleditor', function(e) {
 		select_all(false)
 		cur_path.set(path)
 		cur_model.reset()
+		cur_comp = cur_path.last.comp
 		for (node of path)
 			cur_model.mul(node)
 		cur_inv_model.set(cur_model).invert()
 		axes.model.set(cur_model)
 		axes.update()
 		instances_valid = false
-		render()
 	}
 
 	function exit_edit() {
@@ -861,6 +889,9 @@ component('x-modeleditor', function(e) {
 	// cursor -----------------------------------------------------------------
 
 	{
+	let builtin_cursors = {
+		grab: true,
+	}
 	let offsets = {
 		line          : [0, 25],
 		select        : [5, 12],
@@ -875,7 +906,7 @@ component('x-modeleditor', function(e) {
 		cursor = name
 		let x = offsets[name] && offsets[name][0] || 0
 		let y = offsets[name] && offsets[name][1] || 0
-		e.style.cursor = 'url(cursor_'+name+'.png) '+x+' '+y+', auto'
+		e.style.cursor = builtin_cursors[name] ? name : 'url(cursor_'+name+'.png) '+x+' '+y+', auto'
 	})
 	}
 
@@ -887,23 +918,17 @@ component('x-modeleditor', function(e) {
 		target: e})
 	tt.hide()
 
-	let tt_text = ''
 	let show_after = timer(function() {
-		tt.text = tt_text
 		tt.show()
 	})
 
-	e.property('tooltip', () => tooltip_text, function(s) {
+	e.property('tooltip', () => tt.text, function(s) {
+		tt.hide()
+		tt.text = s
+		tt.px = mouse.x
+		tt.py = mouse.y
 		tt.update()
-		if (s) {
-			tt_text = s
-			tt.px = mouse.x
-			tt.py = mouse.y
-			tt.hide()
-			show_after(.2)
-		} else {
-			show_after(false)
-		}
+		show_after(s ? .2 : false)
 	})
 	}
 
@@ -915,7 +940,7 @@ component('x-modeleditor', function(e) {
 	function helper_line(name, line1, opt) {
 		line = helper_lines[name]
 		if (!line) {
-			line = helper_lines_rr.line(line1, opt.color, opt.dashed, opt.visible)
+			line = helper_lines_rr.line(line1, opt.color, opt.type, opt.visible)
 			line.name = name
 			helper_lines[name] = line
 		} else {
@@ -989,11 +1014,9 @@ component('x-modeleditor', function(e) {
 			tool = assert(tools[name])
 			toolname = name
 			e.cursor = tool.cursor || name
-			if (tool.bind) {
+			if (tool.bind)
 				tool.bind(true)
-				fire_pointermove()
-				render()
-			}
+			fire_pointermove()
 		})
 	}
 
@@ -1001,12 +1024,17 @@ component('x-modeleditor', function(e) {
 
 	tools.orbit = {}
 
+	function orbit_update_cursor() {
+		e.cursor = shift ? 'grab' : 'orbit'
+	}
+
 	tools.orbit.pointerdown = function(capture) {
 		let cam0 = camera.clone()
 		let mx0 = mouse.x
 		let my0 = mouse.y
 		let hit_point = mouse_hit_model({mode: 'camera'})
 		let panning = shift
+		mouse.prevent_validate = true
 		return capture(function() {
 			let mx = mouse.x
 			let my = mouse.y
@@ -1015,6 +1043,7 @@ component('x-modeleditor', function(e) {
 				mx0 = mx
 				my0 = my
 				panning = shift
+				orbit_update_cursor()
 			} else {
 				camera.set(cam0)
 			}
@@ -1033,6 +1062,7 @@ component('x-modeleditor', function(e) {
 	let hit_point
 
 	tools.orbit.keydown = function(key) {
+		orbit_update_cursor()
 		hit_point = hit_point || mouse_hit_model({mode: 'camera'})
 		let x = key == 'ArrowLeft' && -1 || key == 'ArrowRight' && 1 || 0
 		let y = key == 'ArrowUp'   && -1 || key == 'ArrowDown'  && 1 || 0
@@ -1058,6 +1088,7 @@ component('x-modeleditor', function(e) {
 	}
 
 	tools.orbit.keyup = function(key) {
+		orbit_update_cursor()
 		if (key != 'Shift' && key != 'Control' && key != 'Alt')
 			hit_point = null
 	}
@@ -1081,6 +1112,8 @@ component('x-modeleditor', function(e) {
 		update_cur_mode()
 		if (key == 'Escape') {
 			exit_edit()
+			update()
+			render()
 			return false
 		}
 	}
@@ -1105,8 +1138,8 @@ component('x-modeleditor', function(e) {
 			}
 			if (p.path && p.path.equals(cur_path, 0, cur_path.length)) {
 				if (p.path.length == cur_path.length) { // we've hit current component's geometry.
-					if (p.li != null) {
-						p.comp.select_line(p.li, mode, nclicks == 2)
+					if (p.line != null) {
+						p.comp.select_line(p.line.i, mode, nclicks == 2)
 					} else if (p.face != null) {
 						p.comp.select_face(p.face, mode, nclicks == 2)
 					}
@@ -1115,13 +1148,15 @@ component('x-modeleditor', function(e) {
 						enter_edit(p.path.slice(0, cur_path.length + 1))
 					} else { // just select it.
 						let child = p.path[cur_path.length]
-						cur_path.last.comp.select_child(child, mode)
+						cur_comp.select_child(child, mode)
 					}
 				}
 			} else {
 				exit_edit()
 			}
 		}
+		update()
+		render()
 	}
 
 	}
@@ -1134,7 +1169,9 @@ component('x-modeleditor', function(e) {
 
 	tools.line = {}
 
-	let cur_point, cur_line, ref_point, ref_line, cur_axes_model
+	let cur_point, cur_line, ref_point, ref_line
+	let last_point_model
+	let ref_point_model
 
 	function init_line_tool() {
 
@@ -1142,30 +1179,39 @@ component('x-modeleditor', function(e) {
 		cur_point = helper_dot(endp)
 		cur_point.visible = false
 
-		cur_line = helper_line('cur_line', line3(v3(), endp), {color: black, visible: false})
+		cur_line = helper_line('cur_line', line3(v3(), endp), {visible: false})
 
 		ref_point = helper_dot()
 		ref_point.point.snap = 'ref_point'
 		ref_point.visible = false
 
-		ref_line = helper_line('ref_line', line3(), {color: black, dashed: true, visible: false})
+		ref_line = helper_line('ref_line', line3(), {color: black, type: 'dashed', visible: false})
 
-		cur_axes_model = mat4()
+		cur_line_model = mat4()
+		ref_point_model = mat4()
 
 		init_line_tool = noop
 	}
 
 	tools.line.bind = function(on) {
 		init_line_tool()
+		if (!on) {
+			cur_point.visible = false
+			cur_line.visible = false
+			ref_point.visible = false
+			ref_line.visible = false
+			ref_line.update()
+		}
 	}
 
 	tools.line.cancel = function() {
 		e.tooltip = ''
 		cur_line.visible = false
 		cur_line.update()
+
 		ref_point.visible = false
 		ref_line.visible = false
-		reF_line.update()
+		ref_line.update()
 	}
 
 	let snap_tooltips = {
@@ -1189,6 +1235,7 @@ component('x-modeleditor', function(e) {
 	let future_ref_point = v3()
 	let ref_point_update_after = timer(function() {
 		ref_point.update_point(future_ref_point)
+		ref_point_model.set_position(ref_point)
 	})
 
 	tools.line.pointermove = function() {
@@ -1196,8 +1243,8 @@ component('x-modeleditor', function(e) {
 		let p1 = cur_line[0]
 		let p2 = cur_line[1]
 		p2.i = null
-		p2.face = null
 		p2.li = null
+		p2.face = null
 		p2.snap = null
 		p2.line_snap = null
 		p2.tooltip = null
@@ -1208,7 +1255,9 @@ component('x-modeleditor', function(e) {
 		ref_point_update_after(false)
 
 		let p = mouse_hit_model({mode: 'draw', distance: 'snap',
-				axes_model: cur_line.visible ? cur_axes_model : null})
+				axes_model: cur_line.visible ? cur_line_model : null})
+
+		let hit_d = max_hit_distances.snap
 
 		if (p) {
 
@@ -1216,7 +1265,7 @@ component('x-modeleditor', function(e) {
 			if ((p.snap == 'point' || p.snap == 'line_middle')
 				&& (p.i == null || !cur_line.visible || p.i != cur_line[0].i)
 			) {
-				assign(future_ref_point, p)
+				future_ref_point.assign(p)
 				ref_point_update_after(.5)
 			}
 
@@ -1226,18 +1275,18 @@ component('x-modeleditor', function(e) {
 
 					// snap point to axes originating at the ref point.
 					if (ref_point.visible) {
-						let axes_int_p = mouse_hit_axes(cur_axes_model, max_hit_distances.snap)
+						let axes_int_p = mouse_hit_axes(cur_line_model, hit_d)
 						if (axes_int_p) {
 							p = axes_int_p
 							ref_line.snap = p.line_snap
-							ref_line.update_endpoints(ref_point.point, p)
+							ref_line.set(ref_point.point, p)
 						}
 					}
 
 				}
 
-				assign(p1, p)
-				assign(p2, p)
+				p1.assign(p)
+				p2.assign(p)
 
 			} else { // moving the line end-point.
 
@@ -1248,14 +1297,14 @@ component('x-modeleditor', function(e) {
 
 					// snap point to axes originating at the ref point.
 					if (ref_point.visible) {
-						assign(p2, p)
+						p2.assign(p)
 						let p_line_snap = p.line_snap
-						let axes_int_p = axes_hit_line(ref_point.point, p, cur_line)
-						if (axes_int_p && canvas_p2p_distance2(axes_int_p, p) <= e.hit_d ** 2) {
-							assign(p, axes_int_p)
+						let axes_int_p = axes_hit_line(ref_point_model, p, cur_line, hit_d)
+						if (axes_int_p && screen_p2p_distance2(axes_int_p, p) <= hit_d ** 2) {
+							p.assign(axes_int_p)
 							ref_line.snap = axes_int_p.line_snap
 							p.line_snap = p_line_snap
-							ref_line.update_endpoints(ref_point.point, p)
+							ref_line.set(ref_point.point, p)
 						}
 
 					}
@@ -1264,7 +1313,7 @@ component('x-modeleditor', function(e) {
 
 				}
 
-				assign(p2, p)
+				p2.assign(p)
 
 			}
 
@@ -1289,19 +1338,23 @@ component('x-modeleditor', function(e) {
 		e.tooltip = ''
 		if (cur_line.visible) {
 			let closing = cur_line[1].i != null || cur_line[1].li != null
-			e.model.draw_line(cur_line)
+			let abs_cur_line = cur_line.clone()
+			cur_line.transform(cur_inv_model)
+			cur_comp.draw_line(cur_line)
+			cur_line.set(abs_cur_line)
 			ref_point.visible = false
+			update()
 			if (closing) {
 				tools.line.cancel()
 			} else {
-				cur_line[0].set(cur_line[1])
-				cur_axes_model.reset().translate(cur_line[0])
-				cur_line[0].i = cur_line[1].i
+				cur_line[0].assign(cur_line[1])
+				cur_line_model.set_position(cur_line[0])
 				cur_line.update()
 			}
 		} else {
 			if (cur_line[0].i != null && ref_point.point.i == cur_line[0].i)
 				ref_point.visible = false
+			cur_line_model.set_position(cur_line[1])
 			cur_line.visible = true
 			cur_line.update()
 		}
@@ -1333,7 +1386,7 @@ component('x-modeleditor', function(e) {
 				move()
 				return true
 			} else {
-				let p = mouse_hit_faces()
+				let p = mouse_hit_model()
 				if (p && p.snap == 'face') {
 					p.comp.select_face(p.face)
 				} else {
@@ -1363,7 +1416,7 @@ component('x-modeleditor', function(e) {
 		}
 
 		function start() {
-			pull = e.model.start_pull(hit_p)
+			pull = cur_comp.start_pull(hit_p)
 		}
 
 		function stop() {
@@ -1394,84 +1447,76 @@ component('x-modeleditor', function(e) {
 
 	}
 
-	// mouse handling ---------------------------------------------------------
+	// input handling ---------------------------------------------------------
 
-	let mouse = v3()
+	let mouse = v3(false, false, 0)
 	mouse.ray = line3()
 
-	function update_mouse(ev, mx, my, opt) {
-		if (!mouse.valid && opt && opt.validate) {
-			update_model()
-			render_model_for_hit_test()
-			mouse.valid = true
-		}
+	function update_mouse(ev) {
 		let r = e.rect()
-		mx -= r.x
-		my -= r.y
-		let pos_changed = mx != mouse[0] || my != mouse[1]
-		mouse[0] = mx
-		mouse[1] = my
-		if (opt && opt.left_down != null)
-			mouse.left = opt.left_down
-		update_keys(ev)
+		let mx = ev.clientX - r.x
+		let my = ev.clientY - r.y
+		let pos_changed = mx != mouse.x || my != mouse.y
+		mouse.x = mx
+		mouse.y = my
 		if (pos_changed)
 			camera.raycast(mx, my, mouse.ray)
 		return pos_changed
 	}
 
-	let shift, ctrl, alt
-	function update_keys(ev) {
-		shift = ev.shiftKey
-		ctrl  = ev.ctrlKey
-		alt   = ev.altKey
-	}
-
 	function fire_pointermove() {
+		if (mouse.x != mouse.x) // mouse not yet moved.
+			return
 		if (tool.pointermove)
 			tool.pointermove()
 	}
 
-	e.on('pointermove', function(ev, mx, my) {
-		update_mouse(ev, mx, my)
+	let captured
+
+	e.on('pointermove', function(ev) {
+		update_mouse(ev)
 		fire_pointermove()
 	})
 
-	e.on('pointerdown', function(ev, mx, my) {
-		if (update_mouse(ev, mx, my, {validate: true, left_down: true}))
+	e.on('pointerdown', function(ev) {
+		mouse.prevent_validate = false
+		if (update_mouse(ev))
 			fire_pointermove()
 		if (tool.pointerdown) {
-			let captured, captured_move
+			let captured_move
 			function capture(move, up) {
-				let movewrap = move && function(ev, mx, my) {
-					update_mouse(ev, mx, my)
-					return move()
+				let movewrap = function(ev) {
+					update_mouse(ev)
+					if (move)
+						return move()
 				}
-				let upwrap = up && function(ev, mx, my) {
-					update_mouse(ev, mx, my, {validate: true, left_down: false})
-					return up()
+				let upwrap = function(ev) {
+					mouse.captured = false
+					update_mouse(ev)
+					if (up)
+						return up()
 				}
-				captured = e.capture_pointer(ev, movewrap, upwrap)
+				mouse.captured = e.capture_pointer(ev, movewrap, upwrap)
 				captured_move = move
 			}
 			tool.pointerdown(capture)
-			// guarantee a mouse move and render after mouse down.
-			if (!captured)
+			// guarantee a mouse move after each mouse down.
+			if (!mouse.captured)
 				fire_pointermove()
 			else if (captured_move)
 				captured_move()
-			render()
 			return captured
 		}
 	})
 
-	e.on('pointerup', function(ev, mx, my) {
-		if (update_mouse(ev, mx, my, {validate: true, left_down: false}))
+	e.on('pointerup', function(ev) {
+		mouse.prevent_validate = false
+		if (update_mouse(ev))
 			fire_pointermove()
 		if (tool.pointerup) {
 			tool.pointerup()
-			// guarantee a mouse move and render after mouse up.
+			// guarantee a mouse move after each mouse up.
 			fire_pointermove()
-			render()
 		}
 	})
 
@@ -1479,27 +1524,26 @@ component('x-modeleditor', function(e) {
 		e.tooltip = ''
 	})
 
-	e.on('click', function(ev, nclicks, mx, my) {
-		if (update_mouse(ev, mx, my, {validate: true}))
+	e.on('click', function(ev, nclicks) {
+		mouse.prevent_validate = false
+		if (update_mouse(ev))
 			fire_pointermove()
 		if (tool.click) {
 			tool.click(nclicks)
-			// guarantee a mouse move and render after click.
+			// guarantee a mouse move after each click.
 			fire_pointermove()
-			render()
 		}
 	})
 
-	e.on('wheel', function(ev, dy, mx, my) {
-		if (update_mouse(ev, mx, my, {validate: true}))
+	e.on('wheel', function(ev, dy) {
+		mouse.prevent_validate = false
+		if (update_mouse(ev))
 			fire_pointermove()
 		let hit_point = mouse_hit_model({mode: 'camera'})
 		camera.dolly(hit_point, 1 + 0.4 * dy)
 		update_camera()
 		return false
 	})
-
-	// key handling -----------------------------------------------------------
 
 	let tool_keys = {
 		l: 'line',
@@ -1509,13 +1553,22 @@ component('x-modeleditor', function(e) {
 		m: 'move',
 	}
 
+	let shift, ctrl, alt
+
+	function update_keys(ev) {
+		shift = ev.shiftKey
+		ctrl  = ev.ctrlKey
+		alt   = ev.altKey
+	}
+
 	e.on('keydown', function(key, shift, ctrl, alt, ev) {
+		mouse.prevent_validate = false
 		update_keys(ev)
 		if (key == 'Delete') {
 			remove_selection()
 			render()
 		} else if (key == 'h') {
-			e.model.toggle_invisible_lines()
+			cur_comp.toggle_invisible_lines()
 			render()
 		}
 		if (tool.keydown)
@@ -1537,10 +1590,12 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('keyup', function(key, shift, ctrl, alt, ev) {
+		mouse.prevent_validate = false
 		update_keys(ev)
-		if (tool.keyup)
-			if (tool.keyup(key) === false)
-				return false
+		if (!tool.keyup)
+			return
+		if (tool.keyup(key) === false)
+			return false
 	})
 
 	// scripting API ----------------------------------------------------------
@@ -1633,9 +1688,9 @@ component('x-modeleditor', function(e) {
 	update_sun_pos()
 	create_test_objects()
 	enter_edit([root, root.comp.children[0]])//, root.comp.children[0].comp.children[5]])
+	update_all()
 
 	e.tool = 'orbit'
-	render()
 
 	e.on('bind', function(on) {
 		// TODO: init/free DOM things...

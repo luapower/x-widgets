@@ -5,6 +5,9 @@
 
 	Based on tutorials from learnopengl.com.
 
+	TODO: interlaced vertex buffers.
+	TODO: u32 color buffers.
+
 */
 
 (function() {
@@ -383,16 +386,16 @@ gl.hit_test_renderer = function(r) {
 		fbo.attach(depth_map)
 		fbo.clear_color(0, 0xffff, 0xffff, 0xffff, 0xffff)
 		gl.clear_all()
+
 		draw(face_prog)
 		//draw(line_prog)
+
 		fbo.unbind()
 		fbo.read_pixels('color', 0, hit_test_arr)
 	}
 
 	let hit = {}
 	r.hit_test = function(x, y) {
-		hit.inst_id = null
-		hit.geom_id = null
 		if (!hit_test_arr)
 			return
 		if (x < 0 || x >= w || y < 0 || y >= h)
@@ -405,10 +408,14 @@ gl.hit_test_renderer = function(r) {
 		let a = hit_test_arr[i+3]
 		let geom_id = ((r << 16) | g) >>> 0
 		let inst_id = ((b << 16) | a) >>> 0
+
 		if (geom_id == 0xffffffff || inst_id == 0xffffffff)
 			return
+
+		hit.comp_id = geom_id >>> 18 // 32K components
+		hit.face_id = geom_id & ((1 << 18) - 1) // 500K faces each
 		hit.inst_id = inst_id
-		hit.geom_id = geom_id
+
 		return hit
 	}
 
@@ -482,7 +489,7 @@ gl.faces_renderer = function() {
 	let _v1 = v3()
 	let _uv = v2()
 
-	e.update = function(mat_faces_map) {
+	e.update = function(comp_id, mat_faces_map) {
 
 		// get total vertex count and vertex index count.
 		let pt_n = 0
@@ -527,7 +534,8 @@ gl.faces_renderer = function() {
 					uv[2*j+0] = uv[0]
 					uv[2*j+1] = uv[1]
 					selected[j] = face.selected
-					geom_id[j] = face.id
+					geom_id[j] = (comp_id << 18) | face.i
+
 				}
 				let tris = face.triangles()
 				for (i = 0, n = tris.length; i < n; i++, k++) {
@@ -791,7 +799,6 @@ gl.module('fat_line.vs', `
 	#include mesh.vs
 
 	uniform vec3 base_color;
-	in vec3 color;
 	in vec3 q; // line's other end-point.
 	in float dir;
 
@@ -842,7 +849,7 @@ gl.fat_lines_renderer = function(e) {
 
 		void main() {
 			gl_Position = fat_line_pos();
-			v_color = vec4(base_color + color, 1.0);
+			v_color = vec4(base_color, 1.0);
 			v_disabled = disabled;
 		}
 
@@ -971,7 +978,6 @@ gl.fat_lines_renderer = function(e) {
 		vao.set_attr('disabled', e.disabled)
 		vao.set_index(ib.buffer)
 		prog.set_uni('base_color', e.base_color)
-		vao.set_attr('color', e.color)
 		gl.draw_triangles()
 	}
 
@@ -1136,81 +1142,94 @@ gl.skybox = function(opt) {
 gl.helper_lines_renderer = function() {
 
 	let gl = this
-	let e = {}
+	let e = {s: [], d: [], f: []}
+	let ts = [e.s, e.d, e.f]
 
-	let fl_rr = gl.fat_lines_renderer({})
-	let dl_rr = gl.dashed_lines_renderer({dash: 5, gap: 3})
-
-	let fl = [] // [line1,...]
-	let dl = [] // [line1,...]
-
-	function each_fat_line(f) {
-		for (let line of fl)
-			f(line)
-	}
-
-	function update_fl() {
-		fl_rr.update(each_fat_line, fl.length)
-	}
-
-	function update_fl_for(line) {
-		fl_rr.update_at(fl.indexOf(line), line)
-	}
-
-	let dl_dab_pos   = gl.dyn_arr_v3_buffer()
-	let dl_dab_color = gl.dyn_arr_v3_buffer()
+	e.s.rr = gl.solid_lines_renderer({})
+	e.d.rr = gl.dashed_lines_renderer({dash: 5, gap: 3})
+	e.f.rr = gl.fat_lines_renderer({})
 
 	let dab_model = gl.dyn_arr_mat4_instance_buffer()
 	dab_model.set(0, mat4f32.identity)
 	dab_model.upload_invalid()
-	fl_rr.model = dab_model.buffer
-	dl_rr.model = dab_model.buffer
 
-	{
-	let _v = v3()
-	function set_dl(i, line) {
-		dl_dab_pos.set(2*i+0, line[0])
-		dl_dab_pos.set(2*i+1, line[1])
-		let c = _v.set(line.color)
-		dl_dab_color.set(2*i+0, c)
-		dl_dab_color.set(2*i+1, c)
-	}}
-
-	function update_dl() {
-
-		dl_dab_pos  .grow(dl.length, false)
-		dl_dab_color.grow(dl.length, false)
-
-		let i = 0
-		for (line of dl)
-			set_dl(i++, line)
-
-		dl_dab_pos  .setlen(dl.length).upload()
-		dl_dab_color.setlen(dl.length).upload()
-
-		dl_rr.pos   = dl_dab_pos  .buffer
-		dl_rr.color = dl_dab_color.buffer
+	function each_fat_line(f) {
+		for (let line of e.f)
+			f(line)
 	}
 
-	function update_dl_for(line) {
-		set_dl(dl.indexOf(line), line)
-		dl_dab_pos  .upload_invalid()
-		dl_dab_color.upload_invalid()
+	e.f.update = function() {
+		e.f.rr.update(each_fat_line, e.f.length)
 	}
 
-	e.line = function(line, color, dashed, visible) {
+	e.f.update_for = function(line) {
+		e.f.rr.update_at(e.f.indexOf(line), line)
+	}
+
+	for (let t of ts)
+		t.rr.model = dab_model.buffer
+
+	function sldr(t) {
+
+		let dab_pos   = gl.dyn_arr_v3_buffer()
+		let dab_color = gl.dyn_arr_v3_buffer()
+
+		{
+		let _v0 = v3()
+		function set_line(i, line) {
+			assert(i >= 0)
+			dab_pos.set(2*i+0, line[0])
+			dab_pos.set(2*i+1, line[1])
+			let c = _v0.set(line.color)
+			dab_color.set(2*i+0, c)
+			dab_color.set(2*i+1, c)
+
+		}}
+
+		t.update = function() {
+
+			let len = 2 * t.length
+
+			dab_pos  .grow(len, false)
+			dab_color.grow(len, false)
+
+			let i = 0
+			for (line of t)
+				set_line(i++, line)
+
+			dab_pos  .setlen(len).upload()
+			dab_color.setlen(len).upload()
+
+			t.rr.pos   = dab_pos  .buffer
+			t.rr.color = dab_color.buffer
+		}
+
+		t.update_for = function(line) {
+			set_line(t.indexOf(line), line)
+			dab_pos  .upload_invalid()
+			dab_color.upload_invalid()
+		}
+	}
+
+	sldr(e.s)
+	sldr(e.d)
+
+	e.line = function(line, color, type, visible) {
 
 		line.color = color || 0
 		line.visible = visible !== false
+		type = type || 'solid'
 
-		let lines = dashed ? dl : fl
-		let update_lines = dashed ? update_dl     : update_fl
-		let update_line  = dashed ? update_dl_for : update_fl_for
+		let lines =
+			   type == 'solid'  && e.s
+			|| type == 'dashed' && e.d
+			|| type == 'fat'    && e.f
+			|| assert(false, 'invalid helper line type {0}', type)
 
 		line.free = function() {
 			if (line._visible) {
 				lines.remove_value(line)
-				update_lines()
+				lines.update()
 			}
 		}
 
@@ -1221,25 +1240,25 @@ gl.helper_lines_renderer = function() {
 				else
 					lines.remove_value(line)
 				line._visible = line.visible
-				update_lines()
+				lines.update()
 			} else if (line.visible) {
-				update_line(line)
+				lines.update_for(line)
 			}
 		}
 
-		update_lines()
+		lines.update()
 
 		return line
 	}
 
 	e.draw = function(prog) {
-		fl_rr.draw(prog)
-		dl_rr.draw(prog, false)
+		for (let t of ts)
+			t.rr.draw(prog, false)
 	}
 
 	e.free = function() {
-		fl_rr.free()
-		dl_rr.free()
+		for (let t of ts)
+			t.rr.free()
 	}
 
 	return e

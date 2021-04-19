@@ -33,7 +33,7 @@ model3_component = function(pe) {
 	let push_undo = pe.push_undo
 
 	function log(s, ...args) {
-		assert(DEBUG)
+		assert(LOG)
 		print(e.id, s, ...args)
 	}
 
@@ -55,6 +55,7 @@ model3_component = function(pe) {
 	let points_changed          // time to reload the points buffer.
 	let used_points_changed     // time to reload the used_pis buffer.
 	let used_lines_changed      // time to reload the *_edge_lis buffers.
+	let faces_changed           // time to rebuild faces geometry.
 	let edge_line_count = 0     // number of face edge lines.
 	let nonedge_line_count = 0  // number of standalone lines.
 	let bbox_changed            // time to recompute the bbox.
@@ -78,7 +79,14 @@ model3_component = function(pe) {
 		return out
 	}}
 
-	function add_point(x, y, z, need_pi) {
+	function add_point(x, y, z) {
+
+		if (x.is_v3) {
+			let p = x
+			x = p[0]
+			y = p[1]
+			z = p[2]
+		}
 
 		let pi = free_pis.pop()
 		if (pi == null) {
@@ -90,12 +98,9 @@ model3_component = function(pe) {
 		}
 		prc[pi] = 0
 
-		if (need_pi != null)
-			assert(pi == need_pi)
-
 		upload_point(pi, x, y, z)
 
-		if (DEBUG)
+		if (LOG)
 			log('add_point', pi, x+','+y+','+z)
 
 		return pi
@@ -118,7 +123,7 @@ model3_component = function(pe) {
 
 		push_undo(ref_point, pi)
 
-		// if (DEBUG) log('unref_point', pi, prc[pi])
+		// if (LOG) log('unref_point', pi, prc[pi])
 	}
 
 	let ref_point = function(pi) {
@@ -130,7 +135,7 @@ model3_component = function(pe) {
 
 		push_undo(unref_point, pi)
 
-		// if (DEBUG) log('ref_point', pi, prc[pi])
+		// if (LOG) log('ref_point', pi, prc[pi])
 	}
 
 	function move_point(pi, x, y, z) {
@@ -160,7 +165,7 @@ model3_component = function(pe) {
 				f(get_line(li))
 	}
 
-	function add_line(p1i, p2i, need_li) {
+	function add_line(p1i, p2i) {
 
 		let li = free_lis.pop()
 		if (li == null) {
@@ -177,15 +182,12 @@ model3_component = function(pe) {
 		used_lines_changed = true
 		bbox_changed = true
 
-		if (need_li != null)
-			assert(li == need_li)
-
 		ref_point(p1i)
 		ref_point(p2i)
 
 		push_undo(unref_line, li)
 
-		if (DEBUG)
+		if (LOG)
 			log('add_line', li, p1i+','+p2i)
 
 		return li
@@ -212,7 +214,7 @@ model3_component = function(pe) {
 
 			push_undo(add_line, p1i, p2i, li)
 
-			if (DEBUG)
+			if (LOG)
 				log('remove_line', li)
 
 		} else {
@@ -229,7 +231,7 @@ model3_component = function(pe) {
 
 		}
 
-		// if (DEBUG)
+		// if (LOG)
 			// log('unref_line', li, lines[5*li+2])
 	}
 
@@ -248,8 +250,45 @@ model3_component = function(pe) {
 
 		push_undo(unref_line, li)
 
-		// if (DEBUG)
+		// if (LOG)
 			// log('ref_line', li, lines[5*li+2])
+	}
+
+	function merge_lines(li1, li2, need_rc) {
+
+		let pi1 = lines[5*li2+0] // pi1
+		let pi2 = lines[5*li2+1] // pi2
+
+		if (LOG)
+			log('merge_lines', li1, li2)
+
+		assert(need_rc == null || lines[5*li2+2] == need_rc)
+		while (lines[5*li2+2] > 0)
+			unref_line(li2)
+
+		lines[5*li1+1] = pi2 // pi2
+
+		push_undo(cut_line, li1, pi1, li2)
+	}
+
+	function cut_line(li1, pi, need_li2) {
+		let pi2 = lines[5*li1+1] // pi2
+		let rc1 = lines[5*li1+2] // rc
+		let sm1 = lines[5*li1+3] // smoothness
+		let op1 = lines[5*li1+4] // opacity
+
+		if (LOG)
+			log('cut_line', li1, pi)
+
+		let li2 = add_line(pi, pi2)
+		lines[5*li1+1] = pi // pi2
+		while (lines[5*li2+2] < rc1)
+			ref_line(li2)
+		set_line_smoothness (li2, sm1)
+		set_line_opacity    (li2, op1)
+		assert(need_li2 == null || li2 == need_li2)
+
+		push_undo(merge_lines, li1, li2, rc1)
 	}
 
 	let face = {is_face3: true}
@@ -309,7 +348,7 @@ model3_component = function(pe) {
 			face.lis = []
 			face.points = points
 			face.index = fi
-			face.id = (e.id << 18) | fi
+			face.i = fi
 			faces[fi] = face
 		} else {
 			face = faces[fi]
@@ -325,10 +364,12 @@ model3_component = function(pe) {
 				ref_line(li)
 		} else
 			update_face_lis(face)
+		material = material || pe.default_material
 		face.mat_inst = material_instance(material)
 		face.mat_inst.push(face)
-		if (DEBUG)
-			log('add_face', face.id, face.join(','), face.lis.join(','), material.id)
+		faces_changed = true
+		if (LOG)
+			log('add_face', face.i, face.join(','), face.lis.join(','), material.id)
 		return face
 	}
 
@@ -342,7 +383,7 @@ model3_component = function(pe) {
 		face.lis.length = 0
 		face.mat_inst.remove_value(face)
 		face.mat_inst = null
-		if (DEBUG)
+		if (LOG)
 			log('remove_face', face.index)
 	}
 
@@ -354,7 +395,8 @@ model3_component = function(pe) {
 		face.mat_inst.remove_value(face)
 		face.mat_inst = material_instance(material)
 		face.mat_inst.push(face)
-		if (DEBUG)
+		faces_changed = true
+		if (LOG)
 			log('set_material', face.index, material.id)
 	}
 
@@ -368,9 +410,10 @@ model3_component = function(pe) {
 				break
 			}
 		}
-		let li = found_li != null ? found_li : add_line(p1i, p2i)
-		ref_line(li)
-		return li
+		if (found_li == null)
+			found_li = add_line(p1i, p2i)
+		ref_line(found_li)
+		return found_li
 	}
 
 	function update_face_lis(face) {
@@ -383,18 +426,20 @@ model3_component = function(pe) {
 			p1i = p2i
 		}
 		lis.push(assert(ref_or_add_line(p1i, face[0])))
+		faces_changed = true
 	}
 
 	function insert_edge(face, ei, pi, line_before_point, li) {
 		let line_ei = ei - (line_before_point ? 1 : 0)
 		assert(line_ei >= 0) // can't use ei=0 and line_before_point=true with this function.
-		if (DEBUG)
+		if (LOG)
 			log('insert_edge', face.index, '@'+ei, 'pi='+pi, '@'+line_ei, 'li='+li, 'before_pi='+face[ei])
 		face.insert(ei, pi)
 		face.lis.insert(line_ei, li)
 		if (face.mesh)
 			face.mesh.normals_valid = false
 		face.invalidate()
+		faces_changed = true
 	}
 
 	function each_line_face(li, f) {
@@ -479,6 +524,8 @@ model3_component = function(pe) {
 
 		common_meshes.clear()
 		nomesh_faces.length = 0
+
+		faces_changed = true
 	}}
 
 	function set_line_opacity(li, op) {
@@ -493,8 +540,8 @@ model3_component = function(pe) {
 			return
 
 		lines[5*li+4] = op
-		used_lines_changed = true
 
+		used_lines_changed = true
 	}
 
 	// component children
@@ -506,7 +553,7 @@ model3_component = function(pe) {
 		mat.layer = layer || pe.default_layer
 		children.push(mat)
 		pe.child_added(e, mat)
-		if (DEBUG)
+		if (LOG)
 			log('add_child', mat)
 		return mat
 	}
@@ -606,7 +653,7 @@ model3_component = function(pe) {
 			if (i == i1 || i == i2) // don't hit target line's endpoints
 				continue
 			get_point(i, p2)
-			target_line.closestPointToPoint(p2, true, p1)
+			target_line.closest_point_to_point(p2, true, p1)
 			let ds = p2p_distance2(p1, p2)
 			if (ds <= max_d ** 2) {
 				if (f && f(int_line) === false)
@@ -614,8 +661,8 @@ model3_component = function(pe) {
 				if (ds < min_ds) {
 					min_ds = ds
 					min_int_line = min_int_line || line3()
-					min_int_line[0].copy(p1)
-					min_int_line[1].copy(p2)
+					min_int_line[0].set(p1)
+					min_int_line[1].set(p2)
 					min_int_line[1].i = i
 				}
 			}
@@ -631,7 +678,7 @@ model3_component = function(pe) {
 		let min_int_p
 		each_line_f = each_line_f || each_line
 		each_line_f(function(line) {
-			line.closestPointToPoint(p, true, int_p)
+			line.closest_point_to_point(p, true, int_p)
 			let ds = p2p_distance2(p, int_p)
 			if (ds <= max_d ** 2) {
 				if (!(f && f(int_p, line) === false)) {
@@ -654,17 +701,18 @@ model3_component = function(pe) {
 	{
 	let _l0 = line3()
 	let _l1 = line3()
-	function line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid, out) {
-		assert(out.is_v3)
-		out.li = null
-		out.int_line = null
+	let _l2 = line3()
+	let _v0 = v3()
+	function line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid) {
 		let min_ds = 1/0
 		let min_int_p
 		is_line_valid = is_line_valid || return_true
 		is_int_line_valid = is_int_line_valid || return_true
 		for (let li = 0, n = line_count(); li < n; li++) {
 			if (lines[5*li+2]) { // ref count: used.
-				let line = get_line(li).transform(model)
+				let line = get_line(li)
+				if (model)
+					line.transform(model)
 				if (is_line_valid(line)) {
 					let p1i = line[0].i
 					let p2i = line[1].i
@@ -682,17 +730,16 @@ model3_component = function(pe) {
 							let ds = p2p_distance2(int_line[0], int_line[1])
 							if (ds <= max_d ** 2) {
 								let int_p = int_line[1]
-								int_p.li = li
 								int_p.line = line
 								int_p.int_line = int_line
-								if (is_int_line_valid(int_line)) {
+								int_p.li = li
+								if (is_int_line_valid(int_p)) {
 									if (ds < min_ds) {
 										min_ds = ds
-										min_int_p = min_int_p || out
-										min_int_p.set(int_p)
-										min_int_p.li = li
-										min_int_p.line = line.to(_l1)
-										min_int_p.int_line = int_line.clone()
+										min_int_p = min_int_p || _v0
+										min_int_p.assign(int_p)
+										min_int_p.line = _l1.assign(line)
+										min_int_p.int_line = _l2.assign(int_line)
 									}
 								}
 							}
@@ -704,7 +751,6 @@ model3_component = function(pe) {
 		return min_int_p
 	}}
 
-	e.line_hit_points = line_hit_points
 	e.point_hit_lines = point_hit_lines
 	e.point_hit_edge = point_hit_edge
 	e.line_hit_lines = line_hit_lines
@@ -751,6 +797,7 @@ model3_component = function(pe) {
 
 	function face_set_selected(face, sel) {
 		face.selected = sel
+		faces_changed = true
 	}
 
 	function select_all_faces(sel) {
@@ -841,6 +888,8 @@ model3_component = function(pe) {
 
 	// model editing ----------------------------------------------------------
 
+	let real_p2p_distance2 = (p1, p2) => p1.distance2(p2)
+
 	e.draw_line = function(line) {
 
 		let p1 = line[0]
@@ -858,8 +907,7 @@ model3_component = function(pe) {
 		let line_ps = [p1, p2] // line's points as an open polygon.
 
 		// cut the line into segments at intersections with existing points.
-		line = line3(p1, p2)
-		e.line_hit_points(line, NEAR, real_p2p_distance2, function(int_line) {
+		line_hit_points(line, NEAR, real_p2p_distance2, null, null, function(int_line) {
 			let p = int_line[0]
 			let i = p.i
 			if (i !== p1.i && i !== p2.i) { // exclude end points.
@@ -876,7 +924,7 @@ model3_component = function(pe) {
 				line_ps.sort(function(sp1, sp2) {
 					let ds1 = p1.distance2(sp1)
 					let ds2 = p1.distance2(sp2)
-					return ds1 < ds2
+					return ds1 - ds2
 				})
 		}
 
@@ -885,17 +933,19 @@ model3_component = function(pe) {
 		// check if any of the line segments intersect any existing lines.
 		// the ones that do must be broken down further, and so must the
 		// existing lines that are cut by them.
-		let seg = line3()
 		let line_ps_len = line_ps.length
+
+		let seg = line3()
 		for (let i = 0; i < line_ps_len-1; i++) {
-			seg[0] = line_ps[i]
+			seg[0] = line_ps[i+0]
 			seg[1] = line_ps[i+1]
-			e.line_hit_lines(seg, NEAR, real_p2p_distance2, function(p, line) {
-				let li = p.li
-				p = p.clone()
-				p.li = li
-				line_ps.push(p)
-			})
+			line_hit_lines(null, seg, NEAR, real_p2p_distance2, 'clamp', null,
+				function(int_p) {
+					let p = int_p.clone()
+					p.cut_li = int_p.line.i
+					line_ps.push(p)
+					return true
+				})
 		}
 
 		// sort the points again if new points were added.
@@ -909,7 +959,7 @@ model3_component = function(pe) {
 			}
 
 		// create line segments.
-		for (let i = 0, len = line_ps.length; i < len-1; i++) {
+		for (let i = 0, n = line_ps.length; i < n-1; i++) {
 			let p1i = line_ps[i+0].i
 			let p2i = line_ps[i+1].i
 			add_line(p1i, p2i)
@@ -917,8 +967,8 @@ model3_component = function(pe) {
 
 		// cut intersecting lines in two.
 		for (let p of line_ps) {
-			if (p.li != null)
-				cut_line(p.li, p.i)
+			if (p.cut_li != null)
+				cut_line(p.cut_li, p.i)
 		}
 
 	}
@@ -1045,7 +1095,7 @@ model3_component = function(pe) {
 
 			}
 
-			if (DEBUG) {
+			if (LOG) {
 				log('pull.start', pull.face.index,
 					'edges:'+Object.keys(new_pp_edge).join(','),
 					'faces:'+Object.keys(new_pp_face).join(','),
@@ -1130,7 +1180,7 @@ model3_component = function(pe) {
 
 			pull.pull = function(p) {
 
-				pull.dir.closestPointToPoint(p, false, delta)
+				pull.dir.closest_point_to_point(p, false, delta)
 				delta.sub(pull.dir[0])
 
 				let i = 0
@@ -1147,14 +1197,14 @@ model3_component = function(pe) {
 
 		pull.stop = function() {
 			// TODO: make hole, etc.
-			if (DEBUG)
+			if (LOG)
 				log('pull.stop')
 		}
 
 		pull.cancel = function() {
 			// TODO
-			if (DEBUG)
-				print('pull.cancel')
+			if (LOG)
+				log('pull.cancel')
 		}
 
 		return pull
@@ -1257,6 +1307,7 @@ model3_component = function(pe) {
 	function update(models_buf, disabled_buf) {
 
 		if (points_changed) {
+
 			points_dab.set(0, points).setlen(point_count()).upload()
 
 			points_rr             .pos = points_dab.buffer
@@ -1266,6 +1317,7 @@ model3_component = function(pe) {
 		}
 
 		if (used_points_changed) {
+
 			let pn = point_count()
 			used_pis_dab.grow(pn, false)
 
@@ -1278,9 +1330,12 @@ model3_component = function(pe) {
 			used_pis_dab.setlen(i).upload()
 
 			points_rr.index = used_pis_dab.buffer
+
+			changed = true
 		}
 
 		if (used_lines_changed) {
+
 			let vln = edge_line_count
 			let iln = e.show_invisible_lines ? vln : 0
 
@@ -1313,9 +1368,12 @@ model3_component = function(pe) {
 
 			black_thin_lines_rr   .index = vdab.buffer
 			black_dashed_lines_rr .index = idab.buffer
+
+			changed = true
 		}
 
 		if (e.show_invisible_lines && (used_lines_changed || sel_lines_changed)) {
+
 			let max_ln = e.show_invisible_lines ? sel_lines.size : 0
 			let dab = sel_inv_edge_lis_dab
 			dab.grow(max_ln * 2, false)
@@ -1336,22 +1394,26 @@ model3_component = function(pe) {
 			blue_dashed_lines_rr.index = dab.buffer
 		}
 
-		for (let mesh of meshes)
-			if (!mesh.normals_valid)
-				for (let face of mesh)
-					for (let i = 0, teis = face.triangles(), n = teis.length; i < n; i++) {
-						let pi = face[teis[i]]
-						normals[3*pi+0] = 0
-						normals[3*pi+1] = 0
-						normals[3*pi+2] = 0
-					}
 
-		for (let mesh of meshes)
-			if (!mesh.normals_valid)
-				for (let face of mesh)
-					face.compute_smooth_normals(normals)
+		if (points_changed || faces_changed) {
 
-		faces_rr.update(mat_faces_map)
+			for (let mesh of meshes)
+				if (!mesh.normals_valid)
+					for (let face of mesh)
+						for (let i = 0, teis = face.triangles(), n = teis.length; i < n; i++) {
+							let pi = face[teis[i]]
+							normals[3*pi+0] = 0
+							normals[3*pi+1] = 0
+							normals[3*pi+2] = 0
+						}
+
+				for (let mesh of meshes)
+					if (!mesh.normals_valid)
+						for (let face of mesh)
+							face.compute_smooth_normals(normals)
+
+				faces_rr.update(e.id, mat_faces_map)
+		}
 
 		if (points_changed || used_lines_changed)
 			black_fat_lines_rr.update(each_nonedge_line, nonedge_line_count)
@@ -1375,12 +1437,15 @@ model3_component = function(pe) {
 		black_fat_lines_rr    .disabled = disabled_buf
 		blue_fat_lines_rr     .disabled = disabled_buf
 
+		let mouse_invalid = points_changed || faces_changed
+
 		points_changed      = false
 		used_points_changed = false
 		used_lines_changed  = false
+		faces_changed       = false
 		sel_lines_changed   = false
 
-		return e
+		return mouse_invalid
 	}
 
 	e.renderers = [
