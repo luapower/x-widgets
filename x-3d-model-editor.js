@@ -523,7 +523,7 @@ component('x-modeleditor', function(e) {
 			if (ds > max_hit_distance ** 2)
 				return
 
-			let ray = camera.raycast(int_p[0], int_p[1], _l2)
+			let ray = camera.raycast(int_p.x, int_p.y, _l2)
 			let int_line = ray.intersect_line(axis, _l3)
 			if (!int_line)
 				return
@@ -552,16 +552,16 @@ component('x-modeleditor', function(e) {
 		{
 		let int_line = line3()
 		let _l1 = line3()
-		e.main_axis_hit_line = function(model, line, int_p) {
+		e.main_axis_hit_line = function(model, line, out) {
 			let axis = _l1.set(v3.origin, main_axis).transform(model)
 			if (!axis.intersect_line(line, int_line))
 				return
 			let ds = int_line[0].distance2(int_line[1])
 			if (ds > NEAR ** 2)
 				return
-			int_p.set(int_line[1])
-			int_p.line_snap = main_axis_snap
-			return true
+			out.set(int_line[1])
+			out.line_snap = main_axis_snap
+			return out
 		}}
 
 		return e
@@ -1235,7 +1235,7 @@ component('x-modeleditor', function(e) {
 	let future_ref_point = v3()
 	let ref_point_update_after = timer(function() {
 		ref_point.update_point(future_ref_point)
-		ref_point_model.set_position(ref_point)
+		mat4.mul(cur_model, ref_point_model.reset().translate(ref_point), ref_point_model)
 	})
 
 	tools.line.pointermove = function() {
@@ -1275,7 +1275,7 @@ component('x-modeleditor', function(e) {
 
 					// snap point to axes originating at the ref point.
 					if (ref_point.visible) {
-						let axes_int_p = mouse_hit_axes(cur_line_model, hit_d)
+						let axes_int_p = mouse_hit_axes(ref_point_model, hit_d)
 						if (axes_int_p) {
 							p = axes_int_p
 							ref_line.snap = p.line_snap
@@ -1336,28 +1336,26 @@ component('x-modeleditor', function(e) {
 
 	tools.line.pointerdown = function() {
 		e.tooltip = ''
+		let rel_cur_line = cur_line.clone().transform(cur_inv_model)
+		let closing = cur_line.visible && cur_line[1].i != null || cur_line[1].li != null
 		if (cur_line.visible) {
-			let closing = cur_line[1].i != null || cur_line[1].li != null
-			let abs_cur_line = cur_line.clone()
-			cur_line.transform(cur_inv_model)
-			cur_comp.draw_line(cur_line)
-			cur_line.set(abs_cur_line)
+			cur_comp.draw_line(rel_cur_line)
 			ref_point.visible = false
 			update()
 			if (closing) {
 				tools.line.cancel()
 			} else {
 				cur_line[0].assign(cur_line[1])
-				cur_line_model.set_position(cur_line[0])
 				cur_line.update()
 			}
 		} else {
 			if (cur_line[0].i != null && ref_point.point.i == cur_line[0].i)
 				ref_point.visible = false
-			cur_line_model.set_position(cur_line[1])
 			cur_line.visible = true
 			cur_line.update()
 		}
+		if (!closing)
+			mat4.mul(cur_model, cur_line_model.reset().translate(rel_cur_line[1]), cur_line_model)
 	}
 
 	// rectangle tool ---------------------------------------------------------
