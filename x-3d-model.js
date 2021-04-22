@@ -285,7 +285,7 @@ model3_component = function(pe) {
 		push_undo(merge_lines, li1, li2, rc1)
 	}
 
-	function change_line_endpoint(li, new_pi, old_pi) {
+	function replace_line_endpoint(li, new_pi, old_pi) {
 
 		let pi0 = lines[5*li+0]
 		let pi1 = lines[5*li+1]
@@ -300,9 +300,9 @@ model3_component = function(pe) {
 		unref_point(old_pi)
 
 		if (LOG)
-			log('change_line_endpoint', li, '@'+i, old_pi, '->', new_pi)
+			log('replace_line_endpoint', li, '@'+i, old_pi, '->', new_pi)
 
-		push_undo(change_line_endpoint, old_pi, new_pi)
+		push_undo(replace_line_endpoint, old_pi, new_pi)
 	}
 
 	let face = {is_face3: true}
@@ -455,14 +455,25 @@ model3_component = function(pe) {
 		faces_changed = true
 	}
 
-	function change_face_point(face, ei, pi) {
+	function replace_edge(face, ei, li, need_li0) {
+		let li0 = face.lis[ei]
+		assert(need_li0 == null || need_li0 == li0)
+		face.lis[ei] = li
+
+		if (LOG)
+			log('replace_edge', face.i, '@'+ei, li0, '->', li)
+
+		push_undo(replace_edge, face, ei, li0, li)
+	}
+
+	function replace_face_point(face, ei, pi) {
 		let pi0 = face[ei]
 		face[ei] = pi
 
 		if (LOG)
-			log('change_face_point', face.i, '@'+ei, pi0, '->', pi)
+			log('replace_face_point', face.i, '@'+ei, pi0, '->', pi)
 
-		push_undo(change_face_point, face, ei, pi0)
+		push_undo(replace_face_point, face, ei, pi0)
 	}
 
 	function each_line_face(li, f) {
@@ -991,9 +1002,10 @@ model3_component = function(pe) {
 		pull.face = p.face
 
 		// pull direction line, starting on the plane and with unit length.
-		pull.dir = line3()
-		pull.dir[0].set(p)
-		pull.dir[1].set(p).add(pull.face.plane().normal)
+		pull.origin = v3()
+		pull.line = line3(pull.origin, v3())
+		pull.line[0].set(p)
+		pull.line[1].set(p).add(pull.face.plane().normal)
 
 		// faces and lines to exclude when hit-testing while pulling.
 		// all moving geometry must be added here.
@@ -1063,7 +1075,9 @@ model3_component = function(pe) {
 									assert(is_first || is_second)
 									let endpoint_ei = (pull_ei + ((is_first) ? 0 : 1)) % en
 
-									if (!is_side_edge_pp)
+									if (is_side_edge_pp)
+										moving_lis.add(side_edge.i)
+									else
 										new_pp_edge.set(endpoint_ei, true)
 
 									moving_faces.add(face)
@@ -1092,7 +1106,7 @@ model3_component = function(pe) {
 
 				}
 
-				if (!pp_faces_found) {
+				if (!pp_faces_found) { // no pp faces found: create one along with its two edges.
 					new_pp_face.set(pull_ei, true)
 					new_pp_edge.set(pull_ei, true)
 					new_pp_edge.set((pull_ei+1) % en, true)
@@ -1119,10 +1133,11 @@ model3_component = function(pe) {
 				let new_pi = add_point(p)
 				let li = add_line(old_pi, new_pi)
 				new_pp_edge.set(ei, li)
+				moving_lis.add(li)
 
 				// replace point in pulled face.
 				old_points[ei] = old_pi
-				change_face_point(pull.face, ei, new_pi)
+				replace_face_point(pull.face, ei, new_pi)
 				pull.face.invalidate()
 
 				// update the endpoint of pulled face edges that are connected to this point.
@@ -1130,8 +1145,8 @@ model3_component = function(pe) {
 				let prev_ei = mod(ei - 1, en)
 				let next_li = pull.face.lis[next_ei]
 				let prev_li = pull.face.lis[prev_ei]
-				if (!new_pp_face.get(next_ei)) change_line_endpoint(next_li, new_pi, old_pi)
-				if (!new_pp_face.get(prev_ei)) change_line_endpoint(prev_li, new_pi, old_pi)
+				if (!new_pp_face.get(next_ei)) replace_line_endpoint(next_li, new_pi, old_pi)
+				if (!new_pp_face.get(prev_ei)) replace_line_endpoint(prev_li, new_pi, old_pi)
 			}
 
 			// create pp side faces using newly created pp side edges.
@@ -1154,7 +1169,7 @@ model3_component = function(pe) {
 				moving_faces.add(face)
 
 				// replace edge in pulled face.
-				pull.face.lis[e1i] = pull_li
+				replace_edge(pull.face, e1i, pull_li, old_pull_li)
 			}
 
 			// extend pp side faces with newly created pp side edges.
@@ -1170,9 +1185,17 @@ model3_component = function(pe) {
 				}
 			}
 
+			// mark final pulled face's edges as non-hittable.
+			for (let li of pull.face.lis)
+				moving_lis.add(li)
+
 		}
 
 		pull.can_hit = function(p) {
+			if (!p.comp)
+				return false
+			if (p.comp != e)
+				return true
 			return (!(moving_faces.has(p.face) || moving_lis.has(p.li)))
 		}
 
@@ -1180,15 +1203,16 @@ model3_component = function(pe) {
 		let initial_ps = pull.face.map(pi => get_point(pi, v3()))
 		let _v0 = v3()
 		let _v1 = v3()
-		pull.pull = function(p) {
+		pull.pull = function(delta_len) {
 
-			let delta = pull.dir.closest_point_to_point(p, false, _v0).sub(pull.dir[0])
+			let delta = pull.line.delta(_v0).set_len(delta_len)
 
 			let i = 0
 			for (let pi of pull.face) {
 				let p = initial_ps[i++].to(_v1).add(delta)
 				move_point(pi, p)
 			}
+
 			for (let face of moving_faces)
 				face.invalidate()
 

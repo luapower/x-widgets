@@ -655,9 +655,6 @@ component('x-modeleditor', function(e) {
 			mouse.valid = true
 		}
 
-		if (!mouse.valid)
-			return
-
 		let rr_hit = hit_test_rr.hit_test(mouse.x, mouse.y)
 		if (!rr_hit)
 			return
@@ -725,9 +722,6 @@ component('x-modeleditor', function(e) {
 	function mouse_hit_model(opt) {
 
 		let int_p = mouse_hit_faces()
-
-		if (!mouse.valid)
-			return
 
 		let hit_d = max_hit_distances[opt.distance]
 		let axes_model = opt.axes_model
@@ -898,6 +892,7 @@ component('x-modeleditor', function(e) {
 	let offsets = {
 		line          : [0, 25],
 		pull          : [12, 0],
+		pullno        : [12, 0],
 		select        : [5, 12],
 		select_add    : [5, 12],
 		select_remove : [5, 12],
@@ -1156,22 +1151,15 @@ component('x-modeleditor', function(e) {
 
 	tools.line = {}
 
-	let cur_point, cur_line, ref_point, ref_line
+	let cur_point = helper_point(v3(), {visible: false})
+	let ref_point = helper_point(v3(), {visible: false, snap: 'ref_point'})
+	let cur_line  = helper_line(line3(v3(), cur_point), {visible: false})
+	let ref_line  = helper_line(line3(), {color: black, type: 'dashed', visible: false})
+
 	let last_point_model = mat4()
 	let ref_point_model = mat4()
 
-	function init_line_tool() {
-
-		cur_point = helper_point(v3(), {visible: false})
-		ref_point = helper_point(v3(), {visible: false, snap: 'ref_point'})
-		cur_line  = helper_line(line3(v3(), cur_point), {visible: false})
-		ref_line  = helper_line(line3(), {color: black, type: 'dashed', visible: false})
-
-		init_line_tool = noop
-	}
-
 	tools.line.bind = function(on) {
-		init_line_tool()
 		if (!on) {
 			tools.line.cancel()
 		}
@@ -1218,7 +1206,6 @@ component('x-modeleditor', function(e) {
 		let rel_ref_point = ref_point.clone().transform(cur_inv_model)
 		mat4.mul(cur_model, ref_point_model.reset().translate(rel_ref_point), ref_point_model)
 
-		print(ref_point_model)
 	})
 
 	tools.line.pointermove = function() {
@@ -1382,6 +1369,10 @@ component('x-modeleditor', function(e) {
 				return true
 			} else {
 				let p = mouse_hit_faces()
+				let invalid_target = p && p.comp && p.comp != cur_comp
+				e.cursor = 'pull'+(invalid_target ? 'no' : '')
+				if (invalid_target)
+					p = null
 				let changed = (hit_p && hit_p.face) != (p && p.face)
 				if (changed) {
 					select_all(false)
@@ -1395,42 +1386,58 @@ component('x-modeleditor', function(e) {
 
 		{
 		let _line0 = line3()
+		let _v0 = v3()
+		let _v1 = v3()
 		function move() {
 			mouse.prevent_validate = true
 			if (!pull)
 				start()
-			let p = mouse_hit_faces()
-			if (!p || !pull.can_hit(p)) {
-				let int_line = mouse.ray.intersect_line(pull.dir, _line0)
-				if (int_line)
-					p = int_line[0]
+			let p = mouse_hit_model({mode: 'draw', distance: 'snap'})
+			let hit_model = p && pull.can_hit(p)
+			if (!hit_model) {
+				let int_line = mouse.ray.intersect_line(pull.line, _line0)
+				p = int_line && int_line[0]
+			}
+			if (!p)
+				return
+			let origin = pull.line.closest_point_to_point(p, false, _v0)
+			let delta_line = origin.to(_v1).sub(pull.line[0])
+			let delta = sign(delta_line.dot(pull.face.plane().normal)) * delta_line.len()
 
-			}
-			if (p) {
-				pull.pull(p)
-				update()
-			}
+			ref_line.set(origin, p)
+			ref_line.visible = hit_model
+			ref_line.update()
+
+			ref_point.set(p)
+			ref_point.snap = p.snap
+			ref_point.visible = hit_model
+			ref_point.update()
+			e.tooltip = snap_tooltips[p.snap || p.line_snap] || p.tooltip
+
+			pull.pull(delta)
+			update()
 		}}
 
 		function start() {
 			pull = cur_comp.start_pull(hit_p)
 			update()
-
 			cur_comp.create_debug_points()
 		}
 
-		function stop() {
-			pull.stop()
+		function finish() {
 			pull = null
-			select_all(false)
+			ref_point.visible = false
+			ref_point.update()
+			ref_line.visible = false
+			ref_line.update()
 			update()
-
 			cur_comp.create_debug_points()
 		}
 
 		tools.pull.pointerdown = function(capture) {
 			if (pull) {
-				stop()
+				pull.stop()
+			finish()
 			} else if (hit_p != null) {
 				start()
 				/*
@@ -1448,8 +1455,7 @@ component('x-modeleditor', function(e) {
 			if (!pull)
 				return
 			pull.cancel()
-			pull = null
-			update()
+			finish()
 		}
 
 	}
@@ -1573,16 +1579,22 @@ component('x-modeleditor', function(e) {
 		if (key == 'Delete') {
 			remove_selection()
 			update()
-		} else if (key == 'h') {
+			return false
+		}
+		if (key == 'h') {
 			cur_comp.toggle_invisible_lines()
 			update()
+			return false
 		}
 		if (tool.keydown)
 			if (tool.keydown(key) === false)
 				return false
-		if (key == 'Escape')
+		if (key == 'Escape') {
 			if (tool.cancel)
 				tool.cancel()
+			fire_pointermove()
+			return false
+		}
 		if (shift || ctrl)
 			return
 		let toolname = tool_keys[key.toLowerCase()]
@@ -1654,7 +1666,13 @@ component('x-modeleditor', function(e) {
 		//m.faces[1].material = mat1
 		//m.faces[2].material = mat2
 
-		root.comp.set(m)
+		let c0 = root.comp
+		let c1 = e.create_component({name: 'c1'})
+
+		c0.set(m)
+		c1.set(m)
+
+		c0.add_child(c1, mat4().translate(3, 0, 0))
 
 		/*
 		root.comp.set_line_smoothness(0, 1)
@@ -1662,7 +1680,6 @@ component('x-modeleditor', function(e) {
 		root.comp.set_line_opacity(0, 0)
 		root.comp.set_line_opacity(2, 0)
 
-		let c0 = root.comp
 		let c1 = e.create_component({name: 'c1'})
 		let c2 = e.create_component({name: 'c2'})
 		let cg = e.create_component({name: 'cg'})
