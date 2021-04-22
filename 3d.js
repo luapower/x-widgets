@@ -70,7 +70,7 @@
 
 	line3 [p0, p1]
 		set(line | p1,p2) assign to clone equals to|from[_line3]_array
-		center delta distance2 distance at reverse len set_len
+		delta distance2 distance at reverse len set_len
 		closest_point_to_point_t closest_point_to_point intersect_line intersect_plane intersects_plane
 		transform
 
@@ -2502,7 +2502,7 @@ poly3p._update_plane = function() {
 	pl.set_from_poly(this)
 }
 poly3p.plane = function() {
-	return this.update_if_invalid()._plane
+	return this._update_if_invalid()._plane
 }
 
 // xy_quat projects points on the xy plane for in-plane calculations.
@@ -2512,7 +2512,7 @@ poly3p._update_xy_quat = function() {
 	this._xy_quat.set_from_unit_vectors(this._plane.normal, v3.z_axis)
 }
 poly3p.xy_quat = function() {
-	return this.update_if_invalid()._xy_quat
+	return this._update_if_invalid()._xy_quat
 }
 
 // check if a polygon is a convex quad (the most common case for trivial triangulation).
@@ -2600,15 +2600,13 @@ poly3p._update_triangles = function() {
 			ps[2*i+1] = p[1]
 		}
 		out = earcut2(ps, null, 2)
-		print(ps, out, tri_count)
-		assert(out.length == tri_count)
 	}
 	this._triangles = out
 }
 }
 
 poly3p.triangles = function() {
-	return this.update_if_invalid()._triangles
+	return this._update_if_invalid()._triangles
 }
 
 poly3p.triangle = function(ti, out) {
@@ -2699,13 +2697,13 @@ poly3p.uvs = function(uvm, tex_uv, out) {
 	return out
 }
 
-poly3p.update_if_invalid = function() {
+poly3p._update_if_invalid = function() {
 	if (this.invalid)
-		this.update()
+		this._update()
 	return this
 }
 
-poly3p.update = function() {
+poly3p._update = function() {
 	this.invalid = false
 	this._update_plane()
 	this._update_xy_quat()
@@ -2717,6 +2715,17 @@ poly3p.invalidate = function() {
 	this.invalid = true
 	return this
 }
+
+poly3p.center = function(out) {
+	for (let i = 0, n = this.point_count(); i < n; i++)
+		out.add(this.get_point(i, _v0))
+	let len = this.length
+	out.x /= len
+	out.y /= len
+	out.z /= len
+	return out
+}
+
 
 /*
 // region-finding algorithm --------------------------------------------------
@@ -2887,10 +2896,6 @@ let line3_class = class line3 extends Array {
 			line[0].equals(this[0]) &&
 			line[1].equals(this[1])
 		)
-	}
-
-	center(out) {
-		return v3.add(this[0], this[1], out).muls(0.5)
 	}
 
 	delta(out) {

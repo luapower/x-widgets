@@ -1186,6 +1186,12 @@ gl.helper_lines_renderer = function() {
 
 		}}
 
+		t.update_for = function(line) {
+			set_line(t.indexOf(line), line)
+			dab_pos  .upload_invalid()
+			dab_color.upload_invalid()
+		}
+
 		t.update = function() {
 
 			let len = 2 * t.length
@@ -1204,11 +1210,6 @@ gl.helper_lines_renderer = function() {
 			t.rr.color = dab_color.buffer
 		}
 
-		t.update_for = function(line) {
-			set_line(t.indexOf(line), line)
-			dab_pos  .upload_invalid()
-			dab_color.upload_invalid()
-		}
 	}
 
 	sldr(e.s)

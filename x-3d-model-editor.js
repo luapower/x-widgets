@@ -7,6 +7,7 @@
 
 TRACE = 0
 LOG   = 1
+DEBUG = 0
 
 component('x-modeleditor', function(e) {
 
@@ -68,7 +69,7 @@ component('x-modeleditor', function(e) {
 
 		skybox.update_view(camera.pos)
 
-		update_dot_positions()
+		update_helper_points()
 		update_sunlight_pos()
 		update_renderer()
 
@@ -263,6 +264,7 @@ component('x-modeleditor', function(e) {
 				child_added      : child_added,
 				child_removed    : child_removed,
 				layer_changed    : layer_changed,
+				helper_point     : helper_point,
 			}))
 		let id = comps.length
 		comps[id] = comp
@@ -388,6 +390,7 @@ component('x-modeleditor', function(e) {
 	function update() {
 		update_instances()
 		update_comp(cur_comp)
+		render()
 	}
 
 	function update_all() {
@@ -458,6 +461,7 @@ component('x-modeleditor', function(e) {
 				if (int_p) {
 					int_p.inst_id = i
 					int_p.comp = comp
+					int_p.path = instance_path(int_p.comp, int_p.inst_id)
 					return int_p
 				}
 			}
@@ -467,8 +471,6 @@ component('x-modeleditor', function(e) {
 	// selection
 
 	function select_all(sel, with_children) {
-		if (!cur_comp)
-			return
 		cur_comp.select_all(sel, with_children)
 	}
 
@@ -646,7 +648,7 @@ component('x-modeleditor', function(e) {
 	let _l0 = line3()
 	let _m0 = mat4()
 	let _pl0 = plane()
-	function _mouse_hit_faces() {
+	function mouse_hit_faces() {
 
 		if (!(mouse.valid || mouse.prevent_validate)) {
 			hit_test_rr.render(draw_model_for_hit_test)
@@ -679,6 +681,7 @@ component('x-modeleditor', function(e) {
 		int_p.plane = plane
 		int_p.face = face
 		int_p.snap = 'face'
+		int_p.path = instance_path(int_p.comp, int_p.inst_id)
 
 		return int_p
 
@@ -721,7 +724,7 @@ component('x-modeleditor', function(e) {
 	let _v0 = v3()
 	function mouse_hit_model(opt) {
 
-		let int_p = _mouse_hit_faces()
+		let int_p = mouse_hit_faces()
 
 		if (!mouse.valid)
 			return
@@ -812,18 +815,15 @@ component('x-modeleditor', function(e) {
 				int_p = axes_model && mouse_hit_axes(axes_model, hit_d)
 				int_p ||= hit_ref_planes(axes_model || cur_model)
 
-
 			} else if (mode == 'select') {
 
 				// don't hit anything else so we can unselect all.
 
-			} else
+			} else {
 				assert(false)
+			}
 
 		}
-
-		if (int_p)
-			int_p.path = instance_path(int_p.comp, int_p.inst_id)
 
 		return int_p
 
@@ -844,7 +844,10 @@ component('x-modeleditor', function(e) {
 			path = [root]
 		if (cur_path.equals(path))
 			return
-		select_all(false)
+		if (cur_comp) {
+			select_all(false)
+			update() // update cur_comp before it changes
+		}
 		cur_path.set(path)
 		cur_model.reset()
 		cur_comp = cur_path.last.comp
@@ -894,6 +897,7 @@ component('x-modeleditor', function(e) {
 	}
 	let offsets = {
 		line          : [0, 25],
+		pull          : [12, 0],
 		select        : [5, 12],
 		select_add    : [5, 12],
 		select_remove : [5, 12],
@@ -932,72 +936,52 @@ component('x-modeleditor', function(e) {
 	})
 	}
 
+	// html-rendered helper points --------------------------------------------
+
+	function helper_point(p, opt) {
+
+		p = p || v3()
+		assign(p, opt)
+
+		let s = 'model-editor-dot'
+		let e = div({class: (p.text != null ? s+'-debug '+s+'-debug-'+p.type : s)})
+		if (p.text != null)
+			e.set(p.text)
+
+		{
+		let _v0 = v2()
+		p.update = function() {
+			let sp = camera.world_to_screen(p, _v0)
+			e.x = sp[0]
+			e.y = sp[1]
+			e.attr('snap', p.snap)
+			e.show(p.visible !== false)
+		}}
+
+		p.free = function() {
+			e.remove()
+		}
+
+		p.update()
+		pe.add(e)
+		e.point = p
+		e.update = p.update
+
+		return p
+	}
+
+	function update_helper_points() {
+		for (let ce of e.at)
+			if (ce.update)
+				ce.update()
+	}
+
 	// helper lines -----------------------------------------------------------
 
 	let helper_lines_rr = gl.helper_lines_renderer()
 
-	let helper_lines = {}
-	function helper_line(name, line1, opt) {
-		line = helper_lines[name]
-		if (!line) {
-			line = helper_lines_rr.line(line1, opt.color, opt.type, opt.visible)
-			line.name = name
-			helper_lines[name] = line
-		} else {
-			line.color = opt.color
-			line.set(line1)
-			line.update()
-		}
-		render()
-		return line
-	}
-
-	// html-rendered helper dots ----------------------------------------------
-
-	function helper_dot(point, text, text_class) {
-
-		let s = 'model-editor-dot'
-		let e = div({class: (text != null ? s+'-debug '+s+'-debug-'+text_class : s)})
-		if (text != null)
-			e.set(text)
-
-		e.point = point || v3()
-
-		let _p = v2()
-		e.update = function() {
-			let p = camera.world_to_screen(e.point, _p)
-			e.x = p[0]
-			e.y = p[1]
-			e.attr('snap', e.point.snap)
-		}
-
-		e.update_point = function(p) {
-			let snap = e.point.snap
-			assign(e.point, p)
-			e.point.snap = snap
-			e.visible = true
-			e.update()
-		}
-
-		property(e, 'visible',
-			function()  { return !e.hasattr('hidden') },
-			function(v) { e.show(!!v) }
-		)
-
-		e.free = function() {
-			e.remove()
-		}
-
-		e.update()
-		pe.add(e)
-
-		return e
-	}
-
-	function update_dot_positions() {
-		for (let ce of e.at)
-			if (ce.update)
-				ce.update()
+	function helper_line(line, opt) {
+		return helper_lines_rr.line(line, opt.color, opt.type, opt.visible)
 	}
 
 	// direct-manipulation tools ==============================================
@@ -1099,33 +1083,39 @@ component('x-modeleditor', function(e) {
 
 	tools.select = {}
 
-	{
-	let cur_mode
-
-	let update_cur_mode = function() {
-		cur_mode = shift && ctrl && 'remove'
+	function update_select_mode() {
+		let mode = shift && ctrl && 'remove'
 			|| shift && 'toggle' || ctrl && 'add' || null
-		e.cursor = 'select' + (cur_mode && '_' + cur_mode || '')
+		e.cursor = 'select' + (mode && '_' + mode || '')
+		return mode
 	}
 
 	tools.select.keydown = function(key) {
-		update_cur_mode()
+		update_select_mode()
 		if (key == 'Escape') {
 			exit_edit()
 			update()
-			render()
+			return false
+		}
+		if (key == 'Enter') {
+			let child = cur_comp.selected_child
+			if (child) {
+				enter_edit(cur_path.slice().extend([child]))
+				update()
+			}
 			return false
 		}
 	}
 
 	tools.select.keyup = function() {
-		update_cur_mode()
+		update_select_mode()
 	}
 
 	tools.select.click = function(nclicks) {
 		if (nclicks > 3)
 			return
 		let p = mouse_hit_model({mode: 'select', distance: 'select'})
+		let cur_mode = update_select_mode()
 		if (!p && nclicks == 1 && !cur_mode) {
 			select_all(false)
 		} else if (p && nclicks == 3) {
@@ -1156,9 +1146,6 @@ component('x-modeleditor', function(e) {
 			}
 		}
 		update()
-		render()
-	}
-
 	}
 
 	// move tool --------------------------------------------------------------
@@ -1170,25 +1157,15 @@ component('x-modeleditor', function(e) {
 	tools.line = {}
 
 	let cur_point, cur_line, ref_point, ref_line
-	let last_point_model
-	let ref_point_model
+	let last_point_model = mat4()
+	let ref_point_model = mat4()
 
 	function init_line_tool() {
 
-		let endp = v3()
-		cur_point = helper_dot(endp)
-		cur_point.visible = false
-
-		cur_line = helper_line('cur_line', line3(v3(), endp), {visible: false})
-
-		ref_point = helper_dot()
-		ref_point.point.snap = 'ref_point'
-		ref_point.visible = false
-
-		ref_line = helper_line('ref_line', line3(), {color: black, type: 'dashed', visible: false})
-
-		cur_line_model = mat4()
-		ref_point_model = mat4()
+		cur_point = helper_point(v3(), {visible: false})
+		ref_point = helper_point(v3(), {visible: false, snap: 'ref_point'})
+		cur_line  = helper_line(line3(v3(), cur_point), {visible: false})
+		ref_line  = helper_line(line3(), {color: black, type: 'dashed', visible: false})
 
 		init_line_tool = noop
 	}
@@ -1196,22 +1173,21 @@ component('x-modeleditor', function(e) {
 	tools.line.bind = function(on) {
 		init_line_tool()
 		if (!on) {
-			cur_point.visible = false
-			cur_line.visible = false
-			ref_point.visible = false
-			ref_line.visible = false
-			ref_line.update()
+			tools.line.cancel()
 		}
 	}
 
 	tools.line.cancel = function() {
 		e.tooltip = ''
-		cur_line.visible = false
-		cur_line.update()
-
+		cur_point.visible = false
 		ref_point.visible = false
-		ref_line.visible = false
-		ref_line.update()
+		cur_line .visible = false
+		ref_line .visible = false
+		cur_point.update()
+		ref_point.update()
+		cur_line .update()
+		ref_line .update()
+		update()
 	}
 
 	let snap_tooltips = {
@@ -1234,8 +1210,15 @@ component('x-modeleditor', function(e) {
 
 	let future_ref_point = v3()
 	let ref_point_update_after = timer(function() {
-		ref_point.update_point(future_ref_point)
-		mat4.mul(cur_model, ref_point_model.reset().translate(ref_point), ref_point_model)
+
+		ref_point.set(future_ref_point)
+		ref_point.visible = true
+		ref_point.update()
+
+		let rel_ref_point = ref_point.clone().transform(cur_inv_model)
+		mat4.mul(cur_model, ref_point_model.reset().translate(rel_ref_point), ref_point_model)
+
+		print(ref_point_model)
 	})
 
 	tools.line.pointermove = function() {
@@ -1255,7 +1238,7 @@ component('x-modeleditor', function(e) {
 		ref_point_update_after(false)
 
 		let p = mouse_hit_model({mode: 'draw', distance: 'snap',
-				axes_model: cur_line.visible ? cur_line_model : null})
+				axes_model: cur_line.visible ? last_point_model : null})
 
 		let hit_d = max_hit_distances.snap
 
@@ -1279,7 +1262,8 @@ component('x-modeleditor', function(e) {
 						if (axes_int_p) {
 							p = axes_int_p
 							ref_line.snap = p.line_snap
-							ref_line.set(ref_point.point, p)
+							ref_line.set(p, ref_point)
+							ref_line.visible = true
 						}
 					}
 
@@ -1304,7 +1288,8 @@ component('x-modeleditor', function(e) {
 							p.assign(axes_int_p)
 							ref_line.snap = axes_int_p.line_snap
 							p.line_snap = p_line_snap
-							ref_line.set(ref_point.point, p)
+							ref_line.set(p, ref_point)
+							ref_line.visible = true
 						}
 
 					}
@@ -1331,17 +1316,21 @@ component('x-modeleditor', function(e) {
 		cur_line.update()
 		ref_line.update()
 
-		render()
+		update()
 	}
 
 	tools.line.pointerdown = function() {
 		e.tooltip = ''
 		let rel_cur_line = cur_line.clone().transform(cur_inv_model)
-		let closing = cur_line.visible && cur_line[1].i != null || cur_line[1].li != null
+		let closing = cur_line.visible && (cur_line[1].i != null || cur_line[1].li != null)
 		if (cur_line.visible) {
+
 			cur_comp.draw_line(rel_cur_line)
-			ref_point.visible = false
 			update()
+
+			ref_point.visible = false
+			ref_point.update()
+
 			if (closing) {
 				tools.line.cancel()
 			} else {
@@ -1349,13 +1338,19 @@ component('x-modeleditor', function(e) {
 				cur_line.update()
 			}
 		} else {
-			if (cur_line[0].i != null && ref_point.point.i == cur_line[0].i)
+			if (cur_line[0].i != null && ref_point.i == cur_line[0].i) {
 				ref_point.visible = false
+				ref_point.update()
+			}
 			cur_line.visible = true
 			cur_line.update()
 		}
-		if (!closing)
-			mat4.mul(cur_model, cur_line_model.reset().translate(rel_cur_line[1]), cur_line_model)
+
+		if (!closing) {
+			mat4.mul(cur_model, last_point_model.reset().translate(rel_cur_line[1]), last_point_model)
+		}
+
+		update()
 	}
 
 	// rectangle tool ---------------------------------------------------------
@@ -1377,6 +1372,8 @@ component('x-modeleditor', function(e) {
 		tools.pull.bind = function(on) {
 			if (!on)
 				tools.pull.cancel()
+			select_all(false)
+			update()
 		}
 
 		tools.pull.pointermove = function() {
@@ -1384,63 +1381,75 @@ component('x-modeleditor', function(e) {
 				move()
 				return true
 			} else {
-				let p = mouse_hit_model()
-				if (p && p.snap == 'face') {
-					p.comp.select_face(p.face)
-				} else {
-					p = null
+				let p = mouse_hit_faces()
+				let changed = (hit_p && hit_p.face) != (p && p.face)
+				if (changed) {
 					select_all(false)
+					if (p)
+						p.comp.select_face(p.face, 'add')
+					hit_p = p && (hit_p || v3()).assign(p)
+					update()
 				}
-				hit_p = p
-				if ((hit_p && hit_p.face) !== (p && p.face)) // hit face changed
-					render()
 			}
 		}
 
-		let _line = line3()
-
+		{
+		let _line0 = line3()
 		function move() {
+			mouse.prevent_validate = true
 			if (!pull)
 				start()
-			let p = mouse_hit_model()
+			let p = mouse_hit_faces()
 			if (!p || !pull.can_hit(p)) {
-				let int_line = mouse.ray.intersectLine(pull.dir, false, _line)
+				let int_line = mouse.ray.intersect_line(pull.dir, _line0)
 				if (int_line)
 					p = int_line[0]
 
 			}
-			if (p)
+			if (p) {
 				pull.pull(p)
-		}
+				update()
+			}
+		}}
 
 		function start() {
 			pull = cur_comp.start_pull(hit_p)
+			update()
+
+			cur_comp.create_debug_points()
 		}
 
 		function stop() {
 			pull.stop()
 			pull = null
 			select_all(false)
+			update()
+
+			cur_comp.create_debug_points()
 		}
 
 		tools.pull.pointerdown = function(capture) {
 			if (pull) {
 				stop()
 			} else if (hit_p != null) {
+				start()
+				/*
 				return capture(move, function() {
 					if (pull)
 						stop()
 					else
 						start()
 				})
+				*/
 			}
 		}
 
 		tools.pull.cancel = function() {
-			if (pull) {
-				pull.cancel()
-				pull = null
-			}
+			if (!pull)
+				return
+			pull.cancel()
+			pull = null
+			update()
 		}
 
 	}
@@ -1481,25 +1490,24 @@ component('x-modeleditor', function(e) {
 		if (update_mouse(ev))
 			fire_pointermove()
 		if (tool.pointerdown) {
-			let captured_move
+			let captured, captured_move
 			function capture(move, up) {
-				let movewrap = function(ev) {
+				let movewrap = move && function(ev) {
 					update_mouse(ev)
 					if (move)
 						return move()
 				}
-				let upwrap = function(ev) {
-					mouse.captured = false
+				let upwrap = up && function(ev) {
 					update_mouse(ev)
 					if (up)
 						return up()
 				}
-				mouse.captured = e.capture_pointer(ev, movewrap, upwrap)
+				captured = e.capture_pointer(ev, movewrap, upwrap)
 				captured_move = move
 			}
 			tool.pointerdown(capture)
 			// guarantee a mouse move after each mouse down.
-			if (!mouse.captured)
+			if (!captured)
 				fire_pointermove()
 			else if (captured_move)
 				captured_move()
@@ -1534,9 +1542,9 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('wheel', function(ev, dy) {
-		mouse.prevent_validate = false
 		if (update_mouse(ev))
 			fire_pointermove()
+		mouse.prevent_validate = false
 		let hit_point = mouse_hit_model({mode: 'camera'})
 		camera.dolly(hit_point, 1 + 0.4 * dy)
 		update_camera()
@@ -1564,10 +1572,10 @@ component('x-modeleditor', function(e) {
 		update_keys(ev)
 		if (key == 'Delete') {
 			remove_selection()
-			render()
+			update()
 		} else if (key == 'h') {
 			cur_comp.toggle_invisible_lines()
-			render()
+			update()
 		}
 		if (tool.keydown)
 			if (tool.keydown(key) === false)
@@ -1638,16 +1646,17 @@ component('x-modeleditor', function(e) {
 				[5, 1, 2, 6],
 			],
 			lines: [
-				8, 9,
+				//8, 9,
 			],
 		}
 
-		m.faces[0].material = mat1
-		m.faces[1].material = mat1
-		m.faces[2].material = mat2
+		//m.faces[0].material = mat1
+		//m.faces[1].material = mat1
+		//m.faces[2].material = mat2
 
 		root.comp.set(m)
 
+		/*
 		root.comp.set_line_smoothness(0, 1)
 		root.comp.set_line_smoothness(2, 1)
 		root.comp.set_line_opacity(0, 0)
@@ -1676,6 +1685,10 @@ component('x-modeleditor', function(e) {
 				for (let k = 0; k < 2; k++)
 					c1.add_child(c2, mat4().translate(0 + i * 3, 3 + j * 3, -5 - k * 3))
 
+		*/
+
+		root.comp.create_debug_points()
+
 	}
 
 	// init -------------------------------------------------------------------
@@ -1685,13 +1698,15 @@ component('x-modeleditor', function(e) {
 	init_renderer()
 	update_sun_pos()
 	create_test_objects()
-	enter_edit([root, root.comp.children[0]])//, root.comp.children[0].comp.children[5]])
+	enter_edit([root]) // , root.comp.children[0]])//, root.comp.children[0].comp.children[5]])
 	update_all()
 
 	e.tool = 'orbit'
 
 	e.on('bind', function(on) {
 		// TODO: init/free DOM things...
+		if (on) {
+		}
 	})
 
 })

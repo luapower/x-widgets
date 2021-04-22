@@ -325,6 +325,7 @@ method(Array, 'extend', function(a) {
 	this.length += n
 	for (let i = 0; i < n; i++)
 		this[i0+i] = a[i]
+	return this
 })
 
 method(Array, 'set', function(a) {
@@ -332,6 +333,7 @@ method(Array, 'set', function(a) {
 	this.length = n
 	for (let i = 0; i < n; i++)
 		this[i] = a[i]
+	return this
 })
 
 method(Array, 'insert', function(i, v) {
@@ -339,6 +341,7 @@ method(Array, 'insert', function(i, v) {
 		this[i] = v
 	else
 		this.splice(i, 0, v)
+	return this
 })
 
 method(Array, 'remove', function(i) {

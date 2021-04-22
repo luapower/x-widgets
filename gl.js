@@ -1264,6 +1264,7 @@ gl.dyn_arr_buffer = function(type, data_or_cap, inst_div, for_index) {
 
 	property(dab, 'array', () => da.array)
 	property(dab, 'buffer', () => db.buffer)
+	property(dab, 'invalid', () => da.invalid)
 
 	return dab
 }
