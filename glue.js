@@ -888,31 +888,49 @@ function week_start_offset() {
 // colors --------------------------------------------------------------------
 
 {
-	// hsl is in (0..360, 0..1, 0..1); rgb is #rrggbb
-	let h2rgb = function(m1, m2, h) {
-		if (h < 0) h = h+1
-		if (h > 1) h = h-1
-		if (h*6 < 1)
-			return m1+(m2-m1)*h*6
-		else if (h*2 < 1)
-			return m2
-		else if (h*3 < 2)
-			return m1+(m2-m1)*(2/3-h)*6
-		else
-			return m1
-	}
 
-	let hex = x => round(255 * x).toString(16).padStart(2, '0')
+// hsl is in (0..360, 0..1, 0..1); rgb is #rrggbb
+let h2rgb = function(m1, m2, h) {
+	if (h < 0) h = h+1
+	if (h > 1) h = h-1
+	if (h*6 < 1)
+		return m1+(m2-m1)*h*6
+	else if (h*2 < 1)
+		return m2
+	else if (h*3 < 2)
+		return m1+(m2-m1)*(2/3-h)*6
+	else
+		return m1
+}
 
-	function hsl_to_rgb(h, s, L) {
-		h = h / 360
-		let m2 = L <= .5 ? L*(s+1) : L+s-L*s
-		let m1 = L*2-m2
-		return '#' +
-			hex(h2rgb(m1, m2, h+1/3)) +
-			hex(h2rgb(m1, m2, h)) +
-			hex(h2rgb(m1, m2, h-1/3))
-	}
+let hex = x => round(255 * x).toString(16).padStart(2, '0')
+
+function hsl_to_rgb(h, s, L) {
+	h = h / 360
+	let m2 = L <= .5 ? L*(s+1) : L+s-L*s
+	let m1 = L*2-m2
+	return '#' +
+		hex(h2rgb(m1, m2, h+1/3)) +
+		hex(h2rgb(m1, m2, h)) +
+		hex(h2rgb(m1, m2, h-1/3))
+}
+
+function hex3(x) {
+	return x != null && (
+		((x >> 16) & 0xff).toString(16).padStart(2, '0') +
+		((x >>  8) & 0xff).toString(16).padStart(2, '0') +
+		( x        & 0xff).toString(16).padStart(2, '0')
+	)
+}
+
+function hex4(x) {
+	return x != null && (
+		((x >> 24) & 0xff).toString(16).padStart(2, '0') +
+		((x >> 16) & 0xff).toString(16).padStart(2, '0') +
+		((x >>  8) & 0xff).toString(16).padStart(2, '0') +
+		( x        & 0xff).toString(16).padStart(2, '0')
+	)
+}
 
 }
 

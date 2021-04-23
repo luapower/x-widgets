@@ -2776,6 +2776,7 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	position: absolute;
 	width: 100%;
 	height: 100%;
+	user-select: none;
 }
 
 .model-editor-dot {
@@ -2835,6 +2836,10 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 .model-editor-dot-debug-face  { background-color: #ccccff; }
 .model-editor-dot-debug-point { background-color: #ffffff; }
 .model-editor-dot-debug-line  { background-color: #ffffcc; }
+
+.x-modeleditor-materials .x-grid-cell[field=thumbnail] {
+	padding: 1px;
+}
 
 /* ------------------------------------------------------------------------ */
 /* dark theme                                                               */

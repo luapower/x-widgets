@@ -521,6 +521,8 @@ component('x-grid', function(e, is_val_widget) {
 
 		let field = e.fields[fi]
 
+		cell.attr('field', field.attr || field.type)
+
 		cell.attr('align', field.align)
 		cell.class('focusable', e.can_focus_cell(row, field))
 		cell.class('disabled', e.is_cell_disabled(row, field))

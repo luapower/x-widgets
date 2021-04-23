@@ -56,6 +56,7 @@ rowset field attributes:
 	formatting:
 		align          : 'left'|'right'|'center'
 		format         : f(v, row) -> s
+		attr           : custom html attribute for styling
 		date_format    : toLocaleString format options for the date type
 		true_text      : display value for boolean true
 		false_text     : display value for boolean false
@@ -421,7 +422,7 @@ function nav_widget(e) {
 		let tt = field_types[type]
 		let att = all_field_types
 
-		update(field, att, tt, f, ct, pt)
+		assign(field, att, tt, f, ct, pt)
 
 		for (let k in convert_field_attr)
 			field[k] = convert_field_attr[k](field, field[k], f)
@@ -1025,7 +1026,7 @@ function nav_widget(e) {
 			return e.focus_cell(
 				ri === false ? null : ri,
 				fi === false ? null : fi, 0, 0,
-				update({
+				assign({
 					must_not_move_row: ri === false,
 					must_not_move_col: fi === false,
 					unfocus_if_not_found: true,
@@ -1040,7 +1041,7 @@ function nav_widget(e) {
 		let expand_selection = ev.expand_selection && e.can_select_multiple
 		let invert_selection = ev.invert_selection && e.can_select_multiple
 
-		let opt = update({editable: editable}, ev)
+		let opt = assign({editable: editable}, ev)
 
 		;[ri, fi] = e.first_focusable_cell(ri, fi, rows, cols, opt)
 
@@ -1074,7 +1075,7 @@ function nav_widget(e) {
 
 		if (e.val_field && row) {
 			let val = e.cell_val(row, e.val_field)
-			e.set_val(val, update({input: e}, ev))
+			e.set_val(val, assign({input: e}, ev))
 		}
 
 		let sel_rows_changed
@@ -1198,7 +1199,7 @@ function nav_widget(e) {
 	e.focus_next_cell = function(cols, ev) {
 		let dir = strict_sign(cols)
 		let auto_advance_row = ev && ev.auto_advance_row || e.auto_advance_row
-		return e.focus_cell(true, true, dir * 0, cols, update({must_move: true}, ev))
+		return e.focus_cell(true, true, dir * 0, cols, assign({must_move: true}, ev))
 			|| (auto_advance_row && e.focus_cell(true, true, dir, dir * -1/0, ev))
 	}
 
@@ -2131,7 +2132,7 @@ function nav_widget(e) {
 
 	e.row_has_errors = function(row) {
 		if (!row.errors || row.errors.passed)
-			return true
+			return false
 		for (let field of e.all_fields)
 			if (!e.cell_errors(row, field).passed)
 				return true
@@ -2258,7 +2259,7 @@ function nav_widget(e) {
 		let row = e.lookup(e.val_col, [v])[0]
 		let ri = e.row_index(row)
 		e.focus_cell(ri, true, 0, 0,
-			update({
+			assign({
 				must_not_move_row: true,
 				unfocus_if_not_found: true,
 			}, ev))
@@ -2528,7 +2529,7 @@ function nav_widget(e) {
 						e.set_cell_val(row0, field, row[fi])
 				}
 
-				update(row0, ev.row_state)
+				assign(row0, ev.row_state)
 				changed_rows.push(row0)
 				rows_updated = true
 
@@ -2542,7 +2543,7 @@ function nav_widget(e) {
 
 				row.is_new = true
 				e.all_rows.push(row)
-				update(row, ev.row_state)
+				assign(row, ev.row_state)
 				changed_rows.push(row)
 				rows_added = true
 
@@ -2554,7 +2555,7 @@ function nav_widget(e) {
 						// silently set parent id to be the id of the parent row.
 						let parent_id = e.cell_val(row.parent_row, e.id_field)
 						e.set_cell_val(row, e.parent_field, parent_id,
-							update({fire_changed_events: false}, ev))
+							assign({fire_changed_events: false}, ev))
 					}
 					assert(init_parent_rows_for_row(row))
 				}
@@ -2569,7 +2570,7 @@ function nav_widget(e) {
 				}
 
 				// set default client values as if they were typed in by the user.
-				let set_val_ev = update({row_not_modified: true}, ev)
+				let set_val_ev = assign({row_not_modified: true}, ev)
 				for (let field of e.all_fields)
 					if (field.client_default != null)
 						e.set_cell_val(row, field, field.client_default, set_val_ev)
@@ -3808,7 +3809,7 @@ component('x-lookup-dropdown', function(e) {
 
 	// file sizes
 
-	let filesize = update({}, number)
+	let filesize = assign({}, number)
 	field_types.filesize = filesize
 
 	let log = Math.log
@@ -3843,7 +3844,7 @@ component('x-lookup-dropdown', function(e) {
 		{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
 
 	date.editor = function(...opt) {
-		return date_dropdown(update({
+		return date_dropdown(assign({
 			align: 'right',
 			mode: 'fixed',
 		}, ...opt))
@@ -3873,7 +3874,7 @@ component('x-lookup-dropdown', function(e) {
 		{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
 
 	datetime.editor = function(...opt) {
-		return date_dropdown(update({
+		return date_dropdown(assign({
 			align: 'right',
 			mode: 'fixed',
 		}, ...opt))
@@ -3899,7 +3900,7 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	bool.editor = function(...opt) {
-		return checkbox(update({
+		return checkbox(assign({
 			center: true,
 		}, ...opt))
 	}
@@ -3910,7 +3911,7 @@ component('x-lookup-dropdown', function(e) {
 	field_types.enum = enm
 
 	enm.editor = function(...opt) {
-		return list_dropdown(update({
+		return list_dropdown(assign({
 			items: this.enum_values,
 			mode: 'fixed',
 			val_col: 0,
@@ -3923,7 +3924,7 @@ component('x-lookup-dropdown', function(e) {
 	field_types.tags = tags
 
 	tags.editor = function(...opt) {
-		return tagsedit(update({
+		return tagsedit(assign({
 			mode: 'fixed',
 		}, ...opt))
 	}
@@ -3944,7 +3945,7 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	color.editor = function(...opt) {
-		return color_dropdown(update({
+		return color_dropdown(assign({
 			mode: 'fixed',
 		}, ...opt))
 	}
@@ -3959,7 +3960,7 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	icon.editor = function(...opt) {
-		return icon_dropdown(update({
+		return icon_dropdown(assign({
 			mode: 'fixed',
 		}, ...opt))
 	}

@@ -71,7 +71,13 @@ model3_component = function(pe) {
 		return out
 	}}
 
-	function add_point(p) {
+	{
+	let _v0 = v3()
+	function add_point_xyz(x, y, z, expect_pi) {
+		return add_point(_v0.set(x, y, z), expect_pi)
+	}}
+
+	function add_point(p, expect_pi) {
 		assert(p.is_v3)
 		let pi = free_pis.pop()
 		if (pi == null) {
@@ -82,6 +88,7 @@ model3_component = function(pe) {
 			p.to_v3_array(points, pi)
 		}
 		prc[pi] = 0
+		assert(expect_pi == null || pi == expect_pi)
 
 		update_point(pi, p)
 
@@ -91,10 +98,11 @@ model3_component = function(pe) {
 		return pi
 	}
 
-	let unref_point = function(pi) {
+	let unref_point = function(pi, expect_rc) {
 
 		let rc0 = prc[pi]--
 		assert(rc0 > 0)
+		assert(expect_rc == null || expect_rc == rc0)
 
 		if (rc0 == 1) {
 
@@ -102,32 +110,47 @@ model3_component = function(pe) {
 			used_points_changed = true
 
 			let p = get_point(pi)
-			push_undo(add_point, p.x, p.y, p.z, pi)
+			push_undo(add_point_xyz, p[0], p[1], p[2], pi)
 
 		}
 
-		push_undo(ref_point, pi)
+		push_undo(ref_point, pi, rc0 - 1)
 
 		// if (LOG) log('unref_point', pi, prc[pi])
 	}
 
-	let ref_point = function(pi) {
+	let ref_point = function(pi, expect_rc) {
 
 		let rc0 = prc[pi]++
+		assert(expect_rc == null || expect_rc == rc0)
 
 		if (rc0 == 0)
 			used_points_changed = true
 
-		push_undo(unref_point, pi)
+		push_undo(unref_point, pi, rc0 + 1)
 
 		// if (LOG) log('ref_point', pi, prc[pi])
 	}
 
-	function move_point(pi, p) {
-		let p0 = get_point(pi, v3())
+	{
+	let _v0 = v3()
+	function move_point_xyz(pi, x, y, z, x0, y0, z0) {
+		return move_point(pi, _v0.set(x, y, z), x0, y0, z0)
+	}}
+
+	function move_point(pi, p, expect_x, expect_y, expect_z) {
+		let p0 = get_point(pi)
+		let x0 = p0[0]
+		let y0 = p0[1]
+		let z0 = p0[2]
+		if (expect_x != null) {
+			assert(expect_x == x0)
+			assert(expect_y == y0)
+			assert(expect_z == z0)
+		}
 		p.to_v3_array(points, pi)
 		update_point(pi, p)
-		push_undo(move_point, pi, p0)
+		push_undo(move_point_xyz, pi, x0, y0, z0, p[0], p[1], p[2])
 	}
 
 	let line_count = () => lines.length / 5
@@ -150,11 +173,11 @@ model3_component = function(pe) {
 
 	function each_line(f) {
 		for (let li = 0, n = line_count(); li < n; li++)
-			if (lines[5*li+2]) // ref count: used.
+			if (line_rc(li))
 				f(get_line(li))
 	}
 
-	function add_line(p1i, p2i) {
+	function add_line(p1i, p2i, expect_li) {
 
 		let li = free_lis.pop()
 		if (li == null) {
@@ -167,6 +190,8 @@ model3_component = function(pe) {
 			lines[5*li+3] = 0 // smoothness
 			lines[5*li+4] = 1 // opacity
 		}
+		assert(expect_li == null || expect_li == li)
+
 		nonedge_line_count++
 		used_lines_changed = true
 		bbox_changed = true
@@ -174,7 +199,7 @@ model3_component = function(pe) {
 		ref_point(p1i)
 		ref_point(p2i)
 
-		push_undo(unref_line, li)
+		push_undo(unref_line, li, 1)
 
 		if (LOG)
 			log('add_line', li, p1i+','+p2i)
@@ -182,10 +207,11 @@ model3_component = function(pe) {
 		return li
 	}
 
-	function unref_line(li) {
+	function unref_line(li, expect_rc) {
 
 		let rc = --lines[5*li+2]
 		assert(rc >= 0)
+		assert(expect_rc == null || expect_rc == rc + 1)
 
 		if (rc == 0) {
 
@@ -216,17 +242,18 @@ model3_component = function(pe) {
 				edge_line_count--
 			}
 
-			push_undo(ref_line, li)
+			push_undo(ref_line, li, rc)
 
 		}
 
 		// if (LOG)
-			// log('unref_line', li, lines[5*li+2])
+			// log('unref_line', li, rc)
 	}
 
-	function ref_line(li) {
+	function ref_line(li, expect_rc) {
 
 		let rc0 = lines[5*li+2]++
+		assert(expect_rc == null || expect_rc == rc0)
 
 		if (rc0 == 1) {
 			nonedge_line_count--
@@ -237,13 +264,13 @@ model3_component = function(pe) {
 			edge_line_count++
 		}
 
-		push_undo(unref_line, li)
+		push_undo(unref_line, li, rc0 + 1)
 
 		// if (LOG)
-			// log('ref_line', li, lines[5*li+2])
+			// log('ref_line', li, rc0 + 1)
 	}
 
-	function merge_lines(li1, li2, need_rc) {
+	function merge_lines(li1, li2, expect_rc) {
 
 		let pi1 = lines[5*li2+0] // pi1
 		let pi2 = lines[5*li2+1] // pi2
@@ -251,8 +278,9 @@ model3_component = function(pe) {
 		if (LOG)
 			log('merge_lines', li1, li2)
 
-		assert(need_rc == null || lines[5*li2+2] == need_rc)
-		while (lines[5*li2+2] > 0)
+		assert(expect_rc == null || line_rc(li2) == expect_rc)
+
+		while (line_rc(li2))
 			unref_line(li2)
 
 		lines[5*li1+1] = pi2 // pi2
@@ -262,7 +290,7 @@ model3_component = function(pe) {
 		push_undo(cut_line, li1, pi1, li2)
 	}
 
-	function cut_line(li1, pi, need_li2) {
+	function cut_line(li1, pi, expect_li) {
 		let pi2 = lines[5*li1+1] // pi2
 		let rc1 = lines[5*li1+2] // rc
 		let sm1 = lines[5*li1+3] // smoothness
@@ -273,14 +301,14 @@ model3_component = function(pe) {
 
 		let li2 = add_line(pi, pi2)
 		lines[5*li1+1] = pi // pi2
-		while (lines[5*li2+2] < rc1)
+		while (line_rc(li2) < rc1)
 			ref_line(li2)
 		set_line_smoothness (li2, sm1)
 		set_line_opacity    (li2, op1)
 
 		used_lines_changed = true
 
-		assert(need_li2 == null || li2 == need_li2)
+		assert(expect_li == null || li2 == expect_li)
 
 		push_undo(merge_lines, li1, li2, rc1)
 	}
@@ -455,9 +483,9 @@ model3_component = function(pe) {
 		faces_changed = true
 	}
 
-	function replace_edge(face, ei, li, need_li0) {
+	function replace_edge(face, ei, li, expect_li) {
 		let li0 = face.lis[ei]
-		assert(need_li0 == null || need_li0 == li0)
+		assert(expect_li == null || expect_li == li0)
 		face.lis[ei] = li
 
 		if (LOG)
@@ -1002,10 +1030,8 @@ model3_component = function(pe) {
 		pull.face = p.face
 
 		// pull direction line, starting on the plane and with unit length.
-		pull.origin = v3()
-		pull.line = line3(pull.origin, v3())
-		pull.line[0].set(p)
-		pull.line[1].set(p).add(pull.face.plane().normal)
+		pull.line = line3(p.to(v3()), p.to(v3()).add(pull.face.plane().normal))
+		pull.origin = pull.line[0]
 
 		// faces and lines to exclude when hit-testing while pulling.
 		// all moving geometry must be added here.
@@ -1013,6 +1039,9 @@ model3_component = function(pe) {
 		let moving_lis = set() // {li->true}
 
 		moving_faces.add(pull.face)
+
+		let min_distance = -1/0
+		let max_distance =  1/0
 
 		// pulling only works if the pulled face is connected exclusively to
 		// perpendicular (pp) side faces with pp edges at the connection points.
@@ -1028,6 +1057,7 @@ model3_component = function(pe) {
 			let new_pp_edge = map() // {pull_ei->true}
 			let new_pp_face = map() // {pull_ei->true}
 			let ins_edge = map() // {pp_face->[[pp_ei, line_before_point, pull_ei],...]}
+			let pp_lis = set() // {pi}
 
 			let pull_edge = line3()
 			let side_edge = line3()
@@ -1038,7 +1068,7 @@ model3_component = function(pe) {
 
 			// for each edge of the pulled face, find all faces that also
 			// contain that edge and are pp to the pulled face. there should be
-			// at most two such faces per edge.
+			// at most two such faces per edge, one on each side of the pulled face.
 			// also check for any other non-pp faces connected to the pulled face's points.
 			for (let pull_ei = 0; pull_ei < en; pull_ei++) {
 
@@ -1075,10 +1105,12 @@ model3_component = function(pe) {
 									assert(is_first || is_second)
 									let endpoint_ei = (pull_ei + ((is_first) ? 0 : 1)) % en
 
-									if (is_side_edge_pp)
+									if (is_side_edge_pp) {
 										moving_lis.add(side_edge.i)
-									else
+										pp_lis.add(side_edge.i)
+									} else {
 										new_pp_edge.set(endpoint_ei, true)
+									}
 
 									moving_faces.add(face)
 
@@ -1093,7 +1125,7 @@ model3_component = function(pe) {
 
 						} else { // face is not pp, check if it connects to the pulled face at all.
 
-							// check if face connects to pulled face's point at `ei`
+							// check if this face connects to pulled face's point at `ei`
 							// and mark the point as needing a pp edge if it does.
 							let face_ei = face.indexOf(pull.face[pull_ei])
 							if (face_ei != -1) {
@@ -1134,6 +1166,7 @@ model3_component = function(pe) {
 				let li = add_line(old_pi, new_pi)
 				new_pp_edge.set(ei, li)
 				moving_lis.add(li)
+				pp_lis.add(li)
 
 				// replace point in pulled face.
 				old_points[ei] = old_pi
@@ -1189,6 +1222,11 @@ model3_component = function(pe) {
 			for (let li of pull.face.lis)
 				moving_lis.add(li)
 
+			// TODO: set min-max distance limits.
+			for (let li of pp_lis) {
+				let line = get_line(li)
+			}
+
 		}
 
 		pull.can_hit = function(p) {
@@ -1203,9 +1241,10 @@ model3_component = function(pe) {
 		let initial_ps = pull.face.map(pi => get_point(pi, v3()))
 		let _v0 = v3()
 		let _v1 = v3()
-		pull.pull = function(delta_len) {
+		pull.pull = function(distance) {
 
-			let delta = pull.line.delta(_v0).set_len(delta_len)
+			distance = clamp(distance, min_distance, max_distance)
+			let delta = pull.line.delta(_v0).set_len(distance)
 
 			let i = 0
 			for (let pi of pull.face) {
@@ -1222,12 +1261,6 @@ model3_component = function(pe) {
 			// TODO: make hole, etc.
 			if (LOG)
 				log('pull.stop')
-		}
-
-		pull.cancel = function() {
-			// TODO
-			if (LOG)
-				log('pull.cancel')
 		}
 
 		return pull

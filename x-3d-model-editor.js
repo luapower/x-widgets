@@ -26,8 +26,7 @@ component('x-modeleditor', function(e) {
 	// canvas & webgl context -------------------------------------------------
 
 	let canvas = tag('canvas')
-	focusable_widget(e, canvas)
-	canvas.attr('tabindex', -1)
+	focusable_widget(e)
 	e.add(canvas)
 
 	let gl = assert(canvas.getContext('webgl2'))
@@ -40,7 +39,7 @@ component('x-modeleditor', function(e) {
 	let max_distance = 1e4    // max model total distance
 
 	function update_camera_proj() {
-		camera.view_size.set(canvas.width, canvas.height)
+		camera.view_size.set(floor(canvas.cw), floor(canvas.ch))
 		if (e.projection == 'ortho') {
 			camera.ortho(-10, 10, -10, 10, -1e2, 1e2)
 		} else {
@@ -156,8 +155,12 @@ component('x-modeleditor', function(e) {
 	e.detect_resize()
 
 	e.on('resize', function(r) {
-		canvas.width = r.w
-		canvas.height = r.h
+		let w = floor(r.w)
+		let h = floor(r.h)
+		canvas.w = w
+		canvas.h = h
+		canvas.width  = w
+		canvas.height = h
 		update_camera_proj()
 	})
 
@@ -204,7 +207,8 @@ component('x-modeleditor', function(e) {
 
 	// materials --------------------------------------------------------------
 
-	let materials = [] //[{diffuse_color:, diffuse_map:, uv: , opacity: , faces: [face1,...]},...]
+	let materials = [] // [{diffuse_color:, diffuse_map:, uv: , opacity: , faces: [face1,...]},...]
+	let next_material_num = 0
 
 	function add_material(opt) {
 		let mat = assign({
@@ -212,12 +216,21 @@ component('x-modeleditor', function(e) {
 			uv: v2(1, 1),
 			opacity: 1,
 		}, opt)
+		mat.name = mat.name || 'material ' + (next_material_num++)
 		mat.opacity = clamp(mat.opacity, 0, 1)
 		materials.push(mat)
 		return mat
 	}
 
-	let default_material = add_material({diffuse_color: 0xffffff})
+	let default_material = add_material({name: 'white', diffuse_color: 0xffffff})
+
+	for (let m of [
+		{name: 'black' , diffuse_color: 0},
+		{name: 'red'   , diffuse_color: 0xff0000},
+		{name: 'green' , diffuse_color: 0x00ff00},
+		{name: 'blue'  , diffuse_color: 0x0000ff},
+	])
+		add_material(m)
 
 	// layers -----------------------------------------------------------------
 
@@ -226,7 +239,7 @@ component('x-modeleditor', function(e) {
 	let default_layer
 
 	function init_layers() {
-		default_layer = add_layer({name: '<default>', can_hide: false})
+		default_layer = add_layer({name: 'Default', can_hide: false})
 	}
 
 	function layer_changed(node, layer) {
@@ -459,9 +472,10 @@ component('x-modeleditor', function(e) {
 				let model = inst_model(comp, i, _m0)
 				let int_p = comp.line_hit_lines(model, target_line, max_d, p2p_distance2, int_mode, is_line_valid, is_int_line_valid)
 				if (int_p) {
-					int_p.inst_id = i
+					int_p.model = model
 					int_p.comp = comp
-					int_p.path = instance_path(int_p.comp, int_p.inst_id)
+					int_p.path = instance_path(int_p.comp, i)
+					int_p.snap = 'line'
 					return int_p
 				}
 			}
@@ -638,8 +652,9 @@ component('x-modeleditor', function(e) {
 	let hit_test_rr = gl.hit_test_renderer()
 
 	let max_hit_distances = {
-		snap: 20,   // max pixel distance for snapping
-		select: 8,  // max pixel distance for selecting
+		snap      : 20, // max pixel distance for snapping
+		select    :  8, // max pixel distance for selecting
+		drag_pull :  2, // max pixel distance before drag-pull starts
 	}
 
 	// connect rendered comp_id/face_id/inst_id back to the model.
@@ -673,12 +688,11 @@ component('x-modeleditor', function(e) {
 			return
 
 		int_p.comp = comp
-		int_p.inst_id = inst_id
 		int_p.model = model
 		int_p.plane = plane
 		int_p.face = face
 		int_p.snap = 'face'
-		int_p.path = instance_path(int_p.comp, int_p.inst_id)
+		int_p.path = instance_path(comp, inst_id)
 
 		return int_p
 
@@ -1358,9 +1372,7 @@ component('x-modeleditor', function(e) {
 
 		tools.pull.bind = function(on) {
 			if (!on)
-				tools.pull.cancel()
-			select_all(false)
-			update()
+				cancel()
 		}
 
 		tools.pull.pointermove = function() {
@@ -1373,35 +1385,38 @@ component('x-modeleditor', function(e) {
 				e.cursor = 'pull'+(invalid_target ? 'no' : '')
 				if (invalid_target)
 					p = null
-				let changed = (hit_p && hit_p.face) != (p && p.face)
-				if (changed) {
+				if ((hit_p && hit_p.face) != (p && p.face)) {
 					select_all(false)
 					if (p)
 						p.comp.select_face(p.face, 'add')
-					hit_p = p && (hit_p || v3()).assign(p)
-					update()
 				}
+				hit_p = p && (hit_p || v3()).assign(p)
+				update()
 			}
 		}
 
 		{
 		let _line0 = line3()
 		let _v0 = v3()
-		let _v1 = v3()
 		function move() {
-			mouse.prevent_validate = true
-			if (!pull)
+			if (!pull) {
+				if (!mouse.dragging)
+					return
 				start()
+			}
+			mouse.prevent_validate = true
 			let p = mouse_hit_model({mode: 'draw', distance: 'snap'})
 			let hit_model = p && pull.can_hit(p)
-			if (!hit_model) {
+			if (hit_model) {
+				p = pull.line.closest_point_to_point(p, false, _v0)
+			} else {
 				let int_line = mouse.ray.intersect_line(pull.line, _line0)
-				p = int_line && int_line[0]
+				p = int_line && int_line[1].to(_v0)
 			}
 			if (!p)
 				return
-			let origin = pull.line.closest_point_to_point(p, false, _v0)
-			let delta_line = origin.to(_v1).sub(pull.line[0])
+
+			let delta_line = p.sub(pull.origin)
 			let delta = sign(delta_line.dot(pull.face.plane().normal)) * delta_line.len()
 
 			ref_line.set(origin, p)
@@ -1412,6 +1427,7 @@ component('x-modeleditor', function(e) {
 			ref_point.snap = p.snap
 			ref_point.visible = hit_model
 			ref_point.update()
+
 			e.tooltip = snap_tooltips[p.snap || p.line_snap] || p.tooltip
 
 			pull.pull(delta)
@@ -1419,44 +1435,50 @@ component('x-modeleditor', function(e) {
 		}}
 
 		function start() {
+			start_undo()
 			pull = cur_comp.start_pull(hit_p)
 			update()
-			cur_comp.create_debug_points()
+			// cur_comp.create_debug_points()
+		}
+
+		function stop() {
+			pull.stop()
+			finish()
+		}
+
+		function cancel() {
+			if (!pull)
+				return
+			undo()
+			select_all(false)
+			finish()
 		}
 
 		function finish() {
 			pull = null
+			e.tooltip = ''
 			ref_point.visible = false
 			ref_point.update()
 			ref_line.visible = false
 			ref_line.update()
 			update()
-			cur_comp.create_debug_points()
+			//cur_comp.create_debug_points()
 		}
 
 		tools.pull.pointerdown = function(capture) {
 			if (pull) {
-				pull.stop()
-			finish()
+				stop()
 			} else if (hit_p != null) {
-				start()
-				/*
 				return capture(move, function() {
 					if (pull)
 						stop()
 					else
 						start()
 				})
-				*/
 			}
 		}
 
-		tools.pull.cancel = function() {
-			if (!pull)
-				return
-			pull.cancel()
-			finish()
-		}
+		tools.pull.cancel = cancel
 
 	}
 
@@ -1492,22 +1514,28 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('pointerdown', function(ev) {
+		e.focus()
 		mouse.prevent_validate = false
 		if (update_mouse(ev))
 			fire_pointermove()
 		if (tool.pointerdown) {
 			let captured, captured_move
 			function capture(move, up) {
+				let mouse0 = v3()
+				let _v0 = v3()
 				let movewrap = move && function(ev) {
 					update_mouse(ev)
-					if (move)
-						return move()
+					if (!mouse.dragging)
+						mouse.dragging = mouse0.to(_v0).sub(mouse).len() > max_hit_distances.drag_pull
+					move()
 				}
-				let upwrap = up && function(ev) {
+				let upwrap = function(ev) {
 					update_mouse(ev)
 					if (up)
-						return up()
+						up()
+					mouse.dragging = false
 				}
+				mouse0.set(mouse)
 				captured = e.capture_pointer(ev, movewrap, upwrap)
 				captured_move = move
 			}
@@ -1595,6 +1623,10 @@ component('x-modeleditor', function(e) {
 			fire_pointermove()
 			return false
 		}
+		if (key == 'F2') {
+			toogle_toolboxes()
+			return false
+		}
 		if (shift || ctrl)
 			return
 		let toolname = tool_keys[key.toLowerCase()]
@@ -1615,6 +1647,132 @@ component('x-modeleditor', function(e) {
 		if (tool.keyup(key) === false)
 			return false
 	})
+
+	// materials list ---------------------------------------------------------
+
+	let materials_list, materials_toolbox
+
+	function init_materials_list() {
+
+		let rows = []
+		for (let m of materials)
+			rows.push([m, m.name])
+
+		function format_material(m) {
+			if (m.diffuse_color == null)
+				return ''
+			return div({style: 'width: 48px; height: 48px; background-color: #' + hex3(m.diffuse_color)})
+		}
+
+		materials_list = grid({
+			classes: 'x-modeleditor-materials',
+			rowset: {
+				fields: [
+					{name: 'thumbnail', max_w: 50, format: format_material, type: 'thumbnail'},
+					{name: 'name', w: 50},
+				],
+				rows: rows,
+			},
+			header_visible: false,
+			cell_h: 50,
+		})
+
+		materials_toolbox = toolbox({
+			text: 'Materials',
+			content: materials_list,
+			side: 'right',
+			py: 10,
+			w: 160, h: 200,
+		})
+
+	}
+
+	// layers list ------------------------------------------------------------
+
+	let layers_list, layers_toolbox
+
+	function init_layers_list() {
+
+		let rows = []
+		for (let layer of layers)
+			rows.push([true, layer.name, layer])
+
+		function format_visible(v) {
+			return v ? div({class: 'fa fa-eye'}, '') : ''
+		}
+
+		layers_list = grid({
+			rowset: {
+				fields: [
+					{name: 'visible', type: 'bool', format: format_visible},
+					{name: 'name'},
+					{name: 'layer', visible: false},
+				],
+				rows: rows,
+			},
+			header_visible: false,
+		})
+
+		layers_toolbox = toolbox({
+			text: 'Layers',
+			content: layers_list,
+			side: 'right',
+			py: 220,
+			w: 160, h: 200,
+		})
+
+	}
+
+	// components list --------------------------------------------------------
+
+	let comp_list, comp_toolbox
+
+	function init_comp_list() {
+
+		let rows = []
+		for (let comp of comps)
+			rows.push([null, comp.name])
+
+		comp_list = grid({
+			rowset: {
+				fields: [
+					{name: 'thumbnail', w: 50, type: 'image'},
+					{name: 'name', w: 50},
+				],
+				rows: rows,
+			},
+			header_visible: false,
+		})
+
+		comp_toolbox = toolbox({
+			text: 'Components',
+			content: comp_list,
+			side: 'right',
+			py: 430,
+			w: 160, h: 200,
+		})
+
+	}
+
+	// toolboxes --------------------------------------------------------------
+
+	function init_toolboxes() {
+		init_layers_list()
+		init_materials_list()
+		init_comp_list()
+		init_toolboxes = noop
+	}
+
+	let toolboxes_on
+
+	function toogle_toolboxes() {
+		init_toolboxes()
+		let on = !toolboxes_on
+		layers_toolbox.show(on)
+		materials_toolbox.show(on)
+		comp_toolbox.show(on)
+		toolboxes_on = on
+	}
 
 	// scripting API ----------------------------------------------------------
 

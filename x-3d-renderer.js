@@ -372,8 +372,8 @@ gl.hit_test_renderer = function(r) {
 	let hit_test_arr
 
 	r.render = function(draw) {
-		let w1 = gl.canvas.cw
-		let h1 = gl.canvas.ch
+		let w1 = floor(gl.canvas.cw)
+		let h1 = floor(gl.canvas.ch)
 		if (w1 != w || h1 != h) {
 			w = w1
 			h = h1
@@ -398,6 +398,9 @@ gl.hit_test_renderer = function(r) {
 	r.hit_test = function(x, y) {
 		if (!hit_test_arr)
 			return
+		// when the browser is zoomed, mouse coords can be fractional so we need to round them.
+		x = round(x)
+		y = round(y)
 		if (x < 0 || x >= w || y < 0 || y >= h)
 			return
 		y = (h-1) - y // textures are read upside down...
