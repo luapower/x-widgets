@@ -1635,6 +1635,15 @@ component('x-grid', function(e, is_val_widget) {
 		return this.capture_pointer(ev, pointermove, pointerup)
 	}
 
+	function click(ev, nclicks) {
+
+		if (!hit.state)
+			return
+
+		print(hit.state)
+
+	}
+
 	function rightpointerdown(ev, mx, my) {
 
 		if (e.widget_editing)
@@ -1693,6 +1702,7 @@ component('x-grid', function(e, is_val_widget) {
 	e.on('pointerup'       , pointerup)
 	e.on('pointerleave'    , pointerup)
 	e.on('rightpointerdown', rightpointerdown)
+	e.on('click'           , click)
 
 	e.on('contextmenu', function(ev) {
 		let cell = ev.target.closest('.x-grid-header-cell') || ev.target.closest('.x-grid-cell')

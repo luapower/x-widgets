@@ -1157,9 +1157,17 @@ component('x-modeleditor', function(e) {
 		update()
 	}
 
+	// eraser tool ------------------------------------------------------------
+
+	tools.eraser = {}
+
 	// move tool --------------------------------------------------------------
 
 	tools.move = {}
+
+	// rotate tool ------------------------------------------------------------
+
+	tools.rotate = {}
 
 	// line tool --------------------------------------------------------------
 
@@ -1482,6 +1490,10 @@ component('x-modeleditor', function(e) {
 
 	}
 
+	// paint tool -------------------------------------------------------------
+
+	tools.paint = {}
+
 	// input handling ---------------------------------------------------------
 
 	let mouse = v3(false, false, 0)
@@ -1591,6 +1603,9 @@ component('x-modeleditor', function(e) {
 		p: 'pull',
 		o: 'orbit',
 		m: 'move',
+		q: 'rotate',
+		b: 'paint',
+		e: 'eraser',
 	}
 
 	let shift, ctrl, alt
@@ -1625,6 +1640,14 @@ component('x-modeleditor', function(e) {
 		}
 		if (key == 'F2') {
 			toogle_toolboxes()
+			return false
+		}
+		if (key == 'g') {
+			group_selection()
+			return false
+		}
+		if (key == 'u') {
+			ungroup_selection()
 			return false
 		}
 		if (shift || ctrl)
@@ -1668,13 +1691,17 @@ component('x-modeleditor', function(e) {
 			classes: 'x-modeleditor-materials',
 			rowset: {
 				fields: [
-					{name: 'thumbnail', max_w: 50, format: format_material, type: 'thumbnail'},
+					{name: 'thumbnail', max_w: 50, format: format_material, type: 'thumbnail', editable: false},
 					{name: 'name', w: 50},
 				],
 				rows: rows,
 			},
 			header_visible: false,
 			cell_h: 50,
+		})
+
+		materials_list.on('cell_click', function(ev, nclicks) {
+			print('HERE')
 		})
 
 		materials_toolbox = toolbox({
@@ -1752,6 +1779,14 @@ component('x-modeleditor', function(e) {
 			w: 160, h: 200,
 		})
 
+	}
+
+	function group_selection() {
+		// TODO:
+	}
+
+	function ungroup_selection() {
+		// TODO:
 	}
 
 	// toolboxes --------------------------------------------------------------
