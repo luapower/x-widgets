@@ -2312,6 +2312,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-grid-cell:hover {
 	outline: 1px dotted var(--x-fg-label);
+	outline-offset: -1px;
 }
 
 .x-grid-cell[align=center] { justify-content: center; }
@@ -2839,6 +2840,7 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 
 .x-modeleditor-materials .x-grid-cell[field=thumbnail] {
 	padding: 1px;
+	border: 0;
 }
 
 /* ------------------------------------------------------------------------ */
