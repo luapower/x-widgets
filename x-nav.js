@@ -56,7 +56,7 @@ rowset field attributes:
 	formatting:
 		align          : 'left'|'right'|'center'
 		format         : f(v, row) -> s
-		attr           : custom html attribute for styling
+		attr           : custom value for html attribute `field`, for styling
 		date_format    : toLocaleString format options for the date type
 		true_text      : display value for boolean true
 		false_text     : display value for boolean false
@@ -2217,7 +2217,7 @@ function nav_widget(e) {
 		if (val === undefined)
 			val = null
 		let errors = ev && ev.validate ? e.validate_val(field, val, row, ev) : undefined
-		let invalid = !errors.passed
+		let invalid = errors && !errors.passed
 		let cur_val = row[field.val_index]
 		let old_val = e.cell_old_val(row, field)
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
@@ -3116,8 +3116,11 @@ function nav_widget(e) {
 			else
 				save_to_row_vals()
 			e.fire('saved')
-		} else if (e.rowset_url)
+		} else if (e.rowset_url) {
 			save_to_server()
+		} else  {
+			e.commit_changes()
+		}
 	}
 
 	function save_slow(show) {

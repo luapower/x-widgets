@@ -1733,11 +1733,34 @@ component('x-modeleditor', function(e) {
 				fields: [
 					{name: 'visible', type: 'bool', format: format_visible},
 					{name: 'name'},
-					{name: 'layer', visible: false},
 				],
 				rows: rows,
 			},
 			header_visible: false,
+			stay_in_edit_mode: false,
+			can_select_widget: false,
+			//
+		})
+
+		layers_list.on('rows_changed', function(rows) {
+			for (let row of rows) {
+				if (row.is_new) {
+					row.layer = add_layer({
+						name    : this.cell_val(row, 'name'),
+						visible : this.cell_val(row, 'visible')
+					})
+				} else if (row.removed) {
+					remove_layer(row.layer)
+				}
+			}
+		})
+
+		layers_list.on('cell_val_changed_for_visible', function(row, field, val) {
+			row.layer.visible = val
+		})
+
+		layers_list.on('cell_val_changed_for_name', function(row, field, val) {
+			row.layer.name = val
 		})
 
 		layers_toolbox = toolbox({
