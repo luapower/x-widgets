@@ -2318,6 +2318,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-grid-cell[align=center] { justify-content: center; }
 .x-grid-cell[align=right]  { justify-content: flex-end; }
 
+.x-grid-cell.x-grid-cell.row-invalid {
+	outline: 2px solid var(--x-bg-error);
+	outline-offset: -2px;
+}
+
 /* tree node indent */
 
 .x-grid-cell-indent {

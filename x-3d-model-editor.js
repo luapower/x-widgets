@@ -13,6 +13,11 @@ component('x-modeleditor', function(e) {
 
 	let pe = e
 
+	function log(s, ...args) {
+		assert(LOG)
+		print(s, ...args)
+	}
+
 	// colors ------------------------------------------------------------------
 
 	let white = 0xffffff
@@ -235,7 +240,6 @@ component('x-modeleditor', function(e) {
 	// layers -----------------------------------------------------------------
 
 	let layers = []
-	let next_layer_num = 0
 	let default_layer
 
 	function init_layers() {
@@ -247,9 +251,11 @@ component('x-modeleditor', function(e) {
 	}
 
 	function add_layer(opt) {
-		layer = assign({name: 'layer '+(next_layer_num++), visible: true, can_hide: true}, opt)
+		layer = assign({visible: true, can_hide: true}, opt)
 		layers.push(layer)
 		instances_valid = false
+		if (LOG)
+			log('add_layer', layer)
 		return layer
 	}
 
@@ -257,11 +263,15 @@ component('x-modeleditor', function(e) {
 		// TODO: move tbis layer's instances to the default layer.
 		layers.remove_value(layer)
 		instances_valid = false
+		if (LOG)
+			log('remove_layer', layer)
 	}
 
 	function layer_set_visibile(layer, visible) {
 		layer.visible = !!visible
 		instances_valid = false
+		if (LOG)
+			log('layer_set_visibile', layer, visible)
 	}
 
 	// components -------------------------------------------------------------
@@ -1688,7 +1698,10 @@ component('x-modeleditor', function(e) {
 		}
 
 		materials_list = grid({
+
 			classes: 'x-modeleditor-materials',
+			cell_h: 50,
+
 			rowset: {
 				fields: [
 					{name: 'thumbnail', max_w: 50, format: format_material, type: 'thumbnail', editable: false},
@@ -1696,8 +1709,12 @@ component('x-modeleditor', function(e) {
 				],
 				rows: rows,
 			},
+
 			header_visible: false,
-			cell_h: 50,
+			stay_in_edit_mode: false,
+			can_exit_edit_on_errors: false,
+			can_select_widget: false,
+
 		})
 
 		materials_list.on('cell_click', function(ev, nclicks) {
@@ -1721,47 +1738,72 @@ component('x-modeleditor', function(e) {
 	function init_layers_list() {
 
 		let rows = []
-		for (let layer of layers)
-			rows.push([true, layer.name, layer])
+		for (let layer of layers) {
+			let row = [true, layer.name]
+			row.layer = layer
+			rows.push(row)
+		}
+
+		rows[0].can_remove = false
 
 		function format_visible(v) {
 			return v ? div({class: 'fa fa-eye'}, '') : ''
 		}
 
+		function gen_layer_name() {
+			let i = 1
+			while (1) {
+				let s = 'Layer '+(i++)
+				if (!layers_list.lookup('name', [s]).length)
+					return s
+			}
+		}
+
 		layers_list = grid({
+
 			rowset: {
 				fields: [
-					{name: 'visible', type: 'bool', format: format_visible},
-					{name: 'name'},
+					{name: 'visible', type: 'bool', format: format_visible, default: true},
+					{name: 'name', client_default: gen_layer_name, allow_null: false},
 				],
 				rows: rows,
+				pk: 'name',
 			},
+
 			header_visible: false,
 			stay_in_edit_mode: false,
+			can_exit_edit_on_errors: false,
+			save_row_on_insert: true,
 			can_select_widget: false,
-			//
-		})
 
-		layers_list.on('rows_changed', function(rows) {
-			for (let row of rows) {
-				if (row.is_new) {
-					row.layer = add_layer({
-						name    : this.cell_val(row, 'name'),
-						visible : this.cell_val(row, 'visible')
-					})
-				} else if (row.removed) {
-					remove_layer(row.layer)
-				}
-			}
+			init_row: function(row) {
+				row.layer = add_layer({
+					name    : this.cell_val(row, 'name'),
+					visible : this.cell_val(row, 'visible')
+				})
+			},
+
+			free_row: function(row) {
+				remove_layer(row.layer)
+			},
+
 		})
 
 		layers_list.on('cell_val_changed_for_visible', function(row, field, val) {
-			row.layer.visible = val
+			layer_set_visibile(row.layer, val)
 		})
 
 		layers_list.on('cell_val_changed_for_name', function(row, field, val) {
 			row.layer.name = val
 		})
+
+		let can_change_val = layers_list.can_change_val
+		layers_list.can_change_val = function(row, field) {
+			if (can_change_val(row, field))
+				if (field && row && row.layer == default_layer)
+					return false
+			return true
+		}
 
 		layers_toolbox = toolbox({
 			text: 'Layers',
@@ -1784,6 +1826,7 @@ component('x-modeleditor', function(e) {
 			rows.push([null, comp.name])
 
 		comp_list = grid({
+
 			rowset: {
 				fields: [
 					{name: 'thumbnail', w: 50, type: 'image'},
@@ -1791,7 +1834,12 @@ component('x-modeleditor', function(e) {
 				],
 				rows: rows,
 			},
+
 			header_visible: false,
+			stay_in_edit_mode: false,
+			can_exit_edit_on_errors: false,
+			can_select_widget: false,
+
 		})
 
 		comp_toolbox = toolbox({

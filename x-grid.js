@@ -820,6 +820,10 @@ component('x-grid', function(e, is_val_widget) {
 			cls = 'new'
 		else if (prop == 'removed')
 			cls = 'removed'
+		else if (prop == 'errors') {
+			cls = 'row-invalid'
+			val = !!(val && !val.passed)
+		}
 		if (cls)
 			each_cell_of_row(ri, function(cell, fi, cls, val) {
 				cell.class(cls, val)
@@ -978,6 +982,7 @@ component('x-grid', function(e, is_val_widget) {
 			&& e.fields[cell.fi].type == 'bool'
 
 		return e.focus_cell(cell.ri, cell.fi, 0, 0, {
+			must_not_move_col: toggle,
 			must_not_move_row: true,
 			enter_edit: !over_indent && e.can_edit
 				&& !ctrl && !shift
@@ -1773,9 +1778,11 @@ component('x-grid', function(e, is_val_widget) {
 
 		// insert with the arrow down key on the last focusable row.
 		if (key == down_arrow) {
-			if (e.is_last_row_focused())
-				if (e.insert_rows(1, {input: e, focus_it: true}))
-					return false
+			if (!e.save_row_on_insert) // not really compatible behavior...
+				if (e.is_last_row_focused())
+					if (e.exit_edit())
+						if (e.insert_rows(1, {input: e, focus_it: true}))
+							return false
 		}
 
 		// remove last row with the arrow up key if not edited.
@@ -1861,16 +1868,17 @@ component('x-grid', function(e, is_val_widget) {
 				return false
 			}
 			if (e.editor && e.exit_edit_on_escape) {
-				e.exit_edit()
-				e.focus()
+				if (e.exit_edit())
+					e.focus()
 				return false
 			}
 		}
 
 		// insert key: insert row
 		if (key == 'Insert')
-			if (e.insert_rows(1, {input: e, at_focused_row: true, focus_it: true}))
-				return false
+			if (e.exit_edit())
+				if (e.insert_rows(1, {input: e, at_focused_row: true, focus_it: true}))
+					return false
 
 		if (!e.editor && key == 'Delete') {
 
