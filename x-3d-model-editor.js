@@ -1823,17 +1823,20 @@ component('x-modeleditor', function(e) {
 
 		let rows = []
 		for (let comp of comps)
-			rows.push([null, comp.name])
+			if (comp != root.comp)
+				rows.push([null, comp.name])
 
 		comp_list = grid({
 
 			rowset: {
 				fields: [
 					{name: 'thumbnail', w: 50, type: 'image'},
-					{name: 'name', w: 50},
+					{name: 'name', w: 50, },
 				],
 				rows: rows,
 			},
+
+			cell_h: 50,
 
 			header_visible: false,
 			stay_in_edit_mode: false,
@@ -1937,6 +1940,7 @@ component('x-modeleditor', function(e) {
 		c1.set(m)
 
 		c0.add_child(c1, mat4().translate(3, 0, 0))
+		c0.add_child(c1, mat4().translate(6, 0, 0))
 
 		/*
 		root.comp.set_line_smoothness(0, 1)
