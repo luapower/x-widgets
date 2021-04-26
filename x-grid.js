@@ -709,10 +709,10 @@ component('x-grid', function(e, is_val_widget) {
 		y = or(y, cell_y(ri, fi))
 
 		if (field.align == 'right') {
-			e.editor.x  = null
+			e.editor.x1 = null
 			e.editor.x2 = cells_w - (x + w)
 		} else {
-			e.editor.x  = x
+			e.editor.x1 = x
 			e.editor.x2 = null
 		}
 

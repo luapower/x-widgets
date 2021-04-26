@@ -462,7 +462,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	animation-fill-mode: forwards;
 
 	/* behavior */
-	pointer-events: none;
 	user-select: none;
 }
 
@@ -768,11 +767,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	text-align: right;
 }
 
-.x-editbox.modified {
+.x-editbox.modified.modified { /* specificity over .x-widget.grid-editor */
 	/* background-color: var(--x-bg-modified); */
 }
 
-.x-editbox.invalid {
+.x-editbox.invalid.invalid { /* specificity over .x-widget.grid-editor */
 	background-color: var(--x-bg-error);
 	color: var(--x-fg-inverted);
 }
@@ -1303,7 +1302,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	position: relative; /* for item moving */
 }
 
-.x-item.x-listbox-item { /* fighting specificity */
+.x-item.x-listbox-item { /* specificity over ?? */
 	overflow: visible;
 }
 
@@ -2434,8 +2433,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-widget.grid-editor,
-.x-widget.grid-editor.open:not(.widget-selected),            /* more specificity over x-dropdown */
-.x-widget.grid-editor:focus-within:not(.widget-selected)     /* more specificity over x-editbox */
+.x-widget.grid-editor.open:not(.widget-selected),            /* specificity over x-dropdown */
+.x-widget.grid-editor:focus-within:not(.widget-selected)     /* specificity over x-editbox */
 {
 	box-shadow: inset 2px 2px 6px -2px rgba(0,0,0,0.75);
 }
