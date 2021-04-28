@@ -2818,7 +2818,7 @@ component('x-toolbox', function(e) {
 		let px = clamp(e.px, 0, window.innerWidth  - r.w) - br.x
 		let py = clamp(e.py, 0, window.innerHeight - r.h) - br.y
 
-		e.popup(document.body, 'inner-'+e.side, 'start', null, null, null, null, px, py)
+		e.popup(e.target || document.body, 'inner-'+e.side, 'start', null, null, null, null, px, py)
 
 		// move to top if the update was user-triggered not layout-triggered.
 		if (opt && opt.input == e && !is_top())

@@ -337,7 +337,9 @@ method(Array, 'set', function(a) {
 })
 
 method(Array, 'insert', function(i, v) {
-	if (i >= this.length)
+	if (i == null)
+		this.push(v)
+	else if (i >= this.length)
 		this[i] = v
 	else
 		this.splice(i, 0, v)

@@ -21,6 +21,7 @@ implements:
 calls:
 	e.do_update_cell_val(cell, row, field, input_val)
 	e.do_update_cell_errors(cell, row, field, errors)
+	e.do_update_row_state(ri, prop, val, ev)
 --------------------------------------------------------------------------- */
 
 component('x-grid', function(e, is_val_widget) {
@@ -493,9 +494,13 @@ component('x-grid', function(e, is_val_widget) {
 	}
 
 	e.do_update_cell_errors = function(cell, row, field, errors) {
-		let invalid = errors && !errors.passed || false
+		let invalid = !!(errors && !errors.passed)
+		let s = invalid && errors
+				.filter(e => !e.passed)
+				.map(e => e.message instanceof Node ? e.message.textContent : e.message)
+				.join('\n')
 		cell.class('invalid', invalid)
-		cell.attr('title', errors && errors.join('\n') || null)
+		cell.attr('title', s)
 	}
 
 	function indent_offset(indent) {
@@ -820,10 +825,6 @@ component('x-grid', function(e, is_val_widget) {
 			cls = 'new'
 		else if (prop == 'removed')
 			cls = 'removed'
-		else if (prop == 'errors') {
-			cls = 'row-invalid'
-			val = !!(val && !val.passed)
-		}
 		if (cls)
 			each_cell_of_row(ri, function(cell, fi, cls, val) {
 				cell.class(cls, val)
@@ -1024,7 +1025,7 @@ component('x-grid', function(e, is_val_widget) {
 
 		// initial state
 
-		let state = e.start_move_selected_rows()
+		let state = e.start_move_selected_rows({input: e})
 		let ri1 = state.ri1
 		let ri2 = state.ri2
 		let move_ri1 = state.move_ri1
@@ -1326,7 +1327,7 @@ component('x-grid', function(e, is_val_widget) {
 			if (e.editor)
 				e.editor.class('row-moving', false)
 
-			state.finish(hit_ri, hit_parent_row)
+			state.finish(hit_ri, hit_parent_row, {input: e})
 		}
 
 		// post-init

@@ -185,8 +185,10 @@ component('x-modeleditor', function(e) {
 	}
 
 	function undo_from(stack, start) {
+		if (start == null)
+			return
 		start_undo()
-		while (stack.length >= start) {
+		while (stack.length > start) {
 			let f = stack.pop()
 			let argc = stack.pop()
 			f(...stack.splice(-argc))
@@ -250,28 +252,71 @@ component('x-modeleditor', function(e) {
 		// TODO
 	}
 
-	function add_layer(opt) {
+	function add_layer(opt, at_index, ev) {
+
 		layer = assign({visible: true, can_hide: true}, opt)
-		layers.push(layer)
+		layers.insert(at_index, layer)
 		instances_valid = false
+
 		if (LOG)
-			log('add_layer', layer)
+			log('add_layer', opt, at_index, layer)
+
+		push_undo(remove_layer, layer, at_index)
+
+		if (!ev && layers_list) {
+			layers_list.insert_row({
+					name: layer.name,
+					visible: layer.visible,
+				}, {input: e})
+		}
+
+		print(undo_groups, undo_stack)
+
 		return layer
 	}
 
-	function remove_layer(layer) {
-		// TODO: move tbis layer's instances to the default layer.
-		layers.remove_value(layer)
-		instances_valid = false
+	function remove_layer(layer, expect_index, ev) {
+
 		if (LOG)
 			log('remove_layer', layer)
+
+		// TODO: move tbis layer's instances to the default layer.
+
+		let i = layers.remove_value(layer)
+		instances_valid = false
+
+		assert(expect_index == null || expect_index == i)
+
+		push_undo(add_layer, layer, i)
+
+		if (!ev && layers_list) {
+			let row = layers_list.rows[i]
+			assert(row.layer == layer)
+			layers_list.remove_row(row, {input: e})
+		}
+	}
+
+	function move_layers(i, n, insert_i, ev) {
+
+		if (LOG)
+			log('move_layers', i, n, insert_i, ev)
+
+		layers.move(i, n, insert_i, ev)
+
+		push_undo(move_layers, insert_i, n, i)
+
+		if (!ev && layers_list) {
+			layers_list.move_rows(i, n, insert_i, null, {input: e})
+		}
 	}
 
 	function layer_set_visibile(layer, visible) {
-		layer.visible = !!visible
-		instances_valid = false
+
 		if (LOG)
 			log('layer_set_visibile', layer, visible)
+
+		layer.visible = !!visible
+		instances_valid = false
 	}
 
 	// components -------------------------------------------------------------
@@ -1598,6 +1643,7 @@ component('x-modeleditor', function(e) {
 	})
 
 	e.on('wheel', function(ev, dy) {
+		close_context_menu()
 		if (update_mouse(ev))
 			fire_pointermove()
 		mouse.prevent_validate = false
@@ -1629,7 +1675,8 @@ component('x-modeleditor', function(e) {
 	e.on('keydown', function(key, shift, ctrl, alt, ev) {
 		mouse.prevent_validate = false
 		update_keys(ev)
-		if (key == 'Delete') {
+		key = key.lower()
+		if (key == 'delete') {
 			remove_selection()
 			update()
 			return false
@@ -1639,16 +1686,18 @@ component('x-modeleditor', function(e) {
 			update()
 			return false
 		}
-		if (tool.keydown)
-			if (tool.keydown(key) === false)
+		if (tool.keydown) {
+			if (tool.keydown(key) === false) {
 				return false
-		if (key == 'Escape') {
+			}
+		}
+		if (key == 'escape') {
 			if (tool.cancel)
 				tool.cancel()
 			fire_pointermove()
 			return false
 		}
-		if (key == 'F2') {
+		if (key == 'f2') {
 			toogle_toolboxes()
 			return false
 		}
@@ -1660,13 +1709,25 @@ component('x-modeleditor', function(e) {
 			ungroup_selection()
 			return false
 		}
+		if (ctrl && key == 'z') {
+			if (shift)
+				redo()
+			else
+				undo()
+			return false
+		}
+		if (ctrl && key == 'y') {
+			redo()
+			return false
+		}
 		if (shift || ctrl)
 			return
 		let toolname = tool_keys[key.toLowerCase()]
 		if (toolname) {
 			e.tool = toolname
 			return false
-		} else if (key == ' ') {
+		}
+		if (key == ' ') {
 			e.tool = e.tool == 'select' ? 'orbit' : 'select'
 			return false
 		}
@@ -1681,6 +1742,48 @@ component('x-modeleditor', function(e) {
 			return false
 	})
 
+	// context menu -----------------------------------------------------------
+
+	let cmenu
+
+	function close_context_menu() {
+		if (cmenu) {
+			cmenu.close()
+			cmenu = null
+		}
+	}
+
+	e.on('rightpointerdown', close_context_menu)
+
+	e.on('contextmenu', function(ev) {
+
+		close_context_menu()
+
+		if (update_mouse(ev))
+			fire_pointermove()
+
+		function move_to_layer(item) {
+			for (let child of cur_comp.children)
+				if (child.selected)
+					child.comp.set_child_layer(child, item.layer)
+		}
+		let layer_items = []
+		for (let layer of layers)
+			layer_items.push({text: layer.name, layer: layer, action: move_to_layer})
+
+		cmenu = menu({
+			items: [
+				{text: 'Group selection', action: group_selection, key: 'Ctrl+G', icon: 'fa'},
+				{text: 'Ungroup selection', action: ungroup_selection, key: 'Ctrl+U', icon: 'fa', separator: true},
+				{text: 'Move objects to layer', items: layer_items},
+			],
+		})
+
+		cmenu.popup(e, 'inner-top', null, null, null, null, null, mouse.x, mouse.y)
+
+		return false
+	})
+
 	// materials list ---------------------------------------------------------
 
 	let materials_list, materials_toolbox
@@ -1690,6 +1793,8 @@ component('x-modeleditor', function(e) {
 		let rows = []
 		for (let m of materials)
 			rows.push([m, m.name])
+
+		rows[0].can_remove = false
 
 		function format_material(m) {
 			if (m.diffuse_color == null)
@@ -1713,6 +1818,7 @@ component('x-modeleditor', function(e) {
 			header_visible: false,
 			stay_in_edit_mode: false,
 			can_exit_edit_on_errors: false,
+			enable_context_menu: false,
 			can_select_widget: false,
 
 		})
@@ -1724,8 +1830,7 @@ component('x-modeleditor', function(e) {
 		materials_toolbox = toolbox({
 			text: 'Materials',
 			content: materials_list,
-			side: 'right',
-			py: 10,
+			target: e, side: 'right', py: 10,
 			w: 160, h: 200,
 		})
 
@@ -1774,18 +1879,32 @@ component('x-modeleditor', function(e) {
 			stay_in_edit_mode: false,
 			can_exit_edit_on_errors: false,
 			save_row_on_insert: true,
+			enable_context_menu: false,
 			can_select_widget: false,
 
-			init_row: function(row) {
+			init_row: function(row, ri, ev) {
+				if (ev && ev.input == e)
+					return
+				start_undo()
 				row.layer = add_layer({
 					name    : this.cell_val(row, 'name'),
 					visible : this.cell_val(row, 'visible')
-				})
+				}, ri, ev)
 			},
 
-			free_row: function(row) {
-				remove_layer(row.layer)
+			free_row: function(row, ev) {
+				if (ev && ev.input == e)
+					return
+				start_undo()
+				remove_layer(row.layer, ev)
 			},
+
+			rows_moved: function(ri, n, insert_ri, ev) {
+				if (ev && ev.input == e)
+					return
+				start_undo()
+				move_layers(ri, n, insert_ri, ev)
+			}
 
 		})
 
@@ -1808,8 +1927,7 @@ component('x-modeleditor', function(e) {
 		layers_toolbox = toolbox({
 			text: 'Layers',
 			content: layers_list,
-			side: 'right',
-			py: 220,
+			target: e, side: 'right', py: 220,
 			w: 160, h: 200,
 		})
 
@@ -1831,7 +1949,7 @@ component('x-modeleditor', function(e) {
 			rowset: {
 				fields: [
 					{name: 'thumbnail', w: 50, type: 'image'},
-					{name: 'name', w: 50, },
+					{name: 'name', w: 50},
 				],
 				rows: rows,
 			},
@@ -1841,6 +1959,7 @@ component('x-modeleditor', function(e) {
 			header_visible: false,
 			stay_in_edit_mode: false,
 			can_exit_edit_on_errors: false,
+			enable_context_menu: false,
 			can_select_widget: false,
 
 		})
@@ -1848,8 +1967,7 @@ component('x-modeleditor', function(e) {
 		comp_toolbox = toolbox({
 			text: 'Components',
 			content: comp_list,
-			side: 'right',
-			py: 430,
+			target: e, side: 'right', py: 430,
 			w: 160, h: 200,
 		})
 

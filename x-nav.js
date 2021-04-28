@@ -88,7 +88,6 @@ rowset row attributes:
 	row.nosave         : skip saving.
 	row[input_val_i]   : currently set cell value, whether valid or not.
 	row[errors_i]      : cell errors array, only if the cell is invalid.
-	row.errors         : row errors array, if the row is invalid.
 	row[modified_i]    : value was modified, change not on server yet.
 	row[old_val_i]     : initial value before modifying.
 	row.is_new         : new row, not added on server yet.
@@ -182,6 +181,7 @@ row adding, removing, moving:
 		e.can_remove_row()
 		e.init_row()
 		e.free_row()
+		e.move_rows()
 
 cell values & state:
 	publishes:
@@ -208,14 +208,11 @@ updating cells:
 row state:
 	publishes:
 		row.<key>
-		e.row_has_errors()
 		e.row_can_have_children()
 
 updating row state:
 	publishes:
 		e.set_row_state()
-		e.validate_row()
-		e.set_row_errors()
 		e.set_row_is_new()
 	calls:
 		e.do_update_row_state(ri, prop, val, ev)
@@ -335,10 +332,18 @@ function nav_widget(e) {
 
 	function init_all() {
 		init_all_fields()
+		init_validators()
 	}
 
 	function force_unfocus_focused_cell() {
 		assert(e.focus_cell(false, false, 0, 0, {force_exit_edit: true}))
+	}
+
+	function set_rowset(rs) {
+		if (e.rowset && e.free_row)
+			for (let row of e.rowset.rows)
+				e.free_row(row)
+		e.rowset = rs
 	}
 
 	e.on('bind', function(on) {
@@ -353,7 +358,7 @@ function nav_widget(e) {
 	})
 
 	e.set_static_rowset = function(rs) {
-		e.rowset = rs
+		set_rowset(rs)
 		e.reload()
 	}
 	e.prop('static_rowset', {store: 'var'})
@@ -377,7 +382,7 @@ function nav_widget(e) {
 	e.prop('rowset_name', {store: 'var', type: 'rowset'})
 
 	e.set_rowset_id = function(v) {
-		e.rowset = xmodule.rowset(v)
+		set_rowset(xmodule.rowset(v))
 		e.reload()
 	}
 	e.prop('rowset_id', {store: 'var', type: 'rowset'})
@@ -2056,88 +2061,75 @@ function nav_widget(e) {
 
 	e.cell_vals = function(row, cols) {
 		let fields = flds(cols)
-		return fields ? fields.map(f => row[f.val_index]) : null
+		return fields ? fields.map(field => row[field.val_index]) : null
+	}
+
+	e.cell_input_vals = function(row, cols) {
+		let fields = flds(cols)
+		return fields ? fields.map(field => e.cell_input_val(row, field)) : null
 	}
 
 	e.convert_val = function(field, val, row, ev) {
 		return field.convert ? field.convert.call(e, val, field, row) : val
 	}
 
-	e.field_validators = function(field) {
-		let t = []
-		for (let k in field) {
-			if (k.starts('validator_')) {
-				let v = field[k](field)
-				if (v) t.push(v)
+	function init_validators(field) {
+		for (let field of e.all_fields) {
+			let t = []
+			for (let k in field) {
+				if (k.starts('validator_')) {
+					let v = field[k](field)
+					if (v && v.validate) t.push(v)
+				}
 			}
+			// add row-level validators.
+			for (let k in e) {
+				if (k.starts('validator_')) {
+					let v = e[k]()
+					if (v && v.validate) t.push(v)
+				}
+			}
+			field.validators = t
 		}
-		return t
 	}
 
-	e.row_validators = function() {
-		let t = []
-		for (let k in e) {
-			if (k.starts('validator_')) {
-				let v = e[k]()
-				if (v) t.push(v)
-			}
+	e.validator_pk = function() {
+		if (!e.pk)
+			return
+		let pk_fields = flds(e.pk)
+		return {
+			validate: function(val, row, field) {
+				if (!pk_fields.includes(field))
+					return true // don't check if it's not a pk field that's being changed.
+				let rows = e.lookup(e.pk, e.cell_input_vals(row, e.pk)).filter(row1 => row1 != row)
+				return rows.length < 1
+			},
+			message: ('{0} must be unique').subst(pk_fields.map(field => field.text)),
+			must_allow_exit_edit: pk_fields.length > 1 || null,
+			must_not_allow_exit_row: true,
 		}
-		return t
 	}
 
 	e.validate_val = function(field, val, row, ev) {
 		let errors = []
 		errors.passed = true
-		let validators = e.field_validators(field)
-		for (let validator of validators) {
-			if (validator.validate) {
-				let error = {}
-				errors.push(error)
+		for (let validator of field.validators) {
+			let passed = validator.validate(val, row, field)
+			let error = isbool(passed) ? {passed: !!passed} : passed
+			errors.push(error)
+			if (!error.message)
 				error.message = validator.message
-				error.passed = validator.validate(val)
-				if (!error.passed)
-					errors.passed = false
+			if (!error.passed) {
+				errors.passed = false
+				errors.must_allow_exit_edit = or(errors.must_allow_exit_edit, validator.must_allow_exit_edit)
+				errors.must_not_allow_exit_row = or(errors.must_not_allow_exit_row, validator.must_not_allow_exit_row)
 			}
 		}
-		return errors
-	}
-
-	e.validate_row = function(row) {
-		let errors = []
-		errors.passed = true
-
-		let validators = e.row_validators()
-		for (let validator of validators) {
-			if (validator.validate) {
-				let error = {}
-				errors.push(error)
-				error.passed = validator.validate(row)
-				error.message = validator.get_message(row)
-				if (!error.passed)
-					errors.passed = false
-			}
-		}
-
-		if (e.pk && e.lookup(e.pk, e.cell_vals(row, e.pk)).length > 1) {
-			errors.push({passed: false, message: 'Duplicate '+e.pk})
-			errors.passed = false
-		}
-
 		return errors
 	}
 
 	e.row_can_have_children = function(row) {
 		return row.can_have_children != false
-	}
-
-	e.set_row_errors = function(row, errors, ev) {
-		if (errors)
-			for (let error of errors)
-				if (!error.passed) {
-					e.notify('error', error.message)
-					warn(error.message)
-				}
-		e.set_row_state(row, 'errors', errors, undefined, true, ev)
 	}
 
 	e.set_row_is_new = function(row, is_new, ev) {
@@ -2147,19 +2139,24 @@ function nav_widget(e) {
 			row_changed(row)
 	}
 
-	e.row_has_errors = function(row) {
-		if (!row.errors) {
-			let errors = e.validate_row(row)
-			e.set_row_errors(row, errors)
-		}
-		if (!row.errors.passed)
+	function cell_is_valid(row, field, purpose) {
+		let errors = e.cell_errors(row, field)
+		if (!errors || errors.passed)
 			return true
-		for (let field of e.all_fields) {
-			let errors = e.cell_errors(row, field)
-			if (errors && !errors.passed)
+		if (purpose == 'exit_edit')
+			if (e.can_exit_edit_on_errors)
 				return true
-		}
-		return false
+			else
+				return errors.must_allow_exit_edit
+		else if (purpose == 'exit_row')
+			if (errors.must_not_allow_exit_row)
+				return false
+			else if (e.can_exit_row_on_errors)
+				return true
+			else
+				return false
+		else
+			return false
 	}
 
 	function cells_modified(row) {
@@ -2188,15 +2185,17 @@ function nav_widget(e) {
 		if (val === undefined)
 			val = null
 		val = e.convert_val(field, val, row, ev)
+
+		let cur_val = row[field.val_index]
+
+		// some validators use `input_val` directly instead of the supplied `val`.
+		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
+
 		let errors = e.validate_val(field, val, row, ev)
 		let invalid = !errors.passed
-		let cur_val = row[field.val_index]
 		let val_changed = !invalid && val !== cur_val
 
-		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
 		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
-		// reset row's invalid state, to be validated again on `exit_row` if it's set to do so.
-		let row_errors_changed = e.set_row_state(row, 'errors', undefined, undefined, false)
 
 		if (val_changed) {
 
@@ -2227,8 +2226,6 @@ function nav_widget(e) {
 			cell_state_changed(row, field, 'input_val', val, ev)
 		if (cell_errors_changed)
 			cell_state_changed(row, field, 'errors', errors, ev)
-		if (row_errors_changed)
-			row_state_changed(row, 'errors', false, ev)
 
 		if (e.save_row_on == 'input' && (!row.is_new || e.save_new_row_on == 'input'))
 			e.save()
@@ -2247,7 +2244,6 @@ function nav_widget(e) {
 		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
 		let old_val_changed = e.set_cell_state(row, field, 'old_val', val, old_val, false)
 		let cell_modified_changed = e.set_cell_state(row, field, 'modified', false, false, false)
-		let row_errors_changed = e.set_row_state(row, 'errors', undefined, undefined, false)
 		let row_is_new_changed = e.set_row_state(row, 'is_new', false, false, false)
 		if (val !== cur_val) {
 			row[field.val_index] = val
@@ -2264,8 +2260,6 @@ function nav_widget(e) {
 			cell_state_changed(row, field, 'errors', errors, ev)
 		if (cell_modified_changed)
 			cell_state_changed(row, field, 'modified', false, ev)
-		if (row_errors_changed)
-			row_state_changed(row, 'errors', undefined, ev)
 		if (row_is_new_changed)
 			row_state_changed(row, 'is_new', false, ev)
 
@@ -2352,17 +2346,16 @@ function nav_widget(e) {
 			return true
 
 		if (!force)
-			if (!e.can_exit_edit_on_errors && e.row_has_errors(e.focused_row))
+			if (!cell_is_valid(e.focused_row, e.focused_field, 'exit_edit'))
 				return false
 
 		if (!e.fire('exit_edit', e.focused_row_index, e.focused_field_index, force))
 			if (!force)
 				return false
 
-		// TODO: think this through
 		if (e.save_row_on == 'exit_edit'
-			|| (e.save_row_on != 'manual' && row.is_new && e.save_new_row_on == 'exit_edit')
-			|| (e.save_row_on != 'manual' && row.modified && e.save_row_on == 'exit_edit')
+			|| (e.save_row_on != 'manual' && row.is_new   && e.save_new_row_on == 'exit_edit')
+			|| (e.save_row_on != 'manual' && row.modified && e.save_row_on     == 'exit_edit')
 		) {
 			e.save()
 		}
@@ -2396,10 +2389,9 @@ function nav_widget(e) {
 			return false
 
 		if (!force)
-			if (!e.can_exit_row_on_errors && e.row_has_errors(row))
+			if (!cell_is_valid(e.focused_row, e.focused_field, 'exit_row'))
 				return false
 
-		// TODO: think this through
 		if (e.save_row_on == 'exit_row'
 			|| (e.save_row_on != 'manual' && row.is_new  && e.save_new_row_on     == 'exit_row')
 			|| (e.save_row_on != 'manual' && row.removed && e.save_row_remove_on  == 'exit_row')
@@ -2504,10 +2496,6 @@ function nav_widget(e) {
 
 	// row adding & removing --------------------------------------------------
 
-	// stubs to manage rows that link to external live objects.
-	e.init_row = noop
-	e.free_row = noop
-
 	e.insert_rows = function(row_vals, ev) {
 		if (!e.can_edit || !e.can_add_rows)
 			return false
@@ -2572,7 +2560,8 @@ function nav_widget(e) {
 					row[fi] = strict_or(row[fi], field.default)
 				}
 
-				e.init_row(row)
+				if (e.init_row)
+					e.init_row(row, ri, ev)
 
 				row.is_new = true
 				e.all_rows.push(row)
@@ -2647,13 +2636,19 @@ function nav_widget(e) {
 		return true
 	}
 
+	e.insert_row = function(row_vals, ev) {
+		return e.insert_rows([row_vals], ev)
+	}
+
 	e.can_remove_row = function(row) {
 		if (!(e.can_edit && e.can_remove_rows))
 			return false
 		if (!row)
 			return true
-		if (row.can_remove === false)
+		if (row.can_remove === false) {
+			e.notify('error', S('error_not_removable', 'Not removable'))
 			return false
+		}
 		if (row.is_new && row.save_request) {
 			e.notify('error',
 				S('error_remove_while_saving',
@@ -2688,10 +2683,12 @@ function nav_widget(e) {
 					}
 
 					removed_rows.add(row)
-					e.free_row(row)
+					if (e.free_row)
+						e.free_row(row, ev)
 					e.each_child_row(row, function(row) {
 						removed_rows.add(row)
-						e.free_row(row)
+						if (e.free_row)
+							e.free_row(row, ev)
 					})
 
 					remove_row_from_tree(row)
@@ -2763,6 +2760,10 @@ function nav_widget(e) {
 		return removed_rows.size > 0 || rows_marked
 	}
 
+	e.remove_row = function(row, ev) {
+		return e.remove_rows([row], ev)
+	}
+
 	e.remove_selected_rows = function(ev) {
 		return e.remove_rows(e.selected_rows.keys(), ev)
 	}
@@ -2810,10 +2811,10 @@ function nav_widget(e) {
 		}
 	}
 
-	e.start_move_selected_rows = function() {
+	e.rows_moved = noop // stub
+	let rows_moved // flag
 
-		let focused_ri  = e.focused_row_index
-		let selected_ri = or(e.selected_row_index, focused_ri)
+	function move_rows_state(focused_ri, selected_ri, ev) {
 
 		let move_ri1 = min(focused_ri, selected_ri)
 		let move_ri2 = max(focused_ri, selected_ri)
@@ -2852,7 +2853,7 @@ function nav_widget(e) {
 
 		state.rows = move_rows
 
-		state.finish = function(insert_ri, parent_row) {
+		state.finish = function(insert_ri, parent_row, ev) {
 
 			e.rows.splice(insert_ri, 0, ...move_rows)
 
@@ -2878,10 +2879,12 @@ function nav_widget(e) {
 				e.all_rows = [].concat(r1, r2)
 			}
 
-			if (e.parent_field)
+			if (e.parent_field) {
 				e.all_rows = e.rows.slice()
-			else
+			} else {
 				e.all_rows.move(move_ri1, move_n, insert_ri)
+				e.rows_moved(move_ri1, move_n, insert_ri, ev)
+			}
 
 			update_row_index()
 
@@ -2889,7 +2892,7 @@ function nav_widget(e) {
 
 			update_index_field(old_parent_row, parent_row)
 
-			e.rows_moved = true
+			rows_moved = true
 			if (e.save_row_move_on == 'input')
 				e.save()
 			else
@@ -2902,6 +2905,16 @@ function nav_widget(e) {
 		}
 
 		return state
+	}
+
+	e.start_move_selected_rows = function(ev) {
+		let focused_ri  = e.focused_row_index
+		let selected_ri = or(e.selected_row_index, focused_ri)
+		return move_rows_state(focused_ri, selected_ri, ev)
+	}
+
+	e.move_rows = function(ri, n, insert_ri, parent_row, ev) {
+		return move_rows_state(ri, ri + n - 1, ev).finish(insert_ri, parent_row, ev)
 	}
 
 	// ajax requests ----------------------------------------------------------
@@ -2933,7 +2946,7 @@ function nav_widget(e) {
 		force_unfocus_focused_cell()
 
 		e.changed_rows = null // Set(row)
-		e.rows_moved = false
+		rows_moved = false
 
 		e.can_edit        = strict_or(e.rowset.can_edit       , true) && e.can_edit
 		e.can_add_rows    = strict_or(e.rowset.can_add_rows   , true) && e.can_add_rows
@@ -3016,7 +3029,7 @@ function nav_widget(e) {
 	}
 
 	function load_success(rs) {
-		e.rowset = rs
+		set_rowset(rs)
 		e.reset()
 	}
 
@@ -3051,8 +3064,6 @@ function nav_widget(e) {
 		for (let row of e.changed_rows) {
 			if (row.save_request)
 				return // currently saving this row.
-			if (e.row_has_errors(row))
-				return
 			if (row.is_new) {
 				let t = {type: 'new', values: {}}
 				for (let fi = 0; fi < e.all_fields.length; fi++) {
@@ -3144,7 +3155,7 @@ function nav_widget(e) {
 			slow_timeout: e.slow_timeout,
 		})
 		e.changed_rows = null
-		e.rows_moved = false
+		rows_moved = false
 		e.show_action_band(false)
 		add_request(req)
 		set_save_state(req.rows, req)
@@ -3156,7 +3167,7 @@ function nav_widget(e) {
 	}
 
 	e.save = function() {
-		if (!e.changed_rows && !e.rows_moved)
+		if (!e.changed_rows && !rows_moved)
 			return
 
 		if (e.static_rowset) {
@@ -3225,32 +3236,25 @@ function nav_widget(e) {
 		e.begin_update()
 
 		let rows_to_remove = []
-		let all_commited = true
 		for (let row of e.changed_rows) {
-			if (!e.row_has_errors(row)) {
-				if (row.removed) {
-					rows_to_remove.push(row)
-				} else {
-					let is_new_changed   = e.set_row_state(row, 'is_new', false, false, false)
-					let modified_changed = e.set_row_state(row, 'modified', false, false, false)
-					if (is_new_changed)
-						row_state_changed(row, 'is_new', false)
-					if (modified_changed)
-						row_state_changed(row, 'modified', false)
-					for (let field of e.all_fields)
-						e.reset_cell_val(row, field, e.cell_val(row, field))
-				}
+			if (row.removed) {
+				rows_to_remove.push(row)
 			} else {
-				all_commited = false
+				let is_new_changed   = e.set_row_state(row, 'is_new'  , false, false, false)
+				let modified_changed = e.set_row_state(row, 'modified', false, false, false)
+				if (is_new_changed)
+					row_state_changed(row, 'is_new', false)
+				if (modified_changed)
+					row_state_changed(row, 'modified', false)
+				for (let field of e.all_fields)
+					e.reset_cell_val(row, field, e.cell_val(row, field))
 			}
 		}
 		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
 
-		if (all_commited) {
-			e.changed_rows = null
-			e.rows_moved = false
-			e.show_action_band(false)
-		}
+		e.changed_rows = null
+		rows_moved = false
+		e.show_action_band(false)
 
 		e.end_update()
 	}
@@ -3273,7 +3277,7 @@ function nav_widget(e) {
 	e.serialize_all_rows = function(row) {
 		let rows = []
 		for (let row of e.all_rows)
-			if (!row.removed && !row.nosave && !e.row_has_errors(row)) {
+			if (!row.removed && !row.nosave) {
 				let drow = e.serialize_row(row)
 				rows.push(drow)
 			}
@@ -3302,7 +3306,7 @@ function nav_widget(e) {
 	e.serialize_all_row_vals = function() {
 		let rows = []
 		for (let row of e.all_rows)
-			if (!row.removed && !row.nosave && !e.row_has_errors(row)) {
+			if (!row.removed && !row.nosave) {
 				let vals = e.serialize_row_vals(row)
 				if (e.save_row(vals) !== 'skip')
 					rows.push(vals)
@@ -3324,7 +3328,7 @@ function nav_widget(e) {
 	e.serialize_all_row_states = function() {
 		let rows = []
 		for (let row of e.all_rows) {
-			if (!row.nosave && !e.row_has_errors(row)) {
+			if (!row.nosave) {
 				let state = {}
 				if (row.is_new)
 					state.is_new = true
@@ -3791,23 +3795,24 @@ component('x-lookup-dropdown', function(e) {
 		},
 	}
 
-	all_field_types.validator_not_null = field => ({
-		validate : !field.allow_null ? (v => v != null) : undefined,
-		message  : S('validation_required', 'Required'),
+	all_field_types.validator_not_null = field => (!field.allow_null && {
+		validate : v => v != null,
+		message  : S('validation_required',
+			(field.text && '{0} required' || 'Required').subst(field.text)),
 	})
 
-	all_field_types.validator_min = field => ({
-		validate : field.min != null ? (v => v >= field.min) : undefined,
+	all_field_types.validator_min = field => (field.min != null && {
+		validate : v => v >= field.min,
 		message  : S('validation_min_value', 'Value must be at least {0}').subst(field.min),
 	})
 
-	all_field_types.validator_max = field => ({
-		validate : field.max != null ? (v => v <= field.max) : undefined,
+	all_field_types.validator_max = field => (field.max != null && {
+		validate : v => v <= field.max,
 		message  : S('validation_max_value', 'Value must be at most {0}').subst(field.max),
 	})
 
-	all_field_types.validator_lookup = field => ({
-		validate : field.lookup_nav ? (v => !field.lookup_nav.lookup(field.lookup_col, [v]).length) : undefined,
+	all_field_types.validator_lookup = field => (field.lookup_nav && {
+		validate : v => !field.lookup_nav.lookup(field.lookup_col, [v]).length,
 		message  : S('validation_lookup', 'Value must be in the list of allowed values.'),
 	})
 
@@ -3842,13 +3847,13 @@ component('x-lookup-dropdown', function(e) {
 		message  : S('validation_number', 'Value must be a number'),
 	})
 
-	number.validator_integer = field => ({
-		validate : field.multiple_of == 1 ? (v => v % 1 == 0) : undefined,
+	number.validator_integer = field => (field.multiple_of == 1 && {
+		validate : v => v % 1 == 0,
 		message  : S('validation_integer', 'Value must be an integer'),
 	})
 
-	number.validator_multiple = field => ({
-		validate : field.multiple_of != null && field.multiple_of != 1 ? (v => v % field.multiple_of == 0) : undefined,
+	number.validator_multiple = field => (field.multiple_of != null && field.multiple_of != 1 && {
+		validate : v => v % field.multiple_of == 0,
 		message  : S('validation_multiple', 'Value must be multiple of {0}').subst(field.multiple_of),
 	})
 
