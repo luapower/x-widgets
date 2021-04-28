@@ -1802,7 +1802,14 @@ component('x-modeleditor', function(e) {
 		function format_material(m) {
 			if (m.diffuse_color == null)
 				return ''
-			return div({style: 'width: 48px; height: 48px; background-color: #' + hex3(m.diffuse_color)})
+			return div({
+				style: `
+					width  : 48px;
+					height : 48px;
+					background-color: #${hex3(m.diffuse_color)};
+					pointer-events: none; /* dblclick pass-through */
+				`
+			})
 		}
 
 		materials_list = grid({
@@ -1826,7 +1833,7 @@ component('x-modeleditor', function(e) {
 
 		})
 
-		materials_list.on('cell_click', function(ev, nclicks) {
+		materials_list.on('cell_dblclick', function(ev) {
 			print('HERE')
 		})
 
