@@ -410,7 +410,7 @@ model3_component = function(pe) {
 		face.mat_inst.push(face)
 		faces_changed = true
 		if (LOG)
-			log('add_face', face.i, face.join(','), face.lis.join(','), material.id)
+			log('add_face', face.i, face.join(','), face.lis.join(','), material.i)
 		return face
 	}
 
@@ -428,17 +428,22 @@ model3_component = function(pe) {
 			log('remove_face', face.i)
 	}
 
-	function face_at(fi) {
-		return faces[fi]
-	}
-
 	function set_material(face, material) {
-		face.mat_inst.remove_value(face)
-		face.mat_inst = material_instance(material)
+		let m_inst0 = face.mat_inst
+		let m0 = m_inst0.material
+		let m_inst = material_instance(material)
+		if (m_inst == m_inst0)
+			return
+
+		m_inst0.remove_value(face)
+		face.mat_inst = m_inst
 		face.mat_inst.push(face)
 		faces_changed = true
+
 		if (LOG)
-			log('set_material', face.i, material.id)
+			log('set_material', face.i, material.i)
+
+		push_undo(set_material, face, m0)
 	}
 
 	function ref_or_add_line(p1i, p2i) {
@@ -650,9 +655,9 @@ model3_component = function(pe) {
 	e.set_line_smoothness = set_line_smoothness
 	e.set_line_opacity = set_line_opacity
 
+	e.faces       = faces
 	e.add_face    = add_face
 	e.remove_face = remove_face
-	e.face_at     = face_at
 
 	e.set_material = set_material
 

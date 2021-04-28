@@ -272,8 +272,6 @@ component('x-modeleditor', function(e) {
 				}, {input: e, row_index: i, layer: layer})
 		}
 
-		//print(undo_groups, undo_stack)
-
 		return layer
 	}
 
@@ -293,7 +291,6 @@ component('x-modeleditor', function(e) {
 
 		if (layers_list && !(ev && ev.input == layers_list)) {
 			let row = layers_list.rows[i]
-			print(row.layer, layer)
 			assert(row.layer == layer)
 			layers_list.remove_row(row, {input: e})
 		}
@@ -320,6 +317,9 @@ component('x-modeleditor', function(e) {
 
 		layer.visible = !!visible
 		instances_valid = false
+
+		push_undo(layer_set_visibile, layer, !visible)
+
 	}
 
 	// components -------------------------------------------------------------
@@ -737,7 +737,7 @@ component('x-modeleditor', function(e) {
 		let inst_id = rr_hit.inst_id
 
 		let comp = comps[comp_id]
-		let face = comp.face_at(face_id)
+		let face = comp.faces[face_id]
 
 		let model = inst_model(comp, inst_id, _m0)
 		let plane = face.plane().to(_pl0).transform(model)
@@ -1552,6 +1552,40 @@ component('x-modeleditor', function(e) {
 
 	tools.paint = {}
 
+	function paint_node(node, material) {
+		for (let face of node.comp.faces)
+			if (face.mat_inst.material == default_material)
+				node.comp.set_material(face, material)
+		update_comp(node.comp)
+	}
+
+	tools.paint.pointerdown = function() {
+		let row = materials_list && materials_list.focused_row
+		let material = row && row.material || default_material
+		let p = mouse_hit_faces()
+		if (!p || p.snap != 'face')
+			return
+		if (p.comp == cur_comp) {
+
+			cur_comp.set_material(p.face, material)
+
+			for (let face of cur_comp.faces)
+				if (face.selected)
+					cur_comp.set_material(face, material)
+
+		} else if (p.path.equals(cur_path, 0, cur_path.length)) { // we've hit a child
+
+			paint_node(p.path.last, material)
+			update_comp(p.path.last.comp)
+
+			for (let child of cur_comp.children)
+				if (child.selected)
+					paint_node(child, material)
+
+		}
+		update()
+	}
+
 	// input handling ---------------------------------------------------------
 
 	let mouse = v3(false, false, 0)
@@ -1794,8 +1828,11 @@ component('x-modeleditor', function(e) {
 	function init_materials_list() {
 
 		let rows = []
-		for (let m of materials)
-			rows.push([m, m.name])
+		for (let m of materials) {
+			let row = [m, m.name]
+			row.material = m
+			rows.push(row)
+		}
 
 		rows[0].can_remove = false
 
@@ -1834,7 +1871,7 @@ component('x-modeleditor', function(e) {
 		})
 
 		materials_list.on('cell_dblclick', function(ev) {
-			print('HERE')
+			//
 		})
 
 		materials_toolbox = toolbox({
