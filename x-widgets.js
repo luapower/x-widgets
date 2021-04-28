@@ -2834,6 +2834,7 @@ component('x-toolbox', function(e) {
 	}
 
 	e.on('focusin', function(ev) {
+		// TODO: moving the div loses mouse events!
 		e.update({input: e}) // move-to-top
 		ev.target.focus()
 	})

@@ -1705,6 +1705,11 @@ component('x-grid', function(e, is_val_widget) {
 		return false
 	})
 
+	e.on('click', function(ev) {
+		if (!hit.cell) return
+		e.fire('cell_click', hit.cell.ri, hit.cell.fi, ev)
+	})
+
 	e.on('dblclick', function(ev) {
 		if (!hit.cell) return
 		if (e.enter_edit_on_dblclick)

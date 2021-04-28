@@ -969,6 +969,8 @@ component('x-modeleditor', function(e) {
 		select_add    : [5, 12],
 		select_remove : [5, 12],
 		select_toggle : [5, 12],
+		paint         : [6, 28],
+		move          : [15,17],
 	}
 	let cursor
 	e.property('cursor', () => cursor, function(name) {
@@ -1115,10 +1117,10 @@ component('x-modeleditor', function(e) {
 	tools.orbit.keydown = function(key) {
 		orbit_update_cursor()
 		hit_point = hit_point || mouse_hit_model({mode: 'camera'})
-		let x = key == 'ArrowLeft' && -1 || key == 'ArrowRight' && 1 || 0
-		let y = key == 'ArrowUp'   && -1 || key == 'ArrowDown'  && 1 || 0
+		let x = key == 'arrowleft' && -1 || key == 'arrowright' && 1 || 0
+		let y = key == 'arrowup'   && -1 || key == 'arrowdown'  && 1 || 0
 		if (!shift && ctrl && y) {
-			camera.dolly(hit_point, 1 + 0.4 * (key == 'ArrowDown' ? 1 : -1))
+			camera.dolly(hit_point, 1 + 0.4 * (key == 'arrowdown' ? 1 : -1))
 			update_camera()
 			return false
 		}
@@ -1140,7 +1142,7 @@ component('x-modeleditor', function(e) {
 
 	tools.orbit.keyup = function(key) {
 		orbit_update_cursor()
-		if (key != 'Shift' && key != 'Control' && key != 'Alt')
+		if (key != 'shift' && key != 'control' && key != 'alt')
 			hit_point = null
 	}
 
@@ -1159,12 +1161,12 @@ component('x-modeleditor', function(e) {
 
 	tools.select.keydown = function(key) {
 		update_select_mode()
-		if (key == 'Escape') {
+		if (key == 'escape') {
 			exit_edit()
 			update()
 			return false
 		}
-		if (key == 'Enter') {
+		if (key == 'enter') {
 			let child = cur_comp.selected_child
 			if (child) {
 				enter_edit(cur_path.slice().extend([child]))
@@ -1868,6 +1870,10 @@ component('x-modeleditor', function(e) {
 			enable_context_menu: false,
 			can_select_widget: false,
 
+		})
+
+		materials_list.on('cell_click', function(ev) {
+			e.tool = 'paint'
 		})
 
 		materials_list.on('cell_dblclick', function(ev) {
