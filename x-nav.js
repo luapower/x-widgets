@@ -181,7 +181,7 @@ row adding, removing, moving:
 		e.can_remove_row()
 		e.init_row()
 		e.free_row()
-		e.move_rows()
+		e.rows_moved()
 
 cell values & state:
 	publishes:
@@ -2502,14 +2502,14 @@ function nav_widget(e) {
 
 		ev = ev || empty
 
-		let at_row = ev.at_focused_row && e.focused_row
+		let at_row = ev.row_index != null ? e.rows[ev.row_index] : ev.at_focused_row && e.focused_row
 		let parent_row = at_row ? at_row.parent_row : null
 
 		let row_num = isarray(row_vals) ? row_vals.length : row_vals // arg#1 is row_num.
 		if (row_num <= 0)
 			return false
 
-		let ri1 = at_row ? e.focused_row_index : e.rows.length
+		let ri1 = at_row ? e.row_index(at_row) : e.rows.length
 
 		e.begin_update()
 
@@ -2593,12 +2593,15 @@ function nav_widget(e) {
 
 				// set default client values as if they were typed in by the user.
 				let set_val_ev = assign({row_not_modified: true}, ev)
+				let fi = 0
 				for (let field of e.all_fields) {
-					let val = field.client_default
-					if (val != null) {
-						if (isfunc(val)) // name generator etc.
-							val = val()
-						e.set_cell_val(row, field, val, set_val_ev)
+					if (row[fi++] == null) {
+						let val = field.client_default
+						if (val != null) {
+							if (isfunc(val)) // name generator etc.
+								val = val()
+							e.set_cell_val(row, field, val, set_val_ev)
+						}
 					}
 				}
 

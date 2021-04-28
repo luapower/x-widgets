@@ -252,45 +252,48 @@ component('x-modeleditor', function(e) {
 		// TODO
 	}
 
-	function add_layer(opt, at_index, ev) {
+	function add_layer(opt, ev) {
 
-		layer = assign({visible: true, can_hide: true}, opt)
-		layers.insert(at_index, layer)
+		layer = ev && ev.layer || assign({visible: true, can_hide: true}, opt)
+		layers.insert(ev && ev.index, layer)
 		instances_valid = false
 
+		let i = or(ev && ev.index, layers.length - 1)
+
 		if (LOG)
-			log('add_layer', opt, at_index, layer)
+			log('add_layer', opt, ev, layer, i)
 
-		push_undo(remove_layer, layer, at_index)
+		push_undo(remove_layer, layer, {index: i})
 
-		if (!ev && layers_list) {
+		if (layers_list && !(ev && ev.input == layers_list)) {
 			layers_list.insert_row({
 					name: layer.name,
 					visible: layer.visible,
-				}, {input: e})
+				}, {input: e, row_index: i, layer: layer})
 		}
 
-		print(undo_groups, undo_stack)
+		//print(undo_groups, undo_stack)
 
 		return layer
 	}
 
-	function remove_layer(layer, expect_index, ev) {
-
-		if (LOG)
-			log('remove_layer', layer)
+	function remove_layer(layer, ev) {
 
 		// TODO: move tbis layer's instances to the default layer.
 
-		let i = layers.remove_value(layer)
+		let i = assert(layers.remove_value(layer))
 		instances_valid = false
 
-		assert(expect_index == null || expect_index == i)
+		if (LOG)
+			log('remove_layer', layer, ev, i)
 
-		push_undo(add_layer, layer, i)
+		assert(!ev || ev.index == null || ev.index == i)
 
-		if (!ev && layers_list) {
+		push_undo(add_layer, null, {layer: layer, index: i})
+
+		if (layers_list && !(ev && ev.input == layers_list)) {
 			let row = layers_list.rows[i]
+			print(row.layer, layer)
 			assert(row.layer == layer)
 			layers_list.remove_row(row, {input: e})
 		}
@@ -305,7 +308,7 @@ component('x-modeleditor', function(e) {
 
 		push_undo(move_layers, insert_i, n, i)
 
-		if (!ev && layers_list) {
+		if (layers_list && !(ev && ev.input == layers_list)) {
 			layers_list.move_rows(i, n, insert_i, null, {input: e})
 		}
 	}
@@ -1883,13 +1886,15 @@ component('x-modeleditor', function(e) {
 			can_select_widget: false,
 
 			init_row: function(row, ri, ev) {
-				if (ev && ev.input == e)
+				if (ev && ev.input == e) {
+					row.layer = ev.layer
 					return
+				}
 				start_undo()
 				row.layer = add_layer({
 					name    : this.cell_val(row, 'name'),
 					visible : this.cell_val(row, 'visible')
-				}, ri, ev)
+				}, assign({index: ri}, ev))
 			},
 
 			free_row: function(row, ev) {

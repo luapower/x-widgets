@@ -352,8 +352,9 @@ method(Array, 'remove', function(i) {
 
 method(Array, 'remove_value', function(v) {
 	let i = this.indexOf(v)
-	if (i != -1)
-		this.splice(i, 1)
+	if (i == -1)
+		return null
+	this.splice(i, 1)
 	return i
 })
 

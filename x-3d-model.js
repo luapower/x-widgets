@@ -621,7 +621,7 @@ model3_component = function(pe) {
 	}
 
 	function remove_child(mat) {
-		assert(children.remove_value(mat) != -1)
+		assert(children.remove_value(mat))
 		pe.child_removed(e, mat)
 	}
 
