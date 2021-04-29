@@ -1220,7 +1220,7 @@ component('x-modeleditor', function(e) {
 	tools.select.context_menu = function() {
 
 		let p = mouse_hit_model({mode: 'select', distance: 'select'})
-		if (p.path && p.path.equals(cur_path, 0, cur_path.length)) {
+		if (p && p.path && p.path.equals(cur_path, 0, cur_path.length)) {
 			if (p.path.length == cur_path.length) { // we've hit current component's geometry.
 				if (p.line != null) {
 					if (!p.comp.is_line_selected(p.line.i))
@@ -1237,6 +1237,8 @@ component('x-modeleditor', function(e) {
 					select_all(false)
 				cur_comp.select_child(child, 'add')
 			}
+		} else {
+			select_all(false)
 		}
 		update()
 
@@ -1249,9 +1251,11 @@ component('x-modeleditor', function(e) {
 		for (let layer of layers)
 			layer_items.push({text: layer.name, layer: layer, action: move_to_layer})
 
+		let can_group = !cur_comp.is_selection_empty()
+
 		return [
-			{text: 'Group selection'       , action: group_selection   , key: 'Ctrl+G', },
-			{text: 'Ungroup selection'     , action: ungroup_selection , key: 'Ctrl+U', separator: true},
+			{text: 'Group selection'       , action: group_selection   , key: 'Ctrl+G', enabled: can_group},
+			{text: 'Ungroup selection'     , action: ungroup_selection , key: 'Ctrl+U', enabled: can_group, separator: true},
 			{text: 'Move objects to layer' , items: layer_items},
 		]
 

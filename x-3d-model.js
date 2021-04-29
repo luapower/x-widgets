@@ -844,8 +844,13 @@ model3_component = function(pe) {
 		sel_lines_changed = true
 	}
 
+	let sel_face_count = 0
+
 	function face_set_selected(face, sel) {
+		if (!face.selected == !sel)
+			return
 		face.selected = sel
+		sel_face_count += (sel ? 1 : -1)
 		faces_changed = true
 	}
 
@@ -940,6 +945,10 @@ model3_component = function(pe) {
 
 		select_all_lines(false)
 		update_face_lis()
+	}
+
+	e.is_selection_empty = function() {
+		return (sel_face_count + sel_lines.size + sel_child_count) == 0
 	}
 
 	// model editing ----------------------------------------------------------
