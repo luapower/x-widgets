@@ -1520,7 +1520,7 @@ component('x-menu', function(e) {
 
 	// view
 
-	function create_item(item) {
+	function create_item(item, disabled) {
 		let check_div = div({class: 'x-menu-check-div fa fa-check'})
 		let icon_div  = div({class: 'x-menu-icon-div'})
 		if (isstr(item.icon))
@@ -1535,7 +1535,7 @@ component('x-menu', function(e) {
 		let sub_td    = H.td ({class: 'x-menu-sub-td'}, sub_div)
 		sub_div.style.visibility = item.items ? null : 'hidden'
 		let tr = H.tr({class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
-		tr.class('disabled', item.enabled == false)
+		tr.class('disabled', !!(disabled || item.disabled))
 		tr.item = item
 		tr.check_div = check_div
 		update_check(tr)
@@ -1561,13 +1561,13 @@ component('x-menu', function(e) {
 		return tr
 	}
 
-	function create_menu(table, items, submenu) {
+	function create_menu(table, items, is_submenu, disabled) {
 		table = table || H.table()
-		table.classes = 'x-widget x-focusable x-menu'+(submenu ? ' x-menu-submenu' : '')
+		table.classes = 'x-widget x-focusable x-menu'+(is_submenu ? ' x-menu-submenu' : '')
 		table.attr('tabindex', 0)
 		for (let i = 0; i < items.length; i++) {
 			let item = items[i]
-			let tr = item.heading ? create_heading(item) : create_item(item)
+			let tr = item.heading ? create_heading(item) : create_item(item, disabled)
 			table.add(tr)
 			if (item.separator)
 				table.add(create_separator())
@@ -1577,7 +1577,7 @@ component('x-menu', function(e) {
 	}
 
 	e.init = function() {
-		e.table = create_menu(e, e.items)
+		e.table = create_menu(e, e.items, false, e.disabled)
 	}
 
 	function show_submenu(tr) {
@@ -1588,7 +1588,7 @@ component('x-menu', function(e) {
 			if (!items)
 				return
 
-			table = create_menu(null, items, true)
+			table = create_menu(null, items, true, tr.item.disabled)
 			table.parent_menu = tr.parent
 			tr.submenu_table = table
 			tr.last.add(table)
@@ -1687,16 +1687,16 @@ component('x-menu', function(e) {
 		tr = tr && (down ? tr.next : tr.prev)
 		return tr || (down ? menu.first : menu.last)
 	}
-	function next_valid_item(menu, down, tr, enabled) {
+	function next_valid_item(menu, down, tr, disabled) {
 		let i = menu.children.length
 		while (i--) {
 			tr = next_item(menu, down != false, tr)
-			if (tr && tr.focusable != false && (!enabled || tr.enabled != false))
+			if (tr && tr.focusable != false && (disabled || tr.disabled))
 				return tr
 		}
 	}
-	function select_next_item(menu, down, tr0, enabled) {
-		select_item(menu, next_valid_item(menu, down, tr0, enabled))
+	function select_next_item(menu, down, tr0, disabled) {
+		select_item(menu, next_valid_item(menu, down, tr0, disabled))
 	}
 
 	function activate_submenu(tr) {
@@ -1710,7 +1710,7 @@ component('x-menu', function(e) {
 
 	function click_item(tr) {
 		let item = tr.item
-		if ((item.action || item.checked != null) && item.enabled != false) {
+		if ((item.action || item.checked != null) && !item.disabled) {
 			if (item.checked != null) {
 				item.checked = !item.checked
 				update_check(tr)

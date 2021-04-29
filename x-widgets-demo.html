@@ -354,7 +354,7 @@ function act(item) { print(item.text) }
 m = menu({
 	items: [
 		{text: 'Open', action: act, key: 'Ctrl+B', icon: 'fa fa-folder-open'},
-		{text: 'Close', enabled: false, icon: 'fa fa-window-close', action: act, separator: true},
+		{text: 'Close', disabled: true, icon: 'fa fa-window-close', action: act, separator: true},
 		{text: 'More', items: [
 			{text: 'Check', checked: true},
 			{text: 'Check No Close', checked: true,

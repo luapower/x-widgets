@@ -1251,12 +1251,18 @@ component('x-modeleditor', function(e) {
 		for (let layer of layers)
 			layer_items.push({text: layer.name, layer: layer, action: move_to_layer})
 
-		let can_group = !cur_comp.is_selection_empty()
+		let nothing_selected = !(
+				cur_comp.sel_face_count() +
+				cur_comp.sel_line_count() +
+				cur_comp.sel_child_count()
+			)
+
+		let no_children_selected = !cur_comp.sel_child_count()
 
 		return [
-			{text: 'Group selection'       , action: group_selection   , key: 'Ctrl+G', enabled: can_group},
-			{text: 'Ungroup selection'     , action: ungroup_selection , key: 'Ctrl+U', enabled: can_group, separator: true},
-			{text: 'Move objects to layer' , items: layer_items},
+			{text: 'Group selection'   , action: group_selection   , key: 'Ctrl+G', disabled: nothing_selected},
+			{text: 'Ungroup selection' , action: ungroup_selection , key: 'Ctrl+U', disabled: nothing_selected, separator: true},
+			{text: 'Move to layer'     , items: layer_items, disabled: no_children_selected},
 		]
 
 	}

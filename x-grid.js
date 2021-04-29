@@ -1947,7 +1947,7 @@ component('x-grid', function(e, is_val_widget) {
 		items.push({
 			text: e.changed_rows ?
 				S('discard_changes_and_reload', 'Discard changes and reload') : S('reload', 'Reload'),
-			enabled: !e.changed_rows && !!e.rowset_url,
+			disabled: !e.changed_rows || !e.rowset_url,
 			icon: 'fa fa-sync',
 			action: function() {
 				e.reload()
@@ -1957,7 +1957,7 @@ component('x-grid', function(e, is_val_widget) {
 		items.push({
 			text: S('save', 'Save'),
 			icon: 'fa fa-save',
-			enabled: !!(e.changed_rows),
+			disabled: !e.changed_rows,
 			action: function() {
 				e.save()
 			},
@@ -1966,7 +1966,7 @@ component('x-grid', function(e, is_val_widget) {
 		items.push({
 			text: S('revert_changes', 'Revert changes'),
 			icon: 'fa fa-undo',
-			enabled: !!(e.changed_rows),
+			disabled: !e.changed_rows,
 			action: function() {
 				e.revert()
 			},
@@ -1976,7 +1976,7 @@ component('x-grid', function(e, is_val_widget) {
 		items.push({
 			text: S('remove_selected_rows', 'Remove selected rows'),
 			icon: 'fa fa-trash',
-			enabled: e.selected_rows.size && e.can_remove_row(),
+			disabled: !(e.selected_rows.size && e.can_remove_row()),
 			action: function() {
 				e.remove_selected_rows({refocus: true})
 			},
@@ -1985,7 +1985,7 @@ component('x-grid', function(e, is_val_widget) {
 		items.push({
 			text: S('set_null_selected_cells', 'Set selected cells to null'),
 			icon: 'fa fa-eraser',
-			enabled: e.selected_rows.size && e.can_change_val(),
+			disabled: !(e.selected_rows.size && e.can_change_val()),
 			action: function() {
 				e.set_null_selected_cells()
 			},
@@ -2060,12 +2060,12 @@ component('x-grid', function(e, is_val_widget) {
 
 			items.push({
 				text: S('expand_all', 'Expand all'),
-				enabled: horiz && e.tree_field,
+				disabled: !(horiz && e.tree_field),
 				action: function() { e.set_collapsed(null, false, true) },
 			})
 			items.push({
 				text: S('collapse_all', 'Collapse all'),
-				enabled: horiz && e.tree_field,
+				disabled: !(horiz && e.tree_field),
 				action: function() { e.set_collapsed(null, true, true) },
 			})
 		}
