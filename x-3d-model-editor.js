@@ -1217,6 +1217,41 @@ component('x-modeleditor', function(e) {
 		update()
 	}
 
+	tools.select.context_menu = function() {
+
+		let p = mouse_hit_model({mode: 'select', distance: 'select'})
+		select_all(false)
+		if (p.path && p.path.equals(cur_path, 0, cur_path.length)) {
+			if (p.path.length == cur_path.length) { // we've hit current component's geometry.
+				if (p.line != null) {
+					p.comp.select_line(p.line.i, 'add')
+				} else if (p.face != null) {
+					p.comp.select_face(p.face, 'add')
+				}
+			} else { // we've hit a child instance.
+				let child = p.path[cur_path.length]
+				cur_comp.select_child(child, 'add')
+			}
+		}
+		update()
+
+		function move_to_layer(item) {
+			for (let child of cur_comp.children)
+				if (child.selected)
+					child.comp.set_child_layer(child, item.layer)
+		}
+		let layer_items = []
+		for (let layer of layers)
+			layer_items.push({text: layer.name, layer: layer, action: move_to_layer})
+
+		return [
+			{text: 'Group selection', action: group_selection, key: 'Ctrl+G', icon: 'fa'},
+			{text: 'Ungroup selection', action: ungroup_selection, key: 'Ctrl+U', icon: 'fa', separator: true},
+			{text: 'Move objects to layer', items: layer_items},
+		]
+
+	}
+
 	// eraser tool ------------------------------------------------------------
 
 	tools.eraser = {}
@@ -1772,13 +1807,25 @@ component('x-modeleditor', function(e) {
 		}
 	})
 
-	e.on('keyup', function(key, shift, ctrl, alt, ev) {
+	function keyup(key, ev) {
 		mouse.prevent_validate = false
 		update_keys(ev)
 		if (!tool.keyup)
 			return
 		if (tool.keyup(key) === false)
 			return false
+	}
+
+	e.on('keyup', function(key, shift, ctrl, alt, ev) {
+		keyup(key, ev)
+	})
+
+	// [alt+][ctrl+][shift+]tab switches the tab/window and makes us lose
+	// keyup events on shift/ctrl/alt, so we force some keyup events on blur.
+	window.on('blur', function(ev) {
+		keyup('shift', ev)
+		keyup('ctrl' , ev)
+		keyup('alt'  , ev)
 	})
 
 	// context menu -----------------------------------------------------------
@@ -1801,21 +1848,13 @@ component('x-modeleditor', function(e) {
 		if (update_mouse(ev))
 			fire_pointermove()
 
-		function move_to_layer(item) {
-			for (let child of cur_comp.children)
-				if (child.selected)
-					child.comp.set_child_layer(child, item.layer)
-		}
-		let layer_items = []
-		for (let layer of layers)
-			layer_items.push({text: layer.name, layer: layer, action: move_to_layer})
+		let items = []
+
+		if (tool.context_menu)
+			items.extend(tool.context_menu())
 
 		cmenu = menu({
-			items: [
-				{text: 'Group selection', action: group_selection, key: 'Ctrl+G', icon: 'fa'},
-				{text: 'Ungroup selection', action: ungroup_selection, key: 'Ctrl+U', icon: 'fa', separator: true},
-				{text: 'Move objects to layer', items: layer_items},
-			],
+			items: items,
 		})
 
 		cmenu.popup(e, 'inner-top', null, null, null, null, null, mouse.x, mouse.y)
