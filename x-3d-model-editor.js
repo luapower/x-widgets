@@ -1220,16 +1220,21 @@ component('x-modeleditor', function(e) {
 	tools.select.context_menu = function() {
 
 		let p = mouse_hit_model({mode: 'select', distance: 'select'})
-		select_all(false)
 		if (p.path && p.path.equals(cur_path, 0, cur_path.length)) {
 			if (p.path.length == cur_path.length) { // we've hit current component's geometry.
 				if (p.line != null) {
+					if (!p.comp.is_line_selected(p.line.i))
+						select_all(false)
 					p.comp.select_line(p.line.i, 'add')
 				} else if (p.face != null) {
+					if (!p.face.selected)
+						select_all(false)
 					p.comp.select_face(p.face, 'add')
 				}
 			} else { // we've hit a child instance.
 				let child = p.path[cur_path.length]
+				if (!child.selected)
+					select_all(false)
 				cur_comp.select_child(child, 'add')
 			}
 		}
@@ -1245,9 +1250,9 @@ component('x-modeleditor', function(e) {
 			layer_items.push({text: layer.name, layer: layer, action: move_to_layer})
 
 		return [
-			{text: 'Group selection', action: group_selection, key: 'Ctrl+G', icon: 'fa'},
-			{text: 'Ungroup selection', action: ungroup_selection, key: 'Ctrl+U', icon: 'fa', separator: true},
-			{text: 'Move objects to layer', items: layer_items},
+			{text: 'Group selection'       , action: group_selection   , key: 'Ctrl+G', },
+			{text: 'Ungroup selection'     , action: ungroup_selection , key: 'Ctrl+U', separator: true},
+			{text: 'Move objects to layer' , items: layer_items},
 		]
 
 	}

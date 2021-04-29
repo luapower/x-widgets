@@ -893,6 +893,10 @@ model3_component = function(pe) {
 		sel_lines_changed = true
 	}
 
+	e.is_line_selected = function(li) {
+		return sel_lines.has(li)
+	}
+
 	e.selected_child = null
 
 	e.select_child = function(child, mode) {

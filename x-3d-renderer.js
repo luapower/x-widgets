@@ -166,7 +166,7 @@ gl.scene_renderer = function(r) {
 	r.background_color = r.background_color || v4(1, 1, 1, 1)
 	r.sunlight_dir     = r.sunlight_dir || v3(0, 1, 0)
 	r.sunlight_color   = r.sunlight_color || v3(1, 1, 1)
-	r.ambient_strength = or(r.ambient_strength, 0.1)
+	r.ambient_strength = or(r.ambient_strength, 0.3)
 
 	r.show_back_faces  = or(r.show_back_faces, false)
 
