@@ -1094,7 +1094,7 @@ function url(path, params, update) {
 */
 function ajax(req) {
 
-	req = update({slow_timeout: 4}, req)
+	req = assign({slow_timeout: 4}, req)
 	events_mixin(req)
 
 	let xhr = new XMLHttpRequest()

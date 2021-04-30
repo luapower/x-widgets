@@ -947,9 +947,9 @@ model3_component = function(pe) {
 		update_face_lis()
 	}
 
-	e.sel_face_count = () => sel_face_count
-	e.sel_line_count = () => sel_lines.size
-	e.sel_child_count = () => sel_child_count
+	e.selected_face_count = () => sel_face_count
+	e.selected_line_count = () => sel_lines.size
+	e.selected_child_count = () => sel_child_count
 
 	// model editing ----------------------------------------------------------
 

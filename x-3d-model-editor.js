@@ -1252,17 +1252,17 @@ component('x-modeleditor', function(e) {
 			layer_items.push({text: layer.name, layer: layer, action: move_to_layer})
 
 		let nothing_selected = !(
-				cur_comp.sel_face_count() +
-				cur_comp.sel_line_count() +
-				cur_comp.sel_child_count()
+				cur_comp.selected_face_count() +
+				cur_comp.selected_line_count() +
+				cur_comp.selected_child_count()
 			)
 
-		let no_children_selected = !cur_comp.sel_child_count()
+		let no_children_selected = !cur_comp.selected_child_count()
 
 		return [
 			{text: 'Group selection'   , action: group_selection   , key: 'Ctrl+G', disabled: nothing_selected},
 			{text: 'Ungroup selection' , action: ungroup_selection , key: 'Ctrl+U', disabled: nothing_selected, separator: true},
-			{text: 'Move to layer'     , items: layer_items, disabled: no_children_selected},
+			{text: 'Move to layer'     , items: layer_items, disabled: no_children_selected, separator: true},
 		]
 
 	}
@@ -1273,7 +1273,29 @@ component('x-modeleditor', function(e) {
 
 	// move tool --------------------------------------------------------------
 
+	{
+
 	tools.move = {}
+
+	tools.move.pointermove = function() {
+
+	}
+
+	tools.move.pointerdown = function() {
+
+		/*
+		let no_one_face_selected = !(
+			p && p.comp == cur_comp
+			&& p.face && p.face.selected
+			&& cur_comp.selected_face_count() == 1
+			&& cur_comp.selected_line_count() == 0
+			&& cur_comp.selected_child_count() == 0
+		)
+		*/
+
+	}
+
+	}
 
 	// rotate tool ------------------------------------------------------------
 
@@ -1881,6 +1903,19 @@ component('x-modeleditor', function(e) {
 
 	let materials_list, materials_toolbox
 
+	function format_material(m) {
+		if (m.diffuse_color == null)
+			return ''
+		return div({
+			style: `
+				width  : 48px;
+				height : 48px;
+				background-color: #${hex3(m.diffuse_color)};
+				pointer-events: none; /* dblclick pass-through */
+			`
+		})
+	}
+
 	function init_materials_list() {
 
 		let rows = []
@@ -1891,19 +1926,6 @@ component('x-modeleditor', function(e) {
 		}
 
 		rows[0].can_remove = false
-
-		function format_material(m) {
-			if (m.diffuse_color == null)
-				return ''
-			return div({
-				style: `
-					width  : 48px;
-					height : 48px;
-					background-color: #${hex3(m.diffuse_color)};
-					pointer-events: none; /* dblclick pass-through */
-				`
-			})
-		}
 
 		materials_list = grid({
 
@@ -1926,18 +1948,52 @@ component('x-modeleditor', function(e) {
 
 		})
 
+		materials_list.on('focused_row_changed', function(row) {
+			if (material_props)
+				material_props.set_material(row && row.material)
+		})
+
 		materials_list.on('cell_click', function(ev) {
 			e.tool = 'paint'
 		})
 
 		materials_list.on('cell_dblclick', function(ev) {
-			//
+			material_toolbox.show()
 		})
 
 		materials_toolbox = toolbox({
 			text: 'Materials',
 			content: materials_list,
 			target: e, side: 'right', py: 10,
+			w: 160, h: 200,
+		})
+
+	}
+
+	// material properties ----------------------------------------------------
+
+	let material_toolbox, material_props
+
+	function init_material_props() {
+
+		let img = image()
+
+		material_props = div({
+			style: `
+				display: flex;
+			`,
+		},
+			img,
+		)
+
+		material_props.set_material = function(m) {
+			//thumb_ct.set(m ? format_material(m) : '')
+		}
+
+		material_toolbox = toolbox({
+			text: 'Material',
+			content: material_props,
+			target: e, side: 'right', py: 10, px: 180,
 			w: 160, h: 200,
 		})
 
@@ -2095,6 +2151,7 @@ component('x-modeleditor', function(e) {
 	function init_toolboxes() {
 		init_layers_list()
 		init_materials_list()
+		init_material_props()
 		init_comp_list()
 		init_toolboxes = noop
 	}
@@ -2106,6 +2163,7 @@ component('x-modeleditor', function(e) {
 		let on = !toolboxes_on
 		layers_toolbox.show(on)
 		materials_toolbox.show(on)
+		material_toolbox.show(on)
 		comp_toolbox.show(on)
 		toolboxes_on = on
 	}
