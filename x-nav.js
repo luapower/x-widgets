@@ -283,18 +283,6 @@ field_types : {type -> {attr->val}}
 
 --------------------------------------------------------------------------- */
 
-{
-	let upper = function(s) {
-		return s.toUpperCase()
-	}
-	let upper2 = function(s) {
-		return ' ' + s.slice(1).toUpperCase()
-	}
-	function auto_display_name(s) {
-		return (s || '').replace(/[\w]/, upper).replace(/(_[\w])/g, upper2)
-	}
-}
-
 function nav_widget(e) {
 
 	e.isnav = true // for resolver
@@ -417,7 +405,7 @@ function nav_widget(e) {
 	let convert_field_attr = {}
 
 	convert_field_attr.text = function(field, v, f) {
-		return v == null ? auto_display_name(f.name) : v
+		return v == null ? f.name.display_name() : v
 	}
 
 	convert_field_attr.w = function(field, v) {

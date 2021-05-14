@@ -24,7 +24,7 @@ calls:
 	e.do_update_row_state(ri, prop, val, ev)
 --------------------------------------------------------------------------- */
 
-component('x-grid', function(e, is_val_widget) {
+component('x-grid', 'Input', function(e, is_val_widget) {
 
 	e.class('x-stretched')
 

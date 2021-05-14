@@ -1,5 +1,5 @@
 
---Server-side rowset counterpart for x-widgets rowsets.
+--Server-side rowsets for nav-based x-widgets.
 --Written by Cosmin Apreutesei. Public Domain.
 
 local errors = require'errors'

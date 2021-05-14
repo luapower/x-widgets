@@ -3,7 +3,7 @@
 // cssgrid widget
 // ---------------------------------------------------------------------------
 
-component('x-cssgrid', function(e) {
+component('x-cssgrid', 'Containers', function(e) {
 
 	e.class('x-stretched')
 

@@ -341,7 +341,7 @@ function input_widget(e) {
 // checkbox
 // ---------------------------------------------------------------------------
 
-component('x-checkbox', function(e) {
+component('x-checkbox', 'Input', function(e) {
 
 	focusable_widget(e, null, false)
 	editable_widget(e)
@@ -462,7 +462,7 @@ component('x-checkbox', function(e) {
 // radiogroup
 // ---------------------------------------------------------------------------
 
-component('x-radiogroup', function(e) {
+component('x-radiogroup', 'Input', function(e) {
 
 	val_widget(e)
 
@@ -537,7 +537,7 @@ component('x-radiogroup', function(e) {
 // editbox
 // ---------------------------------------------------------------------------
 
-component('x-editbox', function(e) {
+component('x-editbox', 'Input', function(e) {
 
 	val_widget(e)
 	input_widget(e)
@@ -802,7 +802,7 @@ component('x-editbox', function(e) {
 // passedit
 // ---------------------------------------------------------------------------
 
-component('x-passedit', function(e) {
+component('x-passedit', 'Input', function(e) {
 
 	editbox.construct(e)
 	e.input.attr('type', 'password')
@@ -836,7 +836,7 @@ component('x-passedit', function(e) {
 // spinedit
 // ---------------------------------------------------------------------------
 
-component('x-spinedit', function(e) {
+component('x-spinedit', 'Input', function(e) {
 
 	editbox.construct(e)
 
@@ -951,7 +951,7 @@ component('x-spinedit', function(e) {
 // tagsedit
 // ---------------------------------------------------------------------------
 
-component('x-tagsedit', function(e) {
+component('x-tagsedit', 'Input', function(e) {
 
 	e.class('x-editbox')
 
@@ -1225,7 +1225,7 @@ component('x-tagsedit', function(e) {
 // placeedit widget with autocomplete via google places api
 // ---------------------------------------------------------------------------
 
-component('x-placeedit', function(e) {
+component('x-placeedit', 'Input', function(e) {
 
 	editbox.construct(e)
 
@@ -1295,7 +1295,7 @@ component('x-placeedit', function(e) {
 // google maps widget
 // ---------------------------------------------------------------------------
 
-component('x-googlemaps', function(e) {
+component('x-googlemaps', 'Input', function(e) {
 
 	val_widget(e)
 
@@ -1321,7 +1321,7 @@ component('x-googlemaps', function(e) {
 // slider
 // ---------------------------------------------------------------------------
 
-component('x-slider', function(e) {
+component('x-slider', 'Input', function(e) {
 
 	focusable_widget(e, null, false)
 
@@ -1691,7 +1691,7 @@ function dropdown_widget(e) {
 // calendar widget
 // ---------------------------------------------------------------------------
 
-component('x-calendar', function(e) {
+component('x-calendar', 'Input', function(e) {
 
 	focusable_widget(e, null, 'x-focusable-items')
 	val_widget(e)
@@ -1927,7 +1927,7 @@ component('x-calendar', function(e) {
 // date dropdown
 // ---------------------------------------------------------------------------
 
-component('x-date-dropdown', function(e) {
+component('x-date-dropdown', 'Input', function(e) {
 	dropdown_widget(e)
 	e.field_type = 'date'
 	e.create_picker = calendar
@@ -1937,7 +1937,7 @@ component('x-date-dropdown', function(e) {
 // richtext
 // ---------------------------------------------------------------------------
 
-component('x-richtext', function(e) {
+component('x-richtext', 'Input', function(e) {
 
 	e.class('x-stretched')
 
@@ -2150,7 +2150,7 @@ function richtext_widget_editing(e) {
 // image
 // ---------------------------------------------------------------------------
 
-component('x-image', function(e) {
+component('x-image', 'Input', function(e) {
 
 	e.class('x-stretched')
 	e.classes = 'fa fa-camera'
@@ -2296,7 +2296,7 @@ component('x-image', function(e) {
 // sql editor
 // ---------------------------------------------------------------------------
 
-component('x-sql-editor', function(e) {
+component('x-sql-editor', 'Input', function(e) {
 
 	e.class('x-stretched')
 
@@ -2339,7 +2339,7 @@ component('x-sql-editor', function(e) {
 // chart
 // ---------------------------------------------------------------------------
 
-component('x-chart', function(e) {
+component('x-chart', 'Input', function(e) {
 
 	e.class('x-stretched')
 
@@ -2913,7 +2913,7 @@ component('x-chart', function(e) {
 // x-input
 // ---------------------------------------------------------------------------
 
-component('x-input', function(e) {
+component('x-input', 'Input', function(e) {
 
 	val_widget(e, true, false)
 
@@ -3006,7 +3006,7 @@ input.widget_type_options = {
 // form
 // ---------------------------------------------------------------------------
 
-component('x-form', function(e) {
+component('x-form', 'Containers', function(e) {
 
 	e.class('x-stretched')
 	e.class('x-flex')

@@ -88,9 +88,14 @@ function attr_val_opt(e) {
 }
 
 // component(tag, cons) -> create({option: value}) -> element.
-function component(tag, cons) {
+function component(tag, category, cons) {
 
-	let type = tag.replace(/^[^\-]+\-/, '').replaceAll('-', '_')
+	if (!isstr(category)) {
+		cons = category
+		category = 'Other'
+	}
+
+	let type = tag.replace(/^x-/, '').replaceAll('-', '_')
 
 	// override cons() so that calling `parent_widget.construct()` always
 	// sets the css class for parent_widget.
@@ -231,9 +236,11 @@ function component(tag, cons) {
 		return e
 	}
 
+	create.type = type
 	create.class = cls
 	create.construct = construct
 
+	attr(component.categories, category, Array).push(create)
 	component.types[type] = create
 	window[type] = create
 
@@ -241,6 +248,7 @@ function component(tag, cons) {
 }
 
 component.types = {} // {type -> create}
+component.categories = {} // {cat -> {craete1,...}}
 
 component.create = function(e, e0) {
 	if (e instanceof Node || (isobject(e) && e.isinstance))
@@ -1391,7 +1399,7 @@ tooltip.icon_classes = {
 // button
 // ---------------------------------------------------------------------------
 
-component('x-button', function(e) {
+component('x-button', 'Input', function(e) {
 
 	serializable_widget(e)
 	selectable_widget(e)
@@ -1788,6 +1796,49 @@ component('x-menu', function(e) {
 
 })
 
+
+// ---------------------------------------------------------------------------
+// context menu
+// ---------------------------------------------------------------------------
+
+component('x-context-menu', function(e) {
+
+	// TODO:
+
+	let cmenu
+
+	function close_context_menu() {
+		if (cmenu) {
+			cmenu.close()
+			cmenu = null
+		}
+	}
+
+	e.on('rightpointerdown', close_context_menu)
+
+	e.on('contextmenu', function(ev) {
+
+		close_context_menu()
+
+		if (update_mouse(ev))
+			fire_pointermove()
+
+		let items = []
+
+		if (tool.context_menu)
+			items.extend(tool.context_menu())
+
+		cmenu = menu({
+			items: items,
+		})
+
+		cmenu.popup(e, 'inner-top', null, null, null, null, null, mouse.x, mouse.y)
+
+		return false
+	})
+
+})
+
 // ---------------------------------------------------------------------------
 // widget placeholder
 // ---------------------------------------------------------------------------
@@ -1800,36 +1851,12 @@ component('x-widget-placeholder', function(e) {
 	selectable_widget(e)
 	contained_widget(e)
 
-	let stretched_widgets = [
-		['SP', 'split'],
-		['CG', 'cssgrid'],
-		['PL', 'pagelist', true],
-		['L', 'listbox'],
-		['G', 'grid', true],
-		['WSW', 'widget_switcher'],
-	]
-
-	let form_widgets = [
-		['RT', 'richtext'],
-		['I' , 'input'],
-		['SI', 'spin_input'],
-		['CB', 'checkbox'],
-		['RG', 'radiogroup'],
-		['SL', 'slider'],
-		['SQL', 'sql_editor'],
-		['KD', 'lookup_dropdown'],
-		['LD', 'list_dropdown'],
-		['GD', 'grid_dropdown'],
-		['DD', 'date_dropdown', true],
-		['CD', 'color_dropdown', true],
-		['ID', 'icon_dropdown', true],
-		['PC', 'pie_chart', true],
-		['B', 'button'],
-	]
-
-	function create_btn_action() {
+	function replace_widget(item) {
 		let pe = e.parent_widget
-		let te = component.create({type: this.type, id: '<new>', module: pe.module || e.module})
+		let te = component.create({
+			type: item.create.type,
+			module: pe && pe.module || e.module,
+		})
 		if (pe)
 			pe.replace_child_widget(e, te)
 		else {
@@ -1840,29 +1867,36 @@ component('x-widget-placeholder', function(e) {
 		te.focus()
 	}
 
-	function create_widget_buttons(widgets) {
-		e.clear()
-		let i = 1
-		for (let [s, type, sep] of widgets) {
-			let btn = button({text: s, title: type, pos_x: i++})
-			btn.class('x-widget-placeholder-button')
-			if (sep)
-				btn.style['margin-right'] = '.5em'
-			e.add(btn)
-			btn.can_select_widget = false
-			btn.type = type
-			btn.action = create_btn_action
+	let cmenu
+
+	function create_context_menu() {
+		let items = []
+		for (let cat in component.categories) {
+			let comp_items = []
+			let cat_item = {text: cat, items: comp_items}
+			items.push(cat_item)
+			for (let create of component.categories[cat])
+				comp_items.push({
+					text: create.type.display_name(),
+					create: create,
+					action: replace_widget,
+				})
 		}
+		if (cmenu)
+			cmenu.close()
+		cmenu = menu({
+			items: items,
+		})
 	}
 
 	e.on('bind', function(on) {
-		if (on) {
-			widgets = stretched_widgets
-			let pe = e.parent_widget
-			if (pe && pe.accepts_form_widgets)
-				widgets = [].concat(widgets, form_widgets)
-			create_widget_buttons(widgets)
-		}
+		if (on)
+			create_context_menu()
+	})
+
+	e.on('contextmenu', function(ev, mx, my) {
+		cmenu.popup(e, 'inner-top', null, null, null, null, null, ev.clientX, ev.clientY)
+		return false
 	})
 
 })
@@ -1976,7 +2010,7 @@ widget_items_widget = function(e) {
 // pagelist
 // ---------------------------------------------------------------------------
 
-component('x-pagelist', function(e) {
+component('x-pagelist', 'Containers', function(e) {
 
 	e.class('x-stretched')
 
@@ -2382,7 +2416,7 @@ component('x-pagelist', function(e) {
 // split-view
 // ---------------------------------------------------------------------------
 
-component('x-split', function(e) {
+component('x-split', 'Containers', function(e) {
 
 	e.class('x-stretched')
 
@@ -2629,7 +2663,7 @@ component('x-toaster', function(e) {
 // action band
 // ---------------------------------------------------------------------------
 
-component('x-action-band', function(e) {
+component('x-action-band', 'Input', function(e) {
 
 	e.layout = 'ok:ok cancel:cancel'
 
@@ -2952,7 +2986,7 @@ component('x-toolbox', function(e) {
 // widget switcher
 // ---------------------------------------------------------------------------
 
-component('x-widget-switcher', function(e) {
+component('x-widget-switcher', 'Containers', function(e) {
 
 	e.class('x-stretched')
 
@@ -3021,7 +3055,7 @@ component('x-progress', function() {
 // slides
 // ---------------------------------------------------------------------------
 
-component('x-slides', function(e) {
+component('x-slides', 'Containers', function(e) {
 
 	e.class('x-stretched')
 

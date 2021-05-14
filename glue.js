@@ -54,6 +54,7 @@
 		s.ends(s)
 		s.upper()
 		s.lower()
+		s.display_name()
 	arrays:
 		empty_array
 		a.extend(a1)
@@ -109,6 +110,17 @@
 		timer(f)
 	serialization:
 		json(t) -> s
+	clipboard:
+		copy_to_clipboard(text, done_func)
+	local storage:
+		store(key, t)
+		load(key) -> t
+	global events:
+		listen(topic, func)
+		unlisten(topic)
+		broadcast_local(topic, data)
+		broadcast_external(topic, data)
+		broadcast(topic, data)
 	url decoding, encoding and updating:
 		url(path) -> t
 		url(path|path_comp, [path_comp], [params]) -> s
@@ -311,6 +323,18 @@ alias(String, 'starts', 'startsWith')
 alias(String, 'ends'  , 'endsWith')
 alias(String, 'upper' , 'toUpperCase')
 alias(String, 'lower' , 'toLowerCase')
+
+{
+let upper = function(s) {
+	return s.toUpperCase()
+}
+let upper2 = function(s) {
+	return ' ' + s.slice(1).toUpperCase()
+}
+method(String, 'display_name', function() {
+	return this.replace(/[\w]/, upper).replace(/(_[\w])/g, upper2)
+})
+}
 
 // stub for getting message strings that can be translated multiple languages.
 S = window.S || function S(label, msg) { return msg }
@@ -977,8 +1001,66 @@ json = JSON.stringify
 
 // clipboard -----------------------------------------------------------------
 
-function copy_text(text, done) {
+function copy_to_clipboard(text, done) {
 	return navigator.clipboard.writeText(text).then(done)
+}
+
+// local storage -------------------------------------------------------------
+
+function store(key, value) {
+	Storage.setItem(key, json(value))
+}
+
+function load(key) {
+	var value = Storage.getItem(key)
+	return value && JSON.parse(value)
+}
+
+// inter-window events -------------------------------------------------------
+
+let __broadcast = events_mixin({})
+
+function listen(topic, func, enable) {
+	__broadcast_.on(topic, function(ev, data) {
+		func(data)
+	}, enable)
+}
+
+function unlisten(topic) {
+	__broadcast.off(topic)
+}
+
+// broadcast a message to local listeners
+function broadcast_local(topic, data) {
+	__broadcast.fire(topic, data)
+}
+
+window.addEventListener('storage', function(e) {
+	// decode the message
+	if (e.key != '__broadcast_')
+		return
+	var args = e.newValue
+	if (!args) return
+	args = JSON.parse(args)
+	// broadcast it
+	broadcast_local(args.topic, args.data)
+})
+
+// broadcast a message to other windows
+function broadcast_external(topic, data) {
+	store('__broadcast_', '')
+	store('__broadcast_',
+		json({
+			topic: topic,
+			data: data
+		})
+	)
+	store('__broadcast_', '')
+}
+
+function broadcast(topic, data) {
+	broadcast_local(topic, data)
+	broadcast_external(topic, data)
 }
 
 /* URL encoding & decoding ---------------------------------------------------

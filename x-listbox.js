@@ -19,7 +19,7 @@
 // listbox widget
 // ---------------------------------------------------------------------------
 
-component('x-listbox', function(e) {
+component('x-listbox', 'Input', function(e) {
 
 	e.class('x-stretched')
 
