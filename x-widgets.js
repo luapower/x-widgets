@@ -256,12 +256,12 @@ component.create = function(e, e0) {
 	let id = isstr(e) ? e : e.id
 	if (e0 && e0.id == id)
 		return e0  // already created (called from a prop's `convert()`).
-	if (isstr(e)) // e is a id
+	if (isstr(e)) // e is an id
 		e = {id: e}
 	if (!e.type) {
 		e.type = xmodule.instance_type(id)
 		if (!e.type) {
-			warn('id not found', id)
+			warn('component id not found:', id)
 			return
 		}
 	}
@@ -1855,6 +1855,7 @@ component('x-widget-placeholder', function(e) {
 		let pe = e.parent_widget
 		let te = component.create({
 			type: item.create.type,
+			id: '<new>', // pseudo-id to be replaced with an auto-generated id.
 			module: pe && pe.module || e.module,
 		})
 		if (pe)
@@ -1862,7 +1863,7 @@ component('x-widget-placeholder', function(e) {
 		else {
 			let pe = e.parent
 			pe.replace(e, te)
-			root_widget = te
+			xmodule.set_root_widget(te)
 		}
 		te.focus()
 	}

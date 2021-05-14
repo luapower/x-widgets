@@ -53,7 +53,7 @@ action['xmodule_layer.json'] = function(layer)
 	if method'post' then
 		writefile(file, post(), nil, file..'.tmp')
 	else
-		out(file and readfile(file) or '{}')
+		out(readfile(file) or '{}')
 	end
 end
 

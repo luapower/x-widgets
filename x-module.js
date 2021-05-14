@@ -3,8 +3,6 @@
 // prop layers
 // ---------------------------------------------------------------------------
 
-root_widget = null
-
 function xmodule(opt) {
 
 	let xm = {}
@@ -13,6 +11,8 @@ function xmodule(opt) {
 	//xmodule_rowsets_mixin(xm)
 
 	let generation = 1
+
+	xm.root_widget = null
 
 	xm.slots = opt.slots || {} // {name -> {color:, }}
 	xm.modules = opt.modules || {} // {name -> {icon:, }}
@@ -27,14 +27,38 @@ function xmodule(opt) {
 		init_root_widget()
 	}
 
-	// init root widget -------------------------------------------------------
+	// init & changing root widget --------------------------------------------
+
+	function get_root_module_layer() {
+		let layer = xm.get_active_layer(opt.root_module, 'base')
+		if (!layer) {
+			warn('layer not found for root module', opt.root_module)
+			return
+		}
+		return layer
+	}
 
 	function init_root_widget() {
-		if (!opt.root_id)
+		if (!opt.root_module)
 			return
-		assert(opt.root_module, 'x-module: `root_id` option requires `root_module` option')
-		root_widget = component.create(opt.root_id) || widget_placeholder({module: opt.root_module})
-		document.body.set(root_widget)
+		let layer = get_root_module_layer()
+		let root_id = layer && layer.root_id
+		if (layer && !root_id)
+			warn('root_id not found in root module layer')
+		xm.root_widget = root_id && component.create(root_id)
+			|| widget_placeholder({module: opt.root_module})
+		document.body.set(xm.root_widget)
+	}
+
+	xm.set_root_widget = function(root_widget) {
+		if (!opt.root_module)
+			return
+		xm.root_widget = root_widget
+		let layer = get_root_module_layer()
+		if (!layer)
+			return
+		layer.props['<root>'] = root_widget.id
+		layer.modified = true
 	}
 
 	// init prop layer slots --------------------------------------------------
@@ -255,7 +279,7 @@ function xmodule(opt) {
 			let props
 			if (name.starts('local:')) {
 				let shortname = name.replace(/^local\:/, '')
-				props = JSON.parse(localStorage.getItem('layer:'+shortname))
+				props = JSON.parse(load('xmodule-layers/'+shortname))
 			} else {
 				ajax({
 					url: 'xmodule-layer.json/'+name,
@@ -269,6 +293,7 @@ function xmodule(opt) {
 				})
 			}
 			t = {name: name, props: props || {}}
+			t.root_id = t.props['<root>']
 			xm.layers[name] = t
 		}
 		return t
@@ -281,7 +306,7 @@ function xmodule(opt) {
 				let saved = () => debug('layer-saved', name)
 				if (name.starts('local:')) {
 					let shortname = name.replace(/^local\:/, '')
-					localStorage.setItem('layer:'+shortname, json(t.props))
+					store('xmodule-layers/'+shortname, t.props)
 					saved()
 				} else if (!t.save_request) {
 					t.save_request = ajax({
@@ -748,7 +773,7 @@ component('x-widget-tree', function(e) {
 				for (let ce of e.child_widgets())
 					add_widget(ce, e)
 		}
-		add_widget(root_widget)
+		add_widget(xmodule.root_widget)
 		return rows
 	}
 
