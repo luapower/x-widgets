@@ -30,8 +30,10 @@ component('x-modeleditor', function(e) {
 
 	// canvas & webgl context -------------------------------------------------
 
-	let canvas = tag('canvas')
 	focusable_widget(e)
+	selectable_widget(e)
+
+	let canvas = tag('canvas')
 	e.add(canvas)
 
 	let gl = assert(canvas.getContext('webgl2'))
@@ -98,8 +100,8 @@ component('x-modeleditor', function(e) {
 	e.prop('sunlight'   , {store: 'var', type: 'boolean', default: false})
 	e.prop('time'       , {store: 'var', type: 'datetime', default: 1596272400})
 	e.prop('north'      , {store: 'var', type: 'number', default: 0})
-	e.prop('latitude'   , {store: 'var', type: 'number', default: 44.42314})
-	e.prop('longitude'  , {store: 'var', type: 'number', default: 26.35673})
+	e.prop('latitude'   , {store: 'var', type: 'number', default: 44.42314, multiple_of: null})
+	e.prop('longitude'  , {store: 'var', type: 'number', default: 26.35673, multiple_of: null})
 
 	let sun_dir = v3()
 	function update_sun_pos() {

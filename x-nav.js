@@ -405,7 +405,7 @@ function nav_widget(e) {
 	let convert_field_attr = {}
 
 	convert_field_attr.text = function(field, v, f) {
-		return v == null ? f.name.display_name() : v
+		return v == null ? f.name && f.name.display_name() : v
 	}
 
 	convert_field_attr.w = function(field, v) {
@@ -3849,7 +3849,7 @@ component('x-lookup-dropdown', function(e) {
 	})
 
 	number.editor = function(...opt) {
-		return spinedit(update({
+		return spinedit(assign({
 			button_placement: 'left',
 		}, ...opt))
 	}

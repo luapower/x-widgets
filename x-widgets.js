@@ -1858,11 +1858,9 @@ component('x-widget-placeholder', function(e) {
 			id: '<new>', // pseudo-id to be replaced with an auto-generated id.
 			module: pe && pe.module || e.module,
 		})
-		if (pe)
+		if (pe) {
 			pe.replace_child_widget(e, te)
-		else {
-			let pe = e.parent
-			pe.replace(e, te)
+		} else {
 			xmodule.set_root_widget(te)
 		}
 		te.focus()

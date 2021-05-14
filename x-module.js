@@ -45,20 +45,21 @@ function xmodule(opt) {
 		let root_id = layer && layer.root_id
 		if (layer && !root_id)
 			warn('root_id not found in root module layer')
-		xm.root_widget = root_id && component.create(root_id)
-			|| widget_placeholder({module: opt.root_module})
-		document.body.set(xm.root_widget)
+		xm.set_root_widget(root_id && component.create(root_id))
 	}
 
 	xm.set_root_widget = function(root_widget) {
-		if (!opt.root_module)
-			return
+		root_widget = root_widget || widget_placeholder({module: opt.root_module})
+		let pe = document.body
+		pe.replace(xm.root_widget, root_widget)
 		xm.root_widget = root_widget
-		let layer = get_root_module_layer()
-		if (!layer)
-			return
-		layer.props['<root>'] = root_widget.id
-		layer.modified = true
+		if (opt.root_module) {
+			let layer = get_root_module_layer()
+			if (!layer)
+				return
+			layer.props['<root>'] = root_widget.id
+			layer.modified = true
+		}
 	}
 
 	// init prop layer slots --------------------------------------------------
@@ -862,9 +863,27 @@ component('x-widget-tree', function(e) {
 		barrier = false
 	}
 
+	let freeing
+
 	function widget_tree_changed() {
+		if (freeing)
+			return
 		rs.rows = widget_tree_rows()
 		e.reset()
+	}
+
+	e.free_row = function(row) {
+		freeing = true
+		let ce = e.cell_val(row, 'widget')
+		if (ce == xmodule.root_widget) {
+			xmodule.set_root_widget(null)
+			freeing = false
+			widget_tree_changed()
+			freeing = true
+		} else {
+
+		}
+		freeing = false
 	}
 
 	/* TODO: not sure what to do here...
