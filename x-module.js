@@ -50,9 +50,9 @@ function xmodule(opt) {
 
 	xm.set_root_widget = function(root_widget) {
 		root_widget = root_widget || widget_placeholder({module: opt.root_module})
-		let pe = document.body
-		pe.replace(xm.root_widget, root_widget)
+		let old_root_widget = xm.root_widget
 		xm.root_widget = root_widget
+		document.body.replace(old_root_widget, root_widget)
 		if (opt.root_module) {
 			let layer = get_root_module_layer()
 			if (!layer)

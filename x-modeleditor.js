@@ -943,12 +943,12 @@ component('x-modeleditor', function(e) {
 
 	let skybox = gl.skybox({
 		images: {
-			posx: 'skybox/posx.jpg',
-			negx: 'skybox/negx.jpg',
-			posy: 'skybox/posy.jpg',
-			negy: 'skybox/negy.jpg',
-			posz: 'skybox/posz.jpg',
-			negz: 'skybox/negz.jpg',
+			posx: 'x-modeleditor/skybox_posx.jpg',
+			negx: 'x-modeleditor/skybox_negx.jpg',
+			posy: 'x-modeleditor/skybox_posy.jpg',
+			negy: 'x-modeleditor/skybox_negy.jpg',
+			posz: 'x-modeleditor/skybox_posz.jpg',
+			negz: 'x-modeleditor/skybox_negz.jpg',
 		},
 	})
 	skybox.on('load', render)
@@ -981,7 +981,7 @@ component('x-modeleditor', function(e) {
 		cursor = name
 		let x = offsets[name] && offsets[name][0] || 0
 		let y = offsets[name] && offsets[name][1] || 0
-		e.style.cursor = builtin_cursors[name] ? name : 'url(cursor_'+name+'.png) '+x+' '+y+', auto'
+		e.style.cursor = builtin_cursors[name] ? name : 'url(x-modeleditor/cursor_'+name+'.png) '+x+' '+y+', auto'
 	})
 	}
 
