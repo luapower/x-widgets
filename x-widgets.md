@@ -87,8 +87,8 @@ The dependencies are `glue.js` and `divs.js` (included).
 
 `divs.js` is a tiny jQuery-like library for DOM manipulation.
 
-Additionally, [x-modeleditor] is implemented in `x-3d-modeleditor.js`,
-`x-3d-model.js` and `x-3d-renderer.js` and depends on `3d.js`, `gl.js`
+Additionally, [x-modeleditor] is implemented in `x-modeleditor.js`,
+`x-model3.js` and depends on `3d.js`, `gl.js`, `gl-renderer.js`
 and `earcut.js` (also included).
 
 `3d.js` is a fast 3D math library for WebGL.
