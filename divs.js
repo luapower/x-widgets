@@ -13,6 +13,7 @@
 		e.attrval(k)
 		e.bool_attrval(k)
 		e.attrs = {k: v}
+		e.closest_attrval(k)
 	element css class list manipulation:
 		e.class(k, [false])
 		e.hasclass(k)
@@ -141,6 +142,11 @@ property(Element, 'attrs', {
 				this.attr(k, attrs[k])
 	}
 })
+
+method(Element, 'closest_attrval', function(attr) {
+	let e = this.closest('['+attr+']')
+	return e && e.attrval(attr)
+}
 
 // element css class list manipulation ---------------------------------------
 

@@ -99,6 +99,9 @@
 		month_name(ts, ['long'])
 		month_year(ts, ['long'])
 		week_start_offset()
+	time formatting:
+		duration(s) -> s
+		timeago(timestamp) -> s
 	colors:
 		hsl_to_rgb(h, s, L)
 	geometry:
@@ -910,6 +913,48 @@ locale = navigator.language
 // no way to get OS locale in JS in 2020. I hate the web.
 function week_start_offset() {
 	return locale.starts('en') ? 0 : 1
+}
+
+// time formatting -----------------------------------------------------------
+
+{
+
+function duration(s) {
+	if (s > 2 * 365 * 24 * 3600)
+		return S('years', '{0} years').subst(s / (365 * 24 * 3600)).toFixed(0))
+	else if (s > 2 * 30.5 * 24 * 3600)
+		return S('months', '{0} months').subst((s / (30.5 * 24 * 3600)).toFixed(0))
+	else if (s > 1.5 * 24 * 3600)
+		return S('days', '{0} days').subst((s / (24 * 3600)).toFixed(0))
+	else if (s > 2 * 3600)
+		return S('hours', '{0} hours').subst((s / 3600).toFixed(0))
+	else if (s > 2 * 60)
+		return S('minutes', '{0} minutes').subst((s / 60).toFixed(0))
+	else
+		return S('one_minute', '1 minute')
+}
+
+function timeago(t) {
+	var s = time() - t
+	return (s > 0 ? S('time_ago', '{0} ago') : S('in_time', 'in {0}')).subst(duration(abs(s)))
+}
+
+let update_timeago_elem = function() {
+	let t = parseInt(this.attrval('time'))
+	if (!t) {
+		// set client-relative time from timeago attribute.
+		var time_ago = parseInt(this.attrval('timeago'))
+		if (!time_ago)
+			return
+		t = time() - time_ago
+		this.attrval('time', t)
+	}
+	this.set(timeago(t))
+}
+setInterval(function() {
+	$('.timeago').each(update_timeago_elem)
+}, 60 * 1000)
+
 }
 
 // colors --------------------------------------------------------------------
