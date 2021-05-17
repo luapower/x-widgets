@@ -3,12 +3,10 @@
 // prop layers
 // ---------------------------------------------------------------------------
 
-function xmodule(opt) {
+function init_xmodule(opt) {
 
 	let xm = {}
 	xmodule = xm // singleton.
-
-	//xmodule_rowsets_mixin(xm)
 
 	let generation = 1
 
@@ -21,11 +19,6 @@ function xmodule(opt) {
 	xm.selected_module = null
 	xm.selected_slot = null
 	xm.active_layers = {} // {'module:slot' -> layer} in override order
-
-	function init() {
-		init_prop_layers()
-		init_root_widget()
-	}
 
 	// init & changing root widget --------------------------------------------
 
@@ -49,10 +42,13 @@ function xmodule(opt) {
 	}
 
 	xm.set_root_widget = function(root_widget) {
+		xm.root_container = opt.root_container
+			&& $(opt.root_container)[0] || document.body
 		root_widget = root_widget || widget_placeholder({module: opt.root_module})
 		let old_root_widget = xm.root_widget
 		xm.root_widget = root_widget
-		document.body.replace(old_root_widget, root_widget)
+
+		xm.root_container.replace(old_root_widget, root_widget)
 		if (opt.root_module) {
 			let layer = get_root_module_layer()
 			if (!layer)
@@ -327,7 +323,10 @@ function xmodule(opt) {
 		return widget_select_editor(xm.instances, e => e.isnav, ...options)
 	}
 
-	init()
+	on_dom_load(function() {
+		init_prop_layers()
+		init_root_widget()
+	})
 
 }
 
