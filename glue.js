@@ -29,6 +29,8 @@
 		num(s, z)
 		mod(a, b)
 		nextpow2(x)
+		x.dec([decimals])
+		x.base([base], [digits])
 	callback stubs:
 		noop
 		return_true
@@ -64,6 +66,7 @@
 		a.remove_values(cond)
 		a.last
 		a.binsearch(v, cmp, i1, i2)
+		a.each(f)
 	hash maps:
 		set()
 		map()
@@ -83,29 +86,31 @@
 	events:
 		events_mixin(o)
 	timestamps:
-		time()
-		time(y, m, d, H, M, s, ms)
-		time(date_str)
-		day   (ts[, offset])
-		month (ts[, offset])
-		year  (ts[, offset])
-		week  (ts[, offset])
-		days(delta_ts)
+		time() -> ts
+		time(y, m, d, H, M, s, ms) -> ts
+		time(date_str) -> ts
+		day   (ts[, offset]) -> ts
+		month (ts[, offset]) -> ts
+		year  (ts[, offset]) -> ts
+		week  (ts[, offset]) -> ts
+		days(delta_ts) -> ds
 		year_of      (ts)
 		month_of     (ts)
 		month_day_of (ts)
 		locale
-		weekday_name(ts, ['long'])
-		month_name(ts, ['long'])
-		month_year(ts, ['long'])
+		weekday_name (ts, ['long'])
+		month_name   (ts, ['long'])
+		month_year   (ts, ['long'])
 		week_start_offset()
 	time formatting:
-		duration(s) -> s
-		timeago(timestamp) -> s
+		ds.duration() -> s
+		ts.timeago() -> s
+	file size formatting:
+		x.filesize(x, [mag], [dec]) -> s
 	colors:
-		hsl_to_rgb(h, s, L)
+		hsl_to_rgb(h, s, L) -> '#rrggbb'
 	geometry:
-		point_around(cx, cy, r, angle)
+		point_around(cx, cy, r, angle) -> [x, y]
 	timers:
 		after(t, f)
 		every(t, f)
@@ -202,7 +207,6 @@ function nextpow2(x) {
 	return max(0, 2**(ceil(log(x) / log(2))))
 }
 
-
 PI  = Math.PI
 sin = Math.sin
 cos = Math.cos
@@ -214,6 +218,14 @@ asin  = Math.asin
 acos  = Math.acos
 atan  = Math.atan
 atan2 = Math.atan2
+
+Number.prototype.base = function(base, decimals) {
+	let s = this.toString(base)
+	if (decimals != null)
+		s = s.padStart(decimals, '0')
+	return s
+}
+Number.prototype.dec = Number.prototype.toFixed
 
 // callback stubs ------------------------------------------------------------
 
@@ -314,7 +326,7 @@ function override_property_setter(cls, prop, set) {
 
 method(String, 'subst', function(...args) {
 	if (!args.length)
-		return this.toString()
+		return this
 	if (isarray(args[0]))
 		args = args[0]
 	if (isobject(args[0]))
@@ -419,25 +431,27 @@ method(Array, 'equals', function(a, i0, i1) {
 // binary search for an insert position that keeps the array sorted.
 // using '<' gives the first insert position, while '<=' gives the last.
 {
-	let cmps = {}
-	cmps['<' ] = ((a, b) => a <  b)
-	cmps['>' ] = ((a, b) => a >  b)
-	cmps['<='] = ((a, b) => a <= b)
-	cmps['>='] = ((a, b) => a >= b)
-	method(Array, 'binsearch', function(v, cmp, i1, i2) {
-		let lo = or(i1, 0) - 1
-		let hi = or(i2, this.length)
-		cmp = cmps[cmp || '<'] || cmp
-		while (lo + 1 < hi) {
-			let mid = (lo + hi) >> 1
-			if (cmp(this[mid], v))
-				lo = mid
-			else
-				hi = mid
-		}
-		return hi
-	})
+let cmps = {}
+cmps['<' ] = ((a, b) => a <  b)
+cmps['>' ] = ((a, b) => a >  b)
+cmps['<='] = ((a, b) => a <= b)
+cmps['>='] = ((a, b) => a >= b)
+method(Array, 'binsearch', function(v, cmp, i1, i2) {
+	let lo = or(i1, 0) - 1
+	let hi = or(i2, this.length)
+	cmp = cmps[cmp || '<'] || cmp
+	while (lo + 1 < hi) {
+		let mid = (lo + hi) >> 1
+		if (cmp(this[mid], v))
+			lo = mid
+		else
+			hi = mid
+	}
+	return hi
+})
 }
+
+alias(Array, 'each', 'forEach')
 
 // hash maps -----------------------------------------------------------------
 
@@ -919,42 +933,57 @@ function week_start_offset() {
 
 {
 
-function duration(s) {
-	if (s > 2 * 365 * 24 * 3600)
-		return S('years', '{0} years').subst(s / (365 * 24 * 3600)).toFixed(0))
-	else if (s > 2 * 30.5 * 24 * 3600)
-		return S('months', '{0} months').subst((s / (30.5 * 24 * 3600)).toFixed(0))
-	else if (s > 1.5 * 24 * 3600)
-		return S('days', '{0} days').subst((s / (24 * 3600)).toFixed(0))
-	else if (s > 2 * 3600)
-		return S('hours', '{0} hours').subst((s / 3600).toFixed(0))
-	else if (s > 2 * 60)
-		return S('minutes', '{0} minutes').subst((s / 60).toFixed(0))
+method(Number, 'duration', function() {
+	let d = this
+	if (d > 2 * 365 * 24 * 3600)
+		return S('years', '{0} years').subst(d / (365 * 24 * 3600).dec())
+	else if (d > 2 * 30.5 * 24 * 3600)
+		return S('months', '{0} months').subst((d / (30.5 * 24 * 3600)).dec())
+	else if (d > 1.5 * 24 * 3600)
+		return S('days', '{0} days').subst((d / (24 * 3600)).dec())
+	else if (d > 2 * 3600)
+		return S('hours', '{0} hours').subst((d / 3600).dec())
+	else if (d > 2 * 60)
+		return S('minutes', '{0} minutes').subst((d / 60).dec())
 	else
 		return S('one_minute', '1 minute')
-}
+})
 
-function timeago(t) {
-	var s = time() - t
-	return (s > 0 ? S('time_ago', '{0} ago') : S('in_time', 'in {0}')).subst(duration(abs(s)))
-}
+method(Number, 'timeago', function() {
+	var d = time() - this
+	return (d > 0 ? S('time_ago', '{0} ago') : S('in_time', 'in {0}')).subst(abs(d).duration())
+})
 
 let update_timeago_elem = function() {
-	let t = parseInt(this.attrval('time'))
+	let t = num(this.attrval('time'))
 	if (!t) {
 		// set client-relative time from timeago attribute.
-		var time_ago = parseInt(this.attrval('timeago'))
+		var time_ago = num(this.attrval('timeago'))
 		if (!time_ago)
 			return
 		t = time() - time_ago
 		this.attrval('time', t)
 	}
-	this.set(timeago(t))
+	this.set(t.timeago())
 }
 setInterval(function() {
 	$('.timeago').each(update_timeago_elem)
 }, 60 * 1000)
 
+}
+
+// file size formatting ------------------------------------------------------
+
+{
+let suffix = [' B', ' KB', ' MB', ' GB', ' TB']
+let magnitudes = {KB: 1, MB: 2, GB: 3}
+method(Number, 'filesize', function(x, mag, dec) {
+	dec = dec || 0
+	let i = mag ? magnitudes[mag] : floor(log(x) / log(1024))
+	let z = x / 1024**i
+	let s = z.dec(dec) + suffix[i]
+	return s
+})
 }
 
 // colors --------------------------------------------------------------------
@@ -975,7 +1004,7 @@ let h2rgb = function(m1, m2, h) {
 		return m1
 }
 
-let hex = x => round(255 * x).toString(16).padStart(2, '0')
+let hex = x => round(255 * x).base(16, 2)
 
 function hsl_to_rgb(h, s, L) {
 	h = h / 360
@@ -989,18 +1018,18 @@ function hsl_to_rgb(h, s, L) {
 
 function hex3(x) {
 	return x != null && (
-		((x >> 16) & 0xff).toString(16).padStart(2, '0') +
-		((x >>  8) & 0xff).toString(16).padStart(2, '0') +
-		( x        & 0xff).toString(16).padStart(2, '0')
+		((x >> 16) & 0xff).base(16, 2) +
+		((x >>  8) & 0xff).base(16, 2) +
+		( x        & 0xff).base(16, 2)
 	)
 }
 
 function hex4(x) {
 	return x != null && (
-		((x >> 24) & 0xff).toString(16).padStart(2, '0') +
-		((x >> 16) & 0xff).toString(16).padStart(2, '0') +
-		((x >>  8) & 0xff).toString(16).padStart(2, '0') +
-		( x        & 0xff).toString(16).padStart(2, '0')
+		((x >> 24) & 0xff).base(16, 2) +
+		((x >> 16) & 0xff).base(16, 2) +
+		((x >>  8) & 0xff).base(16, 2) +
+		( x        & 0xff).base(16, 2)
 	)
 }
 

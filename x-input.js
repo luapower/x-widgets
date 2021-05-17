@@ -2467,7 +2467,7 @@ component('x-chart', 'Input', function(e) {
 
 			// generate a gradient step for this slice.
 			let color = slice_color(i, slices.length)
-			s.push(color + ' ' + angle.toFixed(0)+'deg '+(angle + arclen).toFixed(0)+'deg')
+			s.push(color + ' ' + angle.dec()+'deg '+(angle + arclen).dec()+'deg')
 
 			// add the label and position it around the pie.
 			labels.add(slice.label)
@@ -2632,7 +2632,7 @@ component('x-chart', 'Input', function(e) {
 		for (let sum = min_sum; sum <= max_sum; sum += y_step) {
 			// draw y-axis label.
 			let y = round(lerp(sum, min_sum, max_sum, h - py2, 0))
-			let s = sum.toFixed(y_step_decimals)
+			let s = sum.dec(y_step_decimals)
 			let m = cx.measureText(s)
 			let text_h = m.actualBoundingBoxAscent - m.actualBoundingBoxDescent
 			cx.save()

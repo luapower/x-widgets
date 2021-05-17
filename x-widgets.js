@@ -195,7 +195,7 @@ function component(tag, category, cons) {
 					let t1 = time()
 					let dt = (t1 - t0) * 1000
 					if (dt > 10)
-						debug((dt).toFixed(0).padStart(3, ' ')+'ms', this.debug_name())
+						debug((dt).dec().padStart(3, ' ')+'ms', this.debug_name())
 				}
 			} else {
 				if (!this.attached)

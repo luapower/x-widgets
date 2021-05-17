@@ -303,7 +303,7 @@ function cssgrid_widget_editing(e) {
 		let z0 = tz[this.i]
 		if (z0 == 'auto') {
 			z0 = s0
-			z0 = z0.toFixed(0) + 'px'
+			z0 = z0.dec() + 'px'
 			tz[this.i] = z0
 			set_sizes(this.axis, tz, true)
 		}
@@ -317,7 +317,7 @@ function cssgrid_widget_editing(e) {
 				z = s0 + dx
 				if (!ev.shiftKey)
 					z = round(z / 10) * 10
-				z = z.toFixed(0) + 'px'
+				z = z.dec() + 'px'
 			} else if (z.ends('%')) {
 				z = num(z)
 				let dz = lerp(dx, 0, s0, 0, z0)
@@ -327,7 +327,7 @@ function cssgrid_widget_editing(e) {
 					let z2 = round(z / (100 / 3)) * (100 / 3)
 					z = abs(z1 - z) < abs(z2 - z) ? z1 : z2
 				}
-				z = z.toFixed(1) + '%'
+				z = z.dec(1) + '%'
 			} else if (z.ends('fr')) {
 				// TODO:
 			}
@@ -346,11 +346,11 @@ function cssgrid_widget_editing(e) {
 		let z = get_sizes(this.axis)[this.i]
 		if (z == 'auto') {
 			z = track_sizes(this.axis)[this.i]
-			z = z.toFixed(0) + 'px'
+			z = z.dec() + 'px'
 		} else if (z.ends('px')) {
 			let px = track_sizes(this.axis)[this.i]
 			z = lerp(px, 0, e.clientWidth, 0, 100)
-			z = z.toFixed(1) + '%'
+			z = z.dec(1) + '%'
 		} else if (z.ends('fr')) {
 			z = 'auto'
 		} else if (z.ends('%')) {

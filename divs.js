@@ -27,9 +27,10 @@
 		e.index
 		e.first, e.last, e.next, e.prev
 	dom tree querying:
-		e.$(sel)
-		$(sel)
+		e.$(sel) -> ea
+		$(sel) -> ea
 		E(sel|e)
+		ea.each(f)
 	safe dom tree manipulation:
 		T(te[,whitespace]) where `te` is f|e|text_str
 		e.set(te[,whitespace])
@@ -146,7 +147,7 @@ property(Element, 'attrs', {
 method(Element, 'closest_attrval', function(attr) {
 	let e = this.closest('['+attr+']')
 	return e && e.attrval(attr)
-}
+})
 
 // element css class list manipulation ---------------------------------------
 
@@ -224,6 +225,10 @@ function $(s) { return document.querySelectorAll(s) }
 function E(s) {
 	return typeof s == 'string' ? document.querySelector(s) : s
 }
+
+method(NodeList, 'each', function(f) {
+	Array.prototype.forEach.call(this, f)
+})
 
 // safe dom tree manipulation ------------------------------------------------
 
