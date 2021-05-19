@@ -121,7 +121,7 @@ method(Element, 'attr', function(k, v) {
 	// `v === undefined` is even more error-prone.
 	if (arguments.length < 2)
 		return repl(this.getAttribute(k), '', true)
-	else if (v === null || v === false || v === '')
+	else if (v == null || v === false || v === '')
 		this.removeAttribute(k)
 	else
 		this.setAttribute(k, repl(v, true, ''))
@@ -132,7 +132,7 @@ method(Element, 'bool_attr', function(k, v) {
 	// `v === undefined` is even more error-prone.
 	if (arguments.length < 2)
 		return repl(repl(this.getAttribute(k), '', true), 'false', false)
-	else if (v === null)
+	else if (v == null)
 		this.removeAttribute(k)
 	else
 		this.setAttribute(k, repl(v, true, ''))
