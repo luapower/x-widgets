@@ -10,10 +10,10 @@
 
 	element attribute manipulation:
 		e.hasattr(k)
-		e.attrval(k)
-		e.bool_attrval(k)
+		e.attr(k[, v]) -> v
+		e.bool_attr(k[, v]) -> v
+		e.closest_attr(k)
 		e.attrs = {k: v}
-		e.closest_attrval(k)
 	element css class list manipulation:
 		e.class(k, [false])
 		e.hasclass(k)
@@ -49,8 +49,9 @@
 		e.on   (name|ev, f, [enable], [capture])
 		e.off  (name|ev, f, [capture])
 		e.once (name|ev, f, [enable], [capture])
-		e.fire   (name, ...args)
-		e.fireup (name, ...args)
+		e.fire    (name, ...args)
+		e.fireup  (name, ...args)
+		broadcast (name, ...args)
 		~[right]click       (ev, nclicks, mx, my)
 		~[right]pointerdown (ev, mx, my)
 		~[right]pointerup   (ev, mx, my)
@@ -108,28 +109,33 @@
 
 */
 
-// element attribute map manipulation ----------------------------------------
+// element attribute manipulation --------------------------------------------
 
 alias(Element, 'hasattr', 'hasAttribute')
 
-// NOTE: `true` is converted to `''`, and `false`, `undefined` and `null` removes the attribute.
+// NOTE: `''`, `false` and `undefined` cannot be stored specifically:
+/// `''` gets back `true`, `false` or `undefined` gets back `null`.
+// To store both `false` and `null` use bool_attr().
 method(Element, 'attr', function(k, v) {
-	if (v == null || v === false)
+	// dispatching on argc sucks but distinguishing get vs set based on
+	// `v === undefined` is even more error-prone.
+	if (arguments.length < 2)
+		return repl(this.getAttribute(k), '', true)
+	else if (v === null || v === false || v === '')
 		this.removeAttribute(k)
 	else
 		this.setAttribute(k, repl(v, true, ''))
 })
 
-// NOTE: '' is not supported, it's converted to `true`.
-// NOTE: `undefined` is not supported, `null` is returned if attr is missing.
-// NOTE: to set false explicitly, use 'false' and use bool_attrval() as getter.
-method(Element, 'attrval', function(k) {
-	return repl(this.getAttribute(k), '', true)
-})
-
-method(Element, 'bool_attrval', function(k) {
-	let v = this.getAttribute(k)
-	return repl(repl(v, '', true), 'false', false)
+method(Element, 'bool_attr', function(k, v) {
+	// dispatching on argc sucks but distinguishing get vs set based on
+	// `v === undefined` is even more error-prone.
+	if (arguments.length < 2)
+		return repl(repl(this.getAttribute(k), '', true), 'false', false)
+	else if (v === null)
+		this.removeAttribute(k)
+	else
+		this.setAttribute(k, repl(v, true, ''))
 })
 
 // NOTE: setting this doesn't remove existing attrs!
@@ -144,9 +150,9 @@ property(Element, 'attrs', {
 	}
 })
 
-method(Element, 'closest_attrval', function(attr) {
+method(Element, 'closest_attr', function(attr) {
 	let e = this.closest('['+attr+']')
-	return e && e.attrval(attr)
+	return e && e.attr(attr)
 })
 
 // element css class list manipulation ---------------------------------------
@@ -176,7 +182,7 @@ method(Element, 'switch_class', function(s1, s2, normal) {
 // NOTE: setting this doesn't remove existing classes!
 property(Element, 'classes', {
 	get: function() {
-		return this.attrval('class')
+		return this.attr('class')
 	},
 	set: function(s) {
 		if (s)
@@ -324,6 +330,7 @@ method(Element, 'set', function(s, whitespace) {
 // except for input elements that must have an explicit `tabindex=-1`.
 
 {
+
 let callers = {}
 
 let hidden_events = {prop_changed: 1, attr_changed: 1, stopped_event: 1}
@@ -417,7 +424,9 @@ callers.wheel = function(ev, f) {
 	}
 }
 
-etrack = new Map()
+DEBUG_EVENTS = false
+
+etrack = DEBUG_EVENTS && new Map()
 
 let log_add_event = function(target, name, f, capture) {
 	if (target.initialized === null) // skip handlers added in the constructor.
@@ -446,8 +455,6 @@ let log_remove_event = function(target, name, f, capture) {
 		warn('off without on', name, capture)
 	}
 }
-
-DEBUG_EVENTS = false
 
 override(Event, 'stopPropagation', function(inherited, ...args) {
 	inherited.call(this, ...args)
@@ -548,6 +555,29 @@ function on_dom_load(fn) {
 		fn()
 }
 
+// inter-window event broadcasting.
+
+window.addEventListener('storage', function(e) {
+	// decode the message.
+	if (e.key != '__broadcast')
+		return
+	let v = e.newValue
+	if (!v)
+		return
+	v = JSON.parse(v)
+	fire(v.topic, ...v.args)
+})
+
+// broadcast a message to other windows.
+function broadcast(topic, ...args) {
+	store('__broadcast', '')
+	store('__broadcast', json({
+		topic: topic,
+		args: args,
+	}))
+	store('__broadcast', '')
+}
+
 }
 
 // geometry wrappers ---------------------------------------------------------
@@ -636,7 +666,7 @@ method(Element, 'focusables', function() {
 })
 
 property(Element, 'effectively_disabled', {get: function() {
-	return this.bool_attrval('disabled') || (this.parent && this.parent.effectively_disabled)
+	return this.bool_attr('disabled') || (this.parent && this.parent.effectively_disabled)
 }})
 
 // text editing --------------------------------------------------------------

@@ -16,7 +16,7 @@ component('x-cssgrid', 'Containers', function(e) {
 	// generate a 3-letter value for `grid-area` based on item's `col` attr or `id`.
 	let names = {}
 	function area_name(item) {
-		let s = item.col || item.attrval('col') || item.id
+		let s = item.col || item.attr('col') || item.id
 		if (!s) return
 		s = s.slice(0, 3)
 		if (names[s]) {

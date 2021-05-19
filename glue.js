@@ -123,12 +123,6 @@
 	local storage:
 		store(key, t)
 		load(key) -> t
-	global events:
-		listen(topic, func)
-		unlisten(topic)
-		broadcast_local(topic, data)
-		broadcast_external(topic, data)
-		broadcast(topic, data)
 	url decoding, encoding and updating:
 		url(path) -> t
 		url(path|path_comp, [path_comp], [params]) -> s
@@ -954,20 +948,19 @@ method(Number, 'timeago', function() {
 	return (d > 0 ? S('time_ago', '{0} ago') : S('in_time', 'in {0}')).subst(abs(d).duration())
 })
 
-let update_timeago_elem = function() {
-	let t = num(this.attrval('time'))
-	if (!t) {
-		// set client-relative time from timeago attribute.
-		var time_ago = num(this.attrval('timeago'))
-		if (!time_ago)
-			return
-		t = time() - time_ago
-		this.attrval('time', t)
-	}
-	this.set(t.timeago())
-}
 setInterval(function() {
-	$('.timeago').each(update_timeago_elem)
+	for (let e of $('.timeago')) {
+		let t = num(e.attr('time'))
+		if (!t) {
+			// set client-relative time from timeago attribute.
+			var time_ago = num(e.attr('timeago'))
+			if (!time_ago)
+				return
+			t = time() - time_ago
+			e.attr('time', t)
+		}
+		e.set(t.timeago())
+	}
 }, 60 * 1000)
 
 }
@@ -1088,53 +1081,6 @@ function store(key, value) {
 function load(key) {
 	var value = Storage.getItem(key)
 	return value && JSON.parse(value)
-}
-
-// inter-window events -------------------------------------------------------
-
-let __broadcast = events_mixin({})
-
-function listen(topic, func, enable) {
-	__broadcast_.on(topic, function(ev, data) {
-		func(data)
-	}, enable)
-}
-
-function unlisten(topic) {
-	__broadcast.off(topic)
-}
-
-// broadcast a message to local listeners
-function broadcast_local(topic, data) {
-	__broadcast.fire(topic, data)
-}
-
-window.addEventListener('storage', function(e) {
-	// decode the message
-	if (e.key != '__broadcast_')
-		return
-	var args = e.newValue
-	if (!args) return
-	args = JSON.parse(args)
-	// broadcast it
-	broadcast_local(args.topic, args.data)
-})
-
-// broadcast a message to other windows
-function broadcast_external(topic, data) {
-	store('__broadcast_', '')
-	store('__broadcast_',
-		json({
-			topic: topic,
-			data: data
-		})
-	)
-	store('__broadcast_', '')
-}
-
-function broadcast(topic, data) {
-	broadcast_local(topic, data)
-	broadcast_external(topic, data)
 }
 
 /* URL encoding & decoding ---------------------------------------------------

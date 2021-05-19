@@ -366,13 +366,10 @@ function props_mixin(e, iprops) {
 	}
 	*/
 
-	e.xon  = function() { e.xmodule_update = true  }
-	e.xoff = function() { e.xmodule_update = false }
+	e.xon  = function() { e.xmodule_noupdate = false }
+	e.xoff = function() { e.xmodule_noupdate = true  }
 
 	function fire_prop_changed(e, prop, v1, v0, slot) {
-		//if (!e.xmodule_update)
-		//	return
-		e.fire('prop_changed', e, prop, v1, v0, slot)
 		document.fire('prop_changed', e, prop, v1, v0, slot)
 	}
 
@@ -1030,7 +1027,7 @@ function cssgrid_item_widget_editing(e) {
 		function so_pointerdown(ev, mx, my) {
 			let handle = ev.target.closest('.x-cssgrid-span-handle')
 			if (!handle) return
-			side = handle.attrval('side')
+			side = handle.attr('side')
 
 			let [bx1, by1, bx2, by2] = track_bounds()
 			let second = side == 'right' || side == 'bottom'
@@ -1160,7 +1157,7 @@ function focusable_widget(e, fe, css_class) {
 
 	function do_update() {
 		let can_be_focused = focusable && !e.disabled
-		fe.attr('tabindex', can_be_focused ? e.tabindex : fe instanceof HTMLInputElement ? -1 : null)
+		fe.attr('tabindex', can_be_focused ? e.tabindex : (fe instanceof HTMLInputElement ? -1 : null))
 		if (!can_be_focused)
 			e.blur()
 	}
@@ -3155,9 +3152,11 @@ component('x-settings-button', function(e) {
 
 	button.construct(e)
 
+	e.xoff()
 	e.bare = true
 	e.text = ''
 	e.icon = 'fa fa-cog'
+	e.xon()
 
 	let tt
 

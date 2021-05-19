@@ -118,7 +118,7 @@ function init_xmodule(opt) {
 			pv = prop_vals(opt.id)
 			opt.module = opt.id.match(/^[^_\d]+/)[0]
 		}
-		e.xmodule_noupdate = true
+		e.xoff()
 		e.begin_update()
 		for (let k in opt)
 			e.set_prop(k, opt[k])
@@ -131,14 +131,14 @@ function init_xmodule(opt) {
 				e.set_prop(k, pv[k])
 		}
 		e.end_update()
-		e.xmodule_noupdate = false
+		e.xon()
 	}
 
 	function update_instance(e) {
 		if (e.xmodule_generation == generation)
 			return
 		e.xmodule_generation = generation
-		e.xmodule_noupdate = true
+		e.xoff()
 		e.begin_update()
 		let pv = prop_vals(e.id)
 		let pv0 = attr(e, '__pv0') // initial vals of overridden props.
@@ -155,7 +155,7 @@ function init_xmodule(opt) {
 			e.set_prop(k, pv[k])
 		}
 		e.end_update()
-		e.xmodule_noupdate = false
+		e.xon()
 	}
 
 	xm.bind_instance = function(e, on) {
@@ -220,21 +220,24 @@ function init_xmodule(opt) {
 		let instances = xm.instances[id] || empty_array
 		for (let e1 of instances) {
 			if (e1 != e) {
-				e1.xmodule_noupdate = true
+				e1.xoff()
 				let pv0 = attr(e1, '__pv0')
 
 				if (!(k in pv0)) // save current val if it wasn't saved before.
 					pv0[k] = e1.get_prop(k)
 				e1.set_prop(k, v)
-				e1.xmodule_noupdate = false
+				e1.xon()
 			}
 		}
 	}
 
 	document.on('prop_changed', function(e, k, v, v0, slot) {
-		if (!e.id) return
-		if (e.xmodule_noupdate) return
-		xm.set_val(e, e.id, k, v, v0, slot, e.module, e.serialize_prop)
+		if (!e.id)
+			return
+		if (e.xmodule_noupdate)
+			return
+		let module = e.module || e.attr('module')
+		xm.set_val(e, e.id, k, v, v0, slot, module, e.serialize_prop)
 	})
 
 	// loading prop layers and assigning to slots -----------------------------
@@ -260,7 +263,7 @@ function init_xmodule(opt) {
 	xm.next_id = function(module) {
 		let ret_id
 		ajax({
-			url: 'xmodule-next-id/'+assert(module),
+			url: '/xmodule-next-id/'+assert(module),
 			method: 'post',
 			async: false,
 			success: id => ret_id = id,
@@ -279,7 +282,7 @@ function init_xmodule(opt) {
 				props = JSON.parse(load('xmodule-layers/'+shortname))
 			} else {
 				ajax({
-					url: 'xmodule-layer.json/'+name,
+					url: '/xmodule-layer.json/'+name,
 					async: false,
 					success: function(props1) {
 						props = props1
@@ -307,7 +310,7 @@ function init_xmodule(opt) {
 					saved()
 				} else if (!t.save_request) {
 					t.save_request = ajax({
-						url: 'xmodule-layer.json/'+name,
+						url: '/xmodule-layer.json/'+name,
 						upload: json(t.props, null, '\t'),
 						done: () => t.save_request = null,
 						success: saved,

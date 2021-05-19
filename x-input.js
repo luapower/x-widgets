@@ -570,8 +570,7 @@ component('x-editbox', 'Input', function(e) {
 	})
 
 	e.on('bind_field', function(on) {
-		let maxlen = on ? e.field.maxlen : null
-		e.input.attr('maxlength', maxlen)
+		e.input.attr('maxlength', on ? e.field.maxlen : null)
 		bind_picker(on)
 	})
 
@@ -1024,8 +1023,7 @@ component('x-tagsedit', 'Input', function(e) {
 		else
 			e.input.value = null
 
-		let maxlen = e.field && e.field.maxlen
-		e.input.attr('maxlength', maxlen)
+		e.input.attr('maxlength', e.field ? e.field.maxlen : null)
 	}
 
 	// expanded bubble.
@@ -3023,7 +3021,7 @@ component('x-form', 'Containers', function(e) {
 	// generate a 3-letter value for `grid-area` based on item's `col` attr or `id`.
 	let names = {}
 	function area_name(item) {
-		let s = item.attrval('area') || item.col || item.attrval('col') || item.id
+		let s = item.attr('area') || item.col || item.attr('col') || item.id
 		if (!s) return
 		s = s.slice(0, 3)
 		if (names[s]) {
