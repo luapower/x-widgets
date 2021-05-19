@@ -1325,4 +1325,3 @@ function ajax(req) {
 
 	return req
 }
-
