@@ -15,7 +15,7 @@
 		e.closest_attr(k)
 		e.attrs = {k: v}
 	element css class list manipulation:
-		e.class(k, [false])
+		e.class(k[, enable])
 		e.hasclass(k)
 		e.switch_class(k1, k2, normal)
 		e.classess = 'k1 k2 ...'
@@ -158,11 +158,16 @@ method(Element, 'closest_attr', function(attr) {
 // element css class list manipulation ---------------------------------------
 
 method(Element, 'class', function(name, enable) {
+	if (arguments.length < 2) // this is why dispatching on argc sucks.
+		enable = true
 	if (name.includes(' ')) {
 		for (let s of name.split(/\s+/))
-			this.class(s, enable)
+			if (enable)
+				this.classList.add(name)
+			else
+				this.classList.remove(name)
 	} else {
-		if (enable !== false)
+		if (enable)
 			this.classList.add(name)
 		else
 			this.classList.remove(name)

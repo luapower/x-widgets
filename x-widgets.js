@@ -1540,7 +1540,7 @@ component('x-menu', function(e) {
 		let sub_td    = H.td ({class: 'x-menu-sub-td'}, sub_div)
 		sub_div.style.visibility = item.items ? null : 'hidden'
 		let tr = H.tr({class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
-		tr.class('disabled', !!(disabled || item.disabled))
+		tr.class('disabled', disabled || item.disabled)
 		tr.item = item
 		tr.check_div = check_div
 		update_check(tr)

@@ -161,7 +161,7 @@ component('x-listbox', 'Input', function(e) {
 				for (let i = 0; i < e.rows.length; i++) {
 					let item = e.at[i]
 					item.class('focused', e.focused_row_index == i)
-					item.class('selected', !!e.selected_rows.get(e.rows[i]))
+					item.class('selected', e.selected_rows.get(e.rows[i]))
 				}
 
 		if (opt.scroll_to_cell)

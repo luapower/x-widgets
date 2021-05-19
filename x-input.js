@@ -322,7 +322,7 @@ function input_widget(e) {
 
 	e.class('with-label', true)
 	function update_label() {
-		e.class('with-label', !e.nolabel && e.field && !!e.field.text)
+		e.class('with-label', !e.nolabel && e.field && e.field.text)
 	}
 	e.set_nolabel = update_label
 	e.set_label   = update_label
@@ -870,32 +870,22 @@ component('x-spinedit', 'Input', function(e) {
 		e.up  .class('fa-caret-right', bs == 'left-right')
 		e.down.class('fa-caret-left' , bs == 'left-right')
 
-		e.up  .class('left'     , false)
-		e.up  .class('right'    , false)
-		e.up  .class('leftmost' , false)
-		e.up  .class('rightmost', false)
-		e.down.class('left'     , false)
-		e.down.class('right'    , false)
-		e.down.class('leftmost' , false)
-		e.down.class('rightmost', false)
+		e.up  .class('left right leftmost rightmost', false)
+		e.down.class('left right leftmost rightmost', false)
 
 		if (bp == 'each-side') {
 			e.insert(0, e.down)
 			e.add(e.up)
-			e.down.class('left' )
-			e.up  .class('right')
-			e.down.class('leftmost' )
-			e.up  .class('rightmost')
+			e.down.class('left  leftmost')
+			e.up  .class('right rightmost')
 		} else if (bp == 'right') {
 			e.add(e.down, e.up)
 			e.down.class('right')
-			e.up  .class('right')
-			e.up  .class('rightmost')
+			e.up  .class('right rightmost')
 		} else if (bp == 'left') {
 			e.insert(0, e.down, e.up)
-			e.down.class('left')
+			e.down.class('left leftmost')
 			e.up  .class('left')
-			e.down.class('leftmost' )
 		}
 
 	}

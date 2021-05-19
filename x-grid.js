@@ -459,7 +459,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			hcell.sort_icon.class('fa-angle-double-'+desc, false)
 			hcell.sort_icon.class('fa-angle'+(pri?'-double':'')+'-'+asc , dir == 'asc')
 			hcell.sort_icon.class('fa-angle'+(pri?'-double':'')+'-'+desc, dir == 'desc')
-			hcell.sort_icon.parent.class('sorted', !!dir)
+			hcell.sort_icon.parent.class('sorted', dir)
 			hcell.sort_icon_pri.set(pri > 1 ? pri : '')
 		}
 	}
@@ -531,8 +531,8 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		cell.attr('align', field.align)
 		cell.class('focusable', e.can_focus_cell(row, field))
 		cell.class('disabled', e.is_cell_disabled(row, field))
-		cell.class('new', !!row.is_new)
-		cell.class('removed', !!row.removed)
+		cell.class('new', row.is_new)
+		cell.class('removed', row.removed)
 		cell.class('modified', e.cell_modified(row, field))
 
 		if (field_has_indent(field)) {
@@ -542,7 +542,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			}
 			let has_children = row.child_rows.length > 0
 			cell.indent.class('far', has_children)
-			cell.indent.class('fa-plus-square' , has_children && !!row.collapsed)
+			cell.indent.class('fa-plus-square' , has_children && row.collapsed)
 			cell.indent.class('fa-minus-square', has_children && !row.collapsed)
 			set_cell_indent(cell.indent, or(indent, row_indent(row)))
 		} else if (cell.indent) {
@@ -685,7 +685,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		},
 		function(v) {
 			filters_visible = !!v
-			e.header.class('with-filters', !!v)
+			e.header.class('with-filters', filters_visible)
 			e.update({sizes: true})
 		}
 	)
