@@ -3,7 +3,6 @@
 --Written by Cosmin Apreutesei. Public Domain.
 
 require'xrowset'
-require'mysql_h'
 
 --[=[
 local function field_defs_from_columns_table(tables)
@@ -48,47 +47,78 @@ local function field_defs_from_columns_table(tables)
 end
 ]=]
 
+local MYSQL_TYPE_DECIMAL     =   0
+local MYSQL_TYPE_TINY        =   1
+local MYSQL_TYPE_SHORT       =   2
+local MYSQL_TYPE_LONG        =   3
+local MYSQL_TYPE_FLOAT       =   4
+local MYSQL_TYPE_DOUBLE      =   5
+local MYSQL_TYPE_NULL        =   6
+local MYSQL_TYPE_TIMESTAMP   =   7
+local MYSQL_TYPE_LONGLONG    =   8
+local MYSQL_TYPE_INT24       =   9
+local MYSQL_TYPE_DATE        =  10
+local MYSQL_TYPE_TIME        =  11
+local MYSQL_TYPE_DATETIME    =  12
+local MYSQL_TYPE_YEAR        =  13
+local MYSQL_TYPE_NEWDATE     =  14
+local MYSQL_TYPE_VARCHAR     =  15
+local MYSQL_TYPE_BIT         =  16
+local MYSQL_TYPE_TIMESTAMP2  =  17
+local MYSQL_TYPE_DATETIME2   =  18
+local MYSQL_TYPE_TIME2       =  19
+local MYSQL_TYPE_NEWDECIMAL  = 246
+local MYSQL_TYPE_ENUM        = 247
+local MYSQL_TYPE_SET         = 248
+local MYSQL_TYPE_TINY_BLOB   = 249
+local MYSQL_TYPE_MEDIUM_BLOB = 250
+local MYSQL_TYPE_LONG_BLOB   = 251
+local MYSQL_TYPE_BLOB        = 252
+local MYSQL_TYPE_VAR_STRING  = 253
+local MYSQL_TYPE_STRING      = 254
+local MYSQL_TYPE_GEOMETRY    = 255
+
 local mysql_types = {
-	[C.MYSQL_TYPE_DECIMAL    ] = 'number',
-	[C.MYSQL_TYPE_TINY       ] = 'boolean',
-	[C.MYSQL_TYPE_SHORT      ] = 'number',
-	[C.MYSQL_TYPE_LONG       ] = 'number',
-	[C.MYSQL_TYPE_FLOAT      ] = 'number',
-	[C.MYSQL_TYPE_DOUBLE     ] = 'number',
-	[C.MYSQL_TYPE_TIMESTAMP  ] = 'date',
-	[C.MYSQL_TYPE_LONGLONG   ] = 'number',
-	[C.MYSQL_TYPE_INT24      ] = 'number',
-	[C.MYSQL_TYPE_DATE       ] = 'datetime',
-	[C.MYSQL_TYPE_TIME       ] = 'time',
-	[C.MYSQL_TYPE_DATETIME   ] = 'datetime',
-	[C.MYSQL_TYPE_YEAR       ] = 'number',
-	[C.MYSQL_TYPE_NEWDATE    ] = 'date',
-	[C.MYSQL_TYPE_VARCHAR    ] = 'text',
-	[C.MYSQL_TYPE_TIMESTAMP2 ] = 'date',
-	[C.MYSQL_TYPE_DATETIME2  ] = 'datetime',
-	[C.MYSQL_TYPE_TIME2      ] = 'time',
-	[C.MYSQL_TYPE_NEWDECIMAL ] = 'number',
-	[C.MYSQL_TYPE_ENUM       ] = 'enum',
-	--[C.MYSQL_TYPE_SET        ] = '',
-	[C.MYSQL_TYPE_TINY_BLOB  ] = 'file',
-	[C.MYSQL_TYPE_MEDIUM_BLOB] = 'file',
-	[C.MYSQL_TYPE_LONG_BLOB  ] = 'file',
-	[C.MYSQL_TYPE_BLOB       ] = 'file',
-	--[C.MYSQL_TYPE_VAR_STRING ] = '',
-	--[C.MYSQL_TYPE_STRING     ] = '',
-	--[C.MYSQL_TYPE_GEOMETRY   ] = '',
+	[MYSQL_TYPE_DECIMAL    ] = 'number',
+	[MYSQL_TYPE_TINY       ] = 'boolean',
+	[MYSQL_TYPE_SHORT      ] = 'number',
+	[MYSQL_TYPE_LONG       ] = 'number',
+	[MYSQL_TYPE_FLOAT      ] = 'number',
+	[MYSQL_TYPE_DOUBLE     ] = 'number',
+	[MYSQL_TYPE_TIMESTAMP  ] = 'date',
+	[MYSQL_TYPE_LONGLONG   ] = 'number',
+	[MYSQL_TYPE_INT24      ] = 'number',
+	[MYSQL_TYPE_DATE       ] = 'datetime',
+	[MYSQL_TYPE_TIME       ] = 'time',
+	[MYSQL_TYPE_DATETIME   ] = 'datetime',
+	[MYSQL_TYPE_YEAR       ] = 'number',
+	[MYSQL_TYPE_NEWDATE    ] = 'date',
+	[MYSQL_TYPE_VARCHAR    ] = 'text',
+	[MYSQL_TYPE_TIMESTAMP2 ] = 'date',
+	[MYSQL_TYPE_DATETIME2  ] = 'datetime',
+	[MYSQL_TYPE_TIME2      ] = 'time',
+	[MYSQL_TYPE_NEWDECIMAL ] = 'number',
+	[MYSQL_TYPE_ENUM       ] = 'enum',
+	--[MYSQL_TYPE_SET        ] = '',
+	[MYSQL_TYPE_TINY_BLOB  ] = 'file',
+	[MYSQL_TYPE_MEDIUM_BLOB] = 'file',
+	[MYSQL_TYPE_LONG_BLOB  ] = 'file',
+	[MYSQL_TYPE_BLOB       ] = 'file',
+	--[MYSQL_TYPE_VAR_STRING ] = '',
+	--[MYSQL_TYPE_STRING     ] = '',
+	--[MYSQL_TYPE_GEOMETRY   ] = '',
 }
 
 local mysql_range = {
-	--[C.MYSQL_TYPE_DECIMAL    ] = {},
-	[C.MYSQL_TYPE_TINY       ] = {-127, 127, 0, 255},
-	[C.MYSQL_TYPE_SHORT      ] = {-32768, 32767, 0, 65535},
-	[C.MYSQL_TYPE_LONG       ] = {},
-	--[C.MYSQL_TYPE_FLOAT      ] = {},
-	--[C.MYSQL_TYPE_DOUBLE     ] = {},
-	[C.MYSQL_TYPE_LONGLONG   ] = {},
-	[C.MYSQL_TYPE_INT24      ] = {-2^23, 2^23-1, 0, 2^24-1},
-	--[C.MYSQL_TYPE_NEWDECIMAL ] = {},
+	--[MYSQL_TYPE_DECIMAL    ] = {},
+	[MYSQL_TYPE_TINY       ] = {-127, 127, 0, 255},
+	[MYSQL_TYPE_SHORT      ] = {-32768, 32767, 0, 65535},
+	[MYSQL_TYPE_LONG       ] = {},
+	--[MYSQL_TYPE_FLOAT      ] = {},
+	--[MYSQL_TYPE_DOUBLE     ] = {},
+	[MYSQL_TYPE_LONGLONG   ] = {},
+	[MYSQL_TYPE_INT24      ] = {-2^23, 2^23-1, 0, 2^24-1},
+	--[MYSQL_TYPE_NEWDECIMAL ] = {},
 }
 
 local mysql_charsize = {
@@ -118,7 +148,7 @@ local function field_defs_from_query_result_cols(cols, extra_defs, update_table)
 				field.min = range[1 + (col.unsigned and 2 or 0)]
 				field.max = range[2 + (col.unsigned and 2 or 0)]
 			end
-			if col.type ~= C.MYSQL_TYPE_FLOAT and col.type ~= C.MYSQL_TYPE_DOUBLE then
+			if col.type ~= MYSQL_TYPE_FLOAT and col.type ~= MYSQL_TYPE_DOUBLE then
 				field.multiple_of = 1 / 10^col.decimals
 			end
 		elseif not type then
