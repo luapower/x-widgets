@@ -38,10 +38,10 @@ function init_xmodule(opt) {
 		let root_id = layer && layer.root_id
 		if (layer && !root_id)
 			warn('root_id not found in root module layer')
-		xm.set_root_widget(root_id && component.create(root_id))
+		xm.set_root_widget(root_id && component.create(root_id), false)
 	}
 
-	xm.set_root_widget = function(root_widget) {
+	xm.set_root_widget = function(root_widget, noupdate) {
 		xm.root_container = opt.root_container
 			&& $(opt.root_container)[0] || document.body
 		root_widget = root_widget || widget_placeholder({module: opt.root_module})
@@ -54,7 +54,7 @@ function init_xmodule(opt) {
 			if (!layer)
 				return
 			layer.props['<root>'] = root_widget.id
-			layer.modified = true
+			layer.modified = !!noupdate
 		}
 	}
 
@@ -190,7 +190,7 @@ function init_xmodule(opt) {
 		if (slot == 'none')
 			return
 		module = xm.selected_module || module
-		let layer = xm.active_layers[module+':'+slot]
+		let layer = module && xm.active_layers[module+':'+slot]
 		if (!layer) {
 			warn('prop-val-lost', '['+module+':'+slot+']', id, k, json(v))
 			return
@@ -236,8 +236,7 @@ function init_xmodule(opt) {
 			return
 		if (e.xmodule_noupdate)
 			return
-		let module = e.module || e.attr('module')
-		xm.set_val(e, e.id, k, v, v0, slot, module, e.serialize_prop)
+		xm.set_val(e, e.id, k, v, v0, slot, e.module, e.serialize_prop)
 	})
 
 	// loading prop layers and assigning to slots -----------------------------
@@ -303,11 +302,14 @@ function init_xmodule(opt) {
 		for (let name in xm.layers) {
 			let t = xm.layers[name]
 			if (t.modified) {
-				let saved = () => debug('layer-saved', name)
+				function saved() {
+					debug('layer-saved', name)
+					t.modified = false
+				}
 				if (name.starts('local:')) {
 					let shortname = name.replace(/^local\:/, '')
 					store('xmodule-layers/'+shortname, t.props)
-					saved()
+					saved(t)
 				} else if (!t.save_request) {
 					t.save_request = ajax({
 						url: '/xmodule-layer.json/'+name,

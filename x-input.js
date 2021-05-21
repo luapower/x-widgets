@@ -76,7 +76,7 @@ function row_widget(e, enabled_without_nav) {
 		e.update()
 	}
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_id' , {store: 'var', bind_id: 'nav', type: 'nav'})
+	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav'})
 
 	e.property('row', () => e.nav && e.nav.focused_row)
 

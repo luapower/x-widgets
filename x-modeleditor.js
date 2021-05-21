@@ -122,11 +122,14 @@ component('x-modeleditor', function(e) {
 
 	// rendering --------------------------------------------------------------
 
+	e.prop('skybox', {store: 'var', type: 'bool', default: true, attr: true})
+
 	function draw(prog) {
 		if (TRACE)
 			gl.start_trace()
 		let t0 = time()
-		skybox.draw(prog)
+		if (e.skybox)
+			skybox.draw(prog)
 		//ground_rr.draw(prog)
 		draw_model(prog)
 		if (TRACE)

@@ -2029,12 +2029,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	opacity: .2;
 	transition: opacity .5s;
 
+	border: 0;
 	border-radius: var(--x-border-radius);
+	box-shadow: var(--x-shadow-toolbox);
 }
 
-.x-toolbox {
-	border: 0;
-	box-shadow: var(--x-shadow-toolbox);
+.x-toolbox.popup {
+	position: fixed !important;
 }
 
 .x-toolbox.pinned,
@@ -2141,6 +2142,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	opacity: 1;
 	pointer-events: all;
 	transition: opacity .2s;
+}
+
+/* mustache --------------------------------------------------------------- */
+
+.x-mustache {
+	display: inline-block;
 }
 
 /* x-nav ------------------------------------------------------------------ */
@@ -2765,17 +2772,11 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	color: var(--x-fg-disabled);
 }
 
-/* settings button & popup ------------------------------------------------ */
-
-.x-settings-button {
-
-	position: absolute;
-	right: 1em;
-	top: 1em;
-
-}
-
 /* model editor ----------------------------------------------------------- */
+
+.x-modeleditor {
+	display: inline-block;
+}
 
 .x-modeleditor > canvas {
 	position: absolute;

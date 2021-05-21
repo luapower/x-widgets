@@ -1227,13 +1227,13 @@ function ajax(req) {
 			slow_watch = null
 		}
 		if (slow_watch === false) {
-			req.fire('slow', false)
+			fire('slow', false)
 			slow_watch = null
 		}
 	}
 
 	function slow_expired() {
-		req.fire('slow', true)
+		fire('slow', true)
 		slow_watch = false
 	}
 
@@ -1248,33 +1248,30 @@ function ajax(req) {
 		if (ev.loaded > 0)
 			stop_slow_watch()
 		let p = ev.lengthComputable ? ev.loaded / ev.total : .5
-		req.fire('progress', p, ev.loaded, ev.total)
+		fire('progress', p, ev.loaded, ev.total)
 	}
 
 	xhr.upload.onprogress = function(ev) {
 		if (ev.loaded > 0)
 			stop_slow_watch()
 		let p = ev.lengthComputable ? ev.loaded / ev.total : .5
-		req.fire('upload_progress', p, ev.loaded, ev.total)
+		fire('upload_progress', p, ev.loaded, ev.total)
 	}
 
 	xhr.ontimeout = function() {
-		req.fail = 'timeout'
-		req.fire('fail', 'timeout')
-		req.fire('done', 'fail', 'timeout')
+		req.failtype = 'timeout'
+		fire('done', 'fail', 'timeout')
 	}
 
 	// NOTE: only fired on network errors like connection refused!
 	xhr.onerror = function() {
-		req.fail = 'network'
-		req.fire('fail', 'network')
-		req.fire('done', 'fail', 'network')
+		req.failtype = 'network'
+		fire('done', 'fail', 'network')
 	}
 
 	xhr.onabort = function() {
-		req.fail = 'abort'
-		req.fire('fail', 'abort')
-		req.fire('done', 'fail', 'abort')
+		req.failtype = 'abort'
+		fire('done', 'fail', 'abort')
 	}
 
 	xhr.onreadystatechange = function(ev) {
@@ -1287,12 +1284,10 @@ function ajax(req) {
 					if (xhr.getResponseHeader('content-type') == 'application/json' && res)
 						res = JSON.parse(res)
 				req.response = res
-				req.fire('success', res)
-				req.fire('done', 'success', res)
+				fire('done', 'success', res)
 			} else if (xhr.status) { // status is 0 for network errors, incl. timeout.
-				req.fail = 'http'
-				req.fire('fail', 'http', xhr.status, xhr.statusText, xhr.responseText)
-				req.fire('done', 'fail', 'http', xhr.status, xhr.statusText, xhr.responseText)
+				req.failtype = 'http'
+				fire('done', 'fail', 'http', xhr.status, xhr.statusText, xhr.responseText)
 			}
 		}
 	}
@@ -1302,12 +1297,18 @@ function ajax(req) {
 		return req
 	}
 
-	req.on('slow', req.slow)
-	req.on('progress', req.progress)
-	req.on('upload_progress', req.upload_progress)
-	req.on('done', req.done)
-	req.on('fail', req.fail)
-	req.on('success', req.success)
+	function fire(name, arg1, ...rest) {
+		if (name == 'done')
+			fire(arg1, ...rest)
+
+		req.fire(name, arg1, ...rest)
+		if (req[name])
+			req[name](arg1, ...rest)
+
+		req.fire('event', name, arg1, ...rest)
+		if (req.event)
+			req.event(name, arg1, ...rest)
+	}
 
 	req.xhr = xhr
 

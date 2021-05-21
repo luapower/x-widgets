@@ -14,6 +14,7 @@
 		e.bool_attr(k[, v]) -> v
 		e.closest_attr(k)
 		e.attrs = {k: v}
+		e.tag
 	element css class list manipulation:
 		e.class(k[, enable])
 		e.hasclass(k)
@@ -155,22 +156,24 @@ method(Element, 'closest_attr', function(attr) {
 	return e && e.attr(attr)
 })
 
+property(Element, 'tag', function() { return this.tagName.lower() })
+
 // element css class list manipulation ---------------------------------------
 
-method(Element, 'class', function(name, enable) {
+method(Element, 'class', function(names, enable) {
 	if (arguments.length < 2) // this is why dispatching on argc sucks.
 		enable = true
-	if (name.includes(' ')) {
-		for (let s of name.split(/\s+/))
+	if (names.includes(' ')) {
+		for (let name of names.split(/\s+/))
 			if (enable)
 				this.classList.add(name)
 			else
 				this.classList.remove(name)
 	} else {
 		if (enable)
-			this.classList.add(name)
+			this.classList.add(names)
 		else
-			this.classList.remove(name)
+			this.classList.remove(names)
 	}
 })
 
@@ -628,10 +631,14 @@ method(DOMRect, 'contains', function(x, y) {
 })
 
 {
-	let layout_changed = function() { document.fire('layout_changed') }
-	window.on('resize', layout_changed)
-	window.on('load'  , layout_changed) // because fonts load asynchronously.
+let layout_changed = function() { document.fire('layout_changed') }
+window.on('resize', layout_changed)
+window.on('load'  , layout_changed) // because fonts load asynchronously.
 }
+
+method(Window, 'rect', function() {
+	return new DOMRect(0, 0, this.innerWidth, this.innerHeight)
+})
 
 // common style wrappers -----------------------------------------------------
 
@@ -962,7 +969,10 @@ let popup_state = function(e) {
 			raf(update)
 	}
 
+	let fixed
+
 	function target_bind(on) {
+		fixed = null
 		if (on) {
 			let css = target.css()
 			// simulate css font inheritance.
@@ -970,10 +980,11 @@ let popup_state = function(e) {
 			// the element is displayed as a popup, which leaves `!important`
 			// as the only way to override back these properties from css.
 			e.__css_inherited = {}
-			for (k of ['font-family', 'font-size', 'line-height'])
+			for (k of ['font-family', 'font-size', 'line-height']) {
 				if (!e.style[k]) {
-				e.style[k] = css[k]
-				e.__css_inherited[k] = true
+					e.style[k] = css[k]
+					e.__css_inherited[k] = true
+				}
 			}
 			e.class('popup')
 			document.body.add(e)
@@ -1018,6 +1029,9 @@ let popup_state = function(e) {
 	function update() {
 		if (!(target && target.isConnected))
 			return
+
+		if (fixed == null)
+			fixed = e.css().position == 'fixed'
 
 		let tr = target.rect()
 		let er = e.rect()
@@ -1075,9 +1089,10 @@ let popup_state = function(e) {
 
 		if (side.starts('inner-')) {
 			// adjust the offset of inner popups to fit the screen.
-			let br = document.body.rect()
-			let bw = br.w - 10
-			let bh = br.h - 10
+			let br = window.rect()
+			let d = 10
+			let bw = br.w - d
+			let bh = br.h - d
 			let ox2 = max(0, x0 + w - bw)
 			let ox1 = min(0, x0)
 			let oy2 = max(0, y0 + h - bh)
@@ -1089,8 +1104,8 @@ let popup_state = function(e) {
 			// TODO
 		}
 
-		e.x = window.scrollX + x0
-		e.y = window.scrollY + y0
+		e.x = fixed ? x0 : window.scrollX + x0
+		e.y = fixed ? y0 : window.scrollY + y0
 
 		target_updated()
 	}

@@ -3277,8 +3277,8 @@ let _v4_0 = v4()
 camera = function(e) {
 	e = e || {}
 
-	e.pos  = e.pos || v3(3, 1, 10)
-	e.dir  = e.dir || v3(0, 0, 1)
+	e.pos  = e.pos || v3(-1, 5, 10)
+	e.dir  = e.dir || v3(-.5, .5, 1)
 	e.up   = e.up  || v3(0, 1, 0)
 
 	e.fov  = e.fov || 60

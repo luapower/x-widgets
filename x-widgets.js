@@ -54,7 +54,6 @@ let resize_observer = new ResizeObserver(function(entries) {
 		entry.target.fire('resize', entry.contentRect, entry)
 })
 
-xmodule = null
 bind_events = true
 
 let dom_loaded = false
@@ -134,7 +133,7 @@ function component(tag, category, cons) {
 					e.on(k, opt.on[k])
 				delete opt.on
 			}
-			if (xmodule) {
+			if (window.xmodule) {
 				xmodule.init_instance(e, opt)
 			} else {
 				e.begin_update()
@@ -1223,7 +1222,6 @@ component('x-tooltip', function(e) {
 	e.add(e.body, e.pin)
 
 	e.prop('target'      , {store: 'var', private: true})
-	e.prop('target_name' , {store: 'var', type: 'element', bind: 'target'})
 	e.prop('text'        , {store: 'var', slot: 'lang'})
 	e.prop('icon_visible', {store: 'var', type: 'bool'})
 	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top', attr: true})
@@ -2810,18 +2808,18 @@ component('x-toolbox', function(e) {
 	e.set_text = function(v) { e.title_div.set(v) }
 	e.prop('text', {slot: 'lang'})
 
-	function refresh() {
+	function update() {
 		e.w = e.pw
 		e.h = e.ph
 		e.update()
 	}
 
-	e.set_side    = refresh
-	e.set_px      = refresh
-	e.set_py      = refresh
-	e.set_pw      = refresh
-	e.set_ph      = refresh
-	e.set_pinned  = refresh
+	e.set_side    = update
+	e.set_px      = update
+	e.set_py      = update
+	e.set_pw      = update
+	e.set_ph      = update
+	e.set_pinned  = update
 
 	e.prop('side'  , {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'right'})
 	e.prop('px'    , {store: 'var', type: 'number', slot: 'user'})
@@ -2848,7 +2846,7 @@ component('x-toolbox', function(e) {
 		let px = clamp(e.px, 0, window.innerWidth  - r.w) - br.x
 		let py = clamp(e.py, 0, window.innerHeight - r.h) - br.y
 
-		e.popup(e.target || document.body, 'inner-'+e.side, 'start', null, null, null, null, px, py)
+		e.popup(document.body, 'inner-'+e.side, 'start', null, null, null, null, px, py)
 
 		// move to top if the update was user-triggered not layout-triggered.
 		if (opt && opt.input == e && !is_top())
@@ -2997,9 +2995,9 @@ component('x-widget-switcher', 'Containers', function(e) {
 			return
 		if (!e.attached)
 			return
-		nav.on('focused_row_changed'     , refresh, on)
-		nav.on('focused_row_val_changed' , refresh, on)
-		nav.on('reset'                   , refresh, on)
+		nav.on('focused_row_changed'     , update, on)
+		nav.on('focused_row_val_changed' , update, on)
+		nav.on('reset'                   , update, on)
 	}
 
 	e.on('bind', function(on) {
@@ -3033,7 +3031,7 @@ component('x-widget-switcher', 'Containers', function(e) {
 		e.set(item)
 	}
 
-	function refresh() {
+	function update() {
 		e.update()
 	}
 
@@ -3096,5 +3094,128 @@ component('x-slides', 'Containers', function(e) {
 
 	return {items: dom_items}
 
+})
+
+// ---------------------------------------------------------------------------
+// mustache widget mixin
+// ---------------------------------------------------------------------------
+
+function mustache_widget(e) {
+
+	e.on('bind', function(on) {
+		if (on)
+			e.reload()
+	})
+
+	// rendering --------------------------------------------------------------
+
+	e.template = e.html
+	e.html = render_string(e.template)
+
+	e.render_s = function(data) { // stub
+		e.html = render_string(e.template, data)
+	}
+
+	// loading ----------------------------------------------------------------
+
+	let load_req
+
+	function load_event(name, ...args) {
+
+		if (name == 'success')
+			e.render_s(args[0])
+
+		if (name == 'done')
+			load_req = null
+
+		let ev = 'load_'+name
+		e.fire(ev, ...args)
+		if (e[ev])
+			e[ev](...args)
+
+	}
+
+	// function progress()
+
+
+	let last_load_url
+
+	e.reload = function(opt) {
+
+		let load_url = e.computed_load_url()
+		if (load_url == last_load_url)
+			return
+		last_load_url = load_url
+
+		if (load_req)
+			load_req.abort()
+
+		if (!load_url) {
+			e.html = ''
+			return
+		}
+
+		load_req = ajax(assign({
+			dont_send: true,
+			event: load_event,
+			url: load_url,
+		}, opt))
+
+		load_req.send()
+
+		return load_req
+	}
+
+	// nav & params binding ---------------------------------------------------
+
+	e.computed_load_url = function() {
+		if (e.nav && e.nav.focused_row && e.load_url)
+			return e.load_url.subst(e.nav.serialize_row_vals(e.nav.focused_row))
+		else
+			return e.load_url
+	}
+
+	function do_update() {
+		e.reload()
+	}
+
+	e.on('bind', function(on) {
+		bind_nav(e.param_nav, e.load_url, on)
+	})
+
+	function update() {
+		e.update()
+	}
+	function bind_nav(nav, url, on, reload) {
+		if (on && !e.attached)
+			return
+		if (nav) {
+			nav.on('focused_row_changed'     , update, on)
+			nav.on('focused_row_val_changed' , update, on)
+			nav.on('cell_val_changed'        , update, on)
+			nav.on('reset'                   , update, on)
+		}
+		if (reload !== false)
+			update()
+	}
+
+	e.set_param_nav = function(nav1, nav0) {
+		bind_nav(nav0, e.load_url, false, false)
+		bind_nav(nav1, e.load_url, true)
+	}
+	e.prop('param_nav', {store: 'var', private: true})
+	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav',
+			text: 'Param Nav', attr: true})
+
+	e.set_load_url = function(url1, url0) {
+		bind_nav(e.param_nav, url0, false, false)
+		bind_nav(e.param_nav, url1, true)
+	}
+	e.prop('load_url', {store: 'var', attr: true})
+
+}
+
+component('x-mustache', function(e) {
+	mustache_widget(e)
 })
 
