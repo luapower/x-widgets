@@ -123,6 +123,14 @@ component('x-modeleditor', function(e) {
 	// rendering --------------------------------------------------------------
 
 	e.prop('skybox', {store: 'var', type: 'bool', default: true, attr: true})
+	e.prop('background_color', {store: 'var', type: 'color', default: '#ffffff', attr: true})
+
+	bg_color = () => v3().from_rgb(e.background_color)
+
+	e.set_background_color = function(v) {
+		renderer.background_color = bg_color()
+		render()
+	}
 
 	function draw(prog) {
 		if (TRACE)
@@ -143,6 +151,7 @@ component('x-modeleditor', function(e) {
 		renderer = gl.scene_renderer({
 			enable_shadows: e.shadows,
 			camera: camera,
+			background_color: bg_color(),
 		})
 	}
 

@@ -424,6 +424,8 @@ let v3_class = class v extends Array {
 	to_v3_array(a, i) { return this.to_array(a, 3 * i) }
 
 	from_rgb(s) {
+		if (isstr(s))
+			s = parseInt(s.replace(/[^0-9a-fA-F]/g, ''), 16)
 		this[0] = (s >> 16 & 0xff) / 255
 		this[1] = (s >>  8 & 0xff) / 255
 		this[2] = (s       & 0xff) / 255
@@ -431,6 +433,8 @@ let v3_class = class v extends Array {
 	}
 
 	from_rgba(s) {
+		if (isstr(s))
+			s = parseInt(s.replace(/[^0-9a-fA-F]/g, ''), 16)
 		this[0] = (s >> 24 & 0xff) / 255
 		this[1] = (s >> 16 & 0xff) / 255
 		this[2] = (s >>  8 & 0xff) / 255

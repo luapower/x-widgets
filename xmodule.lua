@@ -1,6 +1,4 @@
 
-if not ... then require'hd_http'; return end
-
 require'xrowset'
 local path = require'path'
 local fs = require'fs'
