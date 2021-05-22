@@ -2,7 +2,6 @@
 require'xrowset'
 local path = require'path'
 local fs = require'fs'
-local ppjson = require'prettycjson' --TODO: this is broken.
 
 --rowsets --------------------------------------------------------------------
 
