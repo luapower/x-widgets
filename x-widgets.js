@@ -3219,3 +3219,18 @@ component('x-mustache', function(e) {
 	mustache_widget(e)
 })
 
+
+// ---------------------------------------------------------------------------
+// markdown widget
+// ---------------------------------------------------------------------------
+
+{
+let md
+component('x-md', function(e) {
+
+	md = md || markdownit()
+		.use(MarkdownItIndentedTable)
+
+	e.html = md.render(e.html)
+
+})}

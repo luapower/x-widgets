@@ -123,7 +123,7 @@ If you're still not sure, here's a list to
 * this lib extends built-in classes with new methods.
 * this lib only uses `===` when it's actually necessary.
 * this lib uses both `var` and `let` as needed.
-* this lib uses `<table>` for layouting. tables, man. for layouting.
+* this lib uses `<table>` for layouting. Tables, man. For layouting.
 * this lib uses snake case instead of hungarian notation.
 * this lib wraps instantiations with `new` into plain functions.
 * this lib does not even quote html attributes. why are you still reading?
@@ -132,5 +132,5 @@ w3c people found that it's in our best interest to deprecate.
 * this lib uses a deployment system whereby you open up your file explorer
 and then you copy-paste a bunch of .css and .js files to your goddam www folder.
 * this lib was not written by Google so it must have a lot of security vulnerabilities.
+* this libs uses tabs, not spaces.
 * look, it's not even a framework, it's a library. don't you wanna use a framework?
-
