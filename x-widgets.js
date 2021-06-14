@@ -3215,7 +3215,7 @@ function mustache_widget(e) {
 
 }
 
-component('x-mustache', function(e) {
+component('x-mu', function(e) {
 	mustache_widget(e)
 })
 

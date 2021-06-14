@@ -144,6 +144,10 @@ body[opensans] {
 
 /* widget defaults -------------------------------------------------------- */
 
+.x-widget {
+	display: inline-block;
+}
+
 .x-widget, .x-widget * {
 	box-sizing: border-box;
 }
@@ -2146,8 +2150,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* mustache --------------------------------------------------------------- */
 
-.x-mustache {
-	display: inline-block;
+.x-mu {
+	border: 0;
 }
 
 /* x-nav ------------------------------------------------------------------ */
