@@ -114,18 +114,18 @@
 
 alias(Element, 'hasattr', 'hasAttribute')
 
-// NOTE: `''`, `false` and `undefined` cannot be stored specifically:
-/// `''` gets back `true`, `false` or `undefined` gets back `null`.
-// To store both `false` and `null` use bool_attr().
+// NOTE: `true`, `false` and `undefined` cannot be stored specifically:
+// setting `true` gets back 'true' while `false` and `undefined` gets back `null`.
+// To store `true`, `false` and `null` distinctly, use bool_attr().
 method(Element, 'attr', function(k, v) {
 	// dispatching on argc sucks but distinguishing get vs set based on
 	// `v === undefined` is even more error-prone.
 	if (arguments.length < 2)
-		return repl(this.getAttribute(k), '', true)
-	else if (v == null || v === false || v === '')
+		return this.getAttribute(k)
+	else if (v == null || v === false)
 		this.removeAttribute(k)
 	else
-		this.setAttribute(k, repl(v, true, ''))
+		this.setAttribute(k, v)
 })
 
 method(Element, 'bool_attr', function(k, v) {

@@ -3102,21 +3102,17 @@ component('x-slides', 'Containers', function(e) {
 
 function mustache_widget(e) {
 
+	assert(e.at[0] && e.at[0].tag == 'plaintext',
+		'mustache widget must contain a <plaintext> tag')
+
+	e.template_string = e.at[0].html
+
 	e.class('x-mu')
 
 	e.on('bind', function(on) {
 		if (on)
 			e.reload()
 	})
-
-	// rendering --------------------------------------------------------------
-
-	e.template = e.html
-	e.html = render_string(e.template)
-
-	e.render_s = function(data) { // stub
-		e.html = render_string(e.template, data)
-	}
 
 	// loading ----------------------------------------------------------------
 
@@ -3125,7 +3121,7 @@ function mustache_widget(e) {
 	function load_event(name, ...args) {
 
 		if (name == 'success')
-			e.render_s(args[0])
+			e.render(args[0])
 
 		if (name == 'done')
 			load_req = null
@@ -3140,7 +3136,7 @@ function mustache_widget(e) {
 	// function progress()
 
 
-	let last_data_url
+	let last_data_url, placeholder_set
 
 	e.reload = function(opt) {
 
@@ -3154,6 +3150,7 @@ function mustache_widget(e) {
 
 		if (!data_url) {
 			e.html = ''
+			placeholder_set =  false
 			return
 		}
 
@@ -3183,6 +3180,10 @@ function mustache_widget(e) {
 
 	e.on('bind', function(on) {
 		bind_nav(e.param_nav, e.data_url, on)
+		if (on && !placeholder_set) {
+			e.render({placeholder: true})
+			placeholder_set = true
+		}
 	})
 
 	function update() {
@@ -3233,6 +3234,6 @@ component('x-md', function(e) {
 	md = md || markdownit()
 		.use(MarkdownItIndentedTable)
 
-	e.html = md.render(e.html)
+	e.html = md.render_string(e.html)
 
 })}
