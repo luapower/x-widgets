@@ -283,7 +283,7 @@ on_dom_load(function() {
 		e.bind(true)
 	}
 	dom_components = null
-})
+}, 'components')
 
 /* ---------------------------------------------------------------------------
 // component partial deferred updating mixin
@@ -1195,10 +1195,10 @@ function stylable_widget(e) {
 
 	e.set_css_classes = function(c1, c0) {
 		if (c0)
-			for (s of c0.split(/\s+/))
+			for (let s of c0.split(/\s+/))
 				this.class(s, false)
 		if (c1)
-			for (s of c1.split(/\s+/))
+			for (let s of c1.split(/\s+/))
 				this.class(s, true)
 	}
 	e.prop('css_classes', {store: 'var'})
@@ -3102,6 +3102,8 @@ component('x-slides', 'Containers', function(e) {
 
 function mustache_widget(e) {
 
+	e.class('x-mu')
+
 	e.on('bind', function(on) {
 		if (on)
 			e.reload()
@@ -3138,19 +3140,19 @@ function mustache_widget(e) {
 	// function progress()
 
 
-	let last_load_url
+	let last_data_url
 
 	e.reload = function(opt) {
 
-		let load_url = e.computed_load_url()
-		if (load_url == last_load_url)
+		let data_url = e.computed_data_url()
+		if (data_url == last_data_url)
 			return
-		last_load_url = load_url
+		last_data_url = data_url
 
 		if (load_req)
 			load_req.abort()
 
-		if (!load_url) {
+		if (!data_url) {
 			e.html = ''
 			return
 		}
@@ -3158,7 +3160,7 @@ function mustache_widget(e) {
 		load_req = ajax(assign({
 			dont_send: true,
 			event: load_event,
-			url: load_url,
+			url: data_url,
 		}, opt))
 
 		load_req.send()
@@ -3168,19 +3170,19 @@ function mustache_widget(e) {
 
 	// nav & params binding ---------------------------------------------------
 
-	e.computed_load_url = function() {
-		if (e.nav && e.nav.focused_row && e.load_url)
-			return e.load_url.subst(e.nav.serialize_row_vals(e.nav.focused_row))
+	e.computed_data_url = function() {
+		if (e.nav && e.nav.focused_row && e.data_url)
+			return e.data_url.subst(e.nav.serialize_row_vals(e.nav.focused_row))
 		else
-			return e.load_url
+			return e.data_url
 	}
 
-	function do_update() {
+	e.do_update = function() {
 		e.reload()
 	}
 
 	e.on('bind', function(on) {
-		bind_nav(e.param_nav, e.load_url, on)
+		bind_nav(e.param_nav, e.data_url, on)
 	})
 
 	function update() {
@@ -3200,18 +3202,18 @@ function mustache_widget(e) {
 	}
 
 	e.set_param_nav = function(nav1, nav0) {
-		bind_nav(nav0, e.load_url, false, false)
-		bind_nav(nav1, e.load_url, true)
+		bind_nav(nav0, e.data_url, false, false)
+		bind_nav(nav1, e.data_url, true)
 	}
 	e.prop('param_nav', {store: 'var', private: true})
 	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav',
 			text: 'Param Nav', attr: true})
 
-	e.set_load_url = function(url1, url0) {
+	e.set_data_url = function(url1, url0) {
 		bind_nav(e.param_nav, url0, false, false)
 		bind_nav(e.param_nav, url1, true)
 	}
-	e.prop('load_url', {store: 'var', attr: true})
+	e.prop('data_url', {store: 'var', attr: true})
 
 }
 

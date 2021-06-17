@@ -65,7 +65,7 @@
 		~layout_changed()
 		e.capture_pointer(ev, on_pointermove, on_pointerup)
 		DEBUG_EVENTS = false
-		on_dom_load(fn)
+		on_dom_load(fn, [priority_bucket])
 	element geometry:
 		px(x)
 		e.x, e.y, e.x1, e.y1, e.x2, e.y2, e.w, e.h
@@ -556,11 +556,29 @@ method(EventTarget, 'once'   , once)
 method(EventTarget, 'fire'   , fire)
 method(EventTarget, 'fireup' , fireup)
 
-function on_dom_load(fn) {
+{
+let load_slots = {}
+var dom_load_order = ''
+function on_dom_load(fn, name) {
 	if (document.readyState === 'loading')
-		document.once('DOMContentLoaded', fn)
+		attr(load_slots, name || '<default>', Array).push(fn)
 	else // `DOMContentLoaded` already fired
 		fn()
+}
+document.once('DOMContentLoaded', function() {
+	function run(a) {
+		for (let fn of a)
+			fn()
+	}
+	for (let s of dom_load_order.split(/\s+/)) {
+		if (load_slots[s]) {
+			run(load_slots[s])
+			delete load_slots[s]
+		}
+	}
+	for (let s in load_slots)
+		run(load_slots[s])
+})
 }
 
 // inter-window event broadcasting.
