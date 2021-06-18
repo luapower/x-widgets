@@ -2252,7 +2252,7 @@ component('x-pagelist', 'Containers', function(e) {
 	}
 
 	function url_path_tab() {
-		let p = url(location.pathname).path.splice(2)
+		let p = url(location.pathname).segments.splice(2)
 		let slug = p[url_path_level()]
 		for (let item of e.items) {
 			if (slug == item_slug(item))
@@ -3102,8 +3102,8 @@ component('x-slides', 'Containers', function(e) {
 
 function mustache_widget(e) {
 
-	assert(e.at[0] && e.at[0].tag == 'plaintext',
-		'mustache widget must contain a <plaintext> tag')
+	assert(e.at[0] && e.at[0].tag == 'script',
+		'mustache widget is missing the <script> tag')
 
 	e.template_string = e.at[0].html
 
@@ -3121,7 +3121,7 @@ function mustache_widget(e) {
 	function load_event(name, ...args) {
 
 		if (name == 'success')
-			e.render(args[0])
+			e.render(args[0], this)
 
 		if (name == 'done')
 			load_req = null
@@ -3138,9 +3138,9 @@ function mustache_widget(e) {
 
 	let last_data_url, placeholder_set
 
-	e.reload = function(opt) {
+	e.reload = function(req) {
 
-		let data_url = e.computed_data_url()
+		let data_url = req && req.url || e.computed_data_url()
 		if (data_url == last_data_url)
 			return
 		last_data_url = data_url
@@ -3158,7 +3158,7 @@ function mustache_widget(e) {
 			dont_send: true,
 			event: load_event,
 			url: data_url,
-		}, opt))
+		}, req))
 
 		load_req.send()
 

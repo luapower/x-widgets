@@ -125,7 +125,7 @@
 		load(key) -> t
 	url decoding, encoding and updating:
 		url(path) -> t
-		url(path|path_comp, [path_comp], [params]) -> s
+		url(path|path_segments, [path_segments], [params]) -> s
 	ajax requests:
 		ajax({
 			url: s,
@@ -1085,14 +1085,10 @@ function load(key) {
 
 /* URL encoding & decoding ---------------------------------------------------
 
-	url(path) -> t
-	url(path|path_comp, [path_comp], [params]) -> s
-
-	examples:
-		decode: url('a/b?k=v') -> {path: ['a','b'], params: {k:'v'}}
-		encode: url(['a','b'], {k:'v'}) -> 'a/b?k=v'
-		update: url('a/b', {k:'v'}) -> 'a/b?k=v'
-		update: url('a/b?k=v', ['c'], {k:'x'}) -> 'c/b?k=x'
+	decode: url('a/b?k=v') -> {segments: ['a','b'], params: {k:'v'}}
+	encode: url(['a','b'], {k:'v'}) -> 'a/b?k=v'
+	update: url('a/b', {k:'v'}) -> 'a/b?k=v'
+	update: url('a/b?k=v', ['c'], {k:'x'}) -> 'c/b?k=x'
 
 */
 function url(path, params, update) {
@@ -1105,11 +1101,11 @@ function url(path, params, update) {
 			let t = url(path) // decode
 			if (params) // update path
 				for (let i = 0; i < params.length; i++)
-					t.path[i] = params[i]
+					t.segments[i] = params[i]
 			if (update) // update params
 				for (let k in update)
 					t.params[k] = update[k]
-			return url(t.path, t.params) // encode back
+			return url(t.segments, t.params) // encode back
 		} else { // decode
 			let i = path.indexOf('?')
 			if (i > -1) {
@@ -1135,16 +1131,17 @@ function url(path, params, update) {
 					}
 				}
 			}
-			return {path: a, params: t}
+			return {segments: a, params: t}
 		}
 	} else { // encode
-		if (!isarray(path)) {
+		let segments = path
+		if (!isarray(segments)) {
 			params = path.params
-			path = path.path
+			segments = path.segments
 		}
 		let a = []
-		for (let i = 0; i < path.length; i++)
-			a[i] = encodeURIComponent(path[i])
+		for (let i = 0; i < segments.length; i++)
+			a[i] = encodeURIComponent(segments[i])
 		path = a.join('/')
 		a = []
 		let pkeys = keys(params).sort()
@@ -1158,7 +1155,7 @@ function url(path, params, update) {
 					let kv = k + (z !== true ? '=' + encodeURIComponent(z) : '')
 					a.push(kv)
 				}
-			} else {
+			} else if (v != null) {
 				let kv = k + (v !== true ? '=' + encodeURIComponent(v) : '')
 				a.push(kv)
 			}
