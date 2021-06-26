@@ -12,14 +12,14 @@ local function field_defs_from_columns_table(tables)
 			add(where, '\n\t\t\tor ')
 		end
 		append(where,
-			'(c.table_schema = ', quote_sql(t[1]),
-			' and c.table_name = ', quote_sql(t[2]), ' and (')
+			'(c.table_schema = ', sqlval(t[1]),
+			' and c.table_name = ', sqlval(t[2]), ' and (')
 		for i = 3, #t do
 			if i > 3 then
 				add(where, ' or ')
 			end
 			add(where, 'c.column_name = ')
-			add(where, quote_sql(t[i]))
+			add(where, sqlval(t[i]))
 		end
 		add(where, '))')
 	end
@@ -176,18 +176,18 @@ end
 local function where_sql(pk, suffix)
 	local t = {'where '}
 	for i,k in ipairs(pk) do
-		append(t, quote_sqlname(k), ' <=> ', ':', k, suffix or '', ' and ')
+		append(t, sqlname(k), ' <=> ', ':', k, suffix or '', ' and ')
 	end
 	t[#t] = nil --remove the last ' and '.
 	return concat(t)
 end
 
 local function insert_sql(tbl, fields, values)
-	local t = {'insert into ', quote_sqlname(tbl), ' set '}
+	local t = {'insert into ', sqlname(tbl), ' set '}
 	for _,k in ipairs(fields) do
 		local v = values[k]
 		if v ~= nil then
-			append(t, quote_sqlname(k), ' = ', quote_sql(v), ', ')
+			append(t, sqlname(k), ' = ', sqlval(v), ', ')
 		end
 	end
 	if t[#t] == ' set ' then --no fields.
@@ -199,21 +199,21 @@ local function insert_sql(tbl, fields, values)
 end
 
 local function update_sql(tbl, fields, where_sql, values)
-	local t = {'update ', quote_sqlname(tbl), ' set '}
+	local t = {'update ', sqlname(tbl), ' set '}
 	for _,k in ipairs(fields) do
 		local v = values[k]
 		if v ~= nil then
-			append(t, quote_sqlname(k), ' = ', quote_sql(v), ', ')
+			append(t, sqlname(k), ' = ', sqlval(v), ', ')
 		end
 	end
 	t[#t] = ' ' --replace the last comma.
-	add(t, (quote_sqlparams(where_sql, values)))
+	add(t, (sqlparams(where_sql, values)))
 	return concat(t)
 end
 
 local function delete_sql(tbl, where_sql, values)
-	return concat{'delete from ', quote_sqlname(tbl), ' ',
-		(quote_sqlparams(where_sql, values))}
+	return concat{'delete from ', sqlname(tbl), ' ',
+		(sqlparams(where_sql, values))}
 end
 
 function sql_rowset(...)
