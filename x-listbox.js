@@ -19,9 +19,9 @@
 // listbox widget
 // ---------------------------------------------------------------------------
 
-component('x-listbox', 'Input', function(e) {
+function listbox_widget(e) {
 
-	e.class('x-stretched')
+	e.class('x-listbox x-stretched')
 
 	val_widget(e, true)
 	nav_widget(e)
@@ -32,27 +32,33 @@ component('x-listbox', 'Input', function(e) {
 
 	e.prop('orientation'   , {store: 'var', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical', attr: true})
 	e.prop('can_move_items', {store: 'var', type: 'bool', default: true})
-	e.prop('item_type'     , {store: 'var', default: 'richtext'})
 
 	e.display_col = 0
 
-	// item-based rowset ------------------------------------------------------
+	let items_tag = e.$('items')[0]
+	let dom_items = items_tag && [...items_tag.at]
+	let item_template = e.$('script[type="text/x-mustache"]')[0]
+	item_template = item_template && item_template.html
+	e.clear()
 
-	e.prop('items', {store: 'var', private: true})
+	function format_item(row, val) {
+		if (val instanceof HTMLElement) // element, dupe it.
+			return val.clone()
+		return e.create_item(row, val)
+	}
 
-	function setup_item(item) {
+	function create_item() {
+		let item = div()
 		item.classes = 'x-listbox-item x-item'
 		item.on('pointerdown', item_pointerdown)
+		return item
 	}
 
-	function rows_added(rows, ri1) {
-		for (let row of rows) {
-			let item = e.create_item()
-			setup_item(item)
-			row[0] = item
-		}
+	e.do_update_item = function(item, row) {
+		item.set(e.row_display_val(row))
 	}
-	e.on('rows_added', rows_added)
+
+	e.prop('items', {store: 'var', private: true})
 
 	e.set_items = function() {
 
@@ -64,33 +70,16 @@ component('x-listbox', 'Input', function(e) {
 
 		e.display_col = 0
 		let rows = []
-		for (let item of e.items) {
-			if (isobject(item) && item.type)
-				item = component.create(item)
-			if (item instanceof HTMLElement)
-				setup_item(item)
+		for (let item of e.items)
 			rows.push([item])
-		}
 
 		e.rowset = {
-			fields: [{format: e.format_item}],
+			fields: [{format: (val, row) => format_item(row, val)}],
 			rows: rows,
 		}
 
 		e.reload()
 	}
-
-	e.create_item = function() {
-		return component.create({type: e.item_type})
-	}
-
-	e.format_item = function(item) {
-		return isobject(item) ? item.text : item
-	}
-
-	e.property('focused_item', function() {
-		return e.focused_row ? e.focused_row[0] : null
-	})
 
 	e.child_widgets = function() {
 		let widgets = []
@@ -112,11 +101,13 @@ component('x-listbox', 'Input', function(e) {
 
 	// responding to nav changes ----------------------------------------------
 
-	e.do_update_item = function(item, row) { // stub
-		if (item.iswidget)
-			return
-		item.set(e.row_display_val(row))
+	function rows_added(rows, ri1) {
+		for (let row of rows) {
+			let item = create_item()
+			e.insert(ri1++, item)
+		}
 	}
+	e.on('rows_added', rows_added)
 
 	let inh_do_update = e.do_update
 	e.do_update = function(opt) {
@@ -132,13 +123,7 @@ component('x-listbox', 'Input', function(e) {
 		if (opt.rows) {
 			e.clear()
 			for (let row of e.rows) {
-				let item
-				if (e.items && row[0] instanceof HTMLElement) {
-					item = row[0]
-				} else {
-					item = H.div({})
-					setup_item(item)
-				}
+				let item = create_item()
 				e.add(item)
 			}
 			opt.vals = true
@@ -156,13 +141,12 @@ component('x-listbox', 'Input', function(e) {
 			opt.state = true
 		}
 
-		if (opt.state)
-			if (e.at.length)
-				for (let i = 0; i < e.rows.length; i++) {
-					let item = e.at[i]
-					item.class('focused', e.focused_row_index == i)
-					item.class('selected', e.selected_rows.get(e.rows[i]))
-				}
+		if (opt.state && e.at.length)
+			for (let i = 0; i < e.rows.length; i++) {
+				let item = e.at[i]
+				item.class('focused', e.focused_row_index == i)
+				item.class('selected', e.selected_rows.get(e.rows[i]))
+			}
 
 		if (opt.scroll_to_cell)
 			e.scroll_to_cell(...opt.scroll_to_cell)
@@ -366,7 +350,10 @@ component('x-listbox', 'Input', function(e) {
 		e.xmodule_noupdate = false
 	}
 
-})
+	return {items: dom_items, row_display_val_template: item_template}
+}
+
+component('x-listbox', 'Input', listbox_widget)
 
 hlistbox = function(...options) {
 	return listbox({orientation: 'horizontal'}, ...options)

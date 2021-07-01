@@ -809,14 +809,14 @@ function nav_widget(e) {
 		e.reload()
 	}
 	e.prop('param_nav', {store: 'var', private: true})
-	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav', text: 'Param Nav'})
+	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav', text: 'Param Nav', attr: true})
 
 	e.set_params = function(params1, params0) {
 		bind_param_nav_cols(e.param_nav, params0, false)
 		bind_param_nav_cols(e.param_nav, params1, true)
 		e.reload()
 	}
-	e.prop('params', {store: 'var'})
+	e.prop('params', {store: 'var', attr: true})
 
 	function param_map(params) {
 		let m = new Map()
@@ -3573,13 +3573,14 @@ function nav_widget(e) {
 
 	// picker protocol --------------------------------------------------------
 
-	e.prop('row_display_val_template', {store: 'var', private: true}})
-	e.prop('row_display_val_template_name',
-		{store: 'var', bind_id: 'row_display_val_template', type: 'script', attr: true})
+	e.prop('row_display_val_template', {store: 'var', private: true})
+	e.prop('row_display_val_template_name', {store: 'var', attr: true})
 
 	e.row_display_val = function(row) { // stub
+		if (e.row_display_val_template_name)
+			return H(render(e.row_display_val_template_name, e.serialize_row_vals(row)))
 		if (e.row_display_val_template)
-			return render_string(e.row_display_val_template.html, e.serialize_row_vals(row))
+			return H(render_string(e.row_display_val_template, e.serialize_row_vals(row)))
 		if (!e.all_fields.length)
 			return 'no fields'
 		let field = e.all_fields[e.display_col]
