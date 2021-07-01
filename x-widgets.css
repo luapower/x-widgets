@@ -2152,6 +2152,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-mu {
 	border: 0;
+	margin: 0;
 }
 
 /* x-nav ------------------------------------------------------------------ */

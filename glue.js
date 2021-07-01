@@ -1085,7 +1085,7 @@ function load(key) {
 
 /* URL encoding & decoding ---------------------------------------------------
 
-	decode: url('a/b?k=v') -> {segments: ['a','b'], params: {k:'v'}}
+	decode: url('a/b?k=v#xx') -> {segments: ['a','b'], params: {k:'v'}, hash: 'xx'}
 	encode: url(['a','b'], {k:'v'}) -> 'a/b?k=v'
 	update: url('a/b', {k:'v'}) -> 'a/b?k=v'
 	update: url('a/b?k=v', ['c'], {k:'x'}) -> 'c/b?k=x'
@@ -1107,6 +1107,14 @@ function url(path, params, update) {
 					t.params[k] = update[k]
 			return url(t.segments, t.params) // encode back
 		} else { // decode
+			let hash
+			{
+				let i = path.indexOf('#')
+				if (i > -1) {
+					hash = path.substring(i + 1)
+					path = path.substring(0, i)
+				}
+			}
 			let i = path.indexOf('?')
 			if (i > -1) {
 				params = path.substring(i + 1)
@@ -1131,7 +1139,7 @@ function url(path, params, update) {
 					}
 				}
 			}
-			return {segments: a, params: t}
+			return {segments: a, params: t, hash: hash}
 		}
 	} else { // encode
 		let segments = path

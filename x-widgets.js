@@ -3065,6 +3065,10 @@ component('x-slides', 'Containers', function(e) {
 		e.clear()
 		for (let ce of e.items) {
 			ce.class('x-slide', true)
+			if (ce.detect_resize) {
+				ce.detect_resize()
+				ce.on('resize', update_height)
+			}
 			e.add(ce)
 		}
 		e.set_selected_index(e.selected_index)
