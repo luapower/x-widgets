@@ -1299,6 +1299,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-listbox[orientation=horizontal] { flex-direction: row; }
 
 .x-listbox-item {
+	/* layout */
+	display: block;
 	/* sizing */
 	padding: var(--x-input-padding);
 	/* behavior */
@@ -2125,12 +2127,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-slides {
 	margin: 0;
 	border: 0;
+	display: grid;
 }
 
 .x-slide {
-	position: absolute;
-	top: 0;
-	left: 0;
+	grid-column-start: 1;
+	grid-row-start: 1;
 
 	opacity: 0;
 	transition: opacity .2s;

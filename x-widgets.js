@@ -3065,26 +3065,10 @@ component('x-slides', 'Containers', function(e) {
 		e.clear()
 		for (let ce of e.items) {
 			ce.class('x-slide', true)
-			if (ce.detect_resize) {
-				ce.detect_resize()
-				ce.on('resize', update_height)
-			}
 			e.add(ce)
 		}
 		e.set_selected_index(e.selected_index)
-		update_height()
 	}
-
-	function update_height() {
-		e.h = null
-		let h = 0
-		for (let ce of e.at)
-			h = max(h, ce.rect().h)
-		e.h = h
-	}
-
-	e.detect_resize()
-	e.on('resize', update_height)
 
 	e.set_selected_index = function(i1, i0) {
 		let e0 = e.items[i0]

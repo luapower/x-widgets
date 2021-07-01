@@ -3573,7 +3573,13 @@ function nav_widget(e) {
 
 	// picker protocol --------------------------------------------------------
 
+	e.prop('row_display_val_template', {store: 'var', private: true}})
+	e.prop('row_display_val_template_name',
+		{store: 'var', bind_id: 'row_display_val_template', type: 'script', attr: true})
+
 	e.row_display_val = function(row) { // stub
+		if (e.row_display_val_template)
+			return render_string(e.row_display_val_template.html, e.serialize_row_vals(row))
 		if (!e.all_fields.length)
 			return 'no fields'
 		let field = e.all_fields[e.display_col]
@@ -3879,7 +3885,7 @@ component('x-lookup-dropdown', function(e) {
 		let i = mag ? magnitudes[mag] : floor(log(x) / log(1024))
 		let z = x / 1024**i
 		let s = z.dec(dec) + suffix[i]
-		return z < min ? () => span({class: 'x-dba-insignificant-size'}, s) : s
+		return z < min ? span({class: 'x-dba-insignificant-size'}, s) : s
 	}
 
 	// dates

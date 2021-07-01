@@ -76,7 +76,7 @@ function row_widget(e, enabled_without_nav) {
 		e.update()
 	}
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav'})
+	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav', attr: true})
 
 	e.property('row', () => e.nav && e.nav.focused_row)
 
@@ -2203,10 +2203,10 @@ component('x-image', 'Input', function(e) {
 	e.set_allow_upload        = refresh
 	e.set_allow_download      = refresh
 
-	e.prop('url_template'        , {store: 'var'})
-	e.prop('upload_url_template' , {store: 'var'})
-	e.prop('allow_upload'        , {store: 'var', type: 'bool', default: true})
-	e.prop('allow_download'      , {store: 'var', type: 'bool', default: true})
+	e.prop('url_template'        , {store: 'var', attr: true})
+	e.prop('upload_url_template' , {store: 'var', attr: true})
+	e.prop('allow_upload'        , {store: 'var', type: 'bool', default: true, attr: true})
+	e.prop('allow_download'      , {store: 'var', type: 'bool', default: true, attr: true})
 
 	// upload/download error notifications
 

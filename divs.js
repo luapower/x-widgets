@@ -39,6 +39,7 @@
 		e.insert(i, te1,...)
 		e.replace([e0], te)
 		e.clear()
+		e.clone()
 		tag(s, [attrs], te1,...)
 		div(...)
 		span(...)
@@ -315,6 +316,7 @@ method(Element, 'clear', function() {
 	this.innerHTML = null
 })
 
+alias(Element, 'clone', 'cloneNode')
 alias(Element, 'html', 'innerHTML')
 
 method(Element, 'set', function(s, whitespace) {
