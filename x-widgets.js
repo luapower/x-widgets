@@ -25,39 +25,23 @@ DEBUG_ATTACH_TIME = false
 /* ---------------------------------------------------------------------------
 // creating & setting up web components
 // ---------------------------------------------------------------------------
-uses:
-	bind_events <- t|f
 publishes:
 	e.isinstance: t
 	e.iswidget: t
 	e.type
 	e.initialized: t|f
 	e.attached: t|f
-	e.bind(t|f)
-	calls:
+calls:
 	e.init()
 fires:
-	e.'bind' (t|f)
-	document.'global_attached', document.'global_detached'
-	document.'widget_bind'
-------------------------------------------------------------------------------
-NOTE: the only reason for using this web components "technology" instead
-of creating normal elements is because of connectedCallback and
-disconnectedCallback for which there are no events in built-in elements,
-and we use those events to solve the so-called "lapsed listener problem"
-(a proper iterable weak hash map would be a better way to solve this but
-alas, the web people couldn't get that one right either).
+	^document.'widget_bind' (on)
+	^document.'ID.bind' (on)
 --------------------------------------------------------------------------- */
 
 let resize_observer = new ResizeObserver(function(entries) {
 	for (let entry of entries)
 		entry.target.fire('resize', entry.contentRect, entry)
 })
-
-bind_events = true
-
-let dom_loaded = false
-let dom_components = []
 
 function set_attr_func(e, k, opt) {
 	let to_attr
@@ -103,92 +87,18 @@ function component(tag, category, cons) {
 		return cons(e, ...args)
 	}
 
-	let cls = class extends HTMLElement {
+	function initialize(e, ...args) {
 
-		constructor() {
-			super()
-			this.initialized = null // for log_add_event().
-			this.attached = false
-			// elements created by the browser must be initialized on first
-			// attach as they aren't allowed to create children or set
-			// attributes in the constructor, hence _initialize(), called later.
-		}
-
-		_initialize(opt) {
-			let e = this
-			if (e.initialized)
-				return
-			props_mixin(e, opt && opt.props)
-			component_deferred_updating(e)
-			e.isinstance = true   // because you can have non-widget instances.
-			e.iswidget = true     // to diff from normal html elements.
-			e.type = type         // for serialization.
-			e.init = noop         // init point after all props are set.
-			e.class('x-widget')
-			let cons_opt = construct(e)
-			opt = assign_opt(attr_val_opt(e), cons_opt, opt)
-			e.initialized = false // setter barrier to delay init to e.init().
-			if (opt.on) {
-				for (let k in opt.on)
-					e.on(k, opt.on[k])
-				delete opt.on
-			}
-			if (window.xmodule) {
-				xmodule.init_instance(e, opt)
-			} else {
-				e.begin_update()
-				for (let k in opt)
-					e.set_prop(k, opt[k])
-				e.end_update()
-			}
-			e.initialized = true
-			e.init()
-		}
-
-		connectedCallback() {
-			if (this.attached)
-				return
-			if (!this.isConnected)
-				return
-			if (!dom_loaded) {
-				dom_components.push(this)
-				return
-			}
-			this._initialize()
-			this.bind(true)
-		}
-
-		disconnectedCallback() {
-			this.bind(false)
-		}
-
-		detect_resize() {
-			if (this.__detect_resize)
-				return
-			this.__detect_resize = true
-			if (this.attached)
-				resize_observer.observe(this)
-		}
-
-		bind(on) {
-			assert(isbool(on))
-			if (!bind_events)
-				return
+		e.on('bind', function(on) {
 			if (on) {
-				if (this.attached)
-					return
 				let t0 = DEBUG_ATTACH_TIME && time()
 
-				this.attached = true
 				this.begin_update()
-				this.fire('bind', true)
 				if (this.id) {
 					document.fire('widget_bind', this, true)
 					document.fire(this.id+'.bind', this, true)
 				}
 				this.end_update()
-				if (this.__detect_resize)
-					resize_observer.observe(this)
 
 				if (DEBUG_ATTACH_TIME) {
 					let t1 = time()
@@ -197,27 +107,21 @@ function component(tag, category, cons) {
 						debug((dt).dec().padStart(3, ' ')+'ms', this.debug_name())
 				}
 			} else {
-				if (!this.attached)
-					return
-				this.attached = false
-				if (this.__detect_resize)
-					resize_observer.unobserve(this)
-				this.fire('bind', false)
 				if (this.id) {
 					document.fire('widget_bind', this, false)
 					document.fire(this.id+'.bind', this, false)
 				}
 			}
-		}
+		})
 
-		override(method, func) {
+		e.override = function(method, func) {
 			let inherited = this[method] || noop
 			this[method] = function(...args) {
 				return func(inherited, ...args)
 			}
 		}
 
-		debug_name(prefix) {
+		e.debug_name = function(prefix) {
 			prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
 			let p = this; do { p = p.popup_target || p.parent } while (p && !p.debug_name)
 			if (!(p && p.debug_name))
@@ -225,18 +129,56 @@ function component(tag, category, cons) {
 			return p.debug_name(prefix)
 		}
 
+		e.initialized = null // for log_add_event().
+
+		// combine initial prop values from multiple sources, in overriding order:
+		// - html attributes.
+		// - constructor return value,
+		// - constructor args,
+		let opt = assign_opt({}, ...args)
+		props_mixin(e, opt && opt.props)
+		component_deferred_updating(e)
+		e.isinstance = true   // because you can have non-widget instances.
+		e.iswidget = true     // to diff from normal html elements.
+		e.type = type         // for serialization.
+		e.init = noop         // init point after all props are set.
+		e.class('x-widget')
+		let cons_opt = construct(e)
+		opt = assign_opt(attr_val_opt(e), cons_opt, opt)
+
+		e.initialized = false // setter barrier to delay init to e.init().
+
+		// register events from the options directly.
+		if (opt.on) {
+			for (let k in opt.on)
+				e.on(k, opt.on[k])
+			delete opt.on
+		}
+
+		// set props to combined initial values.
+		if (window.xmodule) {
+			xmodule.init_instance(e, opt)
+		} else {
+			e.begin_update()
+			for (let k in opt)
+				e.set_prop(k, opt[k])
+			e.end_update()
+		}
+
+		// call the after-properties-are-set init function.
+		e.initialized = true
+		e.init()
 	}
 
-	customElements.define(tag, cls)
+	register_component(tag, initialize)
 
 	function create(...args) {
-		let e = new cls()
-		e._initialize(assign_opt({}, ...args))
+		let e = document.createElement(tag)
+		initialize(e, ...args)
 		return e
 	}
 
 	create.type = type
-	create.class = cls
 	create.construct = construct
 
 	attr(component.categories, category, Array).push(create)
@@ -249,41 +191,28 @@ function component(tag, category, cons) {
 component.types = {} // {type -> create}
 component.categories = {} // {cat -> {craete1,...}}
 
-component.create = function(e, e0) {
-	if (e instanceof Node || (isobject(e) && e.isinstance))
-		return e // instances pass through.
-	let id = isstr(e) ? e : e.id
+component.create = function(t, e0) {
+	if (t instanceof Node || (isobject(t) && t.isinstance))
+		return t // instances pass through.
+	let id = isstr(t) ? t : t.id
 	if (e0 && e0.id == id)
 		return e0  // already created (called from a prop's `convert()`).
-	if (isstr(e)) // e is an id
-		e = {id: e}
-	if (!e.type) {
-		e.type = xmodule.instance_type(id)
-		if (!e.type) {
+	if (isstr(t)) // t is an id
+		t = {id: t}
+	if (!t.type) {
+		t.type = xmodule.instance_type(id)
+		if (!t.type) {
 			warn('component id not found:', id)
 			return
 		}
 	}
-	let create = component.types[e.type]
+	let create = component.types[t.type]
 	if (!create) {
-		warn('component type not found', e.type, e.id)
+		warn('component type not found', t.type, t.id)
 		return
 	}
-	return create(e)
+	return create(t)
 }
-
-// because stupid web components trigger connectedCallback() on the element
-// before its children are even parsed let alone created, we defer binding
-// the main document's components up until the html is fully parsed so that
-// they can access their children before creating other children.
-on_dom_load(function() {
-	dom_loaded = true
-	for (let e of dom_components) {
-		e._initialize()
-		e.bind(true)
-	}
-	dom_components = null
-}, 'components')
 
 /* ---------------------------------------------------------------------------
 // component partial deferred updating mixin
@@ -467,18 +396,13 @@ function props_mixin(e, iprops) {
 			let resolve = opt.resolve || resolve_widget_id
 			let ID = prop
 			let REF = opt.bind_id
-			function widget_attached(te) {
+			function widget_bind(te, on) {
 				if (e[ID] == te.id)
-					e[REF] = te
-			}
-			function widget_detached(te) {
-				if (e[ID] == te.id)
-					e[REF] = null
+					e[REF] = on ? te : null
 			}
 			function bind(on) {
 				e[REF] = on ? resolve(e[ID]) : null
-				document.on('widget_attached', widget_attached, on)
-				document.on('widget_detached', widget_detached, on)
+				document.on('widget_bind', widget_bind, on)
 			}
 			function id_changed(id1, id0) {
 				if (e.attached)
@@ -2969,7 +2893,6 @@ component('x-toolbox', function(e) {
 		return false
 	})
 
-	e.detect_resize()
 	e.on('resize', function() {
 		document.fire('layout_changed', e)
 	})

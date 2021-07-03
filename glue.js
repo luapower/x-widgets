@@ -38,9 +38,9 @@
 		return_arg
 		assert_false
 	error handling:
-		print()
-		warn()
-		debug()
+		print(...)
+		warn(...)
+		debug(...)
 		trace()
 		assert(v, err, ...) -> v
 		stacktrace()

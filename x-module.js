@@ -328,7 +328,7 @@ function init_xmodule(opt) {
 		return widget_select_editor(xm.instances, e => e.isnav, ...options)
 	}
 
-	on_dom_load(function() {
+	on_dom_load('xmodule', function() {
 		init_prop_layers()
 		init_root_widget()
 	})

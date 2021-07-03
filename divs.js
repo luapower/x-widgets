@@ -34,18 +34,22 @@
 		ea.each(f)
 	safe dom tree manipulation:
 		T(te[,whitespace]) where `te` is f|e|text_str
+		e.clone()
 		e.set(te[,whitespace])
 		e.add(te1,...)
 		e.insert(i, te1,...)
 		e.replace([e0], te)
 		e.clear()
-		e.clone()
 		tag(s, [attrs], te1,...)
 		div(...)
 		span(...)
 	unsafe dom tree manipulation:
 		H(he) where `he` is f|e|html_str|null
 		e.html
+	components:
+		register_component(tag, initializer)
+		e.bind(t|f)
+		^bind (on)
 	events:
 		event(name|ev, [bubbles], ...args) -> ev
 		e.on   (name|ev, f, [enable], [capture])
@@ -66,7 +70,7 @@
 		~layout_changed()
 		e.capture_pointer(ev, on_pointermove, on_pointerup)
 		DEBUG_EVENTS = false
-		on_dom_load(fn, [priority_bucket])
+		on_dom_load([priority_bucket, ]fn)
 	element geometry:
 		px(x)
 		e.x, e.y, e.x1, e.y1, e.x2, e.y2, e.w, e.h
@@ -223,9 +227,7 @@ property(Element, 'index', {
 	set: function(i) {
 		let sx = this.scrollLeft
 		let sy = this.scrollTop
-		bind_events = false
-		this.parent.insert(i, this)
-		bind_events = true
+		this.parent.insertBefore(this, this.at[max(i, 0)])
 		this.scroll(sx, sy)
 	}
 })
@@ -245,7 +247,53 @@ method(NodeList, 'each', function(f) {
 	Array.prototype.forEach.call(this, f)
 })
 
-// safe dom tree manipulation ------------------------------------------------
+// dom tree manipulation with lifecycle management ---------------------------
+
+let component_init = {} // {tag->init}
+let component_query = ''
+function register_component(tag, init) {
+	component_init[tag] = init
+	component_query = component_query ? component_query + ',' + tag : tag
+}
+
+method(Element, 'init_child_components', function() {
+	if (!this.at.length)
+		return
+	let children = this.$(component_query)
+	for (ce of children) // depth-first, so creates children first.
+		component_init[ce.tag](ce)
+})
+
+method(Element, 'init_components', function() {
+	this.init_child_components()
+	let init = component_init[this.tag]
+	if (init)
+		init(this)
+})
+
+method(Element, 'bind_children', function(on) {
+	if (!this.at.length)
+		return
+	assert(isbool(on))
+	// $() is depth-first so we iterate in normal order for bind and in reverse
+	// order for unbind (bind children first, unbind parents first).
+	let children = this.$('[_bind]')
+	if (on)
+		for (let ci of children)
+			ci.bind(on)
+	else
+		for (let i = children.length-1; i >= 0; i--)
+			children[i].bind(false)
+})
+
+method(Element, 'bind', function(on) {
+	assert(isbool(on))
+	if (this.hasattr('_bind') && !this.attached != !on) {
+		this.attached = on
+		this.fire('bind', on)
+	}
+	this.bind_children(on)
+})
 
 // create a text node from a string, quoting it automatically, with wrapping control.
 // can also take a constructor or an existing node as argument.
@@ -270,12 +318,15 @@ function H(s) {
 		return s
 	let span = document.createElement('span')
 	span.html = s.trim()
-	return span.childNodes.length > 1 ? span : span.firstChild
+	let e = span.childNodes.length > 1 ? span : span.firstChild
+	e.init_components()
+	return e
 }
 
 // create a HTML element from an attribute map and a list of child nodes.
 function tag(tag, attrs, ...children) {
 	let e = document.createElement(tag)
+	e.init_components()
 	e.attrs = attrs
 	if (children)
 		e.add(...children)
@@ -291,45 +342,76 @@ function tag(tag, attrs, ...children) {
 div = H.div
 span = H.span
 
-method(Element, 'add', function(...args) {
-	for (let s of args)
-		if (s != null)
-			this.append(T(s))
-})
-
-method(Element, 'insert', function(i0, ...args) {
-	for (let i = args.length-1; i >= 0; i--) {
-		let s = args[i]
-		if (s != null)
-			this.insertBefore(T(s), this.at[i0])
-	}
-})
-
-method(Element, 'replace', function(e0, s) {
-	if (e0 != null)
-		this.replaceChild(T(s), e0)
-	else if (s != null)
-		this.append(T(s))
-})
-
-method(Element, 'clear', function() {
-	this.innerHTML = null
-})
-
 alias(Element, 'clone', 'cloneNode')
-alias(Element, 'html', 'innerHTML')
+
+property(Element, 'html', {
+	get: function() {
+		return this.innerHTML
+	},
+	set: function(s) {
+		this.bind_children(false)
+		this.innerHTML = s
+		this.init_child_components()
+		this.bind_children(true)
+	},
+})
 
 method(Element, 'set', function(s, whitespace) {
 	if (typeof s == 'function')
 		s = s()
+	this.html = null
 	if (s instanceof Node) {
-		this.innerHTML = null
 		this.append(s)
+		if (s instanceof Element)
+			s.bind(true)
 	} else {
 		this.textContent = s
 		if (whitespace)
 			this.style['white-space'] = whitespace
 	}
+})
+
+method(Element, 'add', function(...args) {
+	for (let s of args)
+		if (s != null) {
+			s = T(s)
+			this.append(s)
+			if (s instanceof Element)
+				s.bind(true)
+		}
+})
+
+method(Element, 'insert', function(i0, ...args) {
+	for (let i = args.length-1; i >= 0; i--) {
+		let s = args[i]
+		if (s != null) {
+			s = T(s)
+			this.insertBefore(s, this.at[i0])
+			if (s instanceof Element)
+				s.bind(true)
+		}
+	}
+})
+
+override(Element, 'remove', function(inherited) {
+	this.bind(false)
+	inherited.call(this)
+})
+
+method(Element, 'replace', function(e0, s) {
+	if (e0 != null) {
+		e0.bind(false)
+		s = T(s)
+		this.replaceChild(s, e0)
+		if (s instanceof Element)
+			s.bind(true)
+	} else {
+		this.add(s)
+	}
+})
+
+method(Element, 'clear', function() {
+	this.html = null
 })
 
 // events & event wrappers ---------------------------------------------------
@@ -342,6 +424,38 @@ method(Element, 'set', function(s, whitespace) {
 {
 
 let callers = {}
+let installers = {}
+
+installers.bind = function() {
+	this.bool_attr('_bind', true)
+}
+
+let resize_observer = new ResizeObserver(function(entries) {
+	for (let entry of entries)
+		entry.target.fire('resize', entry.contentRect, entry)
+})
+installers.xresize = function() {
+	if (this.__detecting_resize)
+		return
+	this.__detecting_resize = true
+	let observing
+	function bind(on) {
+		if (on) {
+			if (!observing) {
+				resize_observer.observe(this)
+				observing = true
+			}
+		} else {
+			if (observing) {
+				resize_observer.unobserve(this)
+				observing = false
+			}
+		}
+	}
+	this.on('bind', bind)
+	if (this.attached)
+		bind.call(this, true)
+}
 
 let hidden_events = {prop_changed: 1, attr_changed: 1, stopped_event: 1}
 
@@ -480,6 +594,9 @@ let on = function(name, f, enable, capture) {
 		this.off(name, f, capture)
 		return
 	}
+	let install = installers[name]
+	if (install)
+		install.call(this)
 	let listener
 	if (name.starts('raw:')) { // raw handler
 		name = name.slice(4)
@@ -558,12 +675,18 @@ method(EventTarget, 'once'   , once)
 method(EventTarget, 'fire'   , fire)
 method(EventTarget, 'fireup' , fireup)
 
+// DOM load event.
+
 {
 let load_slots = {}
 var dom_load_order = ''
-function on_dom_load(fn, name) {
+function on_dom_load(name, fn) {
+	if (isfunc(name)) {
+		fn = name
+		name = '<default>'
+	}
 	if (document.readyState === 'loading')
-		attr(load_slots, name || '<default>', Array).push(fn)
+		attr(load_slots, name, Array).push(fn)
 	else // `DOMContentLoaded` already fired
 		fn()
 }
@@ -582,6 +705,12 @@ document.once('DOMContentLoaded', function() {
 		run(load_slots[s])
 })
 }
+
+on_dom_load('components', function() {
+	let e = document.documentElement
+	e.init_components()
+	e.bind(true)
+})
 
 // inter-window event broadcasting.
 

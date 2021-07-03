@@ -809,7 +809,8 @@ function nav_widget(e) {
 		e.reload()
 	}
 	e.prop('param_nav', {store: 'var', private: true})
-	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav', text: 'Param Nav', attr: true})
+	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav',
+			text: 'Param Nav', attr: true})
 
 	e.set_params = function(params1, params0) {
 		bind_param_nav_cols(e.param_nav, params0, false)
