@@ -2141,16 +2141,14 @@ function richtext_widget_editing(e) {
 component('x-image', 'Input', function(e) {
 
 	e.class('x-stretched')
-	e.classes = 'fa fa-camera'
 	e.title = ''
-	e.class('empty')
+	e.class('empty fa fa-camera')
 
 	row_widget(e)
 
-	e.img = tag('img', {
-			class: 'x-image-img',
-			src: '', // believe it or not, this is the only way to remove the border
-		})
+	// believe it or not, `src=''` is the only way to remove the border.
+	e.img1 = tag('img', {class: 'x-image-img', src: ''})
+	e.img2 = tag('img', {class: 'x-image-img', src: ''})
 
 	e.overlay = div({class: 'x-image-overlay'})
 
@@ -2160,23 +2158,33 @@ component('x-image', 'Input', function(e) {
 	e.file_input = tag('input', {type: 'file', style: 'display: none'})
 	e.overlay.add(e.buttons, e.file_input)
 
-	e.add(e.img, e.overlay)
+	e.add(e.img1, e.img2, e.overlay)
 
-	e.img.on('load', function(ev) {
-		e.img.show()
-		e.class('empty', false)
+	function img_load(ev) {
+		e.class('empty fa fa-camera', false)
 		e.overlay.class('transparent', true)
 		e.download_btn.attr('disabled', false)
 		e.title = S('image', 'Image')
-	})
+		let img1 = e.img1
+		let img2 = e.img2
+		img1.style['z-index'] = 1
+		img2.style['z-index'] = 0
+		img1.class('loaded', true)
+		img2.class('loaded', false)
+		e.img1 = img2
+		e.img2 = img1
+	}
+	e.img1.on('load', img_load)
+	e.img2.on('load', img_load)
 
-	e.img.on('error', function(ev) {
-		e.img.hide()
-		e.class('empty')
+	function img_error(ev) {
+		e.class('empty fa fa-camera', true)
 		e.overlay.class('transparent', false)
 		e.download_btn.attr('disabled', true)
 		e.title = S('no_image', 'No image')
-	})
+	}
+	e.img1.on('error', img_error)
+	e.img2.on('error', img_error)
 
 	e.format_url = function(vals, purpose) {
 		return (purpose == 'upload' && e.upload_url_template || e.url_template || '').subst(vals)
@@ -2189,7 +2197,8 @@ component('x-image', 'Input', function(e) {
 
 	e.do_update_row = function() {
 		e.attr('disabled', e.disabled)
-		e.img.attr('src', format_url() || '')
+		e.img1.attr('src', format_url() || '')
+		e.img1.class('loaded', false)
 		e.upload_btn.show(!e.disabled && e.allow_upload)
 		e.download_btn.show(!e.disabled && e.allow_download)
 	}
@@ -2227,6 +2236,10 @@ component('x-image', 'Input', function(e) {
 			upload_req = ajax({
 				url: format_url('upload'),
 				upload: file_contents,
+				headers: {
+					'content-type': file.type,
+					'content-disposition': 'attachment; filename="' + file.name + '"',
+				},
 				success: function() {
 					e.update()
 				},
@@ -2243,7 +2256,7 @@ component('x-image', 'Input', function(e) {
 				},
 			})
 		}
-		reader.readAsBinaryString(file)
+		reader.readAsArrayBuffer(file)
 	}
 
 	e.overlay.on('dragenter', return_false)
@@ -2271,7 +2284,7 @@ component('x-image', 'Input', function(e) {
 
 	e.download_btn.on('click', function() {
 		let href = format_url()
-		let name = url(href).path.last
+		let name = url(href).segments.last
 		let link = tag('a', {href: href, download: name, style: 'display: none'})
 		e.add(link)
 		link.click()

@@ -2633,7 +2633,18 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	object-fit: contain;
 }
 
+.x-image-img:not(.loaded) {
+	opacity: 0;
+	transition: opacity .2s;
+}
+
+.x-image-img.loaded {
+	opacity: 1;
+	transition: opacity .1s;
+}
+
 .x-image-overlay {
+	z-index: 2;
 	position: absolute;
 	left: 0; top: 0; right: 0; bottom: 0;
 	display: grid;

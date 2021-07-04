@@ -6,6 +6,7 @@
 	types:
 		isobject(e)
 		isarray(a)
+		isplainobject(t)
 		isstr(s)
 		isnum(n)
 		isbool(b)
@@ -140,8 +141,9 @@
 
 // types ---------------------------------------------------------------------
 
-isobject = e => e != null && typeof e == 'object'
+isobject = e => e != null && typeof e == 'object' // includes arrays, HTMLElements, etc.
 isarray = Array.isArray
+isplainobject = t => isobject(t) && (t.constructor == Object || t.constructor === undefined)
 isstr = s => typeof s == 'string'
 isnum = n => typeof n == 'number'
 isbool = b => typeof b == 'boolean'
@@ -1212,7 +1214,7 @@ function ajax(req) {
 	xhr.open(method, req.url, async, req.user, req.pass)
 
 	let upload = req.upload
-	if (typeof upload == 'object') {
+	if (isplainobject(upload)) {
 		upload = json(upload)
 		xhr.setRequestHeader('content-type', 'application/json')
 	}
@@ -1221,8 +1223,8 @@ function ajax(req) {
 		xhr.timeout = (req.timeout || 0) * 1000
 
 	if (req.headers)
-		for (let h of headers)
-			xhr.setRequestHeader(h, headers[h])
+		for (let h in req.headers)
+			xhr.setRequestHeader(h, req.headers[h])
 
 	let slow_watch
 
