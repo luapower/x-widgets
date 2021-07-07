@@ -2149,6 +2149,8 @@ component('x-image', 'Input', function(e) {
 	// believe it or not, `src=''` is the only way to remove the border.
 	e.img1 = tag('img', {class: 'x-image-img', src: ''})
 	e.img2 = tag('img', {class: 'x-image-img', src: ''})
+	e.next_img = tag('img', {class: 'x-image-img', src: ''})
+	e.prev_img = tag('img', {class: 'x-image-img', src: ''})
 
 	e.overlay = div({class: 'x-image-overlay'})
 

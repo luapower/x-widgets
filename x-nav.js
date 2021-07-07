@@ -140,6 +140,7 @@ focusing and selection:
 		e.selected_rows: Map(row -> true|Set(field))
 		e.focus_cell()
 		e.focus_next_cell()
+		e.focus_find_row()
 		e.select_all_cells()
 	calls:
 		e.can_change_val()
@@ -1205,6 +1206,10 @@ function nav_widget(e) {
 		let auto_advance_row = ev && ev.auto_advance_row || e.auto_advance_row
 		return e.focus_cell(true, true, dir * 0, cols, assign({must_move: true}, ev))
 			|| (auto_advance_row && e.focus_cell(true, true, dir, dir * -1/0, ev))
+	}
+
+	e.focus_find_row = function(lookup_cols, lookup_vals) {
+		e.focus_cell(e.row_index(e.lookup(lookup_cols, lookup_vals)[0]))
 	}
 
 	e.is_last_row_focused = function() {

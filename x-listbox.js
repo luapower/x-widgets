@@ -44,18 +44,19 @@ function listbox_widget(e) {
 	function format_item(row, val) {
 		if (val instanceof HTMLElement) // element, dupe it.
 			return val.clone()
-		return e.create_item(row, val)
+		// TODO: replace val in row and pass the modified row !
+		return create_item(row, val)
 	}
 
-	function create_item() {
-		let item = div()
+	function create_item(row) {
+		let item = e.row_display_val(row)
 		item.classes = 'x-listbox-item x-item'
 		item.on('pointerdown', item_pointerdown)
 		return item
 	}
 
 	e.do_update_item = function(item, row) {
-		item.set(e.row_display_val(row))
+		e.replace(item, e.create_item(row))
 	}
 
 	e.prop('items', {store: 'var', private: true})
@@ -103,7 +104,7 @@ function listbox_widget(e) {
 
 	function rows_added(rows, ri1) {
 		for (let row of rows) {
-			let item = create_item()
+			let item = create_item(row)
 			e.insert(ri1++, item)
 		}
 	}
@@ -123,10 +124,10 @@ function listbox_widget(e) {
 		if (opt.rows) {
 			e.clear()
 			for (let row of e.rows) {
-				let item = create_item()
+				let item = create_item(row)
 				e.add(item)
 			}
-			opt.vals = true
+			opt.vals = false
 			opt.state = true
 		}
 
@@ -179,6 +180,12 @@ function listbox_widget(e) {
 		}
 
 		e.focus()
+
+		// let the href do its thing on pointerup.
+		if (this.href) {
+			return false
+		}
+
 		if (!e.focus_cell(this.index, null, 0, 0, {
 			input: e,
 			must_not_move_row: true,
@@ -295,20 +302,31 @@ function listbox_widget(e) {
 			case 'End'       : rows =  1/0; break
 		}
 		if (rows) {
-			e.focus_cell(true, null, rows, 0, {
-				input: e,
-				expand_selection: shift,
-			})
+			if (!shift) {
+				let ri = e.first_focusable_cell(true, null, rows, 0)[0]
+				let item = e.at[ri]
+				if (item)
+					item.click()
+			} else {
+				e.focus_cell(true, null, rows, 0, {
+					input: e,
+					expand_selection: shift,
+				})
+			}
 			return false
 		}
 
 		if (key == 'PageUp' || key == 'PageDown') {
 			let item = page_item(key == 'PageDown')
 			if (item)
-				e.focus_cell(item.index, null, 0, 0, {
-					input: e,
-					expand_selection: shift,
-				})
+				if (!shift) {
+					item.click()
+				} else {
+					e.focus_cell(item.index, null, 0, 0, {
+						input: e,
+						expand_selection: shift,
+					})
+				}
 			return false
 		}
 

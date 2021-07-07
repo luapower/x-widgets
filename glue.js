@@ -69,6 +69,7 @@
 		a.binsearch(v, cmp, i1, i2)
 		a.each(f)
 	hash maps:
+		obj()
 		set()
 		map()
 		empty
@@ -118,6 +119,7 @@
 		clock()
 		timer(f)
 	serialization:
+		json_arg(s) -> t
 		json(t) -> s
 	clipboard:
 		copy_to_clipboard(text, done_func)
@@ -125,8 +127,8 @@
 		store(key, t)
 		load(key) -> t
 	url decoding, encoding and updating:
-		url(path) -> t
-		url(path|path_segments, [path_segments], [params]) -> s
+		url_arg(s) -> t
+		url(t) -> s
 	ajax requests:
 		ajax({
 			url: s,
@@ -451,23 +453,24 @@ alias(Array, 'each', 'forEach')
 
 // hash maps -----------------------------------------------------------------
 
+obj = () => Object.create(null)
 set = (iter) => new Set(iter)
 map = (iter) => new Map(iter)
 
-empty = {}
+empty = obj()
 
 keys = Object.keys
 
 assign = Object.assign
 
 // like Object.assign() but skips assigning `undefined` values.
-function assign_opt(dt, ...args) {
-	for (let arg of args)
-		if (arg != null)
-			for (let k in arg)
-				if (arg.hasOwnProperty(k))
-					if (arg[k] !== undefined)
-						dt[k] = arg[k]
+function assign_opt(dt, ...ts) {
+	for (let t of ts)
+		if (t != null)
+			for (let k in t)
+				if (t.hasOwnProperty(k))
+					if (t[k] !== undefined)
+						dt[k] = t[k]
 	return dt
 }
 
@@ -896,7 +899,7 @@ function month_day_of (t) { _d.setTime(t * 1000); return _d.getDay() }
 locale = navigator.language
 
 {
-	let wd = {short: {}, long: {}}
+	let wd = {short: obj(), long: obj()}
 
 	for (let i = 0; i < 7; i++) {
 		_d.setTime(1000 * 3600 * 24 * (3 + i))
@@ -1066,6 +1069,7 @@ function timer(f) {
 
 // serialization -------------------------------------------------------------
 
+json_arg = (s) => isstr(s) ? JSON.parse(s) : s
 json = JSON.stringify
 
 // clipboard -----------------------------------------------------------------
@@ -1081,84 +1085,81 @@ function store(key, value) {
 }
 
 function load(key) {
-	var value = Storage.getItem(key)
-	return value && JSON.parse(value)
+	return json_arg(Storage.getItem(key))
 }
 
-/* URL encoding & decoding ---------------------------------------------------
+// URL encoding & decoding ---------------------------------------------------
 
-	decode: url('a/b?k=v#xx') -> {segments: ['a','b'], params: {k:'v'}, hash: 'xx'}
-	encode: url(['a','b'], {k:'v'}) -> 'a/b?k=v'
-	update: url('a/b', {k:'v'}) -> 'a/b?k=v'
-	update: url('a/b?k=v', ['c'], {k:'x'}) -> 'c/b?k=x'
+function url_arg(s) {
 
-*/
-function url(path, params, update) {
-	if (typeof path == 'string') { // decode or update
-		if (params !== undefined || update !== undefined) { // update
-			if (!isarray(params)) { // update params only
-				update = params
-				params = undefined
-			}
-			let t = url(path) // decode
-			if (params) // update path
-				for (let i = 0; i < params.length; i++)
-					t.segments[i] = params[i]
-			if (update) // update params
-				for (let k in update)
-					t.params[k] = update[k]
-			return url(t.segments, t.params) // encode back
-		} else { // decode
-			let hash
-			{
-				let i = path.indexOf('#')
-				if (i > -1) {
-					hash = path.substring(i + 1)
-					path = path.substring(0, i)
-				}
-			}
-			let i = path.indexOf('?')
-			if (i > -1) {
-				params = path.substring(i + 1)
-				path = path.substring(0, i)
-			}
-			let a = path.split('/')
-			for (let i = 0; i < a.length; i++)
-				a[i] = decodeURIComponent(a[i])
-			let t = {}
-			if (params !== undefined) {
-				params = params.split('&')
-				for (let i = 0; i < params.length; i++) {
-					let kv = params[i].split('=')
-					let k = decodeURIComponent(kv[0])
-					let v = kv.length == 1 ? true : decodeURIComponent(kv[1])
-					if (t[k] !== undefined) {
-						if (isarray(t[k]))
-							t[k] = [t[k]]
-						t[k].push(v)
-					} else {
-						t[k] = v
-					}
-				}
-			}
-			return {segments: a, params: t, hash: hash}
+	if (!isstr(s))
+		return s
+
+	let path, query, fragment
+
+	{
+		let i = s.indexOf('#')
+		if (i > -1) {
+			fragment = path.substring(i + 1)
+			path = s.substring(0, i)
+		} else
+			path = s
+	}
+
+	{
+		let i = path.indexOf('?')
+		if (i > -1) {
+			query = path.substring(i + 1)
+			path = path.substring(0, i)
 		}
-	} else { // encode
-		let segments = path
-		if (!isarray(segments)) {
-			params = path.params
-			segments = path.segments
+	}
+
+	let a = path.split('/')
+	for (let i = 0; i < a.length; i++)
+		a[i] = decodeURIComponent(a[i])
+
+	let t = obj()
+	if (query !== undefined) {
+		let args = query.split('&')
+		for (let i = 0; i < args.length; i++) {
+			let kv = args[i].split('=')
+			let k = decodeURIComponent(kv[0])
+			let v = kv.length == 1 ? true : decodeURIComponent(kv[1])
+			if (t[k] !== undefined) {
+				if (isarray(t[k]))
+					t[k] = [t[k]]
+				t[k].push(v)
+			} else {
+				t[k] = v
+			}
 		}
+	}
+
+	return {path: path, segments: a, query: query, args: t, fragment: fragment}
+}
+
+function url(t) {
+
+	if (!isobject(t))
+		return t
+
+	let path, args, fragment
+
+	if (t.segments) {
 		let a = []
-		for (let i = 0; i < segments.length; i++)
-			a[i] = encodeURIComponent(segments[i])
+		for (let i = 0; i < t.segments.length; i++)
+			a[i] = encodeURIComponent(t.segments[i])
 		path = a.join('/')
-		a = []
-		let pkeys = keys(params).sort()
+	} else
+		path = t.path
+
+	if (t.args) {
+		let a = []
+		let pkeys = keys(t.args).sort()
 		for (let i = 0; i < pkeys.length; i++) {
 			let pk = pkeys[i]
 			let k = encodeURIComponent(pk)
-			let v = params[pk]
+			let v = t.args[pk]
 			if (isarray(v)) {
 				for (let j = 0; j < v.length; j++) {
 					let z = v[j]
@@ -1170,9 +1171,11 @@ function url(path, params, update) {
 				a.push(kv)
 			}
 		}
-		params = a.join('&')
-		return path + (params ? '?' + params : '')
-	}
+		args = a.join('&')
+	} else
+		args = t.args
+
+	return path + (args ? '?' + args : '') + (fragment ? '#' + fragment : '')
 }
 
 /* AJAX requests -------------------------------------------------------------
@@ -1289,7 +1292,7 @@ function ajax(req) {
 				let res = xhr.response
 				if (!xhr.responseType || xhr.responseType == 'text')
 					if (xhr.getResponseHeader('content-type') == 'application/json' && res)
-						res = JSON.parse(res)
+						res = json_arg(res)
 				req.response = res
 				fire('done', 'success', res)
 			} else if (xhr.status) { // status is 0 for network errors, incl. timeout.

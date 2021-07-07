@@ -377,6 +377,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* styling (from github) */
 
 .x-button {
+	border: 1px solid var(--x-faint);
 	background-color: var(--x-bg-button);
 }
 

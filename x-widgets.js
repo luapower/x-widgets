@@ -170,7 +170,7 @@ function component(tag, category, cons) {
 		e.init()
 	}
 
-	register_component(tag, initialize)
+	bind_component(tag, initialize)
 
 	function create(...args) {
 		let e = document.createElement(tag)
@@ -1331,9 +1331,27 @@ component('x-button', 'Input', function(e) {
 	e.icon_div.hide()
 	e.add(e.icon_div, e.text_div)
 
+	e.prop('href', {store:'var', attr: true})
+	e.set_href = function(s) {
+		if (s) {
+			if (!e.link) { // make a link for google bot to follow.
+				let noscript = tag('noscript')
+				e.add(noscript)
+				e.link = tag('a', {}, e.text)
+				e.link.title = e.title
+				noscript.set(e.link)
+			}
+			e.link.href = s
+		} else if (e.link) {
+			e.link.href = null
+		}
+	}
+
 	e.set_text = function(s) {
 		e.text_div.set(s, 'pre-wrap')
 		e.class('empty', !s)
+		if (e.link)
+			e.link.set(s)
 	}
 	e.prop('text', {store: 'var', default: 'OK', slot: 'lang'})
 
@@ -1354,6 +1372,10 @@ component('x-button', 'Input', function(e) {
 	e.activate = function() {
 		if (e.disabled)
 			return
+		if (e.href) {
+			exec(e.href)
+			return
+		}
 		if (e.action)
 			e.action()
 		e.fire('activate')
@@ -3011,7 +3033,7 @@ component('x-slides', 'Containers', function(e) {
 // mustache widget mixin
 // ---------------------------------------------------------------------------
 
-function mustache_widget(e) {
+component('x-mu', function(e) {
 
 	assert(e.at[0] && e.at[0].tag == 'script',
 		'mustache widget is missing the <script> tag')
@@ -3092,7 +3114,7 @@ function mustache_widget(e) {
 	e.on('bind', function(on) {
 		bind_nav(e.param_nav, e.data_url, on)
 		if (on && !placeholder_set) {
-			e.render({placeholder: true})
+			e.render({loading: true})
 			placeholder_set = true
 		}
 	})
@@ -3127,10 +3149,6 @@ function mustache_widget(e) {
 	}
 	e.prop('data_url', {store: 'var', attr: true})
 
-}
-
-component('x-mu', function(e) {
-	mustache_widget(e)
 })
 
 
@@ -3148,3 +3166,71 @@ component('x-md', function(e) {
 	e.html = md.render_string(e.html)
 
 })}
+
+// ---------------------------------------------------------------------------
+// page navigation widget
+// ---------------------------------------------------------------------------
+
+component('x-pagenav', function(e) {
+
+	e.prop('page', {store: 'var', type: 'number', attr: true, default: 1})
+	e.prop('page_size', {store: 'var', type: 'number', attr: true, default: 100})
+	e.prop('item_count', {store: 'var', type: 'number', attr: true})
+
+	function update() { e.update() }
+	e.set_page = update
+	e.set_page_size = update
+	e.set_item_count = update
+
+	property(e, 'page_count', () => ceil(e.item_count / e.page_size))
+
+	e.page_url = noop
+
+	function cur_page() {
+		return clamp(e.page || 1, 1, e.page_count)
+	}
+
+	e.page_button = function(page, text, title, href) {
+		let b = button()
+		b.class('x-pagenav-button')
+		b.class('selected', page == cur_page())
+		b.bool_attr('disabled', page >= 1 && page <= e.page_count && page != cur_page() ? null : true)
+		b.title = or(title, or(text, S('page', 'Page') + ' ' + page))
+		b.href = href !== false ? e.page_url(page) : null
+		b.set(or(text, page))
+		return b
+	}
+
+	e.nav_button = function(offset) {
+		return e.page_button(cur_page() + offset,
+			offset > 0 ?
+				S('next_page_button_text', 'Next →') :
+				S('previous_page_button_text', '← Previous'),
+			offset > 0 ?
+				S('next_page', 'Next') :
+				S('previous_page', 'Previous'),
+			false
+		)
+	}
+
+	e.do_update = function() {
+		e.clear()
+		e.add(e.nav_button(-1))
+		let n = e.page_count
+		let p = cur_page()
+		let dotted
+		for (let i = 1; i <= n; i++) {
+			if (i == 1 || i == n || (i >= p-1 && i <= p+1)) {
+				e.add(e.page_button(i))
+				dotted = false
+			} else if (!dotted) {
+				e.add(' ... ')
+				dotted = true
+			}
+		}
+		e.add(e.nav_button(1))
+	}
+
+})
+
+

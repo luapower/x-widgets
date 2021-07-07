@@ -278,7 +278,7 @@ function init_xmodule(opt) {
 			let props
 			if (name.starts('local:')) {
 				let shortname = name.replace(/^local\:/, '')
-				props = JSON.parse(load('xmodule-layers/'+shortname))
+				props = json_arg(load('xmodule-layers/'+shortname))
 			} else {
 				ajax({
 					url: '/xmodule-layer.json/'+name,

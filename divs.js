@@ -47,7 +47,7 @@
 		H(he) where `he` is f|e|html_str|null
 		e.html
 	components:
-		register_component(tag, initializer)
+		bind_component(tag, initializer, [selector])
 		e.bind(t|f)
 		^bind (on)
 	events:
@@ -101,6 +101,7 @@
 		e.scroll_to_view_rect(sx0, sy0, x, y, w, h)
 		e.make_visible_scroll_offset(sx0, sy0[, parent])
 		e.make_visible()
+		e.is_in_viewport()
 	animation easing:
 		raf(f)
 		transition(f, [dt], [x0], [x1], [easing])
@@ -249,11 +250,22 @@ method(NodeList, 'each', function(f) {
 
 // dom tree manipulation with lifecycle management ---------------------------
 
-let component_init = {} // {tag->init}
+/*
+NOTE: The "lifecycle management" part is basically poor man's web components.
+The reason we're reinventing web components in this inefficient way via DOM
+querying is because the actual web components built into the browser are made
+by web people (or monkeys, not sure) that haven't actually used their own
+APIs to see just how piss-poor a job they have done.
+
+
+*/
+
+let component_init = obj() // {tag->init}
 let component_query = ''
-function register_component(tag, init) {
-	component_init[tag] = init
-	component_query = component_query ? component_query + ',' + tag : tag
+function bind_component(tag, init, selector) {
+	component_init[tag.upper()] = init
+	selector = selector || tag
+	component_query = component_query ? component_query + ',' + selector : selector
 }
 
 method(Element, 'init_child_components', function() {
@@ -261,7 +273,7 @@ method(Element, 'init_child_components', function() {
 		return
 	let children = this.$(component_query)
 	for (ce of children) // depth-first, so creates children first.
-		component_init[ce.tag](ce)
+		component_init[ce.tagName](ce)
 })
 
 method(Element, 'init_components', function() {
@@ -369,6 +381,7 @@ method(Element, 'set', function(s, whitespace) {
 		if (whitespace)
 			this.style['white-space'] = whitespace
 	}
+	return this
 })
 
 method(Element, 'add', function(...args) {
@@ -379,6 +392,7 @@ method(Element, 'add', function(...args) {
 			if (s instanceof Element)
 				s.bind(true)
 		}
+	return this
 })
 
 method(Element, 'insert', function(i0, ...args) {
@@ -391,11 +405,13 @@ method(Element, 'insert', function(i0, ...args) {
 				s.bind(true)
 		}
 	}
+	return this
 })
 
 override(Element, 'remove', function(inherited) {
 	this.bind(false)
 	inherited.call(this)
+	return this
 })
 
 method(Element, 'replace', function(e0, s) {
@@ -408,23 +424,25 @@ method(Element, 'replace', function(e0, s) {
 	} else {
 		this.add(s)
 	}
+	return this
 })
 
 method(Element, 'clear', function() {
 	this.html = null
+	return this
 })
 
 // events & event wrappers ---------------------------------------------------
 
 // NOTE: these wrappers block mouse events on any target with attr `disabled`.
-// (`pointer-events: none` is not a solution because popups).
+// `pointer-events: none` is not a solution because it makes click-through popups.
 // NOTE: preventing focusing is a matter of not-setting/removing attr `tabindex`
 // except for input elements that must have an explicit `tabindex=-1`.
 
 {
 
-let callers = {}
-let installers = {}
+let callers = obj()
+let installers = obj()
 
 installers.bind = function() {
 	this.bool_attr('_bind', true)
@@ -648,8 +666,8 @@ function event(name, bubbles, ...args) {
 		: name
 }
 
-var ev = {}
-var ep = {}
+var ev = obj()
+var ep = obj()
 let log_fire = DEBUG_EVENTS && function(e) {
 	ev[e.type] = (ev[e.type] || 0) + 1
 	if (e.type == 'prop_changed') {
@@ -678,7 +696,7 @@ method(EventTarget, 'fireup' , fireup)
 // DOM load event.
 
 {
-let load_slots = {}
+let load_slots = obj()
 var dom_load_order = ''
 function on_dom_load(name, fn) {
 	if (isfunc(name)) {
@@ -721,7 +739,7 @@ window.addEventListener('storage', function(e) {
 	let v = e.newValue
 	if (!v)
 		return
-	v = JSON.parse(v)
+	v = json_arg(v)
 	fire(v.topic, ...v.args)
 })
 
@@ -920,9 +938,21 @@ method(Element, 'make_visible', function() {
 	}
 })
 
+// check if element is partially or fully visible.
+method(Element, 'is_in_viewport', function(m) {
+	let r = this.rect()
+	m = m || 0
+	return (
+		   (r.x2 + m) >= 0
+		&& (r.y2 + m) >= 0
+		&& (r.x1 - m) <= window.innerWidth
+		&& (r.y1 - m) <= window.innerHeight
+	)
+})
+
 // animation easing ----------------------------------------------------------
 
-easing = {} // from easing.lua
+easing = obj() // from easing.lua
 
 easing.reverse = (f, t, ...args) => 1 - f(1 - t, ...args)
 easing.inout   = (f, t, ...args) => t < .5 ? .5 * f(t * 2, ...args) : .5 * (1 - f((1 - t) * 2, ...args)) + .5
@@ -1128,7 +1158,7 @@ let popup_state = function(e) {
 			// NOTE: this overrides the same properties declared in css when
 			// the element is displayed as a popup, which leaves `!important`
 			// as the only way to override back these properties from css.
-			e.__css_inherited = {}
+			e.__css_inherited = obj()
 			for (k of ['font-family', 'font-size', 'line-height']) {
 				if (!e.style[k]) {
 					e.style[k] = css[k]
