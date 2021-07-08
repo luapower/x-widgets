@@ -3897,7 +3897,7 @@ component('x-lookup-dropdown', function(e) {
 		let mag = this.filesize_magnitude
 		let dec = this.filesize_decimals || 0
 		let min = this.filesize_min || 1/10**dec
-		let i = mag ? magnitudes[mag] : floor(log(x) / log(1024))
+		let i = mag ? magnitudes[mag] : floor(ln(x) / ln(1024))
 		let z = x / 1024**i
 		let s = z.dec(dec) + suffix[i]
 		return z < min ? span({class: 'x-dba-insignificant-size'}, s) : s

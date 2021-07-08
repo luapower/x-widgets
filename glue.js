@@ -21,6 +21,7 @@
 		abs(x)
 		min(x, y) max(x, y)
 		sqrt(x)
+		ln(x)
 		random()
 		PI sin(x) cos(x) tan(x) rad deg
 		clamp(x, x0, x1)
@@ -172,8 +173,8 @@ abs = Math.abs
 min = Math.min
 max = Math.max
 sqrt = Math.sqrt
+ln = Math.log
 random = Math.random
-log = Math.log
 sign = Math.sign
 
 // NOTE: returns x1 if x1 < x0, which enables the idiom
@@ -202,7 +203,7 @@ function mod(a, b) {
 }
 
 function nextpow2(x) {
-	return max(0, 2**(ceil(log(x) / log(2))))
+	return max(0, 2**(ceil(ln(x) / ln(2))))
 }
 
 PI  = Math.PI
@@ -977,7 +978,7 @@ let suffix = [' B', ' KB', ' MB', ' GB', ' TB']
 let magnitudes = {KB: 1, MB: 2, GB: 3}
 method(Number, 'filesize', function(x, mag, dec) {
 	dec = dec || 0
-	let i = mag ? magnitudes[mag] : floor(log(x) / log(1024))
+	let i = mag ? magnitudes[mag] : floor(ln(x) / ln(1024))
 	let z = x / 1024**i
 	let s = z.dec(dec) + suffix[i]
 	return s
