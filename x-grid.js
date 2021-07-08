@@ -30,7 +30,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	if (is_val_widget !== false)
 		val_widget(e, true)
-	nav_widget(e, is_val_widget)
+	nav_widget(e)
 	editable_widget(e)
 	focusable_widget(e, null, 'x-focusable-items')
 	stylable_widget(e)

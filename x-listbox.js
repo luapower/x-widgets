@@ -142,7 +142,7 @@ function listbox_widget(e) {
 			opt.state = true
 		}
 
-		if (opt.state && e.at.length)
+		if (opt.state && e.len)
 			for (let i = 0; i < e.rows.length; i++) {
 				let item = e.at[i]
 				item.class('focused', e.focused_row_index == i)
@@ -225,7 +225,7 @@ function listbox_widget(e) {
 						item._offset = item[e.axis == 'x' ? 'ox' : 'oy']
 						item.class('moving', ri >= move_ri1 && ri <= move_ri2)
 					}
-					e.move_element_start(move_ri1, move_n, 0, e.at.length)
+					e.move_element_start(move_ri1, move_n, 0, e.len)
 					drag_mx = down_mx + e.scrollLeft - e.at[move_ri1].ox
 					drag_my = down_my + e.scrollTop  - e.at[move_ri1].oy
 					mx0 = mx
@@ -305,14 +305,15 @@ function listbox_widget(e) {
 			if (!shift) {
 				let ri = e.first_focusable_cell(true, null, rows, 0)[0]
 				let item = e.at[ri]
-				if (item)
+				if (item && item.attr('href')) {
 					item.click()
-			} else {
-				e.focus_cell(true, null, rows, 0, {
-					input: e,
-					expand_selection: shift,
-				})
+					return false
+				}
 			}
+			e.focus_cell(true, null, rows, 0, {
+				input: e,
+				expand_selection: shift,
+			})
 			return false
 		}
 

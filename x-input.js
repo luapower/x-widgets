@@ -601,6 +601,7 @@ component('x-editbox', 'Input', function(e) {
 			e.picker.class('picker', true)
 			e.picker.bind(true)
 			e.picker.on('val_picked', picker_val_picked)
+			e.fire('picker_created', e.picker)
 		} else if (e.picker) {
 			e.picker.popup(false)
 			e.picker.bind(false)
@@ -969,7 +970,7 @@ component('x-tagsedit', 'Input', function(e) {
 			return
 		}
 
-		let i = e.at.length - 3
+		let i = e.len - 3
 		while (i >= 1)
 			e.at[i--].remove()
 
@@ -1497,6 +1498,7 @@ function dropdown_widget(e) {
 			e.picker.class('picker', true)
 			e.picker.on('val_picked', picker_val_picked)
 			e.picker.on('keydown'   , picker_keydown)
+			e.fire('picker_created', e.picker)
 			e.picker.bind(true)
 		} else if (e.picker) {
 			e.picker.popup(false)

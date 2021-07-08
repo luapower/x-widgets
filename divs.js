@@ -23,7 +23,7 @@
 	access to element computed styles:
 		e.css([k][, state])
 	dom tree navigation excluding text nodes:
-		e.at[i], e.at.length
+		e.at[i], e.len, e.at.length
 		e.parent
 		e.index
 		e.first, e.last, e.next, e.prev
@@ -211,8 +211,8 @@ method(Element, 'css', function(prop, state) {
 })
 
 // dom tree navigation for elements, skipping text nodes ---------------------
-
 alias(Element, 'at'     , 'children')
+alias(Element, 'len'    , 'childElementCount')
 alias(Element, 'parent' , 'parentNode')
 alias(Element, 'first'  , 'firstElementChild')
 alias(Element, 'last'   , 'lastElementChild')
@@ -261,30 +261,41 @@ APIs to see just how piss-poor a job they have done.
 */
 
 let component_init = obj() // {tag->init}
+let component_selector = obj() // {tag->selector}
 let component_query = ''
 function bind_component(tag, init, selector) {
-	component_init[tag.upper()] = init
 	selector = selector || tag
+	let tagName = tag.upper()
+	component_init[tagName] = init
+	component_selector[tagName] = selector
 	component_query = component_query ? component_query + ',' + selector : selector
 }
 
+method(Element, 'init_component', function() {
+	let tagName = this.tagName
+	let init = component_init[tagName]
+	let sel = component_selector[tagName]
+	if (init && (sel == tagName || this.matches(sel)))
+		init(this)
+})
+
 method(Element, 'init_child_components', function() {
-	if (!this.at.length)
+	let n = this.len
+	if (!n)
 		return
+	if (n == 1) { // must be a wrapper
+		let ce = this.at[0]
+		ce.init_child_components()
+		ce.init_component()
+		return
+	}
 	let children = this.$(component_query)
 	for (ce of children) // depth-first, so creates children first.
 		component_init[ce.tagName](ce)
 })
 
-method(Element, 'init_components', function() {
-	this.init_child_components()
-	let init = component_init[this.tag]
-	if (init)
-		init(this)
-})
-
 method(Element, 'bind_children', function(on) {
-	if (!this.at.length)
+	if (!this.len)
 		return
 	assert(isbool(on))
 	// $() is depth-first so we iterate in normal order for bind and in reverse
@@ -331,14 +342,16 @@ function H(s) {
 	let span = document.createElement('span')
 	span.html = s.trim()
 	let e = span.childNodes.length > 1 ? span : span.firstChild
-	e.init_components()
+	e.init_child_components()
+	e.init_component()
 	return e
 }
 
 // create a HTML element from an attribute map and a list of child nodes.
 function tag(tag, attrs, ...children) {
 	let e = document.createElement(tag)
-	e.init_components()
+	e.init_child_components()
+	e.init_component()
 	e.attrs = attrs
 	if (children)
 		e.add(...children)
@@ -726,7 +739,8 @@ document.once('DOMContentLoaded', function() {
 
 on_dom_load('components', function() {
 	let e = document.documentElement
-	e.init_components()
+	e.init_child_components()
+	e.init_component()
 	e.bind(true)
 })
 

@@ -2107,18 +2107,19 @@ function nav_widget(e) {
 	e.validate_val = function(field, val, row, ev) {
 		let errors = []
 		errors.passed = true
-		for (let validator of field.validators) {
-			let passed = validator.validate(val, row, field)
-			let error = isbool(passed) ? {passed: !!passed} : passed
-			errors.push(error)
-			if (!error.message)
-				error.message = validator.message
-			if (!error.passed) {
-				errors.passed = false
-				errors.must_allow_exit_edit = or(errors.must_allow_exit_edit, validator.must_allow_exit_edit)
-				errors.must_not_allow_exit_row = or(errors.must_not_allow_exit_row, validator.must_not_allow_exit_row)
+		if (field.validators)
+			for (let validator of field.validators) {
+				let passed = validator.validate(val, row, field)
+				let error = isbool(passed) ? {passed: !!passed} : passed
+				errors.push(error)
+				if (!error.message)
+					error.message = validator.message
+				if (!error.passed) {
+					errors.passed = false
+					errors.must_allow_exit_edit = or(errors.must_allow_exit_edit, validator.must_allow_exit_edit)
+					errors.must_not_allow_exit_row = or(errors.must_not_allow_exit_row, validator.must_not_allow_exit_row)
+				}
 			}
-		}
 		return errors
 	}
 
@@ -3583,10 +3584,17 @@ function nav_widget(e) {
 	e.prop('row_display_val_template_name', {store: 'var', attr: true})
 
 	e.row_display_val = function(row) { // stub
-		if (e.row_display_val_template_name)
-			return H(render(e.row_display_val_template_name, e.serialize_row_vals(row)))
-		if (e.row_display_val_template)
-			return H(render_string(e.row_display_val_template, e.serialize_row_vals(row)))
+		if (window.template) { // have webb_spa.js
+			let ts = e.row_display_val_template
+			if (!ts) {
+				let tn = e.row_display_val_template_name
+				if (tn)
+					ts = template(tn)
+				else
+					ts = template(e.id + '_item') || template(e.type + '_item')
+			}
+			return H(render_string(ts, e.serialize_row_vals(row)))
+		}
 		if (!e.all_fields.length)
 			return 'no fields'
 		let field = e.all_fields[e.display_col]
