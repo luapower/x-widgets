@@ -22,21 +22,21 @@
 
 :root {
 
-	--x-outline-focused                :  #99d;
-	--x-outline-focused-button         :  #aab;
-	--x-outline-focused-button-primary :  #363;
+	--x-border-focused                :  #99d;
+	--x-border-focused-button         :  #aab;
+	--x-border-focused-button-primary :  #363;
 
-	--x-shadow-focused                :  0    0    0   1px var(--x-outline-focused);
-	--x-shadow-focused-button         :  0    0    0px 1px var(--x-outline-focused-button);
-	--x-shadow-focused-button-primary :  0    0    0px 1px var(--x-outline-focused-button-primary);
-	--x-shadow-popup                  :  2px  2px  2px     #000000aa;
-	--x-shadow-button                 :  0px  0px  8px 0px #00000011;
-	--x-shadow-tooltip                :  2px  2px  9px     #00000044;
-	--x-shadow-dialog                 :  2px  2px 10px     #00000088;
-	--x-shadow-toolbox                :  1px  1px  4px     #000000aa;
-	--x-shadow-slider-thumb           :  1px  1px  2px     #000000aa;
+	--x-shadow-focused                :  0px  0px  0px  1px var(--x-border-focused);
+	--x-shadow-focused-button         :  0px  0px  0px  1px var(--x-border-focused-button);
+	--x-shadow-focused-button-primary :  0px  0px  0px  1px var(--x-border-focused-button-primary);
+	--x-shadow-popup                  :  2px  2px  2px      #000000aa; /* sharply angled shadow */
+	--x-shadow-popup2                 :  0px  5px 10px  1px #00000044; /* large fuzzy shadow */
+	--x-shadow-button                 :  0px  0px  8px  0px #00000011;
+	--x-shadow-tooltip                :  2px  2px  9px      #00000044;
+	--x-shadow-dialog                 :  2px  2px 10px      #00000088;
+	--x-shadow-toolbox                :  1px  1px  4px      #000000aa;
+	--x-shadow-slider-thumb           :  1px  1px  2px      #000000aa;
 	--x-shadow-button-pressed         : inset 0 0.15em 0.3em #1b1f2333;
-
 
 	--x-margin                      : .25em;
 	--x-border-radius               : .25em;
@@ -84,7 +84,7 @@
 
 	--x-bg-select-button: var(--x-bg-button);
 
-	--x-markbox-outline-color-focus : #aaf;
+	--x-markbox-border-color-focus : #aaf;
 	--x-markbox-icon-color: var(--x-item-bg-focused-selected);
 
 	--x-toolbox-titlebar-bg         : var(--x-faint);
@@ -106,6 +106,15 @@
 	--x-item-bg-unselected         : #888;
 	--x-item-bg-selected           : #69c;
 	--x-row-bg-focused             : #eee;
+
+	--x-item-border-unfocused          : #9998;
+	--x-item-border-focused            : #ddd8;
+	--x-item-border-unfocused-selected : #3338;
+	--x-item-border-focused-selected   : #2588;
+	--x-item-border-focused-invalid    : #f338;
+	--x-item-border-unselected         : #8888;
+	--x-item-border-selected           : #69c8;
+	--x-row-border-focused             : #eee8;
 
 	--x-bg-grid-editor             : var(--x-bg-popup);
 
@@ -165,7 +174,7 @@ body[opensans] {
 }
 
 .x-focusable:focus-within {
-	border-color: var(--x-outline-focused);
+	border-color: var(--x-border-focused);
 	box-shadow  : var(--x-shadow-focused);
 }
 
@@ -244,37 +253,45 @@ body > .x-stretched:not(.popup)
 }
 
 .x-focusable-items .x-item:not(.focused).selected:not(.invalid) {
+	border-color: var(--x-item-border-unselected);
 	background-color: var(--x-item-bg-unselected);
 	color: var(--x-fg-inverted);
 }
 
 .x-focusable-items:focus-within .x-item.selected:not(.invalid) {
+	border-color: var(--x-item-border-selected);
 	background-color: var(--x-item-bg-selected);
 	color: var(--x-fg-inverted);
 }
 
 .x-item.row-focused:not(.selected):not(.invalid) {
+	border-color: var(--x-row-border-focused);
 	background-color: var(--x-row-bg-focused);
 }
 
 .x-focusable-items .x-item.focused:not(.invalid) {
+	border-color: var(--x-item-border-unfocused);
 	background-color: var(--x-item-bg-unfocused);
 }
 
 .x-focusable-items:focus-within .x-item.focused:not(.invalid) {
+	border-color: var(--x-item-border-focused);
 	background-color: var(--x-item-bg-focused);
 }
 
 .x-focusable-items .x-item.focused.selected:not(.invalid) {
+	border-color: var(--x-item-border-unfocused-selected);
 	background-color: var(--x-item-bg-unfocused-selected);
 	color: var(--x-fg-inverted);
 }
 
 .x-focusable-items:focus-within .x-item.focused.selected:not(.invalid) {
+	border-color: var(--x-item-border-focused-selected);
 	background-color: var(--x-item-bg-focused-selected);
 }
 
 .x-focusable-items:focus-within .x-item.focused.invalid {
+	border-color: var(--x-item-border-focused-invalid);
 	background-color: var(--x-item-bg-focused-invalid);
 }
 
@@ -391,12 +408,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-button:focus {
-	border-color: var(--x-outline-focused-button);
+	border-color: var(--x-border-focused-button);
 	box-shadow  : var(--x-shadow-focused-button), var(--x-shadow-button);
 }
 
 .x-button[primary]:focus {
-	border-color: var(--x-outline-focused-button-primary);
+	border-color: var(--x-border-focused-button-primary);
 	box-shadow  : var(--x-shadow-focused-button-primary), var(--x-shadow-button);
 }
 
@@ -649,7 +666,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-markbox.no-field > .x-markbox-label { flex: 1; }
 
 .x-markbox:focus-within {
-	border-color: var(--x-markbox-outline-color-focus);
+	border-color: var(--x-markbox-border-color-focus);
 }
 
 .x-markbox:focus.invalid {
@@ -734,6 +751,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 	/* sizing for inline use */
 	padding: 0;              /* set from code */
+
 }
 
 .x-input-placeholder {
@@ -1027,8 +1045,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* look focused even though it's the picker that's focused. */
 .x-dropdown.open {
-	border-color: var(--x-outline-focused);
-	box-shadow  : var(--x-shadow-focused);
+	border-color : var(--x-border-focused);
+	box-shadow   : var(--x-shadow-popup2), var(--x-shadow-focused);
 }
 
 .x-dropdown-value {
@@ -1055,6 +1073,17 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	border-left-color: inherit;
 	border-left-width: 1px;
 }
+
+/* if you want that hipster animation, here it is...
+.x-dropdown-button.down {
+	transition: transform .2s ease;
+}
+
+.x-dropdown-button.up {
+	transition: transform .2s ease;
+	transform: rotate(180deg);
+}
+*/
 
 .x-dropdown.with-label > .x-dropdown-button {
 	margin-top: var(--x-input-il-padding-value-top); /* for alignment with the text */
@@ -1116,10 +1145,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* override with more specificity: .x-widget.x-<foo>.picker */
 .x-widget.picker {
-	border: ;
 	background-color: var(--x-bg-popup);
-	box-shadow: var(--x-shadow-popup);
 	z-index: 3; /* menu = 4, picker = 3, tooltip = 2, toolbox = 1 */
+
+	border-color: var(--x-border-focused);
+	box-shadow  : var(--x-shadow-popup2), var(--x-shadow-focused);
 }
 
 /* tagsedit --------------------------------------------------------------- */
@@ -2873,15 +2903,14 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 
 [theme=dark] {
 
-	color: white;
+	--x-border-focused                :  #66a;
+	--x-border-focused-button         :  #999;
+	--x-border-focused-button-primary :  #5bde5b;
 
-	--x-outline-focused                :  #66a;
-	--x-outline-focused-button         :  #999;
-	--x-outline-focused-button-primary :  #5bde5b;
-
-	--x-shadow-focused                :  0    0    0   1px var(--x-outline-focused);
-	--x-shadow-focused-button         :  0    0    0px 1px var(--x-outline-focused-button);
-	--x-shadow-focused-button-primary :  0    0    0px 1px var(--x-outline-focused-button-primary);
+	/* copy-pasted from the light theme to re-evaluate `--x-border-*` vars */
+	--x-shadow-focused                :  0    0    0   1px var(--x-border-focused);
+	--x-shadow-focused-button         :  0    0    0px 1px var(--x-border-focused-button);
+	--x-shadow-focused-button-primary :  0    0    0px 1px var(--x-border-focused-button-primary);
 
 	--x-shadow-button-pressed         : inset 0 0.15em 0.5em #1b1f2377;
 
@@ -2925,10 +2954,25 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 
 	--x-bg-grid-editor: #495560;
 
+	color: var(--x-fg);
 }
 
 body[theme=dark] {
 	background-color: var(--x-bg);
+}
+
+/* dark widget on white body */
+body:not([theme=dark]) [theme=dark] {
+	background-color: var(--x-bg);
+
+	--x-l-border-focused                :  #99d;
+	--x-l-border-focused-button         :  #aab;
+	--x-l-border-focused-button-primary :  #363;
+
+	/* copy-pasted from the light theme to re-evaluate `--x-border-*` vars */
+	--x-shadow-focused                :  0    0    0   1px var(--x-l-border-focused);
+	--x-shadow-focused-button         :  0    0    0px 1px var(--x-l-border-focused-button);
+	--x-shadow-focused-button-primary :  0    0    0px 1px var(--x-l-border-focused-button-primary);
 }
 
 [theme=dark]::-webkit-scrollbar,

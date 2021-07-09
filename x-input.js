@@ -278,7 +278,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 	e.do_update = function() {
 		let disabled = !(enabled_without_nav || (e.row && e.field))
-		e.attr('disabled', disabled) // for non-focusables
+		e.bool_attr('disabled', disabled ||  null) // for non-focusables
 		e.disabled = disabled
 		cell_state_changed(e.field, 'input_val', e.input_val)
 		cell_state_changed(e.field, 'val', e.val)
@@ -601,7 +601,6 @@ component('x-editbox', 'Input', function(e) {
 			e.picker.class('picker', true)
 			e.picker.bind(true)
 			e.picker.on('val_picked', picker_val_picked)
-			e.fire('picker_created', e.picker)
 		} else if (e.picker) {
 			e.picker.popup(false)
 			e.picker.bind(false)
@@ -1443,6 +1442,7 @@ function dropdown_widget(e) {
 	val_widget(e)
 	input_widget(e)
 	focusable_widget(e)
+	stylable_widget(e)
 
 	e.props.mode.enum_values = ['default', 'inline', 'wrap', 'fixed']
 
@@ -1498,7 +1498,6 @@ function dropdown_widget(e) {
 			e.picker.class('picker', true)
 			e.picker.on('val_picked', picker_val_picked)
 			e.picker.on('keydown'   , picker_keydown)
-			e.fire('picker_created', e.picker)
 			e.picker.bind(true)
 		} else if (e.picker) {
 			e.picker.popup(false)
@@ -1552,6 +1551,7 @@ function dropdown_widget(e) {
 	e.set_open = function(open, focus, hidden) {
 		if (e.isopen != open) {
 			e.class('open', open)
+			e.button.switch_class('down', 'up', open)
 			e.button.switch_class('fa-caret-down', 'fa-caret-up', open)
 			if (open) {
 				e.cancel_val = e.input_val
@@ -2167,7 +2167,7 @@ component('x-image', 'Input', function(e) {
 	function img_load(ev) {
 		e.class('empty fa fa-camera', false)
 		e.overlay.class('transparent', true)
-		e.download_btn.attr('disabled', false)
+		e.download_btn.bool_attr('disabled', null)
 		e.title = S('image', 'Image')
 		let img1 = e.img1
 		let img2 = e.img2
@@ -2177,14 +2177,18 @@ component('x-image', 'Input', function(e) {
 		img2.class('loaded', false)
 		e.img1 = img2
 		e.img2 = img1
+		e.img1.show()
+		e.img2.show()
 	}
 	e.img1.on('load', img_load)
 	e.img2.on('load', img_load)
 
 	function img_error(ev) {
+		e.img1.hide()
+		e.img2.hide()
 		e.class('empty fa fa-camera', true)
 		e.overlay.class('transparent', false)
-		e.download_btn.attr('disabled', true)
+		e.download_btn.bool_attr('disabled', true)
 		e.title = S('no_image', 'No image')
 	}
 	e.img1.on('error', img_error)
@@ -2200,7 +2204,7 @@ component('x-image', 'Input', function(e) {
 	}
 
 	e.do_update_row = function() {
-		e.attr('disabled', e.disabled)
+		e.bool_attr('disabled', e.disabled || null)
 		e.img1.attr('src', format_url() || '')
 		e.img1.class('loaded', false)
 		e.upload_btn.show(!e.disabled && e.allow_upload)

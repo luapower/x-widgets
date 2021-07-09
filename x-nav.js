@@ -3593,7 +3593,7 @@ function nav_widget(e) {
 				else
 					ts = template(e.id + '_item') || template(e.type + '_item')
 			}
-			return H(render_string(ts, e.serialize_row_vals(row)))
+			return H(render_string(ts, row && e.serialize_row_vals(row)))
 		}
 		if (!e.all_fields.length)
 			return 'no fields'
@@ -3605,7 +3605,7 @@ function nav_widget(e) {
 
 	e.dropdown_display_val = function(v) {
 		let row = e.val_field && e.lookup(e.val_col, [v])[0]
-		return row && e.row_display_val(row)
+		return e.row_display_val(row)
 	}
 
 	e.pick_near_val = function(delta, ev) {
@@ -3751,6 +3751,7 @@ component('x-lookup-dropdown', function(e) {
 		opt.id          = ln_id
 		opt.val_col     = e.field.lookup_col
 		opt.display_col = e.field.display_col
+		opt.theme       = e.theme
 
 		let picker = component.create(opt)
 		picker.id = null // not saving into the original.

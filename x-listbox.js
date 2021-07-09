@@ -37,8 +37,11 @@ function listbox_widget(e) {
 
 	let items_tag = e.$('items')[0]
 	let dom_items = items_tag && [...items_tag.at]
+
+	// embedded template: doesn't work if the listbox itself is declared in a template.
 	let item_template = e.$('script[type="text/x-mustache"]')[0]
 	item_template = item_template && item_template.html
+
 	e.clear()
 
 	function format_item(row, val) {
@@ -319,16 +322,17 @@ function listbox_widget(e) {
 
 		if (key == 'PageUp' || key == 'PageDown') {
 			let item = page_item(key == 'PageDown')
-			if (item)
-				if (!shift) {
+			if (item) {
+				if (!shift && item.attr('href')) {
 					item.click()
-				} else {
-					e.focus_cell(item.index, null, 0, 0, {
-						input: e,
-						expand_selection: shift,
-					})
+					return false
 				}
-			return false
+				e.focus_cell(item.index, null, 0, 0, {
+					input: e,
+					expand_selection: shift,
+				})
+				return false
+			}
 		}
 
 		if (key == 'Enter') {
@@ -346,6 +350,18 @@ function listbox_widget(e) {
 		if (key == 'Insert')
 			if (e.insert_row(true, true))
 				return false
+
+		// delete key: delete row
+		if (key == 'Delete') {
+			if (!(e.can_remove_rows && e.can_edit)) {
+				// TODO: either one should set the other
+				e.set_val(null, {input: e})
+				e.focus_cell(false, false, 0, 0, {input: e})
+				return false
+			}
+			if (e.remove_selected_rows({refocus: true, toggle: true}))
+				return false
+		}
 
 	})
 
@@ -395,6 +411,7 @@ component('x-list-dropdown', function(e) {
 			items: e.items,
 			rowset: e.rowset,
 			rowset_name: e.rowset_name,
+			theme: e.theme,
 		}, e.listbox))
 	}
 

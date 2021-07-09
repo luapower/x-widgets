@@ -38,6 +38,14 @@ fires:
 	^document.'ID.bind' (on)
 --------------------------------------------------------------------------- */
 
+// overriding methods on instances.
+method(Element, 'override', function(method, func) {
+	let inherited = this[method] || noop
+	this[method] = function(...args) {
+		return func.call(this, inherited, ...args)
+	}
+})
+
 let resize_observer = new ResizeObserver(function(entries) {
 	for (let entry of entries)
 		entry.target.fire('resize', entry.contentRect, entry)
@@ -113,13 +121,6 @@ function component(tag, category, cons) {
 				}
 			}
 		})
-
-		e.override = function(method, func) {
-			let inherited = this[method] || noop
-			this[method] = function(...args) {
-				return func(inherited, ...args)
-			}
-		}
 
 		e.debug_name = function(prefix) {
 			prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
