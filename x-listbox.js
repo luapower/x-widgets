@@ -403,7 +403,8 @@ component('x-list-dropdown', function(e) {
 	nav_dropdown_widget(e)
 
 	e.create_picker = function(opt) {
-		return component.create(assign_opt(opt, {
+
+		let lb = component.create(assign_opt(opt, {
 			type: 'listbox',
 			id: e.id && e.id + '.picker',
 			val_col: e.val_col,
@@ -413,6 +414,18 @@ component('x-list-dropdown', function(e) {
 			rowset_name: e.rowset_name,
 			theme: e.theme,
 		}, e.listbox))
+
+		// in the rare case that the rows in the listbox are updated while
+		// the listbox is serving as the picker for the dropdown,
+		// update the display value in the dropdown.
+		function update(...args) {
+			e.do_update_val(e.val)
+		}
+		lb.on('focused_row_cell_state_changed', update)
+		lb.on('focused_row_state_changed', update)
+		lb.on('display_vals_changed', update)
+
+		return lb
 	}
 
 })

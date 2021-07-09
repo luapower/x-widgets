@@ -63,6 +63,7 @@ function row_widget(e, enabled_without_nav) {
 		if (!nav)
 			return
 		nav.on('focused_row_changed', row_changed, on)
+		nav.on('focused_row_state_changed', row_changed, on)
 		nav.on('focused_row_cell_state_changed', row_changed, on)
 		nav.on('display_vals_changed', row_changed, on)
 		nav.on('reset', row_changed, on)
@@ -546,7 +547,7 @@ component('x-editbox', 'Input', function(e) {
 	e.label_div = div({class: 'x-editbox-label'})
 	e.add(e.input, e.label_div)
 
-	function update_state(s) {
+	function do_update_state(s) {
 		e.input.class('empty', s == '')
 		e.label_div.class('empty', s == '')
 	}
@@ -560,13 +561,13 @@ component('x-editbox', 'Input', function(e) {
 		let s = e.to_text(v)
 		let maxlen = e.field && e.field.maxlen
 		e.input.value = s.slice(0, maxlen)
-		update_state(s)
+		do_update_state(s)
 	}
 
 	e.input.on('input', function() {
 		let v = e.input.value
 		e.set_val(e.from_text(v), {input: e, typing: true})
-		update_state(v)
+		do_update_state(v)
 	})
 
 	e.on('bind_field', function(on) {

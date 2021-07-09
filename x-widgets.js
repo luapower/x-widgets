@@ -46,11 +46,6 @@ method(Element, 'override', function(method, func) {
 	}
 })
 
-let resize_observer = new ResizeObserver(function(entries) {
-	for (let entry of entries)
-		entry.target.fire('resize', entry.contentRect, entry)
-})
-
 function set_attr_func(e, k, opt) {
 	let to_attr
 	return function(v) {
@@ -137,7 +132,7 @@ function component(tag, category, cons) {
 		// - constructor return value,
 		// - constructor args,
 		let opt = assign_opt({}, ...args)
-		props_mixin(e, opt && opt.props)
+		component_props(e, opt && opt.props)
 		component_deferred_updating(e)
 		e.isinstance = true   // because you can have non-widget instances.
 		e.iswidget = true     // to diff from normal html elements.
@@ -262,8 +257,8 @@ let component_deferred_updating = function(e) {
 			return
 		in_update = true
 		e.do_update(opt)
-		opt = null
 		in_update = false
+		opt = null
 	}
 
 }
@@ -287,13 +282,7 @@ fires:
 	document.'prop_changed' (e, prop, v1, v0, slot)
 --------------------------------------------------------------------------- */
 
-function props_mixin(e, iprops) {
-
-	/* TODO: use this or scrape it
-	e.bind_ext = function(te, ev, f) {
-		e.on('bind', function(on) { te.on(ev, f, on) })
-	}
-	*/
+function component_props(e, iprops) {
 
 	e.xon  = function() { e.xmodule_noupdate = false }
 	e.xoff = function() { e.xmodule_noupdate = true  }
