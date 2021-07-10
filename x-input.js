@@ -150,6 +150,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	function cell_state_changed(field, key, val, ev) {
 		if (e.updating)
 			return
+		bind_field(true)
 		if (key == 'input_val')
 			e.do_update_val(val, ev)
 		else if (key == 'val')
@@ -2196,7 +2197,7 @@ component('x-image', 'Input', function(e) {
 	e.img2.on('error', img_error)
 
 	e.format_url = function(vals, purpose) {
-		return (purpose == 'upload' && e.upload_url_template || e.url_template || '').subst(vals)
+		return (purpose == 'upload' && e.upload_url_format || e.url_format || '').subst(vals)
 	}
 
 	function format_url(purpose) {
@@ -2216,15 +2217,15 @@ component('x-image', 'Input', function(e) {
 		e.update()
 	}
 
-	e.set_url_template        = refresh
-	e.set_upload_url_template = refresh
-	e.set_allow_upload        = refresh
-	e.set_allow_download      = refresh
+	e.set_url_format        = refresh
+	e.set_upload_url_format = refresh
+	e.set_allow_upload      = refresh
+	e.set_allow_download    = refresh
 
-	e.prop('url_template'        , {store: 'var', attr: true})
-	e.prop('upload_url_template' , {store: 'var', attr: true})
-	e.prop('allow_upload'        , {store: 'var', type: 'bool', default: true, attr: true})
-	e.prop('allow_download'      , {store: 'var', type: 'bool', default: true, attr: true})
+	e.prop('url_format'        , {store: 'var', attr: true})
+	e.prop('upload_url_format' , {store: 'var', attr: true})
+	e.prop('allow_upload'      , {store: 'var', type: 'bool', default: true, attr: true})
+	e.prop('allow_download'    , {store: 'var', type: 'bool', default: true, attr: true})
 
 	// upload/download error notifications
 

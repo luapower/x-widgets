@@ -59,6 +59,7 @@
 		s.upper()
 		s.lower()
 		s.display_name()
+		s.cat(sep, ...)
 	arrays:
 		empty_array
 		a.extend(a1)
@@ -69,6 +70,7 @@
 		a.last
 		a.binsearch(v, cmp, i1, i2)
 		a.each(f)
+		a.tokeys([v]) -> t
 	hash maps:
 		obj()
 		set()
@@ -350,6 +352,13 @@ method(String, 'display_name', function() {
 })
 }
 
+{
+let non_null = (s) => s != null
+method(String, 'cat', function(sep, ...args) {
+	return args.filter(non_null).join(sep)
+})
+}
+
 // stub for getting message strings that can be translated multiple languages.
 S = window.S || function S(label, msg) { return msg }
 
@@ -451,6 +460,14 @@ method(Array, 'binsearch', function(v, cmp, i1, i2) {
 }
 
 alias(Array, 'each', 'forEach')
+
+method(Array, 'tokeys', function(v) {
+	v = or(v, true)
+	let t = obj()
+	for (let k of this)
+		t[k] = v
+	return t
+})
 
 // hash maps -----------------------------------------------------------------
 

@@ -3593,7 +3593,8 @@ function nav_widget(e) {
 				else
 					ts = template(e.id + '_item') || template(e.type + '_item')
 			}
-			return H(render_string(ts, row && e.serialize_row_vals(row)))
+			if (ts)
+				return H(render_string(ts, row && e.serialize_row_vals(row)))
 		}
 		if (!e.all_fields.length)
 			return 'no fields'

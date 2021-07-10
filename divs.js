@@ -368,7 +368,9 @@ function tag(tag, attrs, ...children) {
 div = H.div
 span = H.span
 
-alias(Element, 'clone', 'cloneNode')
+method(Element, 'clone', function() {
+	return this.cloneNode(true)
+})
 
 property(Element, 'html', {
 	get: function() {
@@ -429,15 +431,16 @@ override(Element, 'remove', function(inherited) {
 })
 
 method(Element, 'replace', function(e0, s) {
+	s = T(s)
 	if (e0 != null) {
-		e0.bind(false)
-		s = T(s)
+		if (e0 instanceof Element)
+			e0.bind(false)
 		this.replaceChild(s, e0)
-		if (s instanceof Element)
-			s.bind(true)
 	} else {
-		this.add(s)
+		this.appendChild(s)
 	}
+	if (s instanceof Element)
+		s.bind(true)
 	return this
 })
 
@@ -828,7 +831,7 @@ method(Window, 'rect', function() {
 
 method(Element, 'show', function(v, ev) {
 	v = v !== false
-	this.attr('hidden', !v)
+	this.hidden = !v
 	if (ev && ev.layout_changed)
 		document.fire('layout_changed')
 	this.fire('show', v, ev)

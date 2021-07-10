@@ -4,8 +4,7 @@
 
 require'xrowset'
 
---[=[
-local function field_defs_from_columns_table(tables)
+local field_defs_from_columns_table = memoize(function(tables)
 	local where = {}
 	for _,t in ipairs(tables) do
 		if #where > 0 then
@@ -23,29 +22,44 @@ local function field_defs_from_columns_table(tables)
 		end
 		add(where, '))')
 	end
-	print_queries(true)
-	for i,row in ipairs(query([[
+	local function parse_enum(s)
+		local vals = s:match'^enum%((.-)%)$'
+		if not vals then return end
+		local t = {}
+		vals:gsub("'(.-)'", function(s)
+			t[#t+1] = s
+		end)
+		return t
+	end
+	local cols = {}
+	for i,row in ipairs(kv_query([[
 		select
 			c.column_name,
-			c.column_default,
-			c.is_nullable,
-			c.data_type,
-			c.character_maximum_length,
-			c.numeric_precision,
-			c.numeric_scale,
-			c.datetime_precision,
-			c.character_set_name,
-			c.extra, --auto_increment, on update ...
-			c.is_generated
+			c.column_type
+			--c.column_default,
+			--c.is_nullable,
+			--c.data_type,
+			--c.character_maximum_length,
+			--c.numeric_precision,
+			--c.numeric_scale,
+			--c.datetime_precision,
+			--c.character_set_name,
+			--c.extra,
+			--auto_increment, on update ...
+			--c.is_generated
 		from
-			columns c
+			information_schema.columns c
 		where
 			]]..concat(where))
 	) do
-		pp(row)
+		local enum_values = parse_enum(row.column_type)
+		cols[row.column_name] = {
+			type = enum_values and 'enum' or nil,
+			enum_values = enum_values,
+		}
 	end
-end
-]=]
+	return cols
+end)
 
 local MYSQL_TYPE_DECIMAL     =   0
 local MYSQL_TYPE_TINY        =   1
@@ -85,14 +99,14 @@ local mysql_types = {
 	[MYSQL_TYPE_LONG       ] = 'number',
 	[MYSQL_TYPE_FLOAT      ] = 'number',
 	[MYSQL_TYPE_DOUBLE     ] = 'number',
-	[MYSQL_TYPE_TIMESTAMP  ] = 'date',
+	[MYSQL_TYPE_TIMESTAMP  ] = 'datetime',
 	[MYSQL_TYPE_LONGLONG   ] = 'number',
 	[MYSQL_TYPE_INT24      ] = 'number',
-	[MYSQL_TYPE_DATE       ] = 'datetime',
+	[MYSQL_TYPE_DATE       ] = 'datetime', --used before MySQL 5.0 (4 bytes)
 	[MYSQL_TYPE_TIME       ] = 'time',
 	[MYSQL_TYPE_DATETIME   ] = 'datetime',
 	[MYSQL_TYPE_YEAR       ] = 'number',
-	[MYSQL_TYPE_NEWDATE    ] = 'date',
+	[MYSQL_TYPE_NEWDATE    ] = 'datetime', --new from MySQL 5.0 (3 bytes)
 	[MYSQL_TYPE_VARCHAR    ] = 'text',
 	[MYSQL_TYPE_TIMESTAMP2 ] = 'date',
 	[MYSQL_TYPE_DATETIME2  ] = 'datetime',
@@ -128,9 +142,12 @@ local mysql_charsize = {
 
 local function field_defs_from_query_result_cols(cols, extra_defs, update_table)
 	local t, pk, id_col = {}, {}
+	local tables, fields = {}, {}
 	for i,col in ipairs(cols) do
+		tables[i] = {col.db, col.table, col.name}
 		local field = {}
 		field.name = col.name
+		fields[field.name] = field
 		local type = mysql_types[col.type]
 		field.type = type
 		field.allow_null = col.allow_null
@@ -158,6 +175,9 @@ local function field_defs_from_query_result_cols(cols, extra_defs, update_table)
 		if col.pri_key or col.unique_key then
 			add(pk, col.name)
 		end
+	end
+	for col, info in pairs(field_defs_from_columns_table(tables)) do
+		update(fields[col], info)
 	end
 	return t, pk, id_col
 end
@@ -249,29 +269,26 @@ function sql_rowset(...)
 		assert(rs.select)
 
 		function rs:select_rows(res, param_values)
-			trace_queries(not config'hide_errors')
 			if rs.schema then
 				query_on(rs.db, 'use '..rs.schema)
 			end
-			local rows, cols, params = query_on(rs.db, rs.select, param_values)
+			local rows, cols, params = query_on(rs.db, rs.query_options or empty,
+				rs.select, param_values)
 			local fields, pk, id_col =
 				field_defs_from_query_result_cols(cols, rs.field_attrs, rs.update_table)
-			local sql_trace = trace_queries(false)
+
 			merge(res, {
 				fields = fields,
 				pk = pk,
 				id_col = id_col,
 				rows = rows,
 				params = params,
-				sql_trace = sql_trace,
 			})
 		end
 
 		local apply_changes = rs.apply_changes
 		function rs:apply_changes(changes)
-			trace_queries(not config'hide_errors')
 			local res = apply_changes(self, changes)
-			res.sql_trace = trace_queries(false)
 			return res
 		end
 

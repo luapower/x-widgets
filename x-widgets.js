@@ -58,10 +58,13 @@ function set_attr_func(e, k, opt) {
 }
 
 function attr_val_opt(e) {
-	let opt = {}
+	let opt = obj()
 	for (let attr of e.attrs) {
 		let k = attr.name
-		if (k != 'id' && k != 'class' && k != 'style') {
+		// TODO: not cool that we must add all built-in attrs that we use for
+		// custom components here (so that they aren't set twice, and wrong too
+		// because text attr vals don't convert well to bool props, eg. `hidden`).
+		if (k != 'id' && k != 'class' && k != 'style' && k != 'hidden') {
 			let v = attr.value
 			let popt = e.get_prop_attrs(k)
 			if (popt && popt.from_attr)
@@ -1218,7 +1221,7 @@ component('x-tooltip', function(e) {
 	})
 
 	e.property('visible',
-		function()  { return !e.hasattr('hidden') },
+		function()  { return !e.hidden },
 		function(v) { e.show(!!v) }
 	)
 
@@ -1880,7 +1883,7 @@ widget_items_widget = function(e) {
 		// create new items or reuse-by-id.
 		let items = new Set()
 		for (let v of t) {
-			// v is either an item from cur_items, a id, or the attrs for a new item.
+			// v is either an item from cur_items, an id, or the attrs for a new item.
 			let cur_item = cur_set.has(v) ? v : cur_by_id.get(v)
 			items.add(component.create(v, cur_item))
 		}
@@ -1934,6 +1937,13 @@ widget_items_widget = function(e) {
 		e.items = items
 	}
 
+	let items_tag = e.$('items')[0]
+	if (items_tag) {
+		let html_items = [...items_tag.at]
+		items_tag.remove()
+		return html_items
+	}
+
 }
 
 // ---------------------------------------------------------------------------
@@ -1948,10 +1958,7 @@ component('x-pagelist', 'Containers', function(e) {
 	editable_widget(e)
 	contained_widget(e)
 	serializable_widget(e)
-	widget_items_widget(e)
-
-	let dom_items = [...e.at]
-	e.clear()
+	let html_items = widget_items_widget(e)
 
 	e.prop('tabs_side', {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right'], default: 'top', attr: true})
 
@@ -2338,7 +2345,7 @@ component('x-pagelist', 'Containers', function(e) {
 		return false
 	}
 
-	return {items: dom_items}
+	return {items: html_items}
 
 })
 
@@ -2353,6 +2360,10 @@ component('x-split', 'Containers', function(e) {
 	serializable_widget(e)
 	selectable_widget(e)
 	contained_widget(e)
+
+	let html_item1 = e.at[0]
+	let html_item2 = e.at[1]
+	e.clear()
 
 	e.pane1 = div({class: 'x-split-pane x-container'})
 	e.pane2 = div({class: 'x-split-pane x-container'})
@@ -2511,6 +2522,9 @@ component('x-split', 'Containers', function(e) {
 		e[ITEM] = new_item
 		e.update()
 	}
+
+	if (html_item1) e.item1 = html_item1
+	if (html_item2) e.item2 = html_item2
 
 })
 
@@ -2915,15 +2929,20 @@ component('x-toolbox', function(e) {
 // widget switcher
 // ---------------------------------------------------------------------------
 
-component('x-widget-switcher', 'Containers', function(e) {
+component('x-switcher', 'Containers', function(e) {
 
-	e.class('x-stretched')
+	e.class('x-stretched x-container')
 
 	serializable_widget(e)
 	selectable_widget(e)
 	contained_widget(e)
+	let html_items = widget_items_widget(e)
 
 	// nav dynamic binding ----------------------------------------------------
+
+	function update() {
+		e.update()
+	}
 
 	function bind_nav(nav, on) {
 		if (!nav)
@@ -2950,25 +2969,42 @@ component('x-widget-switcher', 'Containers', function(e) {
 
 	// view -------------------------------------------------------------------
 
+	// widget-items widget protocol.
+	e.do_init_items = function() {
+		e.clear()
+	}
+
+	e.prop('item_id_format', {store: 'var', attr: true, default: ''})
+
 	e.format_item_id = function(vals) {
-		return e.module + '_' + e.item_id_format.subst(vals)
+		return ('_').cat(e.module, e.item_id_format.subst(vals))
+	}
+
+	e.match_item = function(item, vals) { // stub
+		return item.id == e.format_item_id(vals)
+	}
+
+	e.find_item = function(vals) {
+		for (let item of e.items)
+			if (e.match_item(item, vals))
+				return item
 	}
 
 	e.item_create_options = noop // stub
 
-	e.prop('item_id_format', {store: 'var'})
+	e.create_item = function(vals) {
+		let id = e.format_item_id(vals)
+		let item = id && component.create(assign_opt({id: id}, e.item_create_options(vals))) || null
+	}
 
 	e.do_update = function() {
 		let row = e.nav && e.nav.focused_row
 		let vals = row && e.nav.serialize_row_vals(row)
-		let id = vals && e.format_item_id(vals)
-		let item = id && component.create(assign_opt({id: id}, e.item_create_options(vals))) || null
+		let item = vals && (e.find_item(vals) || e.create_item(vals))
 		e.set(item)
 	}
 
-	function update() {
-		e.update()
-	}
+	return {items: html_items}
 
 })
 
@@ -2991,10 +3027,7 @@ component('x-slides', 'Containers', function(e) {
 	serializable_widget(e)
 	selectable_widget(e)
 	contained_widget(e)
-	widget_items_widget(e)
-
-	let dom_items = [...e.at]
-	e.clear()
+	let html_items = widget_items_widget(e)
 
 	e.do_init_items = function() {
 		e.clear()
@@ -3015,7 +3048,7 @@ component('x-slides', 'Containers', function(e) {
 
 	e.prop('selected_index', {store: 'var', default: 0})
 
-	return {items: dom_items}
+	return {items: html_items}
 
 })
 

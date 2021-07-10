@@ -367,7 +367,6 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		}
 
 		// detect w/h changes from resizing made with css 'resize: both'.
-		e.detect_resize()
 		e.on('resize', layout_changed)
 	}
 

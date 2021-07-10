@@ -182,6 +182,10 @@ body[opensans] {
 	margin: 0;
 }
 
+.x-container {
+	display: flex;
+}
+
 .x-stretched {
 	place-self: stretch;
 	flex: 1;

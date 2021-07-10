@@ -36,7 +36,7 @@ function listbox_widget(e) {
 	e.display_col = 0
 
 	let items_tag = e.$('items')[0]
-	let dom_items = items_tag && [...items_tag.at]
+	let html_items = items_tag && [...items_tag.at]
 
 	// embedded template: doesn't work if the listbox itself is declared in a template.
 	let item_template = e.$('script[type="text/x-mustache"]')[0]
@@ -385,7 +385,7 @@ function listbox_widget(e) {
 		e.xmodule_noupdate = false
 	}
 
-	return {items: dom_items, row_display_val_template: item_template}
+	return {items: html_items, row_display_val_template: item_template}
 }
 
 component('x-listbox', 'Input', listbox_widget)
