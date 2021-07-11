@@ -1,7 +1,7 @@
 
 /* divs.js ---------------------------------------------------------------- */
 
-[hidden] { display: none !important; }
+[hidden] { display: none !important; } /* because css `display` overrides it! */
 
 .popup { position: absolute !important; }
 

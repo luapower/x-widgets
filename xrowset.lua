@@ -31,7 +31,7 @@ function virtual_rowset(init, ...)
 			id_col = rs.id_col,
 			params = rs.params,
 		}
-		rs:select_rows(res, param_values)
+		rs:load_rows(res, param_values)
 		return res
 	end
 
@@ -99,20 +99,20 @@ function virtual_rowset(init, ...)
 								row.values[id_col] = id
 								rt.values = {[id_col] = id}
 							end
-							if rs.select_row then
-								local ok, values = catch('db', rs.select_row, rs, row.values)
+							if rs.load_row then
+								local ok, values = catch('db', rs.load_row, rs, row.values)
 								if ok then
 									if values then
 										rt.values = values
 									else
 										rt.error = S('inserted_row_not_found',
-											'inserted row could not be selected back')
+											'inserted row could not be loaded back')
 									end
 								else
 									local err = values
 									rt.error = db_error(err,
-										S('select_inserted_row_error',
-											'db error on selecting back inserted row'))
+										S('load_inserted_row_error',
+											'db error on loading back inserted row'))
 								end
 							end
 						end
@@ -130,21 +130,21 @@ function virtual_rowset(init, ...)
 				if can ~= false then
 					local ok, affected_rows = catch('db', rs.update_row, rs, row.values)
 					if ok then
-						if rs.select_row_update then
-							local ok, values = catch('db', rs.select_row_update, rs, row.values)
+						if rs.load_row then
+							local ok, values = catch('db', rs.load_row, rs, row.values)
 							if ok then
 								if values then
 									rt.values = values
 								else
 									rt.remove = true
 									rt.error = S('updated_row_not_found',
-										'updated row could not be selected back')
+										'updated row could not be loaded back')
 								end
 							else
 								local err = values
 								rt.error = db_error(err,
-									S('select_updated_row_error',
-										'db error on selecting back updated row'))
+									S('load_updated_row_error',
+										'db error on loading back updated row'))
 							end
 						end
 					else
@@ -163,8 +163,8 @@ function virtual_rowset(init, ...)
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_removed', 'row not removed')
 						else
-							if rs.select_row then
-								local ok, values = catch('db', rs.select_row, rs, row.values)
+							if rs.load_row then
+								local ok, values = catch('db', rs.load_row, rs, row.values)
 								if ok then
 									if values then
 										rt.error = S('rmeoved_row_found',
@@ -173,8 +173,8 @@ function virtual_rowset(init, ...)
 								else
 									local err = values
 									rt.error = db_error(err,
-										S('select_removed_row_error',
-											'db error on selecting back removed row'))
+										S('load_removed_row_error',
+											'db error on loading back removed row'))
 								end
 							end
 						end

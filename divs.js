@@ -44,8 +44,9 @@
 		div(...)
 		span(...)
 	unsafe dom tree manipulation:
-		H(he) where `he` is f|e|html_str|null
-		e.html
+		[unsafe_]html(he) where `he` is f|e|html_str|null
+		e.html -> s
+		e.[unsafe_]html = s
 	components:
 		bind_component(tag, initializer, [selector])
 		e.bind(t|f)
@@ -170,7 +171,7 @@ method(Element, 'class', function(names, enable) {
 	if (arguments.length < 2) // this is why dispatching on argc sucks.
 		enable = true
 	if (names.includes(' ')) {
-		for (let name of names.split(/\s+/))
+		for (let name of names.names())
 			if (enable)
 				this.classList.add(name)
 			else
@@ -200,7 +201,7 @@ property(Element, 'classes', {
 	},
 	set: function(s) {
 		if (s)
-			for (s of s.split(/\s+/))
+			for (s of s.names())
 				this.class(s, true)
 	}
 })
@@ -335,17 +336,24 @@ function T(s, whitespace) {
 	return document.createTextNode(s)
 }
 
-// create a html element from a html string.
+// create a html element or text node from a html string.
 // if the string contains more than one element or text node, wrap them in a span.
-function H(s) {
+function unsafe_html(s) {
 	if (typeof s != 'string') // pass-through nulls and elements
 		return s
 	let span = document.createElement('span')
-	span.html = s.trim()
+	span.unsafe_html = s.trim()
 	let e = span.childNodes.length > 1 ? span : span.firstChild
 	e.init_child_components()
 	e.init_component()
 	return e
+}
+
+function html(s) {
+	if (s == null)
+		return null
+	assert(DOMPurify.isSupported)
+	return DOMPurify.sanitize(s)
 }
 
 // create a HTML element from an attribute map and a list of child nodes.
@@ -359,14 +367,8 @@ function tag(tag, attrs, ...children) {
 	return e
 }
 
-['div', 'span', 'button', 'input', 'textarea', 'label', 'table', 'thead',
-'tbody', 'tr', 'td', 'th', 'a', 'i', 'b', 'hr', 'img',
-'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].forEach(function(s) {
-	H[s] = function(...a) { return tag(s, ...a) }
-})
-
-div = H.div
-span = H.span
+div  = (...a) => tag('div' , ...a)
+span = (...a) => tag('span', ...a)
 
 method(Element, 'clone', function() {
 	return this.cloneNode(true)
@@ -377,20 +379,32 @@ property(Element, 'html', {
 		return this.innerHTML
 	},
 	set: function(s) {
+		this.unsafe_html = html(s)
+	}
+})
+
+property(Element, 'unsafe_html', {
+	set: function(s) {
 		this.bind_children(false)
 		this.innerHTML = s
 		this.init_child_components()
-		this.bind_children(true)
+		if (this.isConnected)
+			this.bind_children(true)
 	},
+})
+
+method(Element, 'clear', function() {
+	this.unsafe_html = null
+	return this
 })
 
 method(Element, 'set', function(s, whitespace) {
 	if (typeof s == 'function')
 		s = s()
-	this.html = null
+	this.clear()
 	if (s instanceof Node) {
 		this.append(s)
-		if (s instanceof Element)
+		if (s instanceof Element && this.isConnected)
 			s.bind(true)
 	} else {
 		this.textContent = s
@@ -405,8 +419,10 @@ method(Element, 'add', function(...args) {
 		if (s != null) {
 			s = T(s)
 			this.append(s)
-			if (s instanceof Element)
-				s.bind(true)
+			if (s instanceof Element) {
+				if (this.isConnected)
+					s.bind(true)
+			}
 		}
 	return this
 })
@@ -417,8 +433,10 @@ method(Element, 'insert', function(i0, ...args) {
 		if (s != null) {
 			s = T(s)
 			this.insertBefore(s, this.at[i0])
-			if (s instanceof Element)
-				s.bind(true)
+			if (s instanceof Element) {
+				if (this.isConnected)
+					s.bind(true)
+			}
 		}
 	}
 	return this
@@ -439,13 +457,8 @@ method(Element, 'replace', function(e0, s) {
 	} else {
 		this.appendChild(s)
 	}
-	if (s instanceof Element)
+	if (s instanceof Element && this.isConnected)
 		s.bind(true)
-	return this
-})
-
-method(Element, 'clear', function() {
-	this.html = null
 	return this
 })
 
@@ -730,7 +743,7 @@ document.once('DOMContentLoaded', function() {
 		for (let fn of a)
 			fn()
 	}
-	for (let s of dom_load_order.split(/\s+/)) {
+	for (let s of dom_load_order.names()) {
 		if (load_slots[s]) {
 			run(load_slots[s])
 			delete load_slots[s]
@@ -834,7 +847,6 @@ method(Element, 'show', function(v, ev) {
 	this.hidden = !v
 	if (ev && ev.layout_changed)
 		document.fire('layout_changed')
-	this.fire('show', v, ev)
 })
 method(Element, 'hide', function(ev) {
 	this.show(false, ev)

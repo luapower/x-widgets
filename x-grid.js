@@ -376,19 +376,19 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		e.header.clear()
 		for (let fi = 0; fi < e.fields.length; fi++) {
 			let field = e.fields[fi]
-			let sort_icon     = H.span({class: 'fa x-grid-sort-icon'})
-			let sort_icon_pri = H.span({class: 'x-grid-header-sort-icon-pri'})
-			let title_div = H.td({class: 'x-grid-header-title-td'})
+			let sort_icon     = span({class: 'fa x-grid-sort-icon'})
+			let sort_icon_pri = span({class: 'x-grid-header-sort-icon-pri'})
+			let title_div = tag('td', {class: 'x-grid-header-title-td'})
 			title_div.set(field.text)
 			title_div.title = field.hint || title_div.textContent
-			let sort_icon_div = H.td({class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
+			let sort_icon_div = tag('td', {class: 'x-grid-header-sort-icon-td'}, sort_icon, sort_icon_pri)
 			let e1 = title_div
 			let e2 = sort_icon_div
 			if (horiz && field.align == 'right')
 				[e1, e2] = [e2, e1]
 			e1.attr('align', 'left')
 			e2.attr('align', 'right')
-			let title_table = H.table({class: 'x-grid-header-cell-table'}, H.tr(0, e1, e2))
+			let title_table = tag('table', {class: 'x-grid-header-cell-table'}, tag('tr', 0, e1, e2))
 			let hcell = div({class: 'x-grid-header-cell'}, title_table)
 			hcell.fi = fi
 			hcell.title_div = title_div
@@ -480,7 +480,9 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	e.do_update_cell_val = function(cell, row, field, input_val) {
 		let v = e.cell_display_val_for(row, field, input_val)
-		cell.qs_val = v
+		if (cell.data_val === v)
+			return
+		cell.data_val = v
 		let node = cell.childNodes[cell.indent ? 1 : 0]
 		if (cell.qs_div) { // value is wrapped
 			node.replace(node.childNodes[0], v)
@@ -607,7 +609,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		let cell = e.cells.at[cell_index(e.row_index(row), field.index)]
 		if (!cell)
 			return
-		if (!isstr(cell.qs_val))
+		if (!isstr(cell.data_val))
 			return
 		if (!cell.qs_div) {
 			if (s) {

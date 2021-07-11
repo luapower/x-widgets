@@ -60,6 +60,7 @@
 		s.lower()
 		s.display_name()
 		s.cat(sep, ...)
+		s.names() -> a
 	arrays:
 		empty_array
 		a.extend(a1)
@@ -82,12 +83,12 @@
 		attr(t, k[, cons])
 		memoize(f)
 	typed arrays:
-		[dyn_][f32|i8|u8|i16|u16|i32|u32]arr(arr|[...]|capacity, [nc])
-			set(in_arr, [offset=0], [len], [in_offset=0])
-			invalidate([offset=0], [len])
-			grow(cap, [preserve_contents=true], [pow2=true])
-			grow_type(arr_type|max_index|[...]|arr, [preserve_contents=true])
-			setlen(len)
+		[dyn_][f32|i8|u8|i16|u16|i32|u32]arr(arr|[...]|capacity, [nc]) -> [dyn]arr
+			.set(in_arr, [offset=0], [len], [in_offset=0])
+			.invalidate([offset=0], [len])
+			.grow(cap, [preserve_contents=true], [pow2=true])
+			.grow_type(arr_type|max_index|[...]|arr, [preserve_contents=true])
+			.setlen(len)
 	events:
 		events_mixin(o)
 	timestamps:
@@ -358,6 +359,10 @@ method(String, 'cat', function(sep, ...args) {
 	return args.filter(non_null).join(sep)
 })
 }
+
+method(String, 'names', function() {
+	return this.trim().split(/\s+/)
+})
 
 // stub for getting message strings that can be translated multiple languages.
 S = window.S || function S(label, msg) { return msg }

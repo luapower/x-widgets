@@ -4,24 +4,23 @@
 
 require'xrowset'
 
-local field_defs_from_columns_table = memoize(function(tables)
-	local where = {}
-	for _,t in ipairs(tables) do
-		if #where > 0 then
-			add(where, '\n\t\t\tor ')
-		end
-		append(where,
-			'(c.table_schema = ', sqlval(t[1]),
-			' and c.table_name = ', sqlval(t[2]), ' and (')
-		for i = 3, #t do
-			if i > 3 then
-				add(where, ' or ')
-			end
-			add(where, 'c.column_name = ')
-			add(where, sqlval(t[i]))
-		end
-		add(where, '))')
-	end
+local format = string.format
+local concat = table.concat
+
+local function colname(sch, tbl, col)
+	return format('%s\0%s\0%s', sch:lower(), tbl:lower(), col:lower())
+end
+
+local function tblname(sch, tbl)
+	return format('%s\0%s', sch:lower(), tbl:lower())
+end
+
+local function tblname_arg(s)
+	return s:match'^(.-)%z(.-)$'
+end
+
+local col_defs = memoize(function(tbls)
+
 	local function parse_enum(s)
 		local vals = s:match'^enum%((.-)%)$'
 		if not vals then return end
@@ -31,11 +30,23 @@ local field_defs_from_columns_table = memoize(function(tables)
 		end)
 		return t
 	end
+
 	local cols = {}
-	for i,row in ipairs(kv_query([[
+
+	local where = {}
+	for i,tbl in ipairs(glue.names(tbls)) do
+		local sch, tbl = tblname_arg(tbl)
+		where[i] = sqlparams('(c.table_schema = ? and c.table_name = ?)', sch, tbl)
+	end
+	where = concat(where, '\n\t\t\tor ')
+
+	for i,t in ipairs(kv_query([[
 		select
-			c.column_name,
-			c.column_type
+			c.table_schema as sch,
+			c.table_name as tbl,
+			c.column_name as col,
+			c.column_type as type,
+			c.column_key as ckey
 			--c.column_default,
 			--c.is_nullable,
 			--c.data_type,
@@ -50,14 +61,17 @@ local field_defs_from_columns_table = memoize(function(tables)
 		from
 			information_schema.columns c
 		where
-			]]..concat(where))
-	) do
-		local enum_values = parse_enum(row.column_type)
-		cols[row.column_name] = {
+			{where}
+		]], {where = where}))
+	do
+		local enum_values = parse_enum(t.type)
+		cols[colname(t.sch, t.tbl, t.col)] = {
 			type = enum_values and 'enum' or nil,
 			enum_values = enum_values,
+			pk = t.ckey == 'PRI' or nil,
 		}
 	end
+
 	return cols
 end)
 
@@ -140,22 +154,24 @@ local mysql_charsize = {
 	[45] = 4, --utf8mb4
 }
 
-local function field_defs_from_query_result_cols(cols, extra_defs, update_table)
+local function field_defs_from_query_result_cols(col_info, id_table)
 	local t, pk, id_col = {}, {}
-	local tables, fields = {}, {}
-	for i,col in ipairs(cols) do
-		tables[i] = {col.db, col.table, col.name}
+	local tbls, field_bycol = {}, {}
+	for i,col in ipairs(col_info) do
 		local field = {}
 		field.name = col.name
-		fields[field.name] = field
 		local type = mysql_types[col.type]
 		field.type = type
 		field.allow_null = col.allow_null
+		if col.pri_key then
+			field.visible = false
+		end
 		if col.auto_increment then
 			field.focusable = false
 			field.editable = false
 			field.is_id = true
-			if col.orig_table == update_table then
+			id_col = id_col or col.name
+			if col.orig_table == id_table then
 				id_col = col.name
 			end
 		end
@@ -171,32 +187,30 @@ local function field_defs_from_query_result_cols(cols, extra_defs, update_table)
 		elseif not type then
 			field.maxlen = col.length * (mysql_charsize[col.charsetnr] or 1)
 		end
-		t[i] = update(field, extra_defs and extra_defs[col.name])
+		t[i] = field
 		if col.pri_key or col.unique_key then
 			add(pk, col.name)
 		end
+
+		if col.schema and col.orig_table and col.orig_name then
+			tbls[tblname(col.schema, col.orig_table)] = true
+			field_bycol[colname(col.schema, col.orig_table, col.orig_name)] = field
+		end
 	end
-	for col, info in pairs(field_defs_from_columns_table(tables)) do
-		update(fields[col], info)
+	tbls = concat(glue.keys(tbls), ' ')
+	for col, info in pairs(col_defs(tbls)) do
+		local field = field_bycol[col]
+		if field then
+			update(field, info)
+		end
 	end
 	return t, pk, id_col
 end
 
-local function parse_fields(s)
-	if type(s) ~= 'string' then
-		return s
-	end
-	local t = {}
-	for s in s:gmatch'[^%s]+' do
-		t[#t+1] = s
-	end
-	return t
-end
-
-local function where_sql(pk, suffix)
+local function where_sql(tbl, pk, suffix)
 	local t = {'where '}
 	for i,k in ipairs(pk) do
-		append(t, sqlname(k), ' <=> ', ':', k, suffix or '', ' and ')
+		append(t, sqlname(tbl), '.', sqlname(k), ' <=> ', ':', k, suffix or '', ' and ')
 	end
 	t[#t] = nil --remove the last ' and '.
 	return concat(t)
@@ -236,6 +250,27 @@ local function delete_sql(tbl, where_sql, values)
 		(sqlparams(where_sql, values))}
 end
 
+field_name_attrs = {}
+field_type_attrs = {}
+
+--[[
+
+	db          : optional, connection alias to query on.
+	schema      : optional, different current schema to use for query.
+
+	select      : 'select without where clause'
+	where_all   : 'where clause for all rows'
+	where_row   : 'where clause for single row: tbl.pk1 = :pk1_alias:old and ...'
+
+	select + where_all => select_all
+	select + where_row => select_row
+
+	pk          : 'pk1_alias ...', for when MySQL can't deduce it from the query.
+	id_table    : 'tbl', for trees, when multiple auto_increment fields are selected.
+
+	update_tables : {{table='tbl', }, ...}
+
+]]
 function sql_rowset(...)
 	return virtual_rowset(function(rs, sql, ...)
 
@@ -245,41 +280,49 @@ function sql_rowset(...)
 			update(rs, sql, ...)
 		end
 
-		rs.update_fields = parse_fields(rs.update_fields)
-		rs.pk = parse_fields(rs.pk)
+		rs.pk = glue.names(rs.pk)
 
-		if not rs.where_row and rs.pk then
-			rs.where_row = where_sql(rs.pk)
-		end
-		if not rs.where_row_update and rs.pk then
-			rs.where_row_update = where_sql(rs.pk, ':old')
+		if not rs.select_all and rs.select then
+			rs.select_all = rs.select .. (rs.where_all and 'where '..rs.where_all or '')
 		end
 
-		if not rs.select_one and rs.select_all and rs.where_row then
-			rs.select_one = rs.select_all .. ' ' .. rs.where_row
+		if not rs.select_row and rs.select and rs.where_row then
+			rs.select_row = rs.select .. 'where ' .. rs.where_row
 		end
-		if not rs.select_one_update and rs.select_all and rs.where_row_update then
-			rs.select_one_update = rs.select_all .. ' ' .. rs.where_row_update
-		end
-		if not rs.select and rs.select_all then
-			rs.select = rs.select_all .. (rs.where and ' ' .. rs.where or '')
-		end
-		rs.insert_fields = rs.insert_fields or rs.update_fields
 
-		assert(rs.select)
+		assert(rs.select_all)
 
-		function rs:select_rows(res, param_values)
-			if rs.schema then
-				query_on(rs.db, 'use '..rs.schema)
+		local function use_schema()
+			if not rs.schema then return end
+			query_on(rs.db, 'use '..rs.schema)
+		end
+
+		if rs.select_row then
+			use_schema()
+			function rs:load_row(row_values, param_values)
+				return query1(rs.select_row, update({}, param_values, row_values))
 			end
+		end
+
+		function rs:load_rows(res, param_values)
+			use_schema()
 			local rows, cols, params = query_on(rs.db, rs.query_options or empty,
-				rs.select, param_values)
+				rs.select_all, param_values)
+
 			local fields, pk, id_col =
-				field_defs_from_query_result_cols(cols, rs.field_attrs, rs.update_table)
+				field_defs_from_query_result_cols(cols, rs.id_table)
+
+			for i,field in ipairs(fields) do
+				update(field,
+					field_name_attrs[field.name],
+					field_type_attrs[field.type],
+					rs.field_attrs and rs.field_attrs[field.name]
+				)
+			end
 
 			merge(res, {
 				fields = fields,
-				pk = pk,
+				pk = rs.pk or pk,
 				id_col = id_col,
 				rows = rows,
 				params = params,
@@ -292,38 +335,38 @@ function sql_rowset(...)
 			return res
 		end
 
-		if rs.update_table and rs.insert_fields then
-			function rs:insert_row(row)
-				local t = query(insert_sql(rs.update_table, rs.insert_fields, row))
-				return t.affected_rows, t.insert_id ~= 0 and t.insert_id or nil
-			end
-		end
+		--[==[
+		rs.update_tables = rs.update_table and {rs.update_table} or rs.update_tables
+		if rs.update_tables then
+			for _,t in ipairs(rs.update_tables) do
 
-		if rs.update_table and rs.update_fields and rs.where_row_update then
-			function rs:update_row(row)
-				local t = query(update_sql(rs.update_table, rs.update_fields, rs.where_row_update, row))
-				return t.affected_rows
-			end
-		end
+				t.update_fields = glue.names(t.update_fields)
+				t.insert_fields = glue.names(t.insert_fields) or t.update_fields
 
-		if rs.update_table and rs.where_row then
-			function rs:delete_row(row)
-				local t = query(delete_sql(rs.update_table, rs.where_row, row))
-				return t.affected_rows
-			end
-		end
+				local insert_row = rs.insert_row or glue.noop
+				function rs:insert_row(row)
+					insert_row(self, row)
+					local t = query(insert_sql(t.table, t.insert_fields, row))
+					return t.affected_rows, t.insert_id ~= 0 and t.insert_id or nil
+				end
 
-		if rs.select_one then
-			function rs:select_row(row)
-				return query1(rs.select_one, row)
-			end
-		end
+				local update_row = rs.update_row or glue.noop
+				if rs.update_fields and rs.where_row_update then
+					function rs:update_row(row)
+						local t = query(update_sql(rs.update_table, rs.update_fields, rs.where_row_update, row))
+						return t.affected_rows
+					end
+				end
 
-		if rs.select_one_update then
-			function rs:select_row_update(row)
-				return query1(rs.select_one_update, row)
+				if rs.where_row then
+					function rs:delete_row(row)
+						local t = query(delete_sql(rs.update_table, rs.where_row, row))
+						return t.affected_rows
+					end
+				end
 			end
 		end
+		]==]
 
 	end, ...)
 end

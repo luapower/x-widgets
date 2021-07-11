@@ -298,7 +298,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 			return
 		if (!e.error_tooltip) {
 			if (!e.invalid)
-				return // don't create it until nee`ded.
+				return // don't create it until needed.
 			e.error_tooltip = tooltip({kind: 'error', target: e,
 				check: e.do_error_tooltip_check})
 		}
@@ -544,7 +544,7 @@ component('x-editbox', 'Input', function(e) {
 	val_widget(e)
 	input_widget(e)
 
-	e.input = H.input({class: 'x-editbox-input'})
+	e.input = tag('input', {class: 'x-editbox-input'})
 	e.label_div = div({class: 'x-editbox-label'})
 	e.add(e.input, e.label_div)
 
@@ -954,7 +954,7 @@ component('x-tagsedit', 'Input', function(e) {
 	let S_expand = S('expand', 'expand') + ' (Enter)'
 	let S_condense = S('condense', 'condense') + ' (Enter)'
 
-	e.input = H.input({class: 'x-editbox-input x-tagsedit-input'})
+	e.input = tag('input', {class: 'x-editbox-input x-tagsedit-input'})
 	e.label_div = div({class: 'x-editbox-label x-tagsedit-label'})
 	e.expand_button = div({class: 'x-tagsedit-button-expand fa fa-caret-up',
 		title: S_expand,
@@ -1029,7 +1029,7 @@ component('x-tagsedit', 'Input', function(e) {
 			e.bubble = tooltip({classes: 'x-tagsedit-bubble', target: e, side: 'top', align: 'left'})
 		update_tags()
 		if (e.bubble)
-			e.bubble.show(expanded)
+			e.bubble.visible = expanded
 		e.expand_button.title = expanded ? S_condense : S_expand
 	}
 	e.prop('expanded', {store: 'var', private: true})
@@ -1527,7 +1527,7 @@ function dropdown_widget(e) {
 		e.val_div.class('empty', empty)
 		e.val_div.class('null', false)
 		e.label_div.class('empty', empty)
-		e.val_div.set(empty ? H('&nbsp;') : text)
+		e.val_div.set(empty ? T('&nbsp;') : text)
 	}
 
 	let do_error_tooltip_check = e.do_error_tooltip_check
@@ -1718,7 +1718,7 @@ component('x-calendar', 'Input', function(e) {
 	e.header = div({class: 'x-calendar-header'},
 		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
 
-	e.weekview = H.table({class: 'x-calendar-weekview'})
+	e.weekview = tag('table', {class: 'x-calendar-weekview'})
 
 	e.add(e.header, e.weekview)
 
@@ -1755,17 +1755,17 @@ component('x-calendar', 'Input', function(e) {
 		e.weekview.clear()
 		sel_td = null
 		for (let week = 0; week <= weeks; week++) {
-			let tr = H.tr()
+			let tr = tag('tr')
 			for (let weekday = 0; weekday < 7; weekday++) {
 				if (!week) {
-					let th = H.th({class: 'x-calendar-weekday'}, weekday_name(day(d, weekday)))
+					let th = tag('th', {class: 'x-calendar-weekday'}, weekday_name(day(d, weekday)))
 					tr.add(th)
 				} else {
 					let m = month(d)
 					let s = d == today ? ' today' : ''
 					s = s + (m == this_month ? ' current-month' : '')
 					s = s + (d == sel_d ? ' focused selected' : '')
-					let td = H.td({class: 'x-calendar-day x-item'+s}, floor(1 + days(d - m)))
+					let td = tag('td', {class: 'x-calendar-day x-item'+s}, floor(1 + days(d - m)))
 					td.day = d
 					tr.add(td)
 					if (d == sel_d)
@@ -2094,7 +2094,7 @@ function richtext_widget_editing(e) {
 		if (e1 && e1.nodeType == 3)
 			exec('formatBlock', '<p>')
 		else if (e.content_div.html == '<br>')
-			e.content_div.html = ''
+			e.content_div.clear()
 		barrier = true
 		e.content = e.content_div.html
 		barrier = false
@@ -2806,12 +2806,12 @@ component('x-chart', 'Input', function(e) {
 				tt.py = y1 + pad_y1
 				tt.pw = x2 - x1
 				tt.ph = y2 - y1
-				tt.show()
+				tt.visible = true
 				tt.end_update()
 				return
 			}
 			if (tt)
-				tt.hide()
+				tt.visible = false
 		}
 
 	}
@@ -2885,13 +2885,13 @@ component('x-chart', 'Input', function(e) {
 
 	e.set_cat_cols = function(cat_cols, cat_cols0) {
 		if (cat_cols0)
-			for (let col of cat_cols0.split(/\s+/)) {
+			for (let col of cat_cols0.names()) {
 				delete e.props['cat_col.'+col+'.range_freq'  ]
 				delete e.props['cat_col.'+col+'.range_offset']
 				delete e.props['cat_col.'+col+'.range_unit'  ]
 			}
 		if (cat_cols)
-			for (let col of cat_cols.split(/\s+/)) {
+			for (let col of cat_cols.names()) {
 				e.props['cat_col.'+col+'.range_freq'  ] = {name: 'cat_col.'+col+'.range_freq'  , type: 'number'}
 				e.props['cat_col.'+col+'.range_offset'] = {name: 'cat_col.'+col+'.range_offset', type: 'number'}
 				e.props['cat_col.'+col+'.range_unit'  ] = {name: 'cat_col.'+col+'.range_unit'  , type: 'enum', enum_values: ['month', 'year']}

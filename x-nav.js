@@ -383,7 +383,7 @@ function nav_widget(e) {
 
 	let is_not_null = v => v != null
 	function flds(cols) {
-		let fields = isstr(cols) ? cols.split(/\s+/).map(fld).filter(is_not_null) : cols
+		let fields = isstr(cols) ? cols.names().map(fld).filter(is_not_null) : cols
 		return fields.length ? fields : null
 	}
 
@@ -545,7 +545,7 @@ function nav_widget(e) {
 		bind_lookup_navs(true)
 
 		e.pk = e.attached ? (isarray(rs.pk) ? rs.pk.join(' ') : rs.pk) : null
-		e.id_field = e.pk && e.all_fields[e.pk.split(/\s+/)[0]]
+		e.id_field = e.pk && e.all_fields[e.pk.names()[0]]
 		e.parent_field = e.id_field && e.all_fields[rs.parent_col]
 		init_tree_field()
 
@@ -710,7 +710,7 @@ function nav_widget(e) {
 
 	let all_cols = () => e.all_fields.map(f => f.name).filter(visible_col)
 
-	let cols_array = () => e.cols != null ? e.cols.split(/\s+/).filter(visible_col) : all_cols()
+	let cols_array = () => e.cols != null ? e.cols.names().filter(visible_col) : all_cols()
 
 	function cols_from_array(cols) {
 		cols = cols.join(' ')
@@ -822,7 +822,7 @@ function nav_widget(e) {
 
 	function param_map(params) {
 		let m = new Map()
-		for (let s of params.split(/\s+/)) {
+		for (let s of params.names()) {
 			let p = s.split('=')
 			let param = p && p[0] || s
 			let col = p && (p[1] || p[0]) || param
@@ -1366,7 +1366,7 @@ function nav_widget(e) {
 		}
 
 		idx.rebuild = function() {
-			cols_arr = cols.split(/\s+/)
+			cols_arr = cols.names()
 			fis = cols_arr.map(fld).map(f => f.val_index)
 			tree = new Map()
 			for (let row of e.all_rows)
@@ -1481,7 +1481,7 @@ function nav_widget(e) {
 
 		let col_groups = group_cols.split(/\s*,\s*/)
 		let root_group = []
-		let depth = col_groups[0].split(/\s+/).length-1
+		let depth = col_groups[0].names().length-1
 		function add_group(t, path, parent_group, parent_group_level) {
 			let group = []
 			group.key_cols = col_groups[parent_group_level]
@@ -1491,7 +1491,7 @@ function nav_widget(e) {
 			let level = parent_group_level + 1
 			let col_group = col_groups[level]
 			if (col_group) { // more group levels down...
-				let depth = col_group.split(/\s+/).length-1
+				let depth = col_group.names().length-1
 				flatten(t, [], depth, add_group, group, level)
 			} else { // last group level, t is the array of rows.
 				group.push(...t)
@@ -1801,7 +1801,7 @@ function nav_widget(e) {
 			field.sort_dir = null
 			field.sort_priority = null
 		}
-		for (let s1 of (e.order_by || '').split(/\s+/)) {
+		for (let s1 of (e.order_by || '').names()) {
 			let m = s1.split(':')
 			let name = m[0]
 			let field = e.all_fields[name]
@@ -1915,7 +1915,7 @@ function nav_widget(e) {
 	e.and_filter = function(cols, vals) {
 		let expr = ['&&']
 		let i = 0
-		for (let col of cols.split(/\s+/))
+		for (let col of cols.names())
 			expr.push(['===', col, vals[i++]])
 		return expr.length > 1 ? expr_filter(expr) : return_true
 	}
@@ -3026,9 +3026,14 @@ function nav_widget(e) {
 		e.fire('load_fail', err, type, status, message, body)
 	}
 
+	e.prop('focus_state', {store: 'var'})
+
 	function load_success(rs) {
 		set_rowset(rs)
 		e.reset()
+		if (e.pk && e.focus_state != null) {
+			e.focus_find_row(e.pk, json_arg(e.focus_state))
+		}
 	}
 
 	// saving changes ---------------------------------------------------------
@@ -3073,8 +3078,8 @@ function nav_widget(e) {
 				rows.push(t)
 			} else if (row.removed) {
 				let t = {type: 'remove', values: {}}
-				for (let col of e.pk.split(/\s+/))
-					t.values[col] = e.cell_old_val(row, col)
+				for (let col of e.pk.names())
+					t.values[col+':old'] = e.cell_old_val(row, col)
 				rows.push(t)
 			} else if (row.modified) {
 				let t = {type: 'update', values: {}}
@@ -3594,7 +3599,7 @@ function nav_widget(e) {
 					ts = template(e.id + '_item') || template(e.type + '_item')
 			}
 			if (ts)
-				return H(render_string(ts, row && e.serialize_row_vals(row)))
+				return unsafe_html(render_string(ts, row && e.serialize_row_vals(row)))
 		}
 		if (!e.all_fields.length)
 			return 'no fields'
@@ -3965,10 +3970,10 @@ component('x-lookup-dropdown', function(e) {
 	let bool = {align: 'center', w: 26, max_w: 28}
 	field_types.bool = bool
 
-	bool.true_text = () => H('<div class="fa fa-check"></div>')
+	bool.true_text = () => div({classes: 'fa fa-check'})
 	bool.false_text = ''
 
-	bool.null_text = () => H('<div class="fa fa-square"></div>')
+	bool.null_text = () => div({classes: 'fa fa-square'})
 
 	bool.validator_bool = field => ({
 		validate : v => isbool(v),
@@ -4021,7 +4026,7 @@ component('x-lookup-dropdown', function(e) {
 	field_types.color = color
 
 	color.format = function(color) {
-		return div({class: 'x-item-color', style: 'background-color: '+color}, H('&nbsp;'))
+		return div({class: 'x-item-color', style: 'background-color: '+color}, T('&nbsp;'))
 	}
 
 	color.editor = function(...opt) {

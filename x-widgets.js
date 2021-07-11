@@ -1112,10 +1112,10 @@ function stylable_widget(e) {
 
 	e.set_css_classes = function(c1, c0) {
 		if (c0)
-			for (let s of c0.split(/\s+/))
+			for (let s of c0.names())
 				this.class(s, false)
 		if (c1)
-			for (let s of c1.split(/\s+/))
+			for (let s of c1.names())
 				this.class(s, true)
 	}
 	e.prop('css_classes', {store: 'var'})
@@ -1187,17 +1187,17 @@ component('x-tooltip', function(e) {
 			last_popup_time = time()
 	}
 
-	function call_update() { e.update() }
+	function update() { e.update() }
 	e.set_target = function() { e.update({reset_timer: true}) }
-	e.set_icon_visible = call_update
-	e.set_side   = call_update
-	e.set_align  = call_update
-	e.set_kind   = call_update
-	e.set_px     = call_update
-	e.set_py     = call_update
-	e.set_pw     = call_update
-	e.set_ph     = call_update
-	e.set_close_button = call_update
+	e.set_icon_visible = update
+	e.set_side         = update
+	e.set_align        = update
+	e.set_kind         = update
+	e.set_px           = update
+	e.set_py           = update
+	e.set_pw           = update
+	e.set_ph           = update
+	e.set_close_button = update
 
 	e.set_text = function(s) {
 		e.content.set(s, 'pre-wrap')
@@ -1216,13 +1216,14 @@ component('x-tooltip', function(e) {
 		remove_timer(t)
 	}
 
-	e.on('show', function() {
-		e.update()
-	})
-
 	e.property('visible',
 		function()  { return !e.hidden },
-		function(v) { e.show(!!v) }
+		function(v) {
+			e.show(!!v)
+			// TODO: what we really want is an event on changes on prop `hidden`
+			// and css `display`, eg. show() will not call update().
+			e.update()
+		}
 	)
 
 	// keyboard, mouse & focusing behavior ------------------------------------
@@ -1469,14 +1470,14 @@ component('x-menu', function(e) {
 			icon_div.classes = item.icon
 		else
 			icon_div.set(item.icon)
-		let check_td  = H.td ({class: 'x-menu-check-td'}, check_div, icon_div)
-		let title_td  = H.td ({class: 'x-menu-title-td'})
+		let check_td  = tag('td', {class: 'x-menu-check-td'}, check_div, icon_div)
+		let title_td  = tag('td', {class: 'x-menu-title-td'})
 		title_td.set(item.text)
-		let key_td    = H.td ({class: 'x-menu-key-td'}, item.key)
+		let key_td    = tag('td', {class: 'x-menu-key-td'}, item.key)
 		let sub_div   = div({class: 'x-menu-sub-div fa fa-caret-right'})
-		let sub_td    = H.td ({class: 'x-menu-sub-td'}, sub_div)
+		let sub_td    = tag('td', {class: 'x-menu-sub-td'}, sub_div)
 		sub_div.style.visibility = item.items ? null : 'hidden'
-		let tr = H.tr({class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
+		let tr = tag('tr', {class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
 		tr.class('disabled', disabled || item.disabled)
 		tr.item = item
 		tr.check_div = check_div
@@ -1487,24 +1488,24 @@ component('x-menu', function(e) {
 	}
 
 	function create_heading(item) {
-		let td = H.td({class: 'x-menu-heading', colspan: 5})
+		let td = tag('td', {class: 'x-menu-heading', colspan: 5})
 		td.set(item.heading)
-		let tr = H.tr({}, td)
+		let tr = tag('tr', {}, td)
 		tr.focusable = false
 		tr.on('pointerenter', separator_pointerenter)
 		return tr
 	}
 
 	function create_separator() {
-		let td = H.td({class: 'x-menu-separator', colspan: 5}, H.hr())
-		let tr = H.tr({}, td)
+		let td = tag('td', {class: 'x-menu-separator', colspan: 5}, tag('hr'))
+		let tr = tag('tr', {}, td)
 		tr.focusable = false
 		tr.on('pointerenter', separator_pointerenter)
 		return tr
 	}
 
 	function create_menu(table, items, is_submenu, disabled) {
-		table = table || H.table()
+		table = table || tag('table')
 		table.classes = 'x-widget x-focusable x-menu'+(is_submenu ? ' x-menu-submenu' : '')
 		table.attr('tabindex', 0)
 		for (let i = 0; i < items.length; i++) {
@@ -1863,8 +1864,7 @@ widget_items_widget = function(e) {
 
 	function diff_items(t, cur_items) {
 
-		if (isstr(t))
-			t = t.split(/\s+/)
+ 		t = isstr(t) ? t.names() : t
 
 		if (same_items(t, cur_items))
 			return cur_items
@@ -2613,7 +2613,7 @@ component('x-action-band', 'Input', function(e) {
 
 	e.init = function() {
 		let ct = e
-		for (let s of e.layout.split(/\s+/)) {
+		for (let s of e.layout.names()) {
 			if (s == '<') {
 				ct = div({style: `
 						flex: auto;
@@ -3105,7 +3105,7 @@ component('x-mu', function(e) {
 			load_req.abort()
 
 		if (!data_url) {
-			e.html = ''
+			e.clear()
 			placeholder_set =  false
 			return
 		}
@@ -3186,7 +3186,7 @@ component('x-md', function(e) {
 	md = md || markdownit()
 		.use(MarkdownItIndentedTable)
 
-	e.html = md.render_string(e.html)
+	e.unsafe_html = md.render_string(e.html)
 
 })}
 

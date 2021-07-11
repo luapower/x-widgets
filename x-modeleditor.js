@@ -1003,14 +1003,14 @@ component('x-modeleditor', function(e) {
 	let tt = tooltip({kind: 'cursor', //timeout: 'auto',
 		side: 'inner-top', align: 'start',
 		target: e})
-	tt.hide()
+	tt.visible = false
 
 	let show_after = timer(function() {
-		tt.show()
+		tt.visible = true
 	})
 
 	e.property('tooltip', () => tt.text, function(s) {
-		tt.hide()
+		tt.visible = false
 		tt.text = s
 		tt.px = mouse.x
 		tt.py = mouse.y
