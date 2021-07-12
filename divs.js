@@ -51,6 +51,11 @@
 		bind_component(tag, initializer, [selector])
 		e.bind(t|f)
 		^bind (on)
+		e.bound -> t|f
+		e.property(name, [get],[set] | descriptor)
+		e.override(method, f)
+		e.do_before(method, f)
+		e.do_after(method, f)
 	events:
 		event(name|ev, [bubbles], ...args) -> ev
 		e.on   (name|ev, f, [enable], [capture])
@@ -123,7 +128,7 @@ alias(Element, 'hasattr', 'hasAttribute')
 
 // NOTE: `true`, `false` and `undefined` cannot be stored specifically:
 // setting `true` gets back 'true' while `false` and `undefined` gets back `null`.
-// To store `true`, `false` and `null` distinctly, use bool_attr().
+// To store `true`, `false` and `null`, use bool_attr().
 method(Element, 'attr', function(k, v) {
 	// dispatching on argc sucks but distinguishing get vs set based on
 	// `v === undefined` is even more error-prone.
@@ -135,6 +140,8 @@ method(Element, 'attr', function(k, v) {
 		this.setAttribute(k, v)
 })
 
+// NOTE: storing `false` explicitly allows setting the value `false` on
+// props whose default value is `true`.
 method(Element, 'bool_attr', function(k, v) {
 	// dispatching on argc sucks but distinguishing get vs set based on
 	// `v === undefined` is even more error-prone.
@@ -143,7 +150,7 @@ method(Element, 'bool_attr', function(k, v) {
 	else if (v == null)
 		this.removeAttribute(k)
 	else
-		this.setAttribute(k, repl(v, true, ''))
+		this.setAttribute(k, repl(repl(v, true, ''), false, 'false'))
 })
 
 // NOTE: setting this doesn't remove existing attrs!
@@ -250,15 +257,13 @@ method(NodeList, 'each', function(f) {
 	Array.prototype.forEach.call(this, f)
 })
 
-// dom tree manipulation with lifecycle management ---------------------------
+/* dom tree manipulation with lifecycle management ---------------------------
 
-/*
-NOTE: The "lifecycle management" part is basically poor man's web components.
+The "lifecycle management" part of this is basically poor man's web components.
 The reason we're reinventing web components in this inefficient way via DOM
-querying is because the actual web components built into the browser are made
-by web people (or monkeys, not sure) that haven't actually used their own
-APIs to see just how piss-poor a job they have done.
-
+querying is because the actual web components API built into the browser is
+unusable. Needless to say, all DOM changing needs to be done through this API
+exclusively for components to work.
 
 */
 
@@ -301,7 +306,7 @@ method(Element, 'bind_children', function(on) {
 		return
 	assert(isbool(on))
 	// $() is depth-first so we iterate in normal order for bind and in reverse
-	// order for unbind (bind children first, unbind parents first).
+	// order for unbind (bind children first, unbind them last).
 	let children = this.$('[_bind]')
 	if (on)
 		for (let ci of children)
@@ -313,11 +318,20 @@ method(Element, 'bind_children', function(on) {
 
 method(Element, 'bind', function(on) {
 	assert(isbool(on))
-	if (this.hasattr('_bind') && !this.attached != !on) {
-		this.attached = on
+	if (!this.bound == !on)
+		return
+	if (this.do_bind) {
+		this.bound = on
+		this.do_bind(on)
+	} else if (this.hasattr('_bind')) {
+		this.bound = on
 		this.fire('bind', on)
 	}
 	this.bind_children(on)
+})
+
+method(Element, 'on_bind', function(f) {
+	this.after('do_bind', f)
 })
 
 // create a text node from a string, quoting it automatically, with wrapping control.
@@ -462,12 +476,52 @@ method(Element, 'replace', function(e0, s) {
 	return this
 })
 
-// events & event wrappers ---------------------------------------------------
+/* instance method overriding for components ---------------------------------
 
-// NOTE: these wrappers block mouse events on any target with attr `disabled`.
-// `pointer-events: none` is not a solution because it makes click-through popups.
-// NOTE: preventing focusing is a matter of not-setting/removing attr `tabindex`
-// except for input elements that must have an explicit `tabindex=-1`.
+NOTE: unlike global override(), e.override() cannot override built-in methods.
+You can still use the global override() to override built-in methods in an
+instance without disturbing the prototype, and just the same you can use
+override_property_setter() to override a setter in an instance without
+disturbing the prototype.
+
+*/
+
+method(Element, 'property', function(name, get, set) {
+	return property(this, name, get, set)
+})
+
+method(Element, 'override', function(method, func) {
+	let inherited = this[method] || noop
+	this[method] = function(...args) {
+		return func.call(this, inherited, ...args)
+	}
+})
+
+method(Element, 'do_before', function(method, func) {
+	let inherited = this[method]
+	this[method] = inherited && function(...args) {
+		func.call(this, ...args)
+		inherited.call(this, ...args)
+	} || func
+})
+
+method(Element, 'do_after', function(method, func) {
+	let inherited = this[method]
+	this[method] = inherited && function(...args) {
+		inherited.call(this, ...args)
+		func.call(this, ...args)
+	} || func
+})
+
+/* events & event wrappers ---------------------------------------------------
+
+NOTE: these wrappers block mouse events on any target with attr `disabled`.
+`pointer-events: none` is not a solution because it makes click-through popups.
+
+NOTE: preventing focusing is a matter of not-setting/removing attr `tabindex`
+except for input elements that must have an explicit `tabindex=-1`.
+
+*/
 
 {
 
@@ -482,7 +536,9 @@ let resize_observer = new ResizeObserver(function(entries) {
 	for (let entry of entries)
 		entry.target.fire('resize', entry.contentRect, entry)
 })
-installers.xresize = function() {
+installers.resize = function() {
+	if (this == window)
+		return // built-in.
 	if (this.__detecting_resize)
 		return
 	this.__detecting_resize = true
@@ -501,7 +557,7 @@ installers.xresize = function() {
 		}
 	}
 	this.on('bind', bind)
-	if (this.attached)
+	if (this.isConnected)
 		bind.call(this, true)
 }
 
@@ -1075,24 +1131,26 @@ method(Element, 'hit_test_sides', function(mx, my, d1, d2) {
 
 }
 
-// popup pattern -------------------------------------------------------------
+/* popup pattern -------------------------------------------------------------
 
-// Why is this so complicated? Because the forever not-quite-there-yet web
-// platform doesn't have the notion of a global z-index so we can't have
-// in-DOM (i.e. relatively positioned and styled) popups that are also
-// painted last i.e. on top of everything, so we have to choose between popups
-// that are well-positioned but most probably clipped or obscured by other
-// elements, or popups that stay on top but have to be manually positioned
-// and styled, and kept in sync with the position of their target. We chose
-// the latter since we have a lot of implicit "stacking contexts" (read:
-// abstraction leaks of the graphics engine) and we try to auto-update the
-// popup position the best we can, but there will be cases where you'll have
-// to call popup() to update the popup's position manually. We simply don't
-// have an observer for tracking changes to an element's position on screen
-// or relative to another element.
+Why is this so complicated? Because the forever not-quite-there-yet web
+platform doesn't have the notion of a global z-index so we can't have
+in-DOM (i.e. relatively positioned and styled) popups that are also
+painted last i.e. on top of everything, so we have to choose between popups
+that are well-positioned but most probably clipped or obscured by other
+elements, or popups that stay on top but have to be manually positioned
+and styled, and kept in sync with the position of their target. We chose
+the latter since we have a lot of implicit "stacking contexts" (read:
+abstraction leaks of the graphics engine) and we try to auto-update the
+popup position the best we can, but there will be cases where you'll have
+to call popup() to update the popup's position manually. We simply don't
+have an observer for tracking changes to an element's position on screen
+or relative to another element.
 
-// `popup_target_updated` hook allows changing/animating popup's visibility
-// based on target's hover state or focused state.
+`popup_target_updated` hook allows changing/animating popup's visibility
+based on target's hover state or focused state.
+
+*/
 
 {
 
@@ -1160,7 +1218,7 @@ let popup_state = function(e) {
 				target.on('bind', target_bind)
 			}
 		}
-		if (target.isConnected || target.attached)
+		if (target.isConnected || target.bound)
 			target_bind(true)
 	}
 

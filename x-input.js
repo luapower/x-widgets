@@ -58,7 +58,7 @@ function row_widget(e, enabled_without_nav) {
 	}
 
 	function bind_nav(nav, on) {
-		if (!e.attached)
+		if (!e.bound)
 			return
 		if (!nav)
 			return
@@ -120,6 +120,8 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	// nav dynamic binding ----------------------------------------------------
 
 	function bind_field(on) {
+		assert(!(on && !e.bound))
+		assert(e.owns_field != null) // can't call this before init().
 		let field0 = e.field
 		let field1 = on && e.nav && e.nav.all_fields[e.col] || null
 		if (field0 == field1)
@@ -164,7 +166,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	}
 
 	function bind_nav(nav, col, on) {
-		if (on && !e.attached)
+		if (on && !e.bound)
 			return
 		if (!(nav && col != null))
 			return
@@ -177,13 +179,20 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	}
 
 	let field_opt
-	e.on('bind', function(on) {
-		if (on && e.field && !e.owns_field) {
+	let init = e.init
+	e.init = function() {
+		if (e.field) {
 			// `field` option enables standalone mode.
 			field_opt = e.field
 			field_opt.type = or(field_opt.type, e.field_type)
 			e.owns_field = true
+		} else {
+			e.owns_field = false
 		}
+		init()
+	}
+
+	e.on('bind', function(on) {
 		if (e.owns_field) {
 			if (on) {
 				let nav = global_val_nav()
@@ -280,7 +289,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 	e.do_update = function() {
 		let disabled = !(enabled_without_nav || (e.row && e.field))
-		e.bool_attr('disabled', disabled ||  null) // for non-focusables
+		e.bool_attr('disabled', disabled || null) // for non-focusables
 		e.disabled = disabled
 		cell_state_changed(e.field, 'input_val', e.input_val)
 		cell_state_changed(e.field, 'val', e.val)
@@ -587,8 +596,7 @@ component('x-editbox', 'Input', function(e) {
 	e.create_picker = noop // stub
 
 	function bind_picker(on) {
-		if (!e.attached)
-			return
+		assert(!(on && !e.bound))
 		if (on) {
 			e.picker = e.create_picker({
 				id: e.id && e.id + '.picker',
@@ -1029,7 +1037,7 @@ component('x-tagsedit', 'Input', function(e) {
 			e.bubble = tooltip({classes: 'x-tagsedit-bubble', target: e, side: 'top', align: 'left'})
 		update_tags()
 		if (e.bubble)
-			e.bubble.visible = expanded
+			e.bubble.show(expanded)
 		e.expand_button.title = expanded ? S_condense : S_expand
 	}
 	e.prop('expanded', {store: 'var', private: true})
@@ -1259,7 +1267,7 @@ component('x-placeedit', 'Input', function(e) {
 	e.to_text = function(v) { return (isobject(v) ? v.description : v) || '' }
 
 	e.override('do_update_val', function(inherited, v, ev) {
-		inherited(v, ev)
+		inherited.call(this, v, ev)
 		let pin = e.field && e.field.format_pin(v)
 		e.pin_ct.set(pin)
 		if (e.val && !e.place_id)
@@ -1299,7 +1307,7 @@ component('x-googlemaps', 'Input', function(e) {
 	e.add(e.map)
 
 	e.override('do_update_val', function(inherited, v, ev) {
-		inherited(v, ev)
+		inherited.call(this, v, ev)
 		let place_id = isobject(v) && v.place_id || null
 		e.map.goto_place(place_id)
 		e.map.class('empty', !place_id)
@@ -1487,8 +1495,7 @@ function dropdown_widget(e) {
 	}
 
 	function bind_picker(on) {
-		if (!e.attached)
-			return
+		assert(!(on && !e.bound))
 		if (on) {
 			e.picker = e.create_picker({
 				id: e.id && e.id + '.picker',
@@ -1732,7 +1739,7 @@ component('x-calendar', 'Input', function(e) {
 	})
 
 	e.do_update_val = function(v) {
-		assert(e.attached)
+		assert(e.bound)
 		v = or(as_ts(v), time())
 		let t = day(v)
 		update_weekview(t, 6)
@@ -2806,12 +2813,12 @@ component('x-chart', 'Input', function(e) {
 				tt.py = y1 + pad_y1
 				tt.pw = x2 - x1
 				tt.ph = y2 - y1
-				tt.visible = true
+				tt.show()
 				tt.end_update()
 				return
 			}
 			if (tt)
-				tt.visible = false
+				tt.hide()
 		}
 
 	}
@@ -2854,7 +2861,7 @@ component('x-chart', 'Input', function(e) {
 	}
 
 	function bind_nav(nav, on) {
-		if (!e.attached)
+		if (!e.bound)
 			return
 		if (!nav)
 			return
@@ -2992,7 +2999,7 @@ component('x-input', 'Input', function(e) {
 	}
 
 	e.override('init', function(inherited) {
-		inherited()
+		inherited.call(this)
 		e.set_widget_type(e.widget_type)
 	})
 
@@ -3057,7 +3064,7 @@ component('x-form', 'Containers', function(e) {
 	e.detect_resize()
 
 	e.on('resize', function(r) {
-		if (!e.attached)
+		if (!e.bound)
 			return
 		let n = clamp(floor(r.w / 150), 1, 12)
 		for (let i = 1; i <= 12; i++)

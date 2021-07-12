@@ -314,7 +314,9 @@ function nav_widget(e) {
 
 	// init -------------------------------------------------------------------
 
+	let init = e.init
 	e.init = function() {
+		init()
 		if (e.dropdown)
 			e.init_as_picker()
 	}
@@ -403,7 +405,7 @@ function nav_widget(e) {
 
 	// fields array matching 1:1 to row contents ------------------------------
 
-	let convert_field_attr = {}
+	let convert_field_attr = obj()
 
 	convert_field_attr.text = function(field, v, f) {
 		return v == null ? f.name && f.name.display_name() : v
@@ -471,7 +473,7 @@ function nav_widget(e) {
 			name += suffix
 		}
 
-		let field = {}
+		let field = obj()
 
 		init_field_attrs(field, f, name)
 
@@ -535,16 +537,16 @@ function nav_widget(e) {
 
 		let rs = e.rowset || empty
 
-		// not creating fields and rows unless attached because we don't get
-		// events while not attached so the nav might get stale.
-		if (e.attached)
+		// not creating fields and rows unless bound because we don't get
+		// events while not attached to DOM so the nav might get stale.
+		if (e.bound)
 			if (rs.fields)
 				for (let fi = 0; fi < rs.fields.length; fi++)
 					init_field(rs.fields[fi], fi)
 
 		bind_lookup_navs(true)
 
-		e.pk = e.attached ? (isarray(rs.pk) ? rs.pk.join(' ') : rs.pk) : null
+		e.pk = e.bound ? (isarray(rs.pk) ? rs.pk.join(' ') : rs.pk) : null
 		e.id_field = e.pk && e.all_fields[e.pk.names()[0]]
 		e.parent_field = e.id_field && e.all_fields[rs.parent_col]
 		init_tree_field()
@@ -789,7 +791,7 @@ function nav_widget(e) {
 	}
 
 	function bind_param_nav_cols(nav, params, on) {
-		if (on && !e.attached)
+		if (on && !e.bound)
 			return
 		if (!(nav && params))
 			return
@@ -839,7 +841,7 @@ function nav_widget(e) {
 		} else {
 			e.param_vals = []
 			for (let [row] of e.param_nav.selected_rows) {
-				let vals = {}
+				let vals = obj()
 				for (let [col, param] of param_map(e.params)) {
 					let field = e.param_nav.all_fields[col]
 					if (!field)
@@ -857,7 +859,7 @@ function nav_widget(e) {
 	function init_all_rows() {
 		e.do_update_load_fail(false)
 		update_indices('invalidate')
-		e.all_rows = e.attached && e.rowset && (
+		e.all_rows = e.bound && e.rowset && (
 				e.deserialize_all_row_states(e.row_states)
 				|| e.deserialize_all_row_vals(e.row_vals)
 				|| e.rowset.rows
@@ -870,7 +872,7 @@ function nav_widget(e) {
 
 	function create_rows() {
 		e.rows = []
-		if (e.attached) {
+		if (e.bound) {
 			let i = 0
 			for (let row of e.all_rows)
 				if (!row.parent_collapsed && e.row_is_visible(row))
@@ -1284,7 +1286,7 @@ function nav_widget(e) {
 	// cols: 'col1 ...' | fi | field | [col1|field1,...], [v1, ...]
 	function create_index(cols, range_defs) {
 
-		let idx = {}
+		let idx = obj()
 
 		let tree // Map(f1_val->Map(f2_val->[row1,...]))
 		let cols_arr // [col1,...]
@@ -1293,8 +1295,8 @@ function nav_widget(e) {
 		let range_val = return_arg
 		let range_text = return_arg
 		if (range_defs) {
-			let range_val_funcs = {}
-			let range_text_funcs = {}
+			let range_val_funcs = obj() // {col->f}
+			let range_text_funcs = obj() // {col->text}
 			for (let col in range_defs) {
 				let range = range_defs[col]
 				let freq = range.freq
@@ -1418,7 +1420,7 @@ function nav_widget(e) {
 		return idx
 	}
 
-	let indices = {} // {cache_key->index}
+	let indices = obj() // {cache_key->index}
 
 	function index(cols, range_defs) {
 		cols = e.fldnames(cols)
@@ -1968,7 +1970,7 @@ function nav_widget(e) {
 	// get/set cell & row state (storage api) ---------------------------------
 
 	let next_key_index = 0
-	let key_index = {}
+	let key_index = obj() // {key->i}
 
 	function cell_state_key_index(key) {
 		let i = key_index[key]
@@ -2107,7 +2109,7 @@ function nav_widget(e) {
 	e.validate_val = function(field, val, row, ev) {
 		let errors = []
 		errors.passed = true
-		if (field.validators)
+		if (field.validators) {
 			for (let validator of field.validators) {
 				let passed = validator.validate(val, row, field)
 				let error = isbool(passed) ? {passed: !!passed} : passed
@@ -2120,6 +2122,7 @@ function nav_widget(e) {
 					errors.must_not_allow_exit_row = or(errors.must_not_allow_exit_row, validator.must_not_allow_exit_row)
 				}
 			}
+		}
 		return errors
 	}
 
@@ -2935,7 +2938,7 @@ function nav_widget(e) {
 
 	e.reset = function() {
 
-		if (!e.attached)
+		if (!e.bound)
 			return
 		if (!e.rowset)
 			return
@@ -2962,7 +2965,7 @@ function nav_widget(e) {
 	}
 
 	e.reload = function(param_vals) {
-		if (!e.attached) {
+		if (!e.bound) {
 			e.update({reload: true})
 			return
 		}
@@ -3109,7 +3112,7 @@ function nav_widget(e) {
 
 			let err = isstr(rt.error) ? rt.error : undefined
 			let row_failed = rt.error != null
-			e.set_row_errors(row, [{message: err, passed: false}])
+			//TODO: e.set_row_errors(row, [{message: err, passed: false}])
 
 			if (rt.remove) {
 				rows_to_remove.push(row)
@@ -3288,7 +3291,7 @@ function nav_widget(e) {
 	}
 
 	e.serialize_row_vals = function(row) {
-		let vals = {}
+		let vals = obj()
 		for (let field of e.all_fields) {
 			let v = e.cell_val(row, field)
 			if (v !== field.default && !field.nosave)
@@ -3332,7 +3335,7 @@ function nav_widget(e) {
 		let rows = []
 		for (let row of e.all_rows) {
 			if (!row.nosave) {
-				let state = {}
+				let state = obj()
 				if (row.is_new)
 					state.is_new = true
 				if (row.removed)
@@ -3428,7 +3431,7 @@ function nav_widget(e) {
 	}
 
 	e.do_update_load_fail = function(on, error, type, status, message, body) {
-		if (!e.attached)
+		if (!e.bound)
 			return
 		if (type == 'abort')
 			e.load_overlay(false)
@@ -3679,8 +3682,6 @@ component('x-bare-nav', function(e) {
 
 	let val_widget_do_update = e.do_update
 	e.do_update = function(opt) {
-		if (!e.attached)
-			return
 		if (opt.reload) {
 			e.reload()
 			return
@@ -3854,7 +3855,7 @@ component('x-lookup-dropdown', function(e) {
 		return s !== '' ? s.replace('\\n', '\n') : null
 	}
 
-	field_types = {}
+	field_types = obj() // {type->field}
 
 	// numbers
 

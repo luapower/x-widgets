@@ -2112,7 +2112,7 @@ component('x-row-form', function(e) {
 	grid.construct(e, false)
 
 	function bind_nav(nav, on) {
-		if (!e.attached)
+		if (!e.bound)
 			return
 		if (!nav)
 			return

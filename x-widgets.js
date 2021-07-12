@@ -30,21 +30,12 @@ publishes:
 	e.iswidget: t
 	e.type
 	e.initialized: t|f
-	e.attached: t|f
 calls:
 	e.init()
 fires:
 	^document.'widget_bind' (on)
 	^document.'ID.bind' (on)
 --------------------------------------------------------------------------- */
-
-// overriding methods on instances.
-method(Element, 'override', function(method, func) {
-	let inherited = this[method] || noop
-	this[method] = function(...args) {
-		return func.call(this, inherited, ...args)
-	}
-})
 
 function set_attr_func(e, k, opt) {
 	let to_attr
@@ -95,11 +86,14 @@ function component(tag, category, cons) {
 
 	function initialize(e, ...args) {
 
-		e.on('bind', function(on) {
+		e.bool_attr('_bind', true)
+
+		e.do_bind = function(on) {
 			if (on) {
 				let t0 = DEBUG_ATTACH_TIME && time()
 
 				this.begin_update()
+				this.fire('bind', on)
 				if (this.id) {
 					document.fire('widget_bind', this, true)
 					document.fire(this.id+'.bind', this, true)
@@ -118,7 +112,7 @@ function component(tag, category, cons) {
 					document.fire(this.id+'.bind', this, false)
 				}
 			}
-		})
+		}
 
 		e.debug_name = function(prefix) {
 			prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
@@ -158,15 +152,14 @@ function component(tag, category, cons) {
 		if (window.xmodule) {
 			xmodule.init_instance(e, opt)
 		} else {
-			e.begin_update()
 			for (let k in opt)
 				e.set_prop(k, opt[k])
-			e.end_update()
 		}
 
 		// call the after-properties-are-set init function.
 		e.initialized = true
 		e.init()
+		e.update() // ...deferred on first call to bind().
 	}
 
 	bind_component(tag, initialize)
@@ -230,13 +223,13 @@ let component_deferred_updating = function(e) {
 	e.updating = 0
 
 	e.begin_update = function() {
-		if (!e.attached)
+		if (!e.bound)
 			return
 		e.updating++
 	}
 
 	e.end_update = function() {
-		if (!e.attached)
+		if (!e.bound)
 			return
 		assert(e.updating)
 		e.updating--
@@ -256,7 +249,7 @@ let component_deferred_updating = function(e) {
 		opt = opt ? assign_opt(opt, opt1) : opt1
 		if (e.updating)
 			return
-		if (!e.attached)
+		if (!e.bound)
 			return
 		in_update = true
 		e.do_update(opt)
@@ -296,11 +289,7 @@ function component_props(e, iprops) {
 
 	function resolve_widget_id(id) {
 		let e = window[id]
-		return isobject(e) && e.iswidget && e.attached && e.can_select_widget ? e : null
-	}
-
-	e.property = function(prop, getter, setter) {
-		property(this, prop, {get: getter, set: setter})
+		return isobject(e) && e.iswidget && e.bound && e.can_select_widget ? e : null
 	}
 
 	e.props = {}
@@ -398,7 +387,7 @@ function component_props(e, iprops) {
 				document.on('widget_bind', widget_bind, on)
 			}
 			function id_changed(id1, id0) {
-				if (e.attached)
+				if (e.bound)
 					e[REF] = resolve(id1)
 				if ((id1 != null) != (id0 != null)) {
 					e.on('bind', bind, id1 != null)
@@ -1216,14 +1205,14 @@ component('x-tooltip', function(e) {
 		remove_timer(t)
 	}
 
+	override_property_setter(e, 'hidden', function(inherited, v) {
+		inherited.call(this, v)
+		e.update()
+	})
+
 	e.property('visible',
 		function()  { return !e.hidden },
-		function(v) {
-			e.show(!!v)
-			// TODO: what we really want is an event on changes on prop `hidden`
-			// and css `display`, eg. show() will not call update().
-			e.update()
-		}
+		function(v) { e.hidden = !v },
 	)
 
 	// keyboard, mouse & focusing behavior ------------------------------------
@@ -2034,10 +2023,6 @@ component('x-pagelist', 'Containers', function(e) {
 		inh_replace_child_widget(old_widget, new_widget)
 	}
 
-	e.init = function() {
-		e.update()
-	}
-
 	function update_tab_title(tab) {
 		tab.title_div.set(tab.item.title, 'pre-wrap')
 		tab.title_div.title = tab.item.title
@@ -2403,10 +2388,6 @@ component('x-split', 'Containers', function(e) {
 		e.auto_pane.min_h = null
 
 		document.fire('layout_changed')
-	}
-
-	e.init = function() {
-		e.update()
 	}
 
 	e.set_orientation = e.update
@@ -2947,7 +2928,7 @@ component('x-switcher', 'Containers', function(e) {
 	function bind_nav(nav, on) {
 		if (!nav)
 			return
-		if (!e.attached)
+		if (!e.bound)
 			return
 		nav.on('focused_row_changed'     , update, on)
 		nav.on('focused_row_val_changed' , update, on)
@@ -3146,7 +3127,7 @@ component('x-mu', function(e) {
 		e.update()
 	}
 	function bind_nav(nav, url, on, reload) {
-		if (on && !e.attached)
+		if (on && !e.bound)
 			return
 		if (nav) {
 			nav.on('focused_row_changed'     , update, on)
@@ -3217,7 +3198,7 @@ component('x-pagenav', function(e) {
 		let b = button()
 		b.class('x-pagenav-button')
 		b.class('selected', page == cur_page())
-		b.bool_attr('disabled', page >= 1 && page <= e.page_count && page != cur_page() ? null : true)
+		b.bool_attr('disabled', page >= 1 && page <= e.page_count && page != cur_page() || null)
 		b.title = or(title, or(text, S('page', 'Page') + ' ' + page))
 		b.href = href !== false ? e.page_url(page) : null
 		b.set(or(text, page))

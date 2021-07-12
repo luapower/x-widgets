@@ -258,7 +258,15 @@ function stacktrace() {
 	}
 }
 
-// extending built-in objects ------------------------------------------------
+/* extending built-in objects ------------------------------------------------
+
+NOTE: built-in methods are actually "data properties" that shadow normal
+methods so if we want to override one we need to replace the property.
+These special kinds of methods are also non-enumerable, unlike normal
+methods, which is useful if we want to extend Object without injecting
+enumerables into it.
+
+*/
 
 // extend an object with a property, checking for upstream name clashes.
 function property(cls, prop, get, set) {
@@ -269,9 +277,6 @@ function property(cls, prop, get, set) {
 }
 
 // extend an object with a method, checking for upstream name clashes.
-// NOTE: does not actually create methods but "data properties" which happen
-// to have their "value" be a function object. These can be called like
-// methods but come before methods in the look-up chain!
 function method(cls, meth, func) {
 	property(cls, meth, {
 		value: func,
@@ -279,9 +284,11 @@ function method(cls, meth, func) {
 	})
 }
 
+// override a method, with the ability to override a built-in method.
 function override(cls, meth, func) {
 	let proto = cls.prototype || cls
-	let inherited = proto[meth] || noop
+	let inherited = proto[meth]
+	assert(inherited, '{0}.{1} does not exists', cls.name, meth)
 	function wrapper(...args) {
 		return func.call(this, inherited, ...args)
 	}
@@ -307,6 +314,7 @@ function alias(cls, new_name, old_name) {
 	Object.defineProperty(proto, new_name, d)
 }
 
+// override a property setter in a prototype *or instance*.
 function override_property_setter(cls, prop, set) {
 	let proto = cls.prototype || cls
 	let d0 = proto.getPropertyDescriptor(prop)

@@ -6,6 +6,7 @@ require'xrowset'
 
 local format = string.format
 local concat = table.concat
+local outdent = glue.outdent
 
 local function colname(sch, tbl, col)
 	return format('%s\0%s\0%s', sch:lower(), tbl:lower(), col:lower())
@@ -16,7 +17,7 @@ local function tblname(sch, tbl)
 end
 
 local function tblname_arg(s)
-	return s:match'^(.-)%z(.-)$'
+	return s:match'^(.-)%z(.*)$'
 end
 
 local col_defs = memoize(function(tbls)
@@ -36,7 +37,7 @@ local col_defs = memoize(function(tbls)
 	local where = {}
 	for i,tbl in ipairs(glue.names(tbls)) do
 		local sch, tbl = tblname_arg(tbl)
-		where[i] = sqlparams('(c.table_schema = ? and c.table_name = ?)', sch, tbl)
+		where[i] = sqlparams('(c.table_schema = ? and c.table_name = ?)', {sch, tbl})
 	end
 	where = concat(where, '\n\t\t\tor ')
 
@@ -216,38 +217,38 @@ local function where_sql(tbl, pk, suffix)
 	return concat(t)
 end
 
-local function insert_sql(tbl, fields, values)
-	local t = {'insert into ', sqlname(tbl), ' set '}
+local function set_sql(fields, values)
+	local t = {}
 	for _,k in ipairs(fields) do
 		local v = values[k]
 		if v ~= nil then
-			append(t, sqlname(k), ' = ', sqlval(v), ', ')
+			add(t, sqlname(k)..' = '..sqlval(v))
 		end
 	end
-	if t[#t] == ' set ' then --no fields.
-		t[#t] = ' values ()'
-	else
-		t[#t] = nil --remove the last ',  '.
+	return t
+end
+
+local function insert_sql(tbl, fields, values)
+	local t = set_sql(fields, values)
+	if #t == 0 then --no fields, special syntax.
+		return 'insert into ::_tbl default values', {_tbl = tbl}
 	end
-	return concat(t)
+	return outdent[[
+		insert into ::_tbl set
+			{_set}
+	]], update({_tbl = tbl, _set = concat(t, ',\n\t\t')}, values)
 end
 
 local function update_sql(tbl, fields, where_sql, values)
-	local t = {'update ', sqlname(tbl), ' set '}
-	for _,k in ipairs(fields) do
-		local v = values[k]
-		if v ~= nil then
-			append(t, sqlname(k), ' = ', sqlval(v), ', ')
-		end
-	end
-	t[#t] = ' ' --replace the last comma.
-	add(t, (sqlparams(where_sql, values)))
-	return concat(t)
+	local t = set_sql(fields, values)
+	return outdent([[
+		update ::_tbl set
+			{_set}
+		where ]]..where_sql), update({_tbl = tbl, _set = concat(t, ',\n\t\t')}, values)
 end
 
 local function delete_sql(tbl, where_sql, values)
-	return concat{'delete from ', sqlname(tbl), ' ',
-		(sqlparams(where_sql, values))}
+	return 'delete from ::_tbl where '..where_sql, update({_tbl = tbl}, values)
 end
 
 field_name_attrs = {}
@@ -258,9 +259,9 @@ field_type_attrs = {}
 	db          : optional, connection alias to query on.
 	schema      : optional, different current schema to use for query.
 
-	select      : 'select without where clause'
-	where_all   : 'where clause for all rows'
-	where_row   : 'where clause for single row: tbl.pk1 = :pk1_alias:old and ...'
+	select      : select without where clause.
+	where_all   : where clause for all rows (without the word "where").
+	where_row   : where clause for single row: 'tbl.pk1 = :pk1_alias:old and ...'
 
 	select + where_all => select_all
 	select + where_row => select_row
@@ -268,7 +269,18 @@ field_type_attrs = {}
 	pk          : 'pk1_alias ...', for when MySQL can't deduce it from the query.
 	id_table    : 'tbl', for trees, when multiple auto_increment fields are selected.
 
-	update_tables : {{table='tbl', }, ...}
+	update_tables : {{table=,...},...}
+
+		table         : 'tbl'
+		fields        : 'foo bar'
+
+		fields => insert_fields
+		fields => update_fields
+
+		table + insert_fields => insert_sql
+		table + update_fields + where_row => update_sql
+		table + where_row => delete_sql
+
 
 ]]
 function sql_rowset(...)
@@ -300,7 +312,7 @@ function sql_rowset(...)
 		if rs.select_row then
 			use_schema()
 			function rs:load_row(row_values, param_values)
-				return query1(rs.select_row, update({}, param_values, row_values))
+				return pquery1(rs.select_row, update({}, param_values, row_values))
 			end
 		end
 
@@ -335,38 +347,60 @@ function sql_rowset(...)
 			return res
 		end
 
-		--[==[
 		rs.update_tables = rs.update_table and {rs.update_table} or rs.update_tables
 		if rs.update_tables then
 			for _,t in ipairs(rs.update_tables) do
 
-				t.update_fields = glue.names(t.update_fields)
-				t.insert_fields = glue.names(t.insert_fields) or t.update_fields
+				t.insert_fields = glue.names(t.insert_fields or t.fields)
+				t.update_fields = glue.names(t.update_fields or t.fields)
 
-				local insert_row = rs.insert_row or glue.noop
-				function rs:insert_row(row)
-					insert_row(self, row)
-					local t = query(insert_sql(t.table, t.insert_fields, row))
-					return t.affected_rows, t.insert_id ~= 0 and t.insert_id or nil
+				if t.insert_sql or (t.table and t.insert_fields) then
+					local insert_row = rs.insert_row or glue.noop
+					function rs:insert_row(row)
+						insert_row(self, row)
+						local sql, params
+						if t.insert_sql then
+							sql, params = t.insert_sql, row
+						else
+							sql, params = insert_sql(t.table, t.insert_fields, row)
+						end
+						local t = pquery(t.insert_sql, row)
+						return t.affected_rows, t.insert_id ~= 0 and t.insert_id or nil
+					end
 				end
 
-				local update_row = rs.update_row or glue.noop
-				if rs.update_fields and rs.where_row_update then
+				if t.update_sql or (t.table and t.update_fields and rs.where_row) then
+					local update_row = rs.update_row or glue.noop
 					function rs:update_row(row)
-						local t = query(update_sql(rs.update_table, rs.update_fields, rs.where_row_update, row))
+						update_row(self, row)
+						local sql, params
+						if t.update_sql then
+							sql, params = t.update_sql, row
+						else
+							sql, params = update_sql(t.table, t.update_fields, rs.where_row, row)
+						end
+						local t = pquery(sql, params)
 						return t.affected_rows
 					end
 				end
 
-				if rs.where_row then
+				if t.delete_sql or (t.table and rs.where_row) then
+					local delete_row = rs.delete_row or glue.noop
 					function rs:delete_row(row)
-						local t = query(delete_sql(rs.update_table, rs.where_row, row))
+						delete_row(self, row)
+						local sql, params
+						if t.delete_sql then
+							sql, params = t.delete_sql, row
+						else
+							sql, params = delete_sql(t.table, rs.where_row, row)
+						end
+						local t = pquery(sql, params)
 						return t.affected_rows
 					end
 				end
+
 			end
 		end
-		]==]
 
 	end, ...)
 end

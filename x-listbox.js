@@ -44,11 +44,10 @@ function listbox_widget(e) {
 
 	e.clear()
 
-	function format_item(row, val) {
+	function format_item(row, val) { // stub
 		if (val instanceof HTMLElement) // element, dupe it.
 			return val.clone()
-		// TODO: replace val in row and pass the modified row !
-		return create_item(row, val)
+		return div(0, val) // string or we don't know, use `item_field.format` to specify.
 	}
 
 	function create_item(row) {
@@ -59,7 +58,7 @@ function listbox_widget(e) {
 	}
 
 	e.do_update_item = function(item, row) {
-		e.replace(item, e.create_item(row))
+		e.replace(item, create_item(row))
 	}
 
 	e.prop('items', {store: 'var', private: true})
@@ -78,7 +77,7 @@ function listbox_widget(e) {
 			rows.push([item])
 
 		e.rowset = {
-			fields: [{format: (val, row) => format_item(row, val)}],
+			fields: [assign({format: (val, row) => format_item(row, val)}, e.item_field)],
 			rows: rows,
 		}
 
@@ -410,6 +409,7 @@ component('x-list-dropdown', function(e) {
 			val_col: e.val_col,
 			display_col: e.display_col,
 			items: e.items,
+			item_field: e.item_field,
 			rowset: e.rowset,
 			rowset_name: e.rowset_name,
 			theme: e.theme,
