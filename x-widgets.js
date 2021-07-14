@@ -1926,10 +1926,9 @@ widget_items_widget = function(e) {
 		e.items = items
 	}
 
-	let items_tag = e.$('items')[0]
-	if (items_tag) {
-		let html_items = [...items_tag.at]
-		items_tag.remove()
+	if (e.at.length) {
+		let html_items = [...e.at]
+		e.clear()
 		return html_items
 	}
 
@@ -2397,10 +2396,10 @@ component('x-split', 'Containers', function(e) {
 	e.set_min_size    = e.update
 
 	e.prop('orientation', {store: 'var', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal', attr: true})
-	e.prop('fixed_side' , {store: 'var', type: 'enum', enum_values: ['first', 'second'], default: 'first'})
-	e.prop('resizeable' , {store: 'var', type: 'bool', default: true})
-	e.prop('fixed_size' , {store: 'var', type: 'number', default: 200})
-	e.prop('min_size'   , {store: 'var', type: 'number', default:   0})
+	e.prop('fixed_side' , {store: 'var', type: 'enum', enum_values: ['first', 'second'], default: 'first', attr: true})
+	e.prop('resizeable' , {store: 'var', type: 'bool', default: true, attr: true})
+	e.prop('fixed_size' , {store: 'var', type: 'number', default: 200, attr: true})
+	e.prop('min_size'   , {store: 'var', type: 'number', default: 0})
 
 	// resizing ---------------------------------------------------------------
 
@@ -2509,8 +2508,10 @@ component('x-split', 'Containers', function(e) {
 
 })
 
-function hsplit(...options) { return split(...options) }
-function vsplit(...options) { return split(assign_opt({orientation: 'vertical'}, ...options)) }
+component('x-vsplit', function(e) {
+	split.construct(e)
+	return {orientation: 'vertical'}
+})
 
 // ---------------------------------------------------------------------------
 // toaster

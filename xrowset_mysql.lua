@@ -170,6 +170,7 @@ local function field_defs_from_query_result_cols(col_info, id_table)
 		if col.auto_increment then
 			field.focusable = false
 			field.editable = false
+			field.visible = false
 			field.is_id = true
 			id_col = id_col or col.name
 			if col.orig_table == id_table then
@@ -221,6 +222,9 @@ local function set_sql(fields, values)
 	local t = {}
 	for _,k in ipairs(fields) do
 		local v = values[k]
+		if v == nil then
+			v = values['param:'..k]
+		end
 		if v ~= nil then
 			add(t, sqlname(k)..' = '..sqlval(v))
 		end
@@ -231,28 +235,28 @@ end
 local function insert_sql(tbl, fields, values)
 	local t = set_sql(fields, values)
 	if #t == 0 then --no fields, special syntax.
-		return 'insert into ::_tbl default values', {_tbl = tbl}
+		return 'insert into ::_tbl values ()', {_tbl = tbl}
 	end
-	return outdent[[
+	return outdent([[
 		insert into ::_tbl set
 			{_set}
-	]], update({_tbl = tbl, _set = concat(t, ',\n\t\t')}, values)
+	]]), update({_tbl = tbl, _set = concat(t, ',\n\t\t\t')}, values)
 end
 
 local function update_sql(tbl, fields, where_sql, values)
 	local t = set_sql(fields, values)
+	if #t == 0 then
+		return
+	end
 	return outdent([[
 		update ::_tbl set
 			{_set}
-		where ]]..where_sql), update({_tbl = tbl, _set = concat(t, ',\n\t\t')}, values)
+		where ]])..where_sql, update({_tbl = tbl, _set = concat(t, ',\n\t\t\t')}, values)
 end
 
 local function delete_sql(tbl, where_sql, values)
 	return 'delete from ::_tbl where '..where_sql, update({_tbl = tbl}, values)
 end
-
-field_name_attrs = {}
-field_type_attrs = {}
 
 --[[
 
@@ -295,18 +299,27 @@ function sql_rowset(...)
 		rs.pk = glue.names(rs.pk)
 
 		if not rs.select_all and rs.select then
-			rs.select_all = rs.select .. (rs.where_all and 'where '..rs.where_all or '')
+			rs.select_all = outdent(rs.select)
+				.. (rs.where_all and '\nwhere '..rs.where_all or '')
 		end
 
 		if not rs.select_row and rs.select and rs.where_row then
-			rs.select_row = rs.select .. 'where ' .. rs.where_row
+			rs.select_row = outdent(rs.select) .. '\nwhere ' .. rs.where_row
 		end
 
 		assert(rs.select_all)
 
+		local function query(...)
+			return pquery_on(rs.db, rs.query_options or empty, ...)
+		end
+
+		local function query1(...)
+			return pquery1_on(rs.db, rs.query_options or empty, ...)
+		end
+
 		local function use_schema()
 			if not rs.schema then return end
-			query_on(rs.db, 'use '..rs.schema)
+			pquery('use '..rs.schema)
 		end
 
 		if rs.select_row then
@@ -318,19 +331,11 @@ function sql_rowset(...)
 
 		function rs:load_rows(res, param_values)
 			use_schema()
-			local rows, cols, params = query_on(rs.db, rs.query_options or empty,
-				rs.select_all, param_values)
+			pp(param_values)
+			local rows, cols, params = query(rs.select_all, param_values)
 
 			local fields, pk, id_col =
 				field_defs_from_query_result_cols(cols, rs.id_table)
-
-			for i,field in ipairs(fields) do
-				update(field,
-					field_name_attrs[field.name],
-					field_type_attrs[field.type],
-					rs.field_attrs and rs.field_attrs[field.name]
-				)
-			end
 
 			merge(res, {
 				fields = fields,
@@ -349,6 +354,9 @@ function sql_rowset(...)
 
 		rs.update_tables = rs.update_table and {rs.update_table} or rs.update_tables
 		if rs.update_tables then
+
+			local mins, mupd, mdel
+
 			for _,t in ipairs(rs.update_tables) do
 
 				t.insert_fields = glue.names(t.insert_fields or t.fields)
@@ -356,6 +364,7 @@ function sql_rowset(...)
 
 				if t.insert_sql or (t.table and t.insert_fields) then
 					local insert_row = rs.insert_row or glue.noop
+					mins = mins or (rs.insert_row and true)
 					function rs:insert_row(row)
 						insert_row(self, row)
 						local sql, params
@@ -364,42 +373,59 @@ function sql_rowset(...)
 						else
 							sql, params = insert_sql(t.table, t.insert_fields, row)
 						end
-						local t = pquery(t.insert_sql, row)
-						return t.affected_rows, t.insert_id ~= 0 and t.insert_id or nil
+						if sql then
+							local r = query(sql, params)
+							local id = r.insert_id ~= 0 and r.insert_id or nil
+							if id then
+								row[t.autoinc] = id
+							end
+							return r.affected_rows, id
+						end
 					end
 				end
 
-				if t.update_sql or (t.table and t.update_fields and rs.where_row) then
+				if t.update_sql or (t.table and t.update_fields and t.where) then
 					local update_row = rs.update_row or glue.noop
+					mupd = mupd or (rs.update_row and true)
 					function rs:update_row(row)
 						update_row(self, row)
 						local sql, params
 						if t.update_sql then
 							sql, params = t.update_sql, row
 						else
-							sql, params = update_sql(t.table, t.update_fields, rs.where_row, row)
+							sql, params = update_sql(t.table, t.update_fields, t.where, row)
 						end
-						local t = pquery(sql, params)
-						return t.affected_rows
+						if sql then
+							local r = query(sql, params)
+							return r.affected_rows
+						end
 					end
 				end
 
-				if t.delete_sql or (t.table and rs.where_row) then
+				if t.delete_sql or (t.table and t.where) then
 					local delete_row = rs.delete_row or glue.noop
+					mdel = mdel or (rs.delete_row and true)
 					function rs:delete_row(row)
 						delete_row(self, row)
 						local sql, params
 						if t.delete_sql then
 							sql, params = t.delete_sql, row
 						else
-							sql, params = delete_sql(t.table, rs.where_row, row)
+							sql, params = delete_sql(t.table, t.where, row)
 						end
-						local t = pquery(sql, params)
-						return t.affected_rows
+						if sql then
+							local r = query(sql, params)
+							return r.affected_rows
+						end
 					end
 				end
 
 			end
+
+			if mins then local insert_row = rs.insert_row; function rs.insert_row(...) return patomic(insert_row, ...) end end
+			if mupd then local update_row = rs.update_row; function rs.update_row(...) return patomic(update_row, ...) end end
+			if mdel then local delete_row = rs.delete_row; function rs.delete_row(...) return patomic(delete_row, ...) end end
+
 		end
 
 	end, ...)

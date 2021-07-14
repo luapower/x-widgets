@@ -1458,11 +1458,11 @@ function live_move_mixin(e) {
 
 	e = e || {}
 
-	let move_i1, move_i2, i1, i2, i1x, i2x
+	let move_i1, move_i2, i1, i2, i1x, i2x, offsetx
 	let move_x, over_i, over_p, over_x
-	let advance
+	let sizes
 
-	e.move_element_start = function(move_i, move_n, _i1, _i2, _i1x, _i2x) {
+	e.move_element_start = function(move_i, move_n, _i1, _i2, _i1x, _i2x, _offsetx) {
 		move_n = or(move_n, 1)
 		move_i1 = move_i
 		move_i2 = move_i + move_n
@@ -1473,15 +1473,17 @@ function live_move_mixin(e) {
 		i2  = _i2
 		i1x = _i1x
 		i2x = _i2x
-		advance = advance || e.movable_element_advance || (() => 1)
+		offsetx = _offsetx || 0
+		sizes = []
+		for (let i = i1; i < i2; i++)
+			sizes[i] = e.movable_element_size(i)
 		if (i1x == null) {
 			assert(i1 == 0)
 			i1x = 0
 			i2x = i1x
-			for (let i = i1, n; i < i2; i += n) {
-				n = advance(i)
+			for (let i = i1; i < i2; i++) {
 				if (i < move_i1 || i >= move_i2)
-					i2x += e.movable_element_size(i, n)
+					i2x += sizes[i]
 			}
 		}
 	}
@@ -1496,19 +1498,16 @@ function live_move_mixin(e) {
 		let x0 = i1x
 		let last_over_i = over_i
 		let new_over_i, new_over_p
-		for (let i = i1, n; i < i2; i += n) {
-			n = advance(i)
+		for (let i = i1; i < i2; i++) {
 			if (i < move_i1 || i >= move_i2) {
-				let w = e.movable_element_size(i, n)
+				let w = sizes[i]
 				let x1 = x + w / 2
 				if (elem_x < x1) {
 					new_over_i = i
 					new_over_p = lerp(elem_x, x0, x1, 0, 1)
-					if (i > i1 || advance(i1 - 1) == 1) {
-						over_i = new_over_i
-						over_p = new_over_p
-						return new_over_i != last_over_i
-					}
+					over_i = new_over_i
+					over_p = new_over_p
+					return new_over_i != last_over_i
 				}
 				x += w
 				x0 = x1
@@ -1517,11 +1516,9 @@ function live_move_mixin(e) {
 		new_over_i = i2
 		x1 = i2x
 		new_over_p = lerp(elem_x, x0, x1, 0, 1)
-		if (advance(i2 - 1) == 1) {
-			over_i = new_over_i
-			over_p = new_over_p
-			return new_over_i != last_over_i
-		}
+		over_i = new_over_i
+		over_p = new_over_p
+		return new_over_i != last_over_i
 	}
 
  	// `[i1..i2)` index generator with `[move_i1..move_i2)` elements moved.
@@ -1544,8 +1541,8 @@ function live_move_mixin(e) {
 	function set_moving_element_pos(x, moving) {
 		if (move_ri1 != null)
 			for (let i = move_ri1; i < move_ri2; i++) {
-				e.set_movable_element_pos(i, x, moving)
-				x += e.movable_element_size(i, 1)
+				e.set_movable_element_pos(i, offsetx + x, moving)
+				x += sizes[i]
 			}
 	}
 
@@ -1567,8 +1564,8 @@ function live_move_mixin(e) {
 						move_ri1 = or(move_ri1, i)
 						move_ri2 = i+1
 					} else
-						e.set_movable_element_pos(i, x)
-					x += e.movable_element_size(i, 1)
+						e.set_movable_element_pos(i, offsetx + x)
+					x += sizes[i]
 				})
 			}
 			set_moving_element_pos(move_x, true)

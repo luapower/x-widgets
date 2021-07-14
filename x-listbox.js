@@ -35,13 +35,14 @@ function listbox_widget(e) {
 
 	e.display_col = 0
 
-	let items_tag = e.$('items')[0]
-	let html_items = items_tag && [...items_tag.at]
-
 	// embedded template: doesn't work if the listbox itself is declared in a template.
 	let item_template = e.$('script[type="text/x-mustache"]')[0]
-	item_template = item_template && item_template.html
+	if (item_template) {
+		item_template.remove()
+		item_template = item_template.html
+	}
 
+	let html_items = [...e.at]
 	e.clear()
 
 	function format_item(row, val) { // stub
@@ -167,11 +168,15 @@ function listbox_widget(e) {
 
 	e.set_movable_element_pos = function(i, x) {
 		let item = e.at[i]
-		item[e.axis] = x - item._offset
+		// we use x1 and y1 instead of x and y because <img> defines x and y props.
+		item[e.axis == 'x' ? 'x1' : 'y1'] = x - item._offset
 	}
 
 	e.movable_element_size = function(i) {
-		return e.at[i][e.axis == 'x' ? 'offsetWidth' : 'offsetHeight']
+		let item = e.at[i]
+		return item[e.axis == 'x' ? 'offsetWidth' : 'offsetHeight'] +
+			num(item.css('margin-'+(e.axis == 'x' ? 'left'  : 'top'   ))) +
+			num(item.css('margin-'+(e.axis == 'x' ? 'right' : 'bottom')))
 	}
 
 	function item_pointerdown(ev, mx, my) {
@@ -182,11 +187,6 @@ function listbox_widget(e) {
 		}
 
 		e.focus()
-
-		// let the href do its thing on pointerup.
-		if (this.href) {
-			return false
-		}
 
 		if (!e.focus_cell(this.index, null, 0, 0, {
 			input: e,
@@ -227,7 +227,8 @@ function listbox_widget(e) {
 						item._offset = item[e.axis == 'x' ? 'ox' : 'oy']
 						item.class('moving', ri >= move_ri1 && ri <= move_ri2)
 					}
-					e.move_element_start(move_ri1, move_n, 0, e.len)
+					let item1_offset = num(e.at[0].css('margin-'+(e.axis == 'x' ? 'left' : 'top')))
+					e.move_element_start(move_ri1, move_n, 0, e.len, null, null, item1_offset)
 					drag_mx = down_mx + e.scrollLeft - e.at[move_ri1].ox
 					drag_my = down_my + e.scrollTop  - e.at[move_ri1].oy
 					mx0 = mx
@@ -260,12 +261,17 @@ function listbox_widget(e) {
 				e.class('moving', false)
 				for (let item of e.children) {
 					item.class('moving', false)
-					item.x = null
-					item.y = null
+					item.x1 = null
+					item.y1 = null
 				}
 
 			} else if (!(ev.shiftKey || ev.ctrlKey)) {
 				e.fire('val_picked', {input: e}) // picker protocol
+			}
+
+			// let the href do its thing on pointerup.
+			if (this.href) {
+				return
 			}
 
 			return false

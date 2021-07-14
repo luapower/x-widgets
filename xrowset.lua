@@ -8,13 +8,17 @@ local raise = errors.raise
 
 rowset = {}
 
-action['rowset.json'] = function(name, ...)
-	return check(rowset[name])(...)
+action['rowset.json'] = function(name)
+	return check(rowset[name])()
 end
+
+field_name_attrs = {}
+field_type_attrs = {}
 
 function virtual_rowset(init, ...)
 
 	local rs = {}
+	setmetatable(rs, rs)
 
 	rs.can_edit = true
 	rs.can_add_rows = true
@@ -32,6 +36,20 @@ function virtual_rowset(init, ...)
 			params = rs.params,
 		}
 		rs:load_rows(res, param_values)
+
+		local hide_fields = glue.index(glue.names(rs.hide_fields) or glue.empty)
+		for i,field in ipairs(res.fields) do
+			if field.visible == nil and hide_fields[field.name] then
+				field.visible = false
+			end
+			update(field,
+				field_name_attrs[field.name],
+				field_type_attrs[field.type],
+				rs.field_attrs and rs.field_attrs[field.name]
+			)
+		end
+
+
 		return res
 	end
 
@@ -198,10 +216,24 @@ function virtual_rowset(init, ...)
 	end
 
 	function rs:respond()
+		local filter = json_arg(args'filter') or {}
+		local params = {}
+		params.lang = lang()
+		local t = {}
+		for k,v in pairs(params) do
+			t['param:'..k] = v
+		end
+		params.filter = filter
 		if method'post' then
-			return rs:apply_changes(post())
+			local changes = post()
+			for _,row_change in ipairs(changes.rows) do
+				if row_change.values then
+					update(row_change.values, t)
+				end
+			end
+			return rs:apply_changes(changes)
 		else
-			return rs:load(json(args'params'))
+			return rs:load(params)
 		end
 	end
 
@@ -210,6 +242,8 @@ function virtual_rowset(init, ...)
 	if not rs.insert_row then rs.can_add_rows    = false end
 	if not rs.update_row then rs.can_change_rows = false end
 	if not rs.delete_row then rs.can_remove_rows = false end
+
+	rs.__call = rs.respond
 
 	return rs
 end

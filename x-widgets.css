@@ -2599,6 +2599,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	display: flex;
 }
 
+.x-richtext-actionbar-embedded {
+	position: initial;
+	flex-wrap: wrap;
+}
+
 .x-richtext-button {
 	color: inherit;
 	font-size: inherit;

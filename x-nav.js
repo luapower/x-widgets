@@ -840,9 +840,10 @@ function nav_widget(e) {
 			e.param_vals = param_vals || false
 		} else {
 			e.param_vals = []
+			let pmap = param_map(e.params)
 			for (let [row] of e.param_nav.selected_rows) {
 				let vals = obj()
-				for (let [col, param] of param_map(e.params)) {
+				for (let [col, param] of pmap) {
 					let field = e.param_nav.all_fields[col]
 					if (!field)
 						warn('param nav is missing col', col)
@@ -2975,7 +2976,26 @@ function nav_widget(e) {
 			e.reset()
 			return
 		}
-		let uri = e.param_vals ? url(e.rowset_url, {params: json(e.param_vals)}) : e.rowset_url
+		let uri = e.rowset_url
+		if (e.param_vals) {
+			let u = url_arg(uri)
+			u.args = u.args || {}
+
+			// compress param_vals into a value array for single-key pks.
+			let param_vals
+			let cols = []
+			for (let [col, param] of param_map(e.params))
+				cols.push(col)
+			if (cols.length == 1) {
+				let col = cols[0]
+				param_vals = e.param_vals.map(vals => vals[col])
+			} else {
+				param_vals = e.param_vals
+			}
+
+			u.args.filter = json(param_vals)
+			uri = url(u)
+		}
 		if (requests && requests.size && !e.load_request) {
 			e.notify('error',
 				S('error_load_while_saving', 'Cannot reload while saving is in progress.'))

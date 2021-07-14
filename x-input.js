@@ -1936,7 +1936,7 @@ component('x-date-dropdown', 'Input', function(e) {
 // richtext
 // ---------------------------------------------------------------------------
 
-component('x-richtext', 'Input', function(e) {
+component('x-richtext', function(e) {
 
 	e.class('x-stretched')
 
@@ -1945,26 +1945,36 @@ component('x-richtext', 'Input', function(e) {
 	editable_widget(e)
 	contained_widget(e)
 
-	e.content_div = div({class: 'x-richedit-content'})
+	e.content_div = div({class: 'x-richtext-content'})
 	e.add(e.content_div)
 
 	// content property
 
-	e.set_content = function(s) { e.content_div.html = s }
-	e.prop('content', {store: 'var', slot: 'lang'})
+	e.get_content = function() {
+		return e.content_div.html
+	}
+
+	e.set_content = function(s) {
+		e.content_div.html = s
+		e.fire('content_changed')
+	}
+	e.prop('content', {slot: 'lang'})
 
 	// widget editing ---------------------------------------------------------
 
 	e.set_widget_editing = function(v) {
 		if (!v) return
 		richtext_widget_editing(e)
-		e.set_widget_editing(true)
+		e.set_widget_editing = function(v) {
+			e.editing = v
+		}
+		e.editing = true
 	}
 
 })
 
 // ---------------------------------------------------------------------------
-// richedit widget editing mixin
+// richtext widget editing mixin
 // ---------------------------------------------------------------------------
 
 {
@@ -2057,7 +2067,7 @@ let actions = {
 	},
 }
 
-function richtext_widget_editing(e) {
+function richtext_widget_editing(e, embedded) {
 
 	let button_pressed
 	function press_button() { button_pressed = true }
@@ -2087,7 +2097,12 @@ function richtext_widget_editing(e) {
 		})
 		e.actionbar.add(button)
 	}
-	e.actionbar.popup(e, 'top', 'left')
+
+	e.actionbar.class('x-richtext-actionbar-embedded', embedded || false)
+	if (embedded)
+		e.insert(0, e.actionbar)
+	else
+		e.actionbar.popup(e, 'top', 'left')
 
 	let barrier
 	let inh_set_content = e.set_content
@@ -2131,10 +2146,11 @@ function richtext_widget_editing(e) {
 		ev.stopPropagation() // prevent exit editing.
 	})
 
-	e.set_widget_editing = function(v) {
+	e.set_editing = function(v) {
 		e.content_div.contentEditable = v
 		e.actionbar.show(v)
 	}
+	e.prop('editing', {store: 'var', private: true})
 
 	e.content_div.on('blur', function() {
 		if (!button_pressed)
@@ -2144,6 +2160,31 @@ function richtext_widget_editing(e) {
 }
 
 }
+
+// ---------------------------------------------------------------------------
+// richedit
+// ---------------------------------------------------------------------------
+
+component('x-richedit', 'Input', function(e) {
+
+	richtext.construct(e)
+	richtext_widget_editing(e, true)
+	e.set_widget_editing = noop
+
+	e.do_update_val = function(v) {
+		e.content = v
+	}
+
+	e.on('content_changed', function() {
+		e.set_val(e.content, {input: e})
+	})
+
+	e.on('bind', function(on) {
+		if (on)
+			e.editing = true
+	})
+
+})
 
 // ---------------------------------------------------------------------------
 // image
@@ -2293,8 +2334,11 @@ component('x-image', 'Input', function(e) {
 	})
 
 	e.file_input.on('change', function() {
-		if (this.files && this.files.length)
+		if (this.files && this.files.length) {
 			e.upload(this.files[0])
+			// reset value or we won't get another change event for the same file.
+			this.value = ''
+		}
 	})
 
 	// download
@@ -3033,10 +3077,7 @@ component('x-form', 'Containers', function(e) {
 	selectable_widget(e)
 	editable_widget(e)
 	contained_widget(e)
-	widget_items_widget(e)
-
-	let dom_items = [...e.at]
-	e.clear()
+	let html_items = widget_items_widget(e)
 
 	// generate a 3-letter value for `grid-area` based on item's `col` attr or `id`.
 	let names = {}
@@ -3061,8 +3102,6 @@ component('x-form', 'Containers', function(e) {
 		}
 	}
 
-	e.detect_resize()
-
 	e.on('resize', function(r) {
 		if (!e.bound)
 			return
@@ -3077,7 +3116,14 @@ component('x-form', 'Containers', function(e) {
 			e.fire('resize', e.rect())
 	})
 
-	return {items: dom_items}
+	e.set_nav = function(nav) {
+		for (let item of e.items)
+			item.nav = nav
+	}
+	e.prop('nav', {store: 'var', private: true})
+	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav', attr: true})
+
+	return {items: html_items}
 
 })
 
