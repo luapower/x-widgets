@@ -749,10 +749,9 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	}
 
-	let do_create_editor = e.do_create_editor
-	e.do_create_editor = function(field, ...opt) {
-		do_create_editor(field, {
-			inner_label: false,
+	let create_editor = e.create_editor
+	e.create_editor = function(field, ...opt) {
+		create_editor(field, {
 			grid_editor_for: e,
 		}, ...opt)
 		if (!e.editor)

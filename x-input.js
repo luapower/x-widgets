@@ -388,7 +388,7 @@ function input_widget(e) {
 
 	e.do_after('do_update', function() {
 		update_info()
-		let s = !e.nolabel && e.label || (e.field && e.field.text) || null
+		let s = !e.nolabel && (e.label || (e.field && e.field.text)) || null
 		e.class('with-label', !!s)
 		e.label_box.set(!e.nolabel ? s || e.label_placeholder() : null)
 	})
@@ -2000,252 +2000,30 @@ component('x-date-dropdown', 'Input', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// richtext
-// ---------------------------------------------------------------------------
-
-component('x-richtext', function(e) {
-
-	e.class('x-stretched')
-
-	serializable_widget(e)
-	selectable_widget(e)
-	editable_widget(e)
-	contained_widget(e)
-
-	e.content_box = div({class: 'x-richtext-content'})
-	e.focus_box = div({class: 'x-focus-box'}, e.content_box)
-	e.add(e.focus_box)
-
-	// content property
-
-	e.get_content = function() {
-		return e.content_box.html
-	}
-
-	e.set_content = function(s) {
-		e.content_box.html = s
-		e.fire('content_changed')
-	}
-	e.prop('content', {slot: 'lang'})
-
-	// widget editing ---------------------------------------------------------
-
-	e.set_widget_editing = function(v) {
-		if (!v) return
-		richtext_widget_editing(e)
-		e.set_widget_editing = function(v) {
-			e.editing = v
-		}
-		e.editing = true
-	}
-
-})
-
-// ---------------------------------------------------------------------------
-// richtext widget editing mixin
-// ---------------------------------------------------------------------------
-
-{
-
-let exec = (command, value = null) => document.execCommand(command, false, value)
-let cstate = (command) => document.queryCommandState(command)
-
-let actions = {
-	bold: {
-		//icon: '<b>B</b>',
-		icon_class: 'fa fa-bold',
-		result: () => exec('bold'),
-		state: () => cstate('bold'),
-		title: 'Bold (Ctrl+B)',
-	},
-	italic: {
-		//icon: '<i>I</i>',
-		icon_class: 'fa fa-italic',
-		result: () => exec('italic'),
-		state: () => cstate('italic'),
-		title: 'Italic (Ctrl+I)',
-	},
-	underline: {
-		//icon: '<u>U</u>',
-		icon_class: 'fa fa-underline',
-		result: () => exec('underline'),
-		state: () => cstate('underline'),
-		title: 'Underline (Ctrl+U)',
-	},
-	code: {
-		//icon: '&lt/&gt',
-		icon_class: 'fa fa-code',
-		result: () => exec('formatBlock', '<pre>'),
-		title: 'Code',
-	},
-	heading1: {
-		icon: '<b>H<sub>1</sub></b>',
-		result: () => exec('formatBlock', '<h1>'),
-		title: 'Heading 1',
-	},
-	heading2: {
-		icon: '<b>H<sub>2</sub></b>',
-		result: () => exec('formatBlock', '<h2>'),
-		title: 'Heading 2',
-	},
-	line: {
-		icon: '&#8213',
-		result: () => exec('insertHorizontalRule'),
-		title: 'Horizontal Line',
-	},
-	link: {
-		//icon: '&#128279',
-		icon_class: 'fa fa-link',
-		result: function() {
-			let url = window.prompt('Enter the link URL')
-			if (url) exec('createLink', url)
-		},
-		title: 'Link',
-	},
-	olist: {
-		//icon: '&#35',
-		icon_class: 'fa fa-list-ol',
-		result: () => exec('insertOrderedList'),
-		title: 'Ordered List',
-	},
-	ulist: {
-		//icon: '&#8226',
-		icon_class: 'fa fa-list-ul',
-		result: () => exec('insertUnorderedList'),
-		title: 'Unordered List',
-	},
-	paragraph: {
-		//icon: '&#182',
-		icon_class: 'fa fa-paragraph',
-		result: () => exec('formatBlock', '<p>'),
-		title: 'Paragraph',
-	},
-	quote: {
-		//icon: '&#8220 &#8221',
-		icon_class: 'fa fa-quote-left',
-		result: () => exec('formatBlock', '<blockquote>'),
-		title: 'Quote',
-	},
-	strikethrough: {
-		//icon: '<strike>S</strike>',
-		icon_class: 'fa fa-strikethrough',
-		result: () => exec('strikeThrough'),
-		state: () => cstate('strikeThrough'),
-		title: 'Strike-through',
-	},
-}
-
-function richtext_widget_editing(e, embedded) {
-
-	let button_pressed
-	function press_button() { button_pressed = true }
-
-	e.actionbar = div({class: 'x-richtext-actionbar'})
-	for (let k in actions) {
-		let action = actions[k]
-		let button = tag('button', {class: 'x-richtext-button', title: action.title})
-		button.attr('tabindex', '-1')
-		button.html = action.icon || ''
-		button.classes = action.icon_class
-		button.on('pointerdown', press_button)
-		let update_button
-		if (action.state) {
-			update_button = function() {
-				button.class('selected', action.state())
-			}
-			e.content_box.on('keyup', update_button)
-			e.content_box.on('pointerup', update_button)
-		}
-		button.on('click', function() {
-			button_pressed = false
-			if (action.result())
-				e.content_box.focus()
-			if (update_button)
-				update_button()
-			return false
-		})
-		e.actionbar.add(button)
-	}
-
-	e.actionbar.class('x-richtext-actionbar-embedded', embedded || false)
-	if (embedded)
-		e.focus_box.insert(0, e.actionbar)
-	else
-		e.actionbar.popup(e, 'top', 'left')
-
-	let barrier
-	let inh_set_content = e.set_content
-	e.set_content = function(...args) {
-		if (barrier) return
-		inh_set_content(...args)
-	}
-
-	e.content_box.on('input', function(ev) {
-		let e1 = ev.target.first
-		if (e1 && e1.nodeType == 3)
-			exec('formatBlock', '<p>')
-		else if (e.content_box.html == '<br>')
-			e.content_box.clear()
-		barrier = true
-		e.content = e.content_box.html
-		barrier = false
-	})
-
-	e.content_box.on('keydown', function(key, shift, ctrl, alt, ev) {
-		if (key === 'Enter')
-			if (document.queryCommandValue('formatBlock') == 'blockquote')
-				after(0, function() { exec('formatBlock', '<p>') })
-			else if (document.queryCommandValue('formatBlock') == 'pre')
-				after(0, function() { exec('formatBlock', '<br>') })
-		ev.stopPropagation()
-	})
-
-	e.content_box.on('keypress', function(key, shift, ctr, alt, ev) {
-		ev.stopPropagation()
-	})
-
-	e.content_box.on('pointerdown', function(ev) {
-		if (!e.widget_editing)
-			return
-		if (!ev.ctrlKey)
-			ev.stopPropagation() // prevent exit editing.
-	})
-
-	e.actionbar.on('pointerdown', function(ev) {
-		ev.stopPropagation() // prevent exit editing.
-	})
-
-	e.set_editing = function(v) {
-		e.content_box.contentEditable = v
-		e.actionbar.show(v)
-	}
-	e.prop('editing', {store: 'var', private: true})
-
-	e.content_box.on('blur', function() {
-		if (!button_pressed)
-			e.widget_editing = false
-	})
-
-}
-
-}
-
-// ---------------------------------------------------------------------------
 // richedit
 // ---------------------------------------------------------------------------
 
 component('x-richedit', 'Input', function(e) {
 
-	richtext.construct(e)
-	richtext_widget_editing(e, true)
-	e.set_widget_editing = noop
+	e.class('x-stretched')
 
-	e.do_update_val = function(v) {
-		e.content = v
+	e.content_box = div({class: 'x-richtext-content'})
+	e.focus_box = div({class: 'x-focus-box'}, e.content_box)
+	e.add(e.focus_box)
+
+	val_widget(e)
+	editable_widget(e)
+	richtext_widget_editing(e)
+
+	e.do_update_val = function(v, ev) {
+		if (ev && ev.input == e)
+			return
+		e.content_box.html = v
 	}
 
 	e.on('content_changed', function() {
-		e.set_val(e.content, {input: e})
+		let v = e.content_box.html
+		e.set_val(v ? v : null, {input: e})
 	})
 
 	e.on('bind', function(on) {

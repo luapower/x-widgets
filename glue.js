@@ -271,7 +271,7 @@ enumerables into it.
 // extend an object with a property, checking for upstream name clashes.
 function property(cls, prop, get, set) {
 	let proto = cls.prototype || cls
-	assert(!(prop in proto), '{0}.{1} already exists', cls.name, prop)
+	assert(!(prop in proto), '{0}.{1} already exists', cls.type || cls.name, prop)
 	let descriptor = isobject(get) ? get : {get: get, set: set}
 	Object.defineProperty(proto, prop, descriptor)
 }
@@ -288,7 +288,7 @@ function method(cls, meth, func) {
 function override(cls, meth, func) {
 	let proto = cls.prototype || cls
 	let inherited = proto[meth]
-	assert(inherited, '{0}.{1} does not exists', cls.name, meth)
+	assert(inherited, '{0}.{1} does not exists', cls.type || cls.name, meth)
 	function wrapper(...args) {
 		return func.call(this, inherited, ...args)
 	}
@@ -310,7 +310,7 @@ method(Object, 'getPropertyDescriptor', function(key) {
 function alias(cls, new_name, old_name) {
 	let proto = cls.prototype || cls
 	let d = proto.getPropertyDescriptor(old_name)
-	assert(d, '{0}.{1} does not exist', cls.name, old_name)
+	assert(d, '{0}.{1} does not exist', cls.type || cls.name, old_name)
 	Object.defineProperty(proto, new_name, d)
 }
 
@@ -318,7 +318,7 @@ function alias(cls, new_name, old_name) {
 function override_property_setter(cls, prop, set) {
 	let proto = cls.prototype || cls
 	let d0 = proto.getPropertyDescriptor(prop)
-	assert(d0, '{0}.{1} does not exist', cls.name, prop)
+	assert(d0, '{0}.{1} does not exist', cls.type || cls.name, prop)
 	let inherited = d0.set || noop
 	function wrapper(v) {
 		return set.call(this, inherited, v)

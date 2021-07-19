@@ -2789,11 +2789,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	margin-left : -1px;
 	background-color: var(--x-faint);
 	border: 0;
-	opacity: .7;
-}
-
-.x-richedit:focus-within > .x-focus-box > .x-richtext-actionbar-embedded {
-	opacity: initial;
 }
 
 .x-richedit > .x-focus-box {

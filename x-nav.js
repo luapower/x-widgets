@@ -231,7 +231,7 @@ editing:
 		e.exit_edit()
 		e.exit_focused_row()
 	calls:
-		e.do_create_editor()
+		e.create_editor()
 
 loading & saving:
 	needs:
@@ -2286,7 +2286,7 @@ function nav_widget(e) {
 
 	e.editor = null
 
-	e.do_create_editor = function(field, ...opt) {
+	e.create_editor = function(field, ...opt) {
 		if (!field.editor_instance) {
 			e.editor = field.editor({
 				// TODO: use original id as template but
@@ -2296,6 +2296,7 @@ function nav_widget(e) {
 				col: field.name,
 				can_select_widget: false,
 				nolabel: true,
+				infomode: 'hidden',
 			}, ...opt)
 			if (!e.editor)
 				return
@@ -2324,7 +2325,7 @@ function nav_widget(e) {
 		if (editor_state == 'toggle')
 			editor_state = 'select_all'
 
-		e.do_create_editor(e.focused_field)
+		e.create_editor(e.focused_field)
 		if (!e.editor)
 			return false
 
