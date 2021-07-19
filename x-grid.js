@@ -2040,17 +2040,19 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 				return false
 			}
 			for (let field of e.all_fields) {
-				field_items.push({
-					field: field,
-					text: field.text,
-					action: show_field,
-					checked: e.field_index(field) != null,
-				})
+				if (!field.internal)
+					field_items.push({
+						field: field,
+						text: field.text,
+						action: show_field,
+						checked: e.field_index(field) != null,
+					})
 			}
 
 			items.push({
 				text: S('show_fields', 'Show fields'),
 				items: field_items,
+				disabled: !field_items.length,
 			})
 
 		}

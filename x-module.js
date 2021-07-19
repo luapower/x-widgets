@@ -478,12 +478,12 @@ component('x-prop-layers-inspector', function(e) {
 	})
 
 	function set_layer(row, active) {
-		let module  = e.cell_val(row, e.all_fields.module)
-		let slot    = e.cell_val(row, e.all_fields.slot)
-		let layer   = e.cell_val(row, e.all_fields.layer)
-		let visible = e.cell_val(row, e.all_fields.visible)
+		let module   = e.cell_val(row, e.all_fields.module)
+		let slot     = e.cell_val(row, e.all_fields.slot)
+		let layer    = e.cell_val(row, e.all_fields.layer)
+		let internal = e.cell_val(row, e.all_fields.internal)
 		let layer_obj = xmodule.layers[layer]
-		xmodule.set_layer(module, slot, active && visible ? layer : null)
+		xmodule.set_layer(module, slot, active && internal ? null : layer)
 	}
 
 	function set_selected_module_slot(sel_module, sel_slot) {
@@ -551,7 +551,7 @@ component('x-prop-layers-inspector', function(e) {
 
 	e.reset_to_default = function() {
 		for (let row of e.rows)
-			e.reset_cell_val(row, e.all_fields.visible, true)
+			e.reset_cell_val(row, !e.all_fields.internal, true)
 		if (e.state_tooltip)
 			e.state_tooltip.close()
 	}

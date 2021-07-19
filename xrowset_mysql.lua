@@ -165,12 +165,12 @@ local function field_defs_from_query_result_cols(col_info, id_table)
 		field.type = type
 		field.allow_null = col.allow_null
 		if col.pri_key then
-			field.visible = false
+			field.hidden = false
 		end
 		if col.auto_increment then
 			field.focusable = false
 			field.editable = false
-			field.visible = false
+			field.hidden = true
 			field.is_id = true
 			id_col = id_col or col.name
 			if col.orig_table == id_table then
@@ -366,21 +366,23 @@ function sql_rowset(...)
 					local insert_row = rs.insert_row or glue.noop
 					mins = mins or (rs.insert_row and true)
 					function rs:insert_row(row)
-						insert_row(self, row)
+						local affected_rows, id0 = insert_row(self, row)
+						if affected_rows == 0 then
+							return 0
+						end
 						local sql, params
 						if t.insert_sql then
 							sql, params = t.insert_sql, row
 						else
 							sql, params = insert_sql(t.table, t.insert_fields, row)
 						end
-						if sql then
-							local r = query(sql, params)
-							local id = r.insert_id ~= 0 and r.insert_id or nil
-							if id then
-								row[t.autoinc] = id
-							end
-							return r.affected_rows, id
+						local r = query(sql, params)
+						local id = r.insert_id ~= 0 and r.insert_id or nil
+						if id then
+							row[t.autoinc] = id
+							row[t.autoinc..':old'] = id --for selecting it back
 						end
+						return r.affected_rows, id or id0
 					end
 				end
 
@@ -402,21 +404,22 @@ function sql_rowset(...)
 					end
 				end
 
-				if t.delete_sql or (t.table and t.where) then
+				if t.delete_sql or (t.table and t.where and t.delete ~= false) then
 					local delete_row = rs.delete_row or glue.noop
 					mdel = mdel or (rs.delete_row and true)
 					function rs:delete_row(row)
-						delete_row(self, row)
+						local affected_rows = delete_row(self, row)
+						if affected_rows == 0 then
+							return 0
+						end
 						local sql, params
 						if t.delete_sql then
 							sql, params = t.delete_sql, row
 						else
 							sql, params = delete_sql(t.table, t.where, row)
 						end
-						if sql then
-							local r = query(sql, params)
-							return r.affected_rows
-						end
+						local r = query(sql, params)
+						return r.affected_rows
 					end
 				end
 

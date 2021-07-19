@@ -42,8 +42,8 @@ function virtual_rowset(init, ...)
 
 		local hide_fields = glue.index(glue.names(rs.hide_fields) or glue.empty)
 		for i,field in ipairs(res.fields) do
-			if field.visible == nil and hide_fields[field.name] then
-				field.visible = false
+			if hide_fields[field.name] then
+				field.hidden = true
 			end
 			if field.name == rs.parent_col then
 				field.visible = false
@@ -118,11 +118,6 @@ function virtual_rowset(init, ...)
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_inserted', 'row not inserted')
 						else
-							if id then
-								local id_col = assert(changes.id_col)
-								row.values[id_col] = id
-								rt.values = {[id_col] = id}
-							end
 							if rs.load_row then
 								local ok, values = catch('db', rs.load_row, rs, row.values)
 								if ok then

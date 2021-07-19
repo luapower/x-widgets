@@ -30,7 +30,8 @@ rowset field attributes:
 
 	rendering:
 		text           : field name for display purposes (auto-generated default).
-		visible        : field can be visible in a grid (true).
+		internal       : field cannot be made visible in a grid (false).
+		hidden         : field is hidden by default but can be made visible (false).
 		w              : field's width.
 		min_w          : field's minimum width.
 		max_w          : field's maximum width.
@@ -660,7 +661,7 @@ function nav_widget(e) {
 				let field = e.all_fields[col]
 				if (!field)
 					warn('col not found', col)
-				else if (field.visible != false)
+				else if (!field.internal)
 					e.fields.push(field)
 			}
 		update_field_index()
@@ -708,12 +709,13 @@ function nav_widget(e) {
 
 	function visible_col(col) {
 		let field = e.all_fields[col]
-		return field && field.visible !== false
+		return field && !field.internal
 	}
 
-	let all_cols = () => e.all_fields.map(f => f.name).filter(visible_col)
+	let all_cols = () => e.all_fields.filter(f => !f.internal && !f.hidden).map(f => f.name)
 
-	let cols_array = () => e.cols != null ? e.cols.names().filter(visible_col) : all_cols()
+	let cols_array = () => e.cols == null ? all_cols() :
+		e.cols.names().filter(col => e.all_fields[col] && !e.all_fields[col].internal)
 
 	function cols_from_array(cols) {
 		cols = cols.join(' ')
@@ -2713,9 +2715,10 @@ function nav_widget(e) {
 					changed_rows.push(row)
 
 					rows_marked = rows_marked || removed
+
+					row_changed(row)
 				}
 
-				row_changed(row)
 			}
 
 		}
@@ -3066,15 +3069,13 @@ function nav_widget(e) {
 	function row_changed(row, force) {
 		if (row.nosave)
 			return
-		if (!(row.modified || force) || (row.is_new && row.removed)) {
-			if (e.changed_rows) {
-				e.changed_rows.delete(row)
-				if (!e.changed_rows.size)
-					e.changed_rows = null
-			}
-		} else {
+		if (force || row.modified || !row.removed != !row.is_new) {
 			e.changed_rows = e.changed_rows || new Set()
 			e.changed_rows.add(row)
+		} else if (e.changed_rows) {
+			e.changed_rows.delete(row)
+			if (!e.changed_rows.size)
+				e.changed_rows = null
 		}
 		e.show_action_band(!!e.changed_rows)
 	}
