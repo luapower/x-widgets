@@ -34,12 +34,18 @@ function virtual_rowset(init, ...)
 			pk = rs.pk,
 			id_col = rs.id_col,
 			params = rs.params,
+			parent_col = rs.parent_col,
+			name_col = rs.name_col,
+			tree_col = rs.tree_col,
 		}
 		rs:load_rows(res, param_values)
 
 		local hide_fields = glue.index(glue.names(rs.hide_fields) or glue.empty)
 		for i,field in ipairs(res.fields) do
 			if field.visible == nil and hide_fields[field.name] then
+				field.visible = false
+			end
+			if field.name == rs.parent_col then
 				field.visible = false
 			end
 			update(field,

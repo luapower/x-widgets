@@ -90,15 +90,14 @@ function component(tag, category, cons) {
 
 		e.do_bind = function(on) {
 			if (on) {
+
 				let t0 = DEBUG_ATTACH_TIME && time()
 
-				this.begin_update()
-				this.fire('bind', on)
+				this.fire('bind', true)
 				if (this.id) {
 					document.fire('widget_bind', this, true)
 					document.fire(this.id+'.bind', this, true)
 				}
-				this.end_update()
 
 				if (DEBUG_ATTACH_TIME) {
 					let t1 = time()
@@ -106,13 +105,26 @@ function component(tag, category, cons) {
 					if (dt > 10)
 						debug((dt).dec().padStart(3, ' ')+'ms', this.debug_name())
 				}
+
+				this.end_update()
+
 			} else {
+
+				this.begin_update()
+
+				this.fire('bind', false)
 				if (this.id) {
 					document.fire('widget_bind', this, false)
 					document.fire(this.id+'.bind', this, false)
 				}
+
 			}
 		}
+
+		component_deferred_updating(e)
+
+		e.begin_update() // bind(true) calls end_update().
+		e.update() // ...deferred on first call to bind().
 
 		e.debug_name = function(prefix) {
 			prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
@@ -130,7 +142,6 @@ function component(tag, category, cons) {
 		// - constructor args,
 		let opt = assign_opt({}, ...args)
 		component_props(e, opt && opt.props)
-		component_deferred_updating(e)
 		e.isinstance = true   // because you can have non-widget instances.
 		e.iswidget = true     // to diff from normal html elements.
 		e.type = type         // for serialization.
@@ -159,7 +170,6 @@ function component(tag, category, cons) {
 		// call the after-properties-are-set init function.
 		e.initialized = true
 		e.init()
-		e.update() // ...deferred on first call to bind().
 	}
 
 	bind_component(tag, initialize)
@@ -223,14 +233,10 @@ let component_deferred_updating = function(e) {
 	e.updating = 0
 
 	e.begin_update = function() {
-		if (!e.bound)
-			return
 		e.updating++
 	}
 
 	e.end_update = function() {
-		if (!e.bound)
-			return
 		assert(e.updating)
 		e.updating--
 		if (!e.updating)
@@ -245,11 +251,16 @@ let component_deferred_updating = function(e) {
 	e.update = function(opt1) {
 		if (in_update)
 			return
-		opt1 = opt1 || {val: true}
-		opt = opt ? assign_opt(opt, opt1) : opt1
+		if (opt)
+			if (opt1)
+				assign_opt(opt, opt1)
+			else
+				opt.val = true
+		else if (opt1)
+			opt = opt1
+		else
+			opt = {val: true}
 		if (e.updating)
-			return
-		if (!e.bound)
 			return
 		in_update = true
 		e.do_update(opt)
@@ -327,11 +338,14 @@ function component_props(e, iprops) {
 				if (v1 === v0)
 					return
 				v = v1
+				e.begin_update()
 				e[setter](v1, v0)
 				if (attr)
 					set_attr(v1)
 				if (!priv)
 					prop_changed(e, prop, v1, v0, slot)
+				e.update()
+				e.end_update()
 			}
 			if (attr && !e.hasattr(prop))
 				set_attr(dv)
@@ -353,9 +367,12 @@ function component_props(e, iprops) {
 				v = get.call(e) // take it again (browser only sets valid values)
 				if (v == v0)
 					return
+				e.begin_update()
 				e[setter](v, v0)
 				if (!priv)
 					prop_changed(e, prop, v, v0, slot)
+				e.update()
+				e.end_update()
 			}
 		} else {
 			assert(!('default' in opt))
@@ -367,9 +384,12 @@ function component_props(e, iprops) {
 				v = convert(v, v0)
 				if (v === v0)
 					return
+				e.begin_update()
 				e[setter](v, v0)
 				if (!priv)
 					prop_changed(e, prop, v, v0, slot)
+				e.update()
+				e.end_update()
 			}
 		}
 
@@ -1050,12 +1070,10 @@ attr `disabled` but note that `:hover` and `:active` will still work so
 make sure to add `:not([disabled])` in css on those selectors.
 --------------------------------------------------------------------------- */
 
-function focusable_widget(e, fe, css_class) {
+function focusable_widget(e, fe) {
 	fe = fe || e
 
 	let focusable = true
-	if (css_class !== false)
-		e.class(css_class || 'x-focusable')
 
 	if (!fe.hasattr('tabindex'))
 		fe.attr('tabindex', 0)
@@ -1101,17 +1119,12 @@ function stylable_widget(e) {
 
 	e.set_css_classes = function(c1, c0) {
 		if (c0)
-			for (let s of c0.names())
-				this.class(s, false)
+			e.class(c0, false)
 		if (c1)
-			for (let s of c1.names())
-				this.class(s, true)
+			e.class(c1, true)
 	}
 	e.prop('css_classes', {store: 'var'})
 
-	e.set_theme = function() {
-		e.update() // redraw canvas
-	}
 	e.prop('theme', {store: 'var', attr: true})
 }
 
@@ -1122,8 +1135,8 @@ function stylable_widget(e) {
 component('x-tooltip', function(e) {
 
 	e.content = div({class: 'x-tooltip-content'})
-	e.icon_div = div()
-	e.body = div({class: 'x-tooltip-body'}, e.icon_div, e.content)
+	e.icon_box = div()
+	e.body = div({class: 'x-tooltip-body'}, e.icon_box, e.content)
 	e.pin = div({class: 'x-tooltip-tip'})
 	e.add(e.body, e.pin)
 
@@ -1142,7 +1155,7 @@ component('x-tooltip', function(e) {
 
 	e.init = function() {
 		e.update({reset_timer: true})
-		e.bind(true)
+		e.popup(e.target, e.side, e.align, e.px, e.py, e.pw, e.ph)
 	}
 
 	e.popup_target_updated = function(target) {
@@ -1168,7 +1181,7 @@ component('x-tooltip', function(e) {
 			e.xbutton.show(e.close_button)
 		}
 		let icon_classes = e.icon_visible && tooltip.icon_classes[e.kind]
-		e.icon_div.attr('class', icon_classes ? ('x-tooltip-icon ' + icon_classes) : null)
+		e.icon_box.attr('class', icon_classes ? ('x-tooltip-icon ' + icon_classes) : null)
 		e.popup(e.target, e.side, e.align, e.px, e.py, e.pw, e.ph)
 		if (opt && opt.reset_timer)
 			reset_timeout_timer()
@@ -1176,17 +1189,10 @@ component('x-tooltip', function(e) {
 			last_popup_time = time()
 	}
 
-	function update() { e.update() }
-	e.set_target = function() { e.update({reset_timer: true}) }
-	e.set_icon_visible = update
-	e.set_side         = update
-	e.set_align        = update
-	e.set_kind         = update
-	e.set_px           = update
-	e.set_py           = update
-	e.set_pw           = update
-	e.set_ph           = update
-	e.set_close_button = update
+	e.set_target = function() {
+		if (e.initialized)
+			e.init()
+	}
 
 	e.set_text = function(s) {
 		e.content.set(s, 'pre-wrap')
@@ -1195,8 +1201,6 @@ component('x-tooltip', function(e) {
 
 	let remove_timer = timer(close)
 	function reset_timeout_timer() {
-		if (!e.initialized)
-			return
 		let t = e.timeout
 		if (t == 'auto')
 			t = clamp((e.text || '').length / (tooltip.reading_speed / 60), 1, 10)
@@ -1305,14 +1309,14 @@ component('x-button', 'Input', function(e) {
 
 	serializable_widget(e)
 	selectable_widget(e)
-	focusable_widget(e, null, false)
+	focusable_widget(e)
 	editable_widget(e)
 	contained_widget(e)
 
-	e.icon_div = span({class: 'x-button-icon'})
-	e.text_div = span({class: 'x-button-text'})
-	e.icon_div.hide()
-	e.add(e.icon_div, e.text_div)
+	e.icon_box = span({class: 'x-button-icon'})
+	e.text_box = span({class: 'x-button-text'})
+	e.icon_box.hide()
+	e.add(e.icon_box, e.text_box)
 
 	e.prop('href', {store:'var', attr: true})
 	e.set_href = function(s) {
@@ -1331,7 +1335,7 @@ component('x-button', 'Input', function(e) {
 	}
 
 	e.set_text = function(s) {
-		e.text_div.set(s, 'pre-wrap')
+		e.text_box.set(s, 'pre-wrap')
 		e.class('empty', !s)
 		if (e.link)
 			e.link.set(s)
@@ -1342,10 +1346,10 @@ component('x-button', 'Input', function(e) {
 
 	e.set_icon = function(v) {
 		if (isstr(v))
-			e.icon_div.attr('class', 'x-button-icon '+v)
+			e.icon_box.attr('class', 'x-button-icon '+v)
 		else
-			e.icon_div.set(v)
-		e.icon_div.show(!!v)
+			e.icon_box.set(v)
+		e.icon_box.show(!!v)
 	}
 	e.prop('icon', {store: 'var', type: 'icon'})
 
@@ -1375,7 +1379,7 @@ component('x-button', 'Input', function(e) {
 		if (e.widget_editing) {
 			if (key == 'Enter') {
 				if (ctrl) {
-					e.text_div.insert_at_caret('<br>')
+					e.text_box.insert_at_caret('<br>')
 					return
 				} else {
 					e.widget_editing = false
@@ -1416,15 +1420,15 @@ component('x-button', 'Input', function(e) {
 	// widget editing ---------------------------------------------------------
 
 	e.set_widget_editing = function(v) {
-		e.text_div.contenteditable = v
+		e.text_box.contenteditable = v
 		if (!v)
-			e.text = e.text_div.innerText
+			e.text = e.text_box.innerText
 	}
 
 	e.on('pointerdown', function(ev) {
-		if (e.widget_editing && ev.target != e.text_div) {
-			e.text_div.focus()
-			e.text_div.select_all()
+		if (e.widget_editing && ev.target != e.text_box) {
+			e.text_box.focus()
+			e.text_box.select_all()
 			return this.capture_pointer(ev)
 		}
 	})
@@ -1433,10 +1437,10 @@ component('x-button', 'Input', function(e) {
 		if (e.widget_editing)
 			ev.stopPropagation()
 	}
-	e.text_div.on('pointerdown', prevent_bubbling)
-	e.text_div.on('click', prevent_bubbling)
+	e.text_box.on('pointerdown', prevent_bubbling)
+	e.text_box.on('click', prevent_bubbling)
 
-	e.text_div.on('blur', function() {
+	e.text_box.on('blur', function() {
 		e.widget_editing = false
 	})
 
@@ -1448,28 +1452,29 @@ component('x-button', 'Input', function(e) {
 
 component('x-menu', function(e) {
 
-	focusable_widget(e, null, 'x-focusable-items')
+	focusable_widget(e)
+	e.class('x-focusable-items')
 
 	// view
 
 	function create_item(item, disabled) {
-		let check_div = div({class: 'x-menu-check-div fa fa-check'})
-		let icon_div  = div({class: 'x-menu-icon-div'})
+		let check_box = div({class: 'x-menu-check-div fa fa-check'})
+		let icon_box  = div({class: 'x-menu-icon-div'})
 		if (isstr(item.icon))
-			icon_div.classes = item.icon
+			icon_box.classes = item.icon
 		else
-			icon_div.set(item.icon)
-		let check_td  = tag('td', {class: 'x-menu-check-td'}, check_div, icon_div)
+			icon_box.set(item.icon)
+		let check_td  = tag('td', {class: 'x-menu-check-td'}, check_box, icon_box)
 		let title_td  = tag('td', {class: 'x-menu-title-td'})
 		title_td.set(item.text)
 		let key_td    = tag('td', {class: 'x-menu-key-td'}, item.key)
-		let sub_div   = div({class: 'x-menu-sub-div fa fa-caret-right'})
-		let sub_td    = tag('td', {class: 'x-menu-sub-td'}, sub_div)
-		sub_div.style.visibility = item.items ? null : 'hidden'
+		let sub_box   = div({class: 'x-menu-sub-div fa fa-caret-right'})
+		let sub_td    = tag('td', {class: 'x-menu-sub-td'}, sub_box)
+		sub_box.style.visibility = item.items ? null : 'hidden'
 		let tr = tag('tr', {class: 'x-item x-menu-tr'}, check_td, title_td, key_td, sub_td)
 		tr.class('disabled', disabled || item.disabled)
 		tr.item = item
-		tr.check_div = check_div
+		tr.check_box = check_box
 		update_check(tr)
 		tr.on('pointerdown' , item_pointerdown)
 		tr.on('pointerenter', item_pointerenter)
@@ -1569,8 +1574,8 @@ component('x-menu', function(e) {
 	}
 
 	function update_check(tr) {
-		tr.check_div.show(tr.item.checked != null)
-		tr.check_div.style.visibility = tr.item.checked ? null : 'hidden'
+		tr.check_box.show(tr.item.checked != null)
+		tr.check_box.style.visibility = tr.item.checked ? null : 'hidden'
 	}
 
 	// popup protocol
@@ -1901,7 +1906,6 @@ widget_items_widget = function(e) {
 
 	e.set_items = function() {
 		e.do_init_items()
-		e.update()
 	}
 
 	e.prop('items', {store: 'var', convert: diff_items, serialize: serialize_items, default: []})
@@ -1965,15 +1969,15 @@ component('x-pagelist', 'Containers', function(e) {
 		if (!item._tab) {
 			let xbutton = div({class: 'x-pagelist-xbutton fa fa-times'})
 			xbutton.hide()
-			let title_div = div({class: 'x-pagelist-title'})
-			let tab = div({class: 'x-pagelist-tab', tabindex: 0}, title_div, xbutton)
-			tab.title_div = title_div
+			let title_box = div({class: 'x-pagelist-title'})
+			let tab = div({class: 'x-pagelist-tab', tabindex: 0}, title_box, xbutton)
+			tab.title_box = title_box
 			tab.xbutton = xbutton
 			tab.on('pointerdown' , tab_pointerdown)
 			tab.on('dblclick'    , tab_dblclick)
 			tab.on('keydown'     , tab_keydown)
-			title_div.on('input' , update_title)
-			title_div.on('blur'  , title_blur)
+			title_box.on('input' , update_title)
+			title_box.on('blur'  , title_blur)
 			xbutton.on('pointerdown', xbutton_pointerdown)
 			tab.item = item
 			item._tab = tab
@@ -2023,14 +2027,14 @@ component('x-pagelist', 'Containers', function(e) {
 	}
 
 	function update_tab_title(tab) {
-		tab.title_div.set(tab.item.title, 'pre-wrap')
-		tab.title_div.title = tab.item.title
+		tab.title_box.set(tab.item.title, 'pre-wrap')
+		tab.title_box.title = tab.item.title
 		update_selection_bar()
 	}
 
 	function update_tab_state(tab, select) {
 		tab.xbutton.show(select && (e.can_remove_items || e.widget_editing) || false)
-		tab.title_div.contenteditable = select && (e.widget_editing || e.renaming)
+		tab.title_box.contenteditable = select && (e.widget_editing || e.renaming)
 	}
 
 	function update_selection_bar() {
@@ -2057,10 +2061,6 @@ component('x-pagelist', 'Containers', function(e) {
 		e.add_button.show(e.can_add_items || e.widget_editing)
 		update_selection_bar()
 	}
-
-	e.set_can_add_items    = e.update
-	e.set_can_remove_items = e.update
-	e.set_can_rename_items = e.update
 
 	e.prop('can_rename_items', {store: 'var', type: 'bool', default: false})
 	e.prop('can_add_items'   , {store: 'var', type: 'bool', default: false})
@@ -2203,7 +2203,7 @@ component('x-pagelist', 'Containers', function(e) {
 	let dragging, drag_mx
 
 	function tab_pointerdown(ev, mx, my) {
-		if (this.title_div.contenteditable && !ev.ctrlKey) {
+		if (this.title_box.contenteditable && !ev.ctrlKey) {
 			ev.stopPropagation()
 			return
 		}
@@ -2255,7 +2255,7 @@ component('x-pagelist', 'Containers', function(e) {
 
 	function set_renaming(renaming) {
 		e.renaming = !!renaming
-		e.selected_tab.title_div.contenteditable = e.renaming
+		e.selected_tab.title_box.contenteditable = e.renaming
 	}
 
 	function tab_keydown(key, shift, ctrl) {
@@ -2266,7 +2266,7 @@ component('x-pagelist', 'Containers', function(e) {
 		if (e.widget_editing || e.renaming) {
 			if (key == 'Enter') {
 				if (ctrl)
-					this.title_div.insert_at_caret('<br>')
+					this.title_box.insert_at_caret('<br>')
 				else
 					e.widget_editing = false
 				return false
@@ -2295,7 +2295,6 @@ component('x-pagelist', 'Containers', function(e) {
 	e.set_widget_editing = function(v) {
 		if (!v)
 			update_title()
-		e.update()
 	}
 
 	e.add_button.on('click', function() {
@@ -2315,7 +2314,7 @@ component('x-pagelist', 'Containers', function(e) {
 
 	function update_title() {
 		if (e.selected_tab)
-			e.selected_tab.item.title = e.selected_tab.title_div.innerText
+			e.selected_tab.item.title = e.selected_tab.title_box.innerText
 		e.update()
 	}
 
@@ -2388,12 +2387,6 @@ component('x-split', 'Containers', function(e) {
 
 		document.fire('layout_changed')
 	}
-
-	e.set_orientation = e.update
-	e.set_fixed_side  = e.update
-	e.set_resizeable  = e.update
-	e.set_fixed_size  = e.update
-	e.set_min_size    = e.update
 
 	e.prop('orientation', {store: 'var', type: 'enum', enum_values: ['horizontal', 'vertical'], default: 'horizontal', attr: true})
 	e.prop('fixed_side' , {store: 'var', type: 'enum', enum_values: ['first', 'second'], default: 'first', attr: true})
@@ -2661,7 +2654,7 @@ component('x-action-band', 'Input', function(e) {
 
 component('x-dialog', function(e) {
 
-	focusable_widget(e, null, false)
+	focusable_widget(e)
 
 	e.x_button = true
 
@@ -2723,35 +2716,22 @@ component('x-dialog', function(e) {
 
 component('x-toolbox', function(e) {
 
-	focusable_widget(e, null, false)
+	focusable_widget(e)
 
 	e.istoolbox = true
 	e.class('pinned')
 
 	e.pin_button = div({class: 'x-toolbox-button x-toolbox-button-pin fa fa-thumbtack'})
 	e.xbutton = div({class: 'x-toolbox-button x-toolbox-button-close fa fa-times'})
-	e.title_div = div({class: 'x-toolbox-title'})
-	e.titlebar = div({class: 'x-toolbox-titlebar'}, e.title_div, e.pin_button, e.xbutton)
-	e.content_div = div({class: 'x-toolbox-content x-container'})
+	e.title_box = div({class: 'x-toolbox-title'})
+	e.titlebar = div({class: 'x-toolbox-titlebar'}, e.title_box, e.pin_button, e.xbutton)
+	e.content_box = div({class: 'x-toolbox-content x-container'})
 	e.resize_overlay = div({class: 'x-toolbox-resize-overlay'})
-	e.add(e.titlebar, e.content_div, e.resize_overlay)
+	e.add(e.titlebar, e.content_box, e.resize_overlay)
 
-	e.get_text = () => e.title_div.textContent
-	e.set_text = function(v) { e.title_div.set(v) }
+	e.get_text = () => e.title_box.textContent
+	e.set_text = function(v) { e.title_box.set(v) }
 	e.prop('text', {slot: 'lang'})
-
-	function update() {
-		e.w = e.pw
-		e.h = e.ph
-		e.update()
-	}
-
-	e.set_side    = update
-	e.set_px      = update
-	e.set_py      = update
-	e.set_pw      = update
-	e.set_ph      = update
-	e.set_pinned  = update
 
 	e.prop('side'  , {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'right'})
 	e.prop('px'    , {store: 'var', type: 'number', slot: 'user'})
@@ -2773,6 +2753,9 @@ component('x-toolbox', function(e) {
 
 	e.do_update = function(opt) {
 
+		e.w = e.pw
+		e.h = e.ph
+
 		let r = e.rect()
 		let br = document.body.rect()
 		let px = clamp(e.px, 0, window.innerWidth  - r.w) - br.x
@@ -2787,9 +2770,8 @@ component('x-toolbox', function(e) {
 	}
 
 	e.init = function() {
-		e.content_div.set(e.content)
+		e.content_box.set(e.content)
 		e.hide()
-		e.update()
 		e.bind(true)
 	}
 
@@ -2856,7 +2838,7 @@ component('x-toolbox', function(e) {
 		e.focus()
 		e.update({input: e}) // move-to-top
 
-		let first_focusable = e.content_div.focusables()[0]
+		let first_focusable = e.content_box.focusables()[0]
 		if (first_focusable)
 			first_focusable.focus()
 
@@ -2944,7 +2926,6 @@ component('x-switcher', 'Containers', function(e) {
 		assert(nav1 != e)
 		bind_nav(nav0, false)
 		bind_nav(nav1, true)
-		e.update()
 	}
 	e.prop('nav', {store: 'var', private: true})
 	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav'})
@@ -3137,7 +3118,7 @@ component('x-mu', function(e) {
 			nav.on('reset'                   , update, on)
 		}
 		if (reload !== false)
-			update()
+			e.update()
 	}
 
 	e.set_param_nav = function(nav1, nav0) {
@@ -3181,11 +3162,6 @@ component('x-pagenav', function(e) {
 	e.prop('page', {store: 'var', type: 'number', attr: true, default: 1})
 	e.prop('page_size', {store: 'var', type: 'number', attr: true, default: 100})
 	e.prop('item_count', {store: 'var', type: 'number', attr: true})
-
-	function update() { e.update() }
-	e.set_page = update
-	e.set_page_size = update
-	e.set_item_count = update
 
 	property(e, 'page_count', () => ceil(e.item_count / e.page_size))
 

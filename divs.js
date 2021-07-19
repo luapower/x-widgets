@@ -320,18 +320,14 @@ method(Element, 'bind', function(on) {
 	assert(isbool(on))
 	if (!this.bound == !on)
 		return
-	if (this.do_bind) {
+	if (this.do_bind) { // component
 		this.bound = on
 		this.do_bind(on)
-	} else if (this.hasattr('_bind')) {
+	} else if (this.hasattr('_bind')) { // any tag that registered a bind event
 		this.bound = on
 		this.fire('bind', on)
 	}
 	this.bind_children(on)
-})
-
-method(Element, 'on_bind', function(f) {
-	this.after('do_bind', f)
 })
 
 // create a text node from a string, quoting it automatically, with wrapping control.
@@ -1214,9 +1210,7 @@ let popup_state = function(e) {
 
 	function init() {
 		if (target != document.body) { // prevent infinite recursion.
-			if (target.iswidget) {
-				target.on('bind', target_bind)
-			}
+			target.on('bind', target_bind)
 		}
 		if (target.isConnected || target.bound)
 			target_bind(true)
@@ -1225,8 +1219,7 @@ let popup_state = function(e) {
 	function free() {
 		if (target) {
 			target_bind(false)
-			if (target.iswidget)
-				target.off('bind', target_bind)
+			target.off('bind', target_bind)
 			target = null
 		}
 	}

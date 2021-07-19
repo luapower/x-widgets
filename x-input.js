@@ -68,13 +68,13 @@ function row_widget(e, enabled_without_nav) {
 		nav.on('display_vals_changed', row_changed, on)
 		nav.on('reset', row_changed, on)
 		nav.on('col_text_changed', row_changed, on)
+		nav.on('col_info_changed', row_changed, on)
 	}
 
 	e.set_nav = function(nav1, nav0) {
 		assert(nav1 != e)
 		bind_nav(nav0, false)
 		bind_nav(nav1, true)
-		e.update()
 	}
 	e.prop('nav', {store: 'var', private: true})
 	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav', attr: true})
@@ -143,7 +143,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		e.update()
 	}
 
-	function label_changed() {
+	function col_attr_changed() {
 		e.update()
 	}
 
@@ -174,7 +174,8 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		nav.on('focused_row_cell_state_changed_for_'+col, cell_state_changed, on)
 		nav.on('display_vals_changed_for_'+col, val_changed, on)
 		nav.on('reset', nav_reset, on)
-		nav.on('col_text_changed_for_'+col, label_changed, on)
+		nav.on('col_text_changed_for_'+col, col_attr_changed, on)
+		nav.on('col_info_changed_for_'+col, col_attr_changed, on)
 		bind_field(on)
 	}
 
@@ -192,7 +193,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		init()
 	}
 
-	e.on('bind', function(on) {
+	e.on('bind', function val_widget_bind(on) {
 		if (e.owns_field) {
 			if (on) {
 				let nav = global_val_nav()
@@ -217,7 +218,6 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	function set_nav_col(nav1, nav0, col1, col0) {
 		bind_nav(nav0, col0, false)
 		bind_nav(nav1, col1, true)
-		e.update()
 	}
 
 	e.set_nav = function(nav1, nav0) {
@@ -278,11 +278,14 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		return row && e.field ? e.nav.cell_modified(row, e.field) : false
 	})
 
-	e.display_val = function(v) {
-		let row = e.row
-		if (!row)
-			return div({class: 'x-input-placeholder'})
-		return e.nav.cell_display_val_for(row, e.field, v)
+	e.placeholder_display_val = function() {
+		return div({class: 'x-input-placeholder'})
+	}
+
+	e.display_val_for = function(v) {
+		if (!e.row || !e.field)
+			return e.placeholder_display_val()
+		return e.nav.cell_display_val_for(e.row, e.field, v)
 	}
 
 	// view -------------------------------------------------------------------
@@ -326,25 +329,85 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 function input_widget(e) {
 
-	e.prop('label'  , {store: 'var', slot: 'lang'})
-	e.prop('nolabel', {store: 'var', type: 'bool'})
-	e.prop('align'  , {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
-	e.prop('mode'   , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default', attr: true})
+	e.prop('label'   , {store: 'var', slot: 'lang'})
+	e.prop('nolabel' , {store: 'var', type: 'bool'})
+	e.prop('align'   , {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
+	e.prop('mode'    , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default', attr: true})
+	e.prop('info'    , {store: 'var', slot: 'lang'})
+	e.prop('infomode', {store: 'var', slot: 'lang', type: 'enum', enum_values: ['under', 'button', 'hidden'], attr: true, default: 'under'})
 
-	e.class('with-label', true)
-	function update_label() {
-		e.class('with-label', !e.nolabel && e.field && e.field.text)
-	}
-	e.set_nolabel = update_label
-	e.set_label   = update_label
+	e.add_info_button = e.add // stub
+	e.add_info_box = e.add // stub
 
-	let inh_do_update = e.do_update
-	e.do_update = function() {
-		inh_do_update()
-		update_label()
-		let s = or(e.label, e.field ? e.field.text : div({class: 'x-input-placeholder'}))
-		e.label_div.set(s)
+	function update_info() {
+		let info = e.field && e.field.info
+
+		if (info && e.infomode == 'button' && !e.info_button) {
+			e.info_button = button({
+				classes: 'x-input-info-button',
+				icon: 'fa fa-info-circle',
+				text: '',
+				focusable: false,
+			})
+			e.info_tooltip = tooltip({
+				kind: 'info',
+				side: 'bottom',
+				align: 'end',
+			})
+			e.info_tooltip.on('click', function() {
+				this.close()
+			})
+			e.info_button.action = function() {
+				if (e.info_tooltip.target) {
+					e.info_tooltip.target = null
+				} else {
+					e.info_tooltip.target = e.info_button
+				}
+			}
+			e.add_info_button(e.info_button)
+		}
+		if (e.info_button) {
+			e.info_tooltip.text = info
+			e.info_button.show(e.infomode == 'button' && !!info)
+		}
+
+		if (info && e.infomode == 'under' && !e.info_box) {
+			e.info_box = div({class: 'x-input-info'})
+			e.add_info_box(e.info_box)
+		}
+		if (e.info_box) {
+			e.info_box.set(info)
+			e.info_box.show(e.infomode == 'under' && !!info)
+		}
+
 	}
+
+	e.label_placeholder = function() {
+		return div({class: 'x-input-placeholder'})
+	}
+
+	e.do_after('do_update', function() {
+		update_info()
+		let s = !e.nolabel && e.label || (e.field && e.field.text) || null
+		e.class('with-label', !!s)
+		e.label_box.set(!e.nolabel ? s || e.label_placeholder() : null)
+	})
+
+	e.on('keydown', function(key) {
+		if (key == 'F1') {
+			if (e.info_button)
+				e.info_button.activate()
+			return false
+		}
+	})
+
+	e.on('mousedown', function(ev) {
+		let fe = e.focusables()[0]
+		if (fe && ev.target != fe) {
+			fe.focus()
+			return false
+		}
+	})
 
 }
 
@@ -354,7 +417,7 @@ function input_widget(e) {
 
 component('x-checkbox', 'Input', function(e) {
 
-	focusable_widget(e, null, false)
+	focusable_widget(e)
 	editable_widget(e)
 	val_widget(e)
 	input_widget(e)
@@ -364,12 +427,18 @@ component('x-checkbox', 'Input', function(e) {
 	e.checked_val = true
 	e.unchecked_val = false
 
-	e.icon_div = span({class: 'x-markbox-icon x-checkbox-icon far fa-square'})
-	e.label_div = span({class: 'x-markbox-label x-checkbox-label'})
-	e.add(e.icon_div, e.label_div)
+	e.icon_box = span({class: 'x-markbox-icon x-checkbox-icon far fa-square'})
+	e.label_box = span({class: 'x-markbox-label x-checkbox-label'})
+	e.focus_box = div({class: 'x-focus-box'}, e.icon_box, e.label_box)
+	e.add(e.focus_box)
+
+	e.add_info_button = function(btn) {
+		btn.attr('bare', true)
+		e.add(btn)
+	}
 
 	function update_icon() {
-		let ie = e.icon_div
+		let ie = e.icon_box
 		ie.class('fa far fa-square fa-check-square fa-toggle-on fa-toggle-off', false)
 		if (e.button_style == 'toggle')
 			ie.classes = 'fa fa-toggle-'+(e.checked ? 'on' : 'off')
@@ -412,18 +481,21 @@ component('x-checkbox', 'Input', function(e) {
 		e.focus()
 	})
 
-	e.on('click', function(ev) {
+	function click(ev) {
 		if (e.widget_editing)
 			return
 		e.toggle({input: e})
 		return false
-	})
+	}
+
+	e.icon_box.on('click', click)
+	e.label_box.on('click', click)
 
 	e.on('keydown', function(key, shift, ctrl) {
 		if (e.widget_editing) {
 			if (key == 'Enter') {
 				if (ctrl)
-					e.label_div.insert_at_caret('<br>')
+					e.label_box.insert_at_caret('<br>')
 				else
 					e.widget_editing = false
 				return false
@@ -443,16 +515,16 @@ component('x-checkbox', 'Input', function(e) {
 	// widget editing ---------------------------------------------------------
 
 	e.set_widget_editing = function(v) {
-		e.label_div.contenteditable = v
+		e.label_box.contenteditable = v
 		if (!v)
-			e.label = e.label_div.innerText
+			e.label = e.label_box.innerText
 	}
 
 	e.on('pointerdown', function(ev) {
-		if (e.widget_editing && ev.target != e.label_div)
+		if (e.widget_editing && ev.target != e.label_box)
 			return this.capture_pointer(ev, null, function() {
-				e.label_div.focus()
-				e.label_div.select_all()
+				e.label_box.focus()
+				e.label_box.select_all()
 			})
 	})
 
@@ -460,10 +532,10 @@ component('x-checkbox', 'Input', function(e) {
 		if (e.widget_editing && !ev.ctrlKey)
 			ev.stopPropagation()
 	}
-	e.label_div.on('pointerdown', prevent_bubbling)
-	e.label_div.on('click', prevent_bubbling)
+	e.label_box.on('pointerdown', prevent_bubbling)
+	e.label_box.on('click', prevent_bubbling)
 
-	e.label_div.on('blur', function() {
+	e.label_box.on('blur', function() {
 		e.widget_editing = false
 	})
 
@@ -481,11 +553,11 @@ component('x-radiogroup', 'Input', function(e) {
 		for (let item of items) {
 			if (isstr(item) || item instanceof Node)
 				item = {text: item}
-			let radio_div = span({class: 'x-markbox-icon x-radio-icon far fa-circle'})
-			let text_div = span({class: 'x-markbox-label x-radio-label'})
-			text_div.set(item.text)
+			let radio_box = span({class: 'x-markbox-icon x-radio-icon far fa-circle'})
+			let text_box = span({class: 'x-markbox-label x-radio-label'})
+			text_box.set(item.text)
 			let idiv = div({class: 'x-widget x-markbox x-radio-item', tabindex: 0},
-				radio_div, text_div)
+				radio_box, text_box)
 			idiv.attr('align', e.align)
 			idiv.item = item
 			idiv.on('click', idiv_click)
@@ -554,12 +626,13 @@ component('x-editbox', 'Input', function(e) {
 	input_widget(e)
 
 	e.input = tag('input', {class: 'x-editbox-input'})
-	e.label_div = div({class: 'x-editbox-label'})
-	e.add(e.input, e.label_div)
+	e.label_box = div({class: 'x-editbox-label'})
+	e.focus_box = div({class: 'x-focus-box'}, e.input, e.label_box)
+	e.add(e.focus_box)
 
 	function do_update_state(s) {
 		e.input.class('empty', s == '')
-		e.label_div.class('empty', s == '')
+		e.label_box.class('empty', s == '')
 	}
 
 	e.from_text = function(s) { return e.field.from_text(s) }
@@ -852,8 +925,6 @@ component('x-spinedit', 'Input', function(e) {
 	e.align = 'right'
 	e.field_type = 'number'
 
-	e.set_button_style     = e.update
-	e.set_button_placement = e.update
 	e.prop('button_style'    , {store: 'var', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus', attr: true})
 	e.prop('button_placement', {store: 'var', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side', attr: true})
 
@@ -963,11 +1034,11 @@ component('x-tagsedit', 'Input', function(e) {
 	let S_condense = S('condense', 'condense') + ' (Enter)'
 
 	e.input = tag('input', {class: 'x-editbox-input x-tagsedit-input'})
-	e.label_div = div({class: 'x-editbox-label x-tagsedit-label'})
+	e.label_box = div({class: 'x-editbox-label x-tagsedit-label'})
 	e.expand_button = div({class: 'x-tagsedit-button-expand fa fa-caret-up',
 		title: S_expand,
 	})
-	e.add(e.expand_button, e.input, e.label_div)
+	e.add(e.expand_button, e.input, e.label_box)
 
 	function update_tags() {
 
@@ -1321,7 +1392,7 @@ component('x-googlemaps', 'Input', function(e) {
 
 component('x-slider', 'Input', function(e) {
 
-	focusable_widget(e, null, false)
+	focusable_widget(e)
 
 	e.prop('from', {store: 'var', default: 0})
 	e.prop('to', {store: 'var', default: 1})
@@ -1458,10 +1529,11 @@ function dropdown_widget(e) {
 
 	e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
 
-	e.val_div = span({class: 'x-editbox-input x-dropdown-value'})
+	e.val_box = span({class: 'x-editbox-input x-dropdown-value'})
 	e.button = span({class: 'x-dropdown-button fa fa-caret-down'})
-	e.label_div = div({class: 'x-editbox-label x-dropdown-label'})
-	e.add(e.val_div, e.button, e.label_div)
+	e.label_box = div({class: 'x-editbox-label x-dropdown-label'})
+	e.focus_box = div({class: 'x-focus-box'}, e.val_box, e.button, e.label_box)
+	e.add(e.focus_box)
 
 	e.set_more_action = function(action) {
 		if (!e.more_btn && action) {
@@ -1497,6 +1569,7 @@ function dropdown_widget(e) {
 	function bind_picker(on) {
 		assert(!(on && !e.bound))
 		if (on) {
+			assert(!e.picker)
 			e.picker = e.create_picker({
 				id: e.id && e.id + '.picker',
 				dropdown: e,
@@ -1529,12 +1602,11 @@ function dropdown_widget(e) {
 	e.do_update_val = function(v, ev) {
 		let text = e.picker && e.picker.dropdown_display_val(v)
 		if (text == null)
-			text = e.display_val(v)
+			text = e.display_val_for(v)
 		let empty = text === ''
-		e.val_div.class('empty', empty)
-		e.val_div.class('null', false)
-		e.label_div.class('empty', empty)
-		e.val_div.set(empty ? T('&nbsp;') : text)
+		e.val_box.class('empty', empty)
+		e.label_box.class('empty', empty)
+		e.val_box.set(text)
 	}
 
 	let do_error_tooltip_check = e.do_error_tooltip_check
@@ -1610,7 +1682,7 @@ function dropdown_widget(e) {
 	// grid editor protocol
 
 	e.set_text_min_w = function(w) {
-		e.val_div.min_w = w
+		e.val_box.min_w = w
 	}
 
 	// keyboard & mouse binding
@@ -1692,7 +1764,8 @@ function dropdown_widget(e) {
 
 component('x-calendar', 'Input', function(e) {
 
-	focusable_widget(e, null, 'x-focusable-items')
+	focusable_widget(e)
+	e.class('x-focusable-items')
 	val_widget(e)
 
 	function format_month(i) {
@@ -1900,12 +1973,6 @@ component('x-calendar', 'Input', function(e) {
 		}
 	})
 
-	// picker protocol
-
-	e.dropdown_display_val = function(v) {
-		return e.display_val(v)
-	}
-
 	// hack: trick dropdown into thinking that our own opened dropdown picker
 	// is our child, which is how we would implement dropdowns if this fucking
 	// rendering model would allow us to decouple painting order from element's
@@ -1945,17 +2012,18 @@ component('x-richtext', function(e) {
 	editable_widget(e)
 	contained_widget(e)
 
-	e.content_div = div({class: 'x-richtext-content'})
-	e.add(e.content_div)
+	e.content_box = div({class: 'x-richtext-content'})
+	e.focus_box = div({class: 'x-focus-box'}, e.content_box)
+	e.add(e.focus_box)
 
 	// content property
 
 	e.get_content = function() {
-		return e.content_div.html
+		return e.content_box.html
 	}
 
 	e.set_content = function(s) {
-		e.content_div.html = s
+		e.content_box.html = s
 		e.fire('content_changed')
 	}
 	e.prop('content', {slot: 'lang'})
@@ -2076,6 +2144,7 @@ function richtext_widget_editing(e, embedded) {
 	for (let k in actions) {
 		let action = actions[k]
 		let button = tag('button', {class: 'x-richtext-button', title: action.title})
+		button.attr('tabindex', '-1')
 		button.html = action.icon || ''
 		button.classes = action.icon_class
 		button.on('pointerdown', press_button)
@@ -2084,13 +2153,13 @@ function richtext_widget_editing(e, embedded) {
 			update_button = function() {
 				button.class('selected', action.state())
 			}
-			e.content_div.on('keyup', update_button)
-			e.content_div.on('pointerup', update_button)
+			e.content_box.on('keyup', update_button)
+			e.content_box.on('pointerup', update_button)
 		}
 		button.on('click', function() {
 			button_pressed = false
 			if (action.result())
-				e.content_div.focus()
+				e.content_box.focus()
 			if (update_button)
 				update_button()
 			return false
@@ -2100,7 +2169,7 @@ function richtext_widget_editing(e, embedded) {
 
 	e.actionbar.class('x-richtext-actionbar-embedded', embedded || false)
 	if (embedded)
-		e.insert(0, e.actionbar)
+		e.focus_box.insert(0, e.actionbar)
 	else
 		e.actionbar.popup(e, 'top', 'left')
 
@@ -2111,18 +2180,18 @@ function richtext_widget_editing(e, embedded) {
 		inh_set_content(...args)
 	}
 
-	e.content_div.on('input', function(ev) {
+	e.content_box.on('input', function(ev) {
 		let e1 = ev.target.first
 		if (e1 && e1.nodeType == 3)
 			exec('formatBlock', '<p>')
-		else if (e.content_div.html == '<br>')
-			e.content_div.clear()
+		else if (e.content_box.html == '<br>')
+			e.content_box.clear()
 		barrier = true
-		e.content = e.content_div.html
+		e.content = e.content_box.html
 		barrier = false
 	})
 
-	e.content_div.on('keydown', function(key, shift, ctrl, alt, ev) {
+	e.content_box.on('keydown', function(key, shift, ctrl, alt, ev) {
 		if (key === 'Enter')
 			if (document.queryCommandValue('formatBlock') == 'blockquote')
 				after(0, function() { exec('formatBlock', '<p>') })
@@ -2131,11 +2200,11 @@ function richtext_widget_editing(e, embedded) {
 		ev.stopPropagation()
 	})
 
-	e.content_div.on('keypress', function(key, shift, ctr, alt, ev) {
+	e.content_box.on('keypress', function(key, shift, ctr, alt, ev) {
 		ev.stopPropagation()
 	})
 
-	e.content_div.on('pointerdown', function(ev) {
+	e.content_box.on('pointerdown', function(ev) {
 		if (!e.widget_editing)
 			return
 		if (!ev.ctrlKey)
@@ -2147,12 +2216,12 @@ function richtext_widget_editing(e, embedded) {
 	})
 
 	e.set_editing = function(v) {
-		e.content_div.contentEditable = v
+		e.content_box.contentEditable = v
 		e.actionbar.show(v)
 	}
 	e.prop('editing', {store: 'var', private: true})
 
-	e.content_div.on('blur', function() {
+	e.content_box.on('blur', function() {
 		if (!button_pressed)
 			e.widget_editing = false
 	})
@@ -2260,15 +2329,6 @@ component('x-image', 'Input', function(e) {
 		e.upload_btn.show(!e.disabled && e.allow_upload)
 		e.download_btn.show(!e.disabled && e.allow_download)
 	}
-
-	function refresh() {
-		e.update()
-	}
-
-	e.set_url_format        = refresh
-	e.set_upload_url_format = refresh
-	e.set_allow_upload      = refresh
-	e.set_allow_download    = refresh
 
 	e.prop('url_format'        , {store: 'var', attr: true})
 	e.prop('upload_url_format' , {store: 'var', attr: true})

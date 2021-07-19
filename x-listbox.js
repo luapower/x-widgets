@@ -25,7 +25,8 @@ function listbox_widget(e) {
 
 	val_widget(e, true)
 	nav_widget(e)
-	focusable_widget(e, null, 'x-focusable-items')
+	focusable_widget(e)
+	e.class('x-focusable-items')
 	stylable_widget(e)
 
 	e.can_focus_cells = false
@@ -445,7 +446,8 @@ component('x-enum-dropdown', function(e) {
 	list_dropdown.construct(e)
 
 	e.on('bind_field', function(on) {
-		e.picker.items = on ? e.field.enum_values : null
+		if (e.picker)
+			e.picker.items = on ? e.field.enum_values : null
 	})
 
 	e.val_col = 0

@@ -32,7 +32,8 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		val_widget(e, true)
 	nav_widget(e)
 	editable_widget(e)
-	focusable_widget(e, null, 'x-focusable-items')
+	focusable_widget(e)
+	e.class('x-focusable-items')
 	stylable_widget(e)
 
 	// geometry

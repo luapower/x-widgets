@@ -563,13 +563,14 @@ function nav_widget(e) {
 
 	function init_tree_field() {
 		let rs = e.rowset || empty
-		e.tree_field = or(e.all_fields[or(e.tree_col, e.name_col)], or(rs.tree_col, rs.name_col))
+		e.tree_field = e.all_fields[or(
+				or(e.tree_col, e.name_col),
+				or(rs.tree_col, rs.name_col)
+			)]
 	}
 
 	e.set_val_col = function(v) {
 		e.val_field = e.all_fields[v]
-		if (e.val_field)
-			e.update()
 	}
 	e.prop('val_col', {store: 'var', type: 'col'})
 
@@ -836,7 +837,7 @@ function nav_widget(e) {
 	function init_param_vals(param_vals) {
 		if (!e.params) {
 			e.param_vals = null
-		} else if (!(e.param_nav && e.param_nav.focused_row)) {
+		} else if (!(e.param_nav && e.param_nav.focused_row && !e.param_nav.focused_row.is_new)) {
 			e.param_vals = param_vals || false
 		} else {
 			e.param_vals = []
@@ -2443,7 +2444,7 @@ function nav_widget(e) {
 		}
 	}
 
-	function null_display_val_for(row, field) {
+	function null_display_val(row, field) {
 		let s = field.null_text
 		if (!field.null_lookup_col)
 			return s
@@ -2458,7 +2459,7 @@ function nav_widget(e) {
 
 	e.cell_display_val_for = function(row, field, v) {
 		if (v == null)
-			return null_display_val_for(row, field)
+			return null_display_val(row, field)
 		if (v === '')
 			return field.empty_text
 		let ln = field.lookup_nav
@@ -3624,8 +3625,8 @@ function nav_widget(e) {
 			if (ts)
 				return unsafe_html(render_string(ts, row && e.serialize_row_vals(row)))
 		}
-		if (!e.all_fields.length)
-			return 'no fields'
+		if (!row)
+			return
 		let field = e.all_fields[e.display_col]
 		if (!field)
 			return 'no display field'
@@ -3633,7 +3634,9 @@ function nav_widget(e) {
 	}
 
 	e.dropdown_display_val = function(v) {
-		let row = e.val_field && e.lookup(e.val_col, [v])[0]
+		if (!e.val_field)
+			return 'no val field'
+		let row = e.lookup(e.val_col, [v])[0]
 		return e.row_display_val(row)
 	}
 
@@ -3991,10 +3994,10 @@ component('x-lookup-dropdown', function(e) {
 	let bool = {align: 'center', w: 26, max_w: 28}
 	field_types.bool = bool
 
-	bool.true_text = () => div({classes: 'fa fa-check'})
+	bool.true_text = () => div({class: 'fa fa-check'})
 	bool.false_text = ''
 
-	bool.null_text = () => div({classes: 'fa fa-square'})
+	bool.null_text = () => div({class: 'fa fa-square'})
 
 	bool.validator_bool = field => ({
 		validate : v => isbool(v),
@@ -4047,7 +4050,7 @@ component('x-lookup-dropdown', function(e) {
 	field_types.color = color
 
 	color.format = function(color) {
-		return div({class: 'x-item-color', style: 'background-color: '+color}, T('&nbsp;'))
+		return div({class: 'x-item-color', style: 'background-color: '+color}, '\u00A0')
 	}
 
 	color.editor = function(...opt) {
