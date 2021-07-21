@@ -1776,7 +1776,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		if (key == down_arrow) {
 			if (!e.save_row_on_insert) // not really compatible behavior...
 				if (e.is_last_row_focused())
-					if (e.exit_edit())
+					if (e.exit_focused_row())
 						if (e.insert_rows(1, {input: e, focus_it: true}))
 							return false
 		}

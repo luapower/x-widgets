@@ -966,15 +966,15 @@ function week_start_offset() {
 method(Number, 'duration', function() {
 	let d = this
 	if (d > 2 * 365 * 24 * 3600)
-		return S('years', '{0} years').subst(d / (365 * 24 * 3600).dec())
+		return S('years', '{0} years', d / (365 * 24 * 3600).dec())
 	else if (d > 2 * 30.5 * 24 * 3600)
-		return S('months', '{0} months').subst((d / (30.5 * 24 * 3600)).dec())
+		return S('months', '{0} months', (d / (30.5 * 24 * 3600)).dec())
 	else if (d > 1.5 * 24 * 3600)
-		return S('days', '{0} days').subst((d / (24 * 3600)).dec())
+		return S('days', '{0} days', (d / (24 * 3600)).dec())
 	else if (d > 2 * 3600)
-		return S('hours', '{0} hours').subst((d / 3600).dec())
+		return S('hours', '{0} hours', (d / 3600).dec())
 	else if (d > 2 * 60)
-		return S('minutes', '{0} minutes').subst((d / 60).dec())
+		return S('minutes', '{0} minutes', (d / 60).dec())
 	else
 		return S('one_minute', '1 minute')
 })
@@ -1355,7 +1355,7 @@ function ajax(req) {
 
 	req.error_message = function(type, status, message, body) {
 		if (type == 'http')
-			return S('error_http', 'Server returned {0} {1}').subst(status, message)
+			return S('error_http', 'Server returned {0} {1}', status, message)
 		else if (type == 'network')
 			return S('error_load_network', 'Loading failed: network error.')
 		else if (type == 'timeout')

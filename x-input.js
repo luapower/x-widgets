@@ -1063,11 +1063,11 @@ component('x-tagsedit', 'Input', function(e) {
 				let s = T(tag).textContent
 				let xb = div({
 					class: 'x-tagsedit-tag-xbutton fa fa-times',
-					title: S('remove', 'remove {0}'.subst(s)),
+					title: S('remove', 'remove {0}', s),
 				})
 				let tag_e = div({
 					class: 'x-tagsedit-tag',
-					title: S('edit', 'edit {0}'.subst(s)),
+					title: S('edit', 'edit {0}', s),
 				}, tag, xb)
 				xb.on('pointerdown', tag_xbutton_pointerdown)
 				tag_e.on('pointerdown', tag_pointerdown)

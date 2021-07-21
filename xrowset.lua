@@ -2,7 +2,9 @@
 --Server-side rowsets for nav-based x-widgets.
 --Written by Cosmin Apreutesei. Public Domain.
 
+require'webb'
 local errors = require'errors'
+
 local catch = errors.catch
 local raise = errors.raise
 
@@ -31,8 +33,11 @@ function virtual_rowset(init, ...)
 			can_add_rows = rs.can_add_rows,
 			can_remove_rows = rs.can_remove_rows,
 			can_change_rows = rs.can_change_rows,
+			fields = rs.fields,
 			pk = rs.pk,
 			id_col = rs.id_col,
+			index_col = rs.index_col,
+			cols = rs.cols,
 			params = rs.params,
 			parent_col = rs.parent_col,
 			name_col = rs.name_col,
@@ -42,7 +47,11 @@ function virtual_rowset(init, ...)
 
 		local hide_fields = glue.index(glue.names(rs.hide_fields) or glue.empty)
 		for i,field in ipairs(res.fields) do
-			if hide_fields[field.name] then
+			if hide_fields[field.name]
+				or field.name == res.index_col
+				or field.name == res.id_col
+				--or field.name ==
+			then
 				field.hidden = true
 			end
 			if field.name == rs.parent_col then
@@ -248,4 +257,88 @@ function virtual_rowset(init, ...)
 
 	return rs
 end
+
+--S translation rowset -------------------------------------------------------
+
+do
+
+local files = {}
+local ids --{id->{files=,n=,en_s}}
+
+function Sfile(filenames)
+	for _,file in ipairs(glue.names(filenames)) do
+		files[file] = true
+	end
+	ids = nil
+end
+
+local function get_ids()
+	if not ids then
+		ids = {}
+		for file in pairs(files) do
+			local ext = fileext(file)
+			assert(ext == 'lua' or ext == 'js')
+			local s = assert(readfile(file))
+			for id, en_s in s:gmatch"[^%w_]S%(%s*'([%w_]+)'%s*,%s*'(.-)'%s*[,%)]" do
+				local ext_id = ext..':'..id
+				local t = ids[ext_id]
+				if not t then
+					t = {files = file, n = 1, en_s = en_s}
+					ids[ext_id] = t
+				else
+					t.files = t.files .. ' ' .. file
+					t.n = t.n + 1
+				end
+			end
+		end
+	end
+	return ids
+end
+
+rowset.S = virtual_rowset(function(self, ...)
+
+	self.fields = {
+		{name = 'ext'},
+		{name = 'id'},
+		{name = 'en_text'},
+		{name = 'text'},
+		{name = 'files'},
+		{name = 'occurences', type = 'number', max_w = 30},
+	}
+	self.pk = 'ext id'
+	self.cols = 'id en_text text'
+	function self:load_rows(rs, params)
+		rs.rows = {}
+		local lang = params.lang
+		for ext_id, t in pairs(get_ids()) do
+			local ext, id = ext_id:match'^(.-):(.*)$'
+			local s = S_texts(lang, ext)[id]
+			add(rs.rows, {ext, id, t.en_s, s, t.files, t.n})
+		end
+	end
+
+	local function update_key(vals)
+		local ext  = check(json_str_arg(vals['ext:old']))
+		local id   = check(json_str_arg(vals['id:old']))
+		local lang = check(json_str_arg(vals['param:lang']))
+		return ext, id, lang
+	end
+
+	function self:update_row(vals)
+		local ext, id, lang = update_key(vals)
+		local text = json_str_arg(vals.text)
+		update_S_texts(lang, ext, {[id] = text or false})
+	end
+
+	function self:load_row(vals)
+		local ext, id, lang = update_key(vals)
+		local t = get_ids()[ext..':'..id]
+		if not t then return end
+		local s = S_texts(lang, ext)[id]
+		return {ext, id, t.en_s, s, t.files, t.n}
+	end
+
+end)
+
+end --files
 

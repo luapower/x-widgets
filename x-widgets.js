@@ -3176,7 +3176,7 @@ component('x-pagenav', function(e) {
 		b.class('x-pagenav-button')
 		b.class('selected', page == cur_page())
 		b.bool_attr('disabled', page >= 1 && page <= e.page_count && page != cur_page() || null)
-		b.title = or(title, or(text, S('page', 'Page') + ' ' + page))
+		b.title = or(title, or(text, S('page', 'Page {0}', page)))
 		b.href = href !== false ? e.page_url(page) : null
 		b.set(or(text, page))
 		return b

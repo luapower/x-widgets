@@ -331,7 +331,7 @@ function sql_rowset(...)
 
 		function rs:load_rows(res, param_values)
 			use_schema()
-			pp(param_values)
+			pp('load_rows', param_values)
 			local rows, cols, params = query(rs.select_all, param_values)
 
 			local fields, pk, id_col =
@@ -339,7 +339,7 @@ function sql_rowset(...)
 
 			merge(res, {
 				fields = fields,
-				pk = rs.pk or pk,
+				pk = pk,
 				id_col = id_col,
 				rows = rows,
 				params = params,

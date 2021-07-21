@@ -70,6 +70,7 @@ rowset field attributes:
 		empty_text     : display value for ''
 
 	vlookup:
+		lookup_rowset[_name]|[_id][_url]: rowset to look up values of this field into.
 		lookup_nav     : nav to look up values of this field into.
 		lookup_nav_id  : nav id for creating lookup_nav.
 		lookup_col     : field in lookup_nav that matches this field.
@@ -368,7 +369,7 @@ function nav_widget(e) {
 	e.prop('row_states', {store: 'var', slot: 'app'})
 
 	e.set_rowset_name = function(v) {
-		e.rowset_url = v ? 'rowset.json/' + v : null
+		e.rowset_url = v ? '/rowset.json/' + v : null
 		e.reload()
 	}
 	e.prop('rowset_name', {store: 'var', type: 'rowset'})
@@ -712,10 +713,28 @@ function nav_widget(e) {
 		return field && !field.internal
 	}
 
-	let all_cols = () => e.all_fields.filter(f => !f.internal && !f.hidden).map(f => f.name)
+	let user_cols = () =>
+		e.cols != null &&
+		e.cols.names().filter(function(col) {
+			let f = e.all_fields[col]
+			return f && !f.internal
+		})
 
-	let cols_array = () => e.cols == null ? all_cols() :
-		e.cols.names().filter(col => e.all_fields[col] && !e.all_fields[col].internal)
+	let rowset_cols = () =>
+		e.rowset && e.rowset.cols &&
+		e.rowset.cols.names().filter(function(col) {
+			let f = e.all_fields[col]
+			return f && !f.internal && !f.hidden
+		})
+
+	let all_cols = () =>
+		e.all_fields.filter(function(f) {
+			return !f.internal && !f.hidden
+		}).map(f => f.name)
+
+	let cols_array = function() {
+		return user_cols() || rowset_cols() || all_cols()
+	}
 
 	function cols_from_array(cols) {
 		cols = cols.join(' ')
@@ -826,7 +845,7 @@ function nav_widget(e) {
 	e.prop('params', {store: 'var', attr: true})
 
 	function param_map(params) {
-		let m = new Map()
+		let m = map()
 		for (let s of params.names()) {
 			let p = s.split('=')
 			let param = p && p[0] || s
@@ -887,7 +906,7 @@ function nav_widget(e) {
 	function init_rows() {
 		e.focused_row = null
 		e.selected_row = null
-		e.selected_rows = new Map()
+		e.selected_rows = map()
 		reset_quicksearch()
 
 		init_filters()
@@ -1093,7 +1112,7 @@ function nav_widget(e) {
 		if (ev.preserve_selection) {
 			// leave it
 		} else if (ev.selected_rows) {
-			e.selected_rows = new Map(ev.selected_rows)
+			e.selected_rows = map(ev.selected_rows)
 			sel_rows_changed = true
 		} else if (e.can_focus_cells) {
 			if (expand_selection) {
@@ -1105,7 +1124,7 @@ function nav_widget(e) {
 				for (let ri = ri1; ri <= ri2; ri++) {
 					let row = e.rows[ri]
 					if (e.can_select_cell(row)) {
-						let sel_fields = new Set()
+						let sel_fields = set()
 						for (let fi = fi1; fi <= fi2; fi++) {
 							let field = e.fields[fi]
 							if (e.can_select_cell(row, field)) {
@@ -1120,11 +1139,11 @@ function nav_widget(e) {
 					}
 				}
 			} else {
-				let sel_fields = e.selected_rows.get(row) || new Set()
+				let sel_fields = e.selected_rows.get(row) || set()
 
 				if (!invert_selection) {
 					e.selected_rows.clear()
-					sel_fields = new Set()
+					sel_fields = set()
 				}
 
 				let field = e.fields[fi]
@@ -1231,7 +1250,7 @@ function nav_widget(e) {
 			if (e.can_select_cell(row)) {
 				let sel_fields = true
 				if (e.can_focus_cells) {
-					sel_fields = new Set()
+					sel_fields = set()
 					for (let field of e.fields)
 						if (e.can_select_cell(row, field) && (of_field == null || field == of_field))
 							sel_fields.add(field)
@@ -1361,7 +1380,7 @@ function nav_widget(e) {
 				let v = range_val(row[fi], i)
 				let t1 = t0.get(v)
 				if (!t1) {
-					t1 = fi == last_fi ? [] : new Map()
+					t1 = fi == last_fi ? [] : map()
 					t0.set(v, t1)
 					t1.text = range_text(v, i)
 				}
@@ -1374,7 +1393,7 @@ function nav_widget(e) {
 		idx.rebuild = function() {
 			cols_arr = cols.names()
 			fis = cols_arr.map(fld).map(f => f.val_index)
-			tree = new Map()
+			tree = map()
 			for (let row of e.all_rows)
 				add_row(row)
 		}
@@ -1456,7 +1475,7 @@ function nav_widget(e) {
 		let fields = flds(cols)
 		if (!fields)
 			return
-		let rows = new Set()
+		let rows = set()
 		for (let row of e.all_rows) {
 			let group_vals = e.cell_vals(row, fields)
 			let group_rows = e.lookup(cols, group_vals, range_defs)
@@ -1719,7 +1738,7 @@ function nav_widget(e) {
 
 	function row_comparator() {
 
-		let order_by = new Map(order_by_map)
+		let order_by = map(order_by_map)
 
 		// use index-based ordering by default, unless otherwise specified.
 		if (e.index_field && order_by.size == 0)
@@ -1798,7 +1817,7 @@ function nav_widget(e) {
 
 	// changing the sort order ------------------------------------------------
 
-	let order_by_map = new Map()
+	let order_by_map = map()
 
 	function update_field_sort_order() {
 		order_by_map.clear()
@@ -1955,9 +1974,9 @@ function nav_widget(e) {
 				}, field)
 			field.exclude_vals_nav = nav
 		}
-		let exclude_set = new Set(exclude_vals)
+		let exclude_set = set(exclude_vals)
 		let rows = []
-		let val_set = new Set()
+		let val_set = set()
 		for (let row of e.all_rows) {
 			let v = e.cell_val(row, field)
 			if (!val_set.has(v)) {
@@ -2416,18 +2435,35 @@ function nav_widget(e) {
 
 	function bind_lookup_navs(on) {
 		for (let field of e.all_fields) {
-			let ln_id = field.lookup_nav_id
-			if (ln_id) {
-				field.lookup_nav = component.create(ln_id)
-				field.lookup_nav.id = null // not saving into the original.
+			if (
+				   field.lookup_rowset
+				|| field.lookup_rowset_id
+				|| field.lookup_rowset_name
+				|| field.lookup_rowset_url
+			) {
+				field.lookup_nav = bare_nav({
+					rowset      : field.lookup_rowset,
+					rowset_id   : field.lookup_rowset_id,
+					rowset_name : field.lookup_rowset_name,
+					rowset_url  : field.lookup_rowset_url,
+				})
 				field.lookup_nav.hide()
 				e.add(field.lookup_nav)
+			} else {
+				let ln_id = field.lookup_nav_id
+				if (ln_id) {
+					field.lookup_nav = component.create(ln_id)
+					field.lookup_nav.id = null // not saving into the original.
+					field.lookup_nav.hide()
+					e.add(field.lookup_nav)
+				}
 			}
 			let ln = field.lookup_nav
 			if (ln) {
 				if (on && !field.lookup_nav_reset) {
 					field.lookup_nav_reset = function() {
-						field.display_field = ln.all_fields[field.display_col || ln.name_col]
+						field.lookup_fields = ln.flds(field.lookup_col || (ln.rowset && ln.rowset.pk))
+						field.display_field = ln.fld(field.display_col || ln.name_col)
 						e.fire('display_vals_changed', field)
 						e.fire('display_vals_changed_for_'+field.name, field)
 					}
@@ -2435,12 +2471,14 @@ function nav_widget(e) {
 						e.fire('display_vals_changed', field)
 						e.fire('display_vals_changed_for_'+field.name, field)
 					}
-					field.lookup_nav_reset()
+					if (ln.rowset)
+						field.lookup_nav_reset()
 				}
 				ln.on('reset'       , field.lookup_nav_reset, on)
 				ln.on('rows_changed', field.lookup_nav_display_vals_changed, on)
-				ln.on('cell_val_changed_for_'+field.lookup_col,
-					field.lookup_nav_display_vals_changed, on)
+				for (let col of field.lookup_col.names())
+					ln.on('cell_val_changed_for_'+col,
+						field.lookup_nav_display_vals_changed, on)
 				ln.on('cell_val_changed_for_'+(field.display_col || ln.name_col),
 					field.lookup_nav_display_vals_changed, on)
 			}
@@ -2467,7 +2505,7 @@ function nav_widget(e) {
 			return field.empty_text
 		let ln = field.lookup_nav
 		if (ln) {
-			if (field.lookup_col) {
+			if (field.lookup_fields && field.display_field) {
 				let row = ln.lookup(field.lookup_col, [v])[0]
 				if (row)
 					return ln.cell_display_val(row, field.display_field)
@@ -2531,8 +2569,8 @@ function nav_widget(e) {
 				// `undefined` allows for partial updates on specific fields only
 				// and allows for setting the field's default value on insert.
 				let val = isobject(vals) ? vals[field.name] : (vals ? vals[fi] : undefined)
-				// update with current param values if it's a client-side-filtered detail rowset.
-				if (val === undefined && !e.rowset_url && e.param_vals)
+				// update with current param values if it's a filtered detail rowset.
+				if (val === undefined && e.param_vals)
 					val = e.param_vals[0][field.name]
 				row[fi] = val
 			}
@@ -2671,7 +2709,7 @@ function nav_widget(e) {
 
 		e.begin_update()
 
-		let removed_rows = new Set()
+		let removed_rows = set()
 		let changed_rows = []
 		let rows_marked
 		let top_row_index
@@ -2815,6 +2853,7 @@ function nav_widget(e) {
 			let index = 1
 			for (let ri = 0; ri < e.rows.length; ri++)
 				e.set_cell_val(e.rows[ri], e.index_field, index++)
+			print(index, e.changed_rows)
 		}
 	}
 
@@ -2930,7 +2969,7 @@ function nav_widget(e) {
 
 	function add_request(req) {
 		if (!requests)
-			requests = new Set()
+			requests = set()
 		requests.add(req)
 	}
 
@@ -2981,10 +3020,10 @@ function nav_widget(e) {
 			e.reset()
 			return
 		}
-		let uri = e.rowset_url
+		let uri = href(e.rowset_url)
 		if (e.param_vals) {
 			let u = url_arg(uri)
-			u.args = u.args || {}
+			u.args = u.args || obj()
 
 			// compress param_vals into a value array for single-key pks.
 			let param_vals
@@ -3070,7 +3109,7 @@ function nav_widget(e) {
 		if (row.nosave)
 			return
 		if (force || row.modified || !row.removed != !row.is_new) {
-			e.changed_rows = e.changed_rows || new Set()
+			e.changed_rows = e.changed_rows || set()
 			e.changed_rows.add(row)
 		} else if (e.changed_rows) {
 			e.changed_rows.delete(row)
@@ -3094,21 +3133,23 @@ function nav_widget(e) {
 			if (row.save_request)
 				return // currently saving this row.
 			if (row.is_new) {
-				let t = {type: 'new', values: {}}
+				let t = {type: 'new', values: obj()}
 				for (let fi = 0; fi < e.all_fields.length; fi++) {
 					let field = e.all_fields[fi]
 					let val = row[fi]
 					if (val !== field.default && !field.nosave)
 						t.values[field.name] = val
 				}
+				for (let f of pk_fields)
+					t.values[f.name+':old'] = e.cell_old_val(row, f)
 				rows.push(t)
 			} else if (row.removed) {
-				let t = {type: 'remove', values: {}}
+				let t = {type: 'remove', values: obj()}
 				for (let col of e.pk.names())
 					t.values[col+':old'] = e.cell_old_val(row, col)
 				rows.push(t)
 			} else if (row.modified) {
-				let t = {type: 'update', values: {}}
+				let t = {type: 'update', values: obj()}
 				let found
 				for (let field of e.all_fields) {
 					if (e.cell_modified(row, field) && !field.nosave) {
@@ -3230,7 +3271,7 @@ function nav_widget(e) {
 	function save_fail(type, status, message, body) {
 		let err
 		if (type == 'http')
-			err = S('error_http', 'Server returned {0} {1}').subst(status, message)
+			err = S('error_http', 'Server returned {0} {1}', status, message)
 		else if (type == 'network')
 			err = S('error_save_network', 'Saving failed: network error.')
 		else if (type == 'timeout')
@@ -3660,7 +3701,7 @@ function nav_widget(e) {
 	e.set_sql_db = function(v) {
 		if (!e.id)
 			return
-		e.rowset_url = v ? 'sql_rowset.json/' + e.id : null
+		e.rowset_url = v ? '/sql_rowset.json/' + e.id : null
 		e.reload()
 	}
 
@@ -3769,7 +3810,7 @@ function nav_dropdown_widget(e) {
 }
 
 // ---------------------------------------------------------------------------
-// lookup dropdown (for binding to fields with `lookup_nav_id`)
+// lookup dropdown (for binding to fields with `lookup_nav_id` or `lookup_rowset*`)
 // ---------------------------------------------------------------------------
 
 component('x-lookup-dropdown', function(e) {
@@ -3778,9 +3819,16 @@ component('x-lookup-dropdown', function(e) {
 
 	e.create_picker = function(opt) {
 		let ln_id = e.field.lookup_nav_id
-		if (!ln_id)
-			return
-		opt.id          = ln_id
+		if (ln_id) {
+			opt.id = ln_id
+		} else {
+			opt.type = 'listbox'
+			opt.rowset      = e.field.lookup_rowset
+			opt.rowset_id   = e.field.lookup_rowset_id
+			opt.rowset_name = e.field.lookup_rowset_name
+			opt.rowset_url  = e.field.lookup_rowset_url
+		}
+
 		opt.val_col     = e.field.lookup_col
 		opt.display_col = e.field.display_col
 		opt.theme       = e.theme
@@ -3842,22 +3890,21 @@ component('x-lookup-dropdown', function(e) {
 
 	all_field_types.validator_not_null = field => (!field.allow_null && {
 		validate : v => v != null,
-		message  : S('validation_required',
-			(field.text && '{0} required' || 'Required').subst(field.text)),
+		message  : S('validation_empty', 'Value cannot be empty'),
 	})
 
 	all_field_types.validator_min = field => (field.min != null && {
 		validate : v => v >= field.min,
-		message  : S('validation_min_value', 'Value must be at least {0}').subst(field.min),
+		message  : S('validation_min_value', 'Value must be at least {0}', field.min),
 	})
 
 	all_field_types.validator_max = field => (field.max != null && {
 		validate : v => v <= field.max,
-		message  : S('validation_max_value', 'Value must be at most {0}').subst(field.max),
+		message  : S('validation_max_value', 'Value must be at most {0}', field.max),
 	})
 
 	all_field_types.validator_lookup = field => (field.lookup_nav && {
-		validate : v => !field.lookup_nav.lookup(field.lookup_col, [v]).length,
+		validate : v => field.lookup_nav.lookup(field.lookup_col, [v]).length,
 		message  : S('validation_lookup', 'Value must be in the list of allowed values.'),
 	})
 
@@ -3866,7 +3913,13 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	all_field_types.editor = function(...opt) {
-		if (this.lookup_nav_id)
+		if (
+			   this.lookup_nav_id
+			|| this.lookup_rowset_id
+			|| this.lookup_rowset_name
+			|| this.lookup_rowset_url
+			|| this.lookup_rowset
+		)
 			return lookup_dropdown(...opt)
 		return editbox(...opt)
 	}
@@ -3899,7 +3952,7 @@ component('x-lookup-dropdown', function(e) {
 
 	number.validator_multiple = field => (field.multiple_of != null && field.multiple_of != 1 && {
 		validate : v => v % field.multiple_of == 0,
-		message  : S('validation_multiple', 'Value must be multiple of {0}').subst(field.multiple_of),
+		message  : S('validation_multiple', 'Value must be multiple of {0}', field.multiple_of),
 	})
 
 	number.editor = function(...opt) {
@@ -4043,7 +4096,7 @@ component('x-lookup-dropdown', function(e) {
 	tags.convert = function(v) {
 		if (!(v && v.length))
 			return null
-		return [...new Set(v)]
+		return [...set(v)]
 	}
 
 	// colors

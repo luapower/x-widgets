@@ -54,6 +54,8 @@ function listbox_widget(e) {
 
 	function create_item(row) {
 		let item = e.row_display_val(row)
+		if (!(item instanceof HTMLElement)) // plain string or text node, wrap it.
+			item = div(0, item)
 		item.classes = 'x-listbox-item x-item'
 		item.on('pointerdown', item_pointerdown)
 		return item
