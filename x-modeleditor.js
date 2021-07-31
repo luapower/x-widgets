@@ -2046,7 +2046,7 @@ component('x-modeleditor', function(e) {
 			rowset: {
 				fields: [
 					{name: 'visible', type: 'bool', format: format_visible, default: true},
-					{name: 'name', client_default: gen_layer_name, allow_null: false},
+					{name: 'name', client_default: gen_layer_name, not_null: true},
 				],
 				rows: rows,
 				pk: 'name',

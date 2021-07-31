@@ -1,6 +1,43 @@
+--[[
 
---Server-side rowsets for nav-based x-widgets.
---Written by Cosmin Apreutesei. Public Domain.
+	Server-side rowsets for nav-based x-widgets.
+	Written by Cosmin Apreutesei. Public Domain.
+
+	Must set:
+		fields           : {field1, ...} field list (required)
+		pk               : 'col1 ...'    primary key columns (required)
+		field_attrs      : {col->field}  extra field attributes
+		cols             : 'col1 ...'    default visible columns list
+		hide_cols        : 'col1 ...'    columns hidden by default
+		ro_cols          : 'col1 ...'    read-only (i.e. non-editable) columns
+		index_col        : 'col'         index column for manual ordering of rows
+		id_col           : 'col'         id column for tree-building
+		parent_col       : 'col'         parent column for tree-building
+		name_col         : 'col'         default display_col in lookup rowsets
+		tree_col         : 'col'         tree column (the one with [+] icons)
+		params           : 'par1 ...'    detail param names for master-detail
+		can_edit         : t|f           allow editing of any kind (true)
+		can_add_rows     : t|f           allow adding new rows
+		can_remove_rows  : t|f           allow removing rows
+		can_change_rows  : t|f           allow editing existing rows
+
+	Must implement:
+		- load_rows(result, params)
+		- insert_row(vals)
+		- update_row(vals)
+		- delete_row(vals)
+		- load_row(vals)
+
+	Sets by default:
+		- can_*_rows are set to false on missing row update methods.
+		- index_col and parent_col are set to hidden by default.
+		- on client-side, id_col is set to pk if pk is single-column.
+
+	Field defaults based on field's name or type:
+		field_name_attrs = {col->field}
+		field_type_attrs = {type->field}
+
+]]
 
 require'webb'
 local errors = require'errors'
@@ -14,57 +51,74 @@ action['rowset.json'] = function(name)
 	return check(rowset[name])()
 end
 
-field_name_attrs = {}
 field_type_attrs = {}
+field_name_attrs = {}
+
+server_field_attrs = {
+	from_server = 1,
+	to_server = 1,
+}
 
 function virtual_rowset(init, ...)
 
 	local rs = {}
 	setmetatable(rs, rs)
 
-	rs.can_edit = true
-	rs.can_add_rows = true
-	rs.can_remove_rows = true
-	rs.can_change_rows = true
+	function rs.init_fields(rs)
+
+		local hide_cols = glue.index(glue.names(rs.hide_cols) or glue.empty)
+		local   ro_cols = glue.index(glue.names(rs.  ro_cols) or glue.empty)
+
+		rs.client_fields = {}
+
+		for fi,field in ipairs(rs.fields) do
+			if hide_cols[field.name]
+				or field.name == rs.index_col
+				or field.name == rs.parent_col
+			then
+				field.hidden = true
+			end
+			if ro_cols[field.name] then
+				field.editable = false
+			end
+			update(field,
+				field_type_attrs[field.type],
+				field_name_attrs[field.name],
+				rs.field_attrs and rs.field_attrs[field.name]
+			)
+
+			local client_field = {}
+			for k in pairs(field) do
+				if not server_field_attrs[k] then
+					client_field[k] = field[k]
+				end
+			end
+			rs.client_fields[fi] = client_field
+		end
+
+		if not rs.insert_row then rs.can_add_rows    = false end
+		if not rs.update_row then rs.can_change_rows = false end
+		if not rs.delete_row then rs.can_remove_rows = false end
+	end
 
 	function rs:load(param_values)
-		local res = {
+		local res = {}
+		rs:load_rows(res, param_values)
+		merge(res, {
 			can_edit = rs.can_edit,
 			can_add_rows = rs.can_add_rows,
 			can_remove_rows = rs.can_remove_rows,
 			can_change_rows = rs.can_change_rows,
-			fields = rs.fields,
+			fields = rs.client_fields,
 			pk = rs.pk,
-			id_col = rs.id_col,
 			index_col = rs.index_col,
 			cols = rs.cols,
 			params = rs.params,
+			id_col = rs.id_col,
 			parent_col = rs.parent_col,
 			name_col = rs.name_col,
 			tree_col = rs.tree_col,
-		}
-		rs:load_rows(res, param_values)
-
-		local hide_fields = glue.index(glue.names(rs.hide_fields) or glue.empty)
-		for i,field in ipairs(res.fields) do
-			if hide_fields[field.name]
-				or field.name == res.index_col
-				or field.name == res.id_col
-				--or field.name ==
-			then
-				field.hidden = true
-			end
-			if field.name == rs.parent_col then
-				field.visible = false
-			end
-			update(field,
-				field_name_attrs[field.name],
-				field_type_attrs[field.type],
-				rs.field_attrs and rs.field_attrs[field.name]
-			)
-		end
-
-
+		})
 		return res
 	end
 
@@ -92,7 +146,7 @@ function virtual_rowset(init, ...)
 	end
 
 	function rs:can_add_row(values)
-		if not rs.can_add_rows then
+		if rs.can_add_rows == false then
 			return false, 'adding rows not allowed'
 		end
 		local errors = rs:validate_fields(values)
@@ -100,7 +154,7 @@ function virtual_rowset(init, ...)
 	end
 
 	function rs:can_change_row(values)
-		if not rs.can_change_rows then
+		if rs.can_change_rows == false then
 			return false, 'updating rows not allowed'
 		end
 		local errors = rs:validate_fields(values)
@@ -108,7 +162,7 @@ function virtual_rowset(init, ...)
 	end
 
 	function rs:can_remove_row(values)
-		if not rs.can_remove_rows then
+		if rs.can_remove_rows == false then
 			return false, 'removing rows not allowed'
 		end
 	end
@@ -122,26 +176,27 @@ function virtual_rowset(init, ...)
 			if row.type == 'new' then
 				local can, err, field_errors = rs:can_add_row(row.values)
 				if can ~= false then
-					local ok, affected_rows, id = catch('db', rs.insert_row, rs, row.values)
+					local ok, affected_rows = catch('db', rs.insert_row, rs, row.values)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_inserted', 'row not inserted')
-						else
-							if rs.load_row then
-								local ok, values = catch('db', rs.load_row, rs, row.values)
-								if ok then
-									if values then
-										rt.values = values
-									else
-										rt.error = S('inserted_row_not_found',
-											'inserted row could not be loaded back')
-									end
+						elseif rs.load_row then
+							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							if ok then
+								if #rows == 0 then
+									rt.error = S('inserted_row_not_found',
+										'inserted row could not be loaded back')
+								elseif #rows > 1 then
+									rt.error = S('inserted_row_multiple_rows',
+										'loaded back multiple rows for one inserted row')
 								else
-									local err = values
-									rt.error = db_error(err,
-										S('load_inserted_row_error',
-											'db error on loading back inserted row'))
+									rt.values = rows[1]
 								end
+							else
+								local err = rows
+								rt.error = db_error(err,
+									S('load_inserted_row_error',
+										'db error on loading back inserted row'))
 							end
 						end
 					else
@@ -158,18 +213,30 @@ function virtual_rowset(init, ...)
 				if can ~= false then
 					local ok, affected_rows = catch('db', rs.update_row, rs, row.values)
 					if ok then
-						if rs.load_row then
-							local ok, values = catch('db', rs.load_row, rs, row.values)
+						if (affected_rows or 1) == 0 then
+							rt.error = S('row_not_updated', 'row not updated')
+						elseif rs.load_row then
+							--copy :foo:old to :foo so we can select the row back.
+							for k,v in pairs(row.values) do
+								local k1 = k:match'^(.-):old$'
+								if k1 and row.values[k1] == nil then
+									row.values[k1] = v
+								end
+							end
+							local ok, rows = catch('db', rs.load_row, rs, row.values)
 							if ok then
-								if values then
-									rt.values = values
-								else
+								if #rows == 0 then
 									rt.remove = true
 									rt.error = S('updated_row_not_found',
 										'updated row could not be loaded back')
+								elseif #rows > 1 then
+									rt.error = S('updated_row_multiple_rows',
+										'loaded back multiple rows for one updated row')
+								else
+									rt.values = rows[1]
 								end
 							else
-								local err = values
+								local err = rows
 								rt.error = db_error(err,
 									S('load_updated_row_error',
 										'db error on loading back updated row'))
@@ -190,20 +257,21 @@ function virtual_rowset(init, ...)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_removed', 'row not removed')
-						else
-							if rs.load_row then
-								local ok, values = catch('db', rs.load_row, rs, row.values)
-								if ok then
-									if values then
-										rt.error = S('rmeoved_row_found',
-											'removed row is still in db')
-									end
-								else
-									local err = values
-									rt.error = db_error(err,
-										S('load_removed_row_error',
-											'db error on loading back removed row'))
+						elseif rs.load_row then
+							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							if ok then
+								if #rows == 1 then
+									rt.error = S('removed_row_found',
+										'removed row is still in db')
+								elseif #rows > 1 then
+									rt.error = S('removed_row_multiple_rows',
+										'loaded back multiple rows for one removed row')
 								end
+							else
+								local err = rows
+								rt.error = db_error(err,
+									S('load_removed_row_error',
+										'db error on loading back removed row'))
 							end
 						end
 					else
@@ -248,10 +316,9 @@ function virtual_rowset(init, ...)
 	end
 
 	init(rs, ...)
-
-	if not rs.insert_row then rs.can_add_rows    = false end
-	if not rs.update_row then rs.can_change_rows = false end
-	if not rs.delete_row then rs.can_remove_rows = false end
+	if not rs.delay_init_fields then
+		rs:init_fields()
+	end
 
 	rs.__call = rs.respond
 

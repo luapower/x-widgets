@@ -6,11 +6,11 @@ local fs = require'fs'
 --rowsets --------------------------------------------------------------------
 
 local rowsets = virtual_rowset(function(rs)
-	function rs:select_rows(res, param_values)
-		res.fields = {
-			{name = 'name'},
-		}
-		res.pk = {'name'}
+	rs.fields = {
+		{name = 'name'}
+	}
+	rs.pk = 'name'
+	function rs:select_rows(res, params)
 		res.rows = {}
 		for name, rs in sortedpairs(rowset) do
 			add(res.rows, {name})

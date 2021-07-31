@@ -21,6 +21,7 @@ rowset attributes:
 	fields: [field1,...]
 	rows: [row1,...]
 	pk: 'col1 ...'
+	id_col: 'col'
 
 rowset field attributes:
 
@@ -47,9 +48,10 @@ rowset field attributes:
 		from_text      : f(s) -> v
 		to_text        : f(v) -> s
 		enum_values    : [v1, ...]
+		enum_texts     : [t1, ...]
 
 	validation:
-		allow_null     : allow null (true).
+		not_null       : don't allow null (false).
 		validator_*    : f(field) -> {validate: f(v) -> true|false, message: text}
 		convert        : f(v) -> v
 		min            : min value (0).
@@ -325,7 +327,6 @@ function nav_widget(e) {
 
 	function init_all() {
 		init_all_fields()
-		init_validators()
 	}
 
 	function force_unfocus_focused_cell() {
@@ -341,6 +342,7 @@ function nav_widget(e) {
 
 	e.on('bind', function(on) {
 		bind_param_nav(on)
+		bind_linked_lookup_navs(on)
 		if (on) {
 			e.update({reload: true})
 		} else {
@@ -382,13 +384,14 @@ function nav_widget(e) {
 
 	// utils ------------------------------------------------------------------
 
-	let fld     = col => isstr(col) ? e.all_fields[col] : col
+	let fld     = col => isstr(col) ? assert(e.all_fields[col]) : col
 	let fldname = col => isstr(col) ? col : col.name
+	let colsarr = cols => isstr(cols) ? cols.names() : cols
 
 	let is_not_null = v => v != null
 	function flds(cols) {
-		let fields = isstr(cols) ? cols.names().map(fld).filter(is_not_null) : cols
-		return fields.length ? fields : null
+		let fields = cols && colsarr(cols).map(fld).filter(is_not_null)
+		return fields && fields.length ? fields : null
 	}
 
 	e.fldnames = function(cols) {
@@ -396,10 +399,10 @@ function nav_widget(e) {
 			return cols
 		if (isnum(cols)) // fi
 			return e.all_fields[cols].name
-		else if (isobject(cols)) // field
-			return cols.name
 		else if (isarray(cols)) // [col1|field1,...]
 			return cols.map(fldname).join(' ')
+		else if (isobject(cols)) // field
+			return cols.name
 	}
 
 	e.fld = fld
@@ -486,7 +489,15 @@ function nav_widget(e) {
 		e.all_fields[fi] = field
 		e.all_fields[name] = field
 
+		init_field_own_lookup_nav(field)
+
 		return field
+	}
+
+	function free_field(field) {
+		if (field.editor_instance)
+			field.editor_instance.remove()
+		free_field_own_lookup_nav(field)
 	}
 
 	e.add_field = function(f) {
@@ -501,6 +512,7 @@ function nav_widget(e) {
 			for (let i = 2 * fn; i < row.length; i += fn)
 				row.splice(i, 0, null)
 		}
+		init_field_validators(field)
 		init_fields()
 		e.update({fields: true})
 		return field
@@ -526,14 +538,9 @@ function nav_widget(e) {
 
 	function init_all_fields() {
 
-		if (e.all_fields) {
-
+		if (e.all_fields)
 			for (let field of e.all_fields)
-				if (field.editor_instance)
-					field.editor_instance.remove()
-
-			bind_lookup_navs(false)
-		}
+				free_field(field)
 
 		e.all_fields = [] // fields in row value order.
 
@@ -546,15 +553,19 @@ function nav_widget(e) {
 				for (let fi = 0; fi < rs.fields.length; fi++)
 					init_field(rs.fields[fi], fi)
 
-		bind_lookup_navs(true)
-
 		e.pk = e.bound ? (isarray(rs.pk) ? rs.pk.join(' ') : rs.pk) : null
-		e.id_field = e.pk && e.all_fields[e.pk.names()[0]]
+		e.pk_fields = flds(e.pk)
+		e.id_field = rs.id_col
+			? e.all_fields[rs.id_col]
+			: (e.pk_fields && e.pk_fields.length == 1 ? e.pk_fields[0] : null)
 		e.parent_field = e.id_field && e.all_fields[rs.parent_col]
 		init_tree_field()
 
 		e.val_field   = e.all_fields[e.val_col]
 		e.index_field = e.all_fields[rs.index_col]
+
+		for (let field of e.all_fields)
+			init_field_validators(field)
 
 		init_fields()
 
@@ -724,7 +735,7 @@ function nav_widget(e) {
 		e.rowset && e.rowset.cols &&
 		e.rowset.cols.names().filter(function(col) {
 			let f = e.all_fields[col]
-			return f && !f.internal && !f.hidden
+			return f && !f.internal
 		})
 
 	let all_cols = () =>
@@ -1095,13 +1106,12 @@ function nav_widget(e) {
 		let ri0 = or(e.selected_row_index  , last_ri)
 		let fi0 = or(e.selected_field_index, last_fi)
 		let row0 = e.focused_row
+		let row = e.rows[ri]
 
-		e.focused_row = e.rows[ri]
+		e.focused_row = row
 		e.focused_field = e.fields[fi]
 		if (e.focused_field != null)
 			e.last_focused_col = e.focused_field.name
-
-		let row = e.rows[ri]
 
 		if (e.val_field && row) {
 			let val = e.cell_val(row, e.val_field)
@@ -1272,7 +1282,7 @@ function nav_widget(e) {
 
 		let refocus_pk, refocus_row
 		if (how == 'pk')
-			refocus_pk = e.focused_row ? e.cell_vals(e.focused_row, e.pk) : null
+			refocus_pk = e.focused_row ? e.cell_vals(e.focused_row, e.pk_fields) : null
 		else if (how == 'row')
 			refocus_row = e.focused_row
 
@@ -1283,8 +1293,8 @@ function nav_widget(e) {
 			if (how == 'val' && e.val_field && e.nav && e.field) {
 				ri = e.row_index(e.lookup(e.val_col, [e.input_val])[0])
 				unfocus_if_not_found = true
-			} else if (how == 'pk' && e.pk) {
-				ri = e.row_index(e.lookup(e.pk, refocus_pk)[0])
+			} else if (how == 'pk') {
+				ri = e.row_index(e.lookup(e.pk_fields, refocus_pk)[0])
 			} else if (how == 'row') {
 				ri = e.row_index(refocus_row)
 			} else if (!how) { // TODO: not used (unfocus)
@@ -1312,7 +1322,7 @@ function nav_widget(e) {
 		let idx = obj()
 
 		let tree // Map(f1_val->Map(f2_val->[row1,...]))
-		let cols_arr // [col1,...]
+		let cols_arr = colsarr(cols) // [col1,...]
 		let fis // [val_index1, ...]
 
 		let range_val = return_arg
@@ -1391,7 +1401,6 @@ function nav_widget(e) {
 		}
 
 		idx.rebuild = function() {
-			cols_arr = cols.names()
 			fis = cols_arr.map(fld).map(f => f.val_index)
 			tree = map()
 			for (let row of e.all_rows)
@@ -2092,39 +2101,35 @@ function nav_widget(e) {
 		return field.convert ? field.convert.call(e, val, field, row) : val
 	}
 
-	function init_validators(field) {
-		for (let field of e.all_fields) {
-			let t = []
-			for (let k in field) {
-				if (k.starts('validator_')) {
-					let v = field[k](field)
-					if (v && v.validate) t.push(v)
-				}
+	function init_field_validators(field) {
+		let t = []
+		for (let k in field) {
+			if (k.starts('validator_')) {
+				let v = field[k](field)
+				if (v && v.validate) t.push(v)
 			}
-			// add row-level validators.
-			for (let k in e) {
-				if (k.starts('validator_')) {
-					let v = e[k]()
-					if (v && v.validate) t.push(v)
-				}
-			}
-			field.validators = t
 		}
+		// add row-level validators.
+		for (let k in e) {
+			if (k.starts('validator_')) {
+				let v = e[k]()
+				if (v && v.validate) t.push(v)
+			}
+		}
+		field.validators = t
 	}
 
 	e.validator_pk = function() {
-		if (!e.pk)
-			return
-		let pk_fields = flds(e.pk)
 		return {
-			validate: function(val, row, field) {
-				if (!pk_fields.includes(field))
+			validate: e.pk && function(val, row, field) {
+				if (!e.pk_fields.includes(field))
 					return true // don't check if it's not a pk field that's being changed.
 				let rows = e.lookup(e.pk, e.cell_input_vals(row, e.pk)).filter(row1 => row1 != row)
 				return rows.length < 1
 			},
-			message: ('{0} must be unique').subst(pk_fields.map(field => field.text)),
-			must_allow_exit_edit: pk_fields.length > 1 || null,
+			message: S('validation_unique', '{0} must be unique')
+				.subst(e.pk_fields && e.pk_fields.map(field => field.text) || ''),
+			must_allow_exit_edit: e.pk_fields && e.pk_fields.length > 1 || null,
 			must_not_allow_exit_row: true,
 		}
 	}
@@ -2135,7 +2140,7 @@ function nav_widget(e) {
 		if (field.validators) {
 			for (let validator of field.validators) {
 				let passed = validator.validate(val, row, field)
-				let error = isbool(passed) ? {passed: !!passed} : passed
+				let error = !isobject(passed) ? {passed: !!passed} : passed
 				errors.push(error)
 				if (!error.message)
 					error.message = validator.message
@@ -2433,56 +2438,78 @@ function nav_widget(e) {
 
 	// get/set cell display val -----------------------------------------------
 
-	function bind_lookup_navs(on) {
-		for (let field of e.all_fields) {
-			if (
-				   field.lookup_rowset
-				|| field.lookup_rowset_id
-				|| field.lookup_rowset_name
-				|| field.lookup_rowset_url
-			) {
-				field.lookup_nav = bare_nav({
-					rowset      : field.lookup_rowset,
-					rowset_id   : field.lookup_rowset_id,
-					rowset_name : field.lookup_rowset_name,
-					rowset_url  : field.lookup_rowset_url,
-				})
-				field.lookup_nav.hide()
-				e.add(field.lookup_nav)
-			} else {
-				let ln_id = field.lookup_nav_id
-				if (ln_id) {
-					field.lookup_nav = component.create(ln_id)
-					field.lookup_nav.id = null // not saving into the original.
-					field.lookup_nav.hide()
-					e.add(field.lookup_nav)
-				}
-			}
-			let ln = field.lookup_nav
-			if (ln) {
-				if (on && !field.lookup_nav_reset) {
-					field.lookup_nav_reset = function() {
-						field.lookup_fields = ln.flds(field.lookup_col || (ln.rowset && ln.rowset.pk))
-						field.display_field = ln.fld(field.display_col || ln.name_col)
-						e.fire('display_vals_changed', field)
-						e.fire('display_vals_changed_for_'+field.name, field)
-					}
-					field.lookup_nav_display_vals_changed = function() {
-						e.fire('display_vals_changed', field)
-						e.fire('display_vals_changed_for_'+field.name, field)
-					}
-					if (ln.rowset)
-						field.lookup_nav_reset()
-				}
-				ln.on('reset'       , field.lookup_nav_reset, on)
-				ln.on('rows_changed', field.lookup_nav_display_vals_changed, on)
-				for (let col of field.lookup_col.names())
-					ln.on('cell_val_changed_for_'+col,
-						field.lookup_nav_display_vals_changed, on)
-				ln.on('cell_val_changed_for_'+(field.display_col || ln.name_col),
-					field.lookup_nav_display_vals_changed, on)
+	function init_field_own_lookup_nav(field) {
+		let ln = field.lookup_nav
+		if (ln) // linked lookup nav (not owned).
+			return
+		if (
+				field.lookup_rowset
+			|| field.lookup_rowset_id
+			|| field.lookup_rowset_name
+			|| field.lookup_rowset_url
+		) {
+			ln = bare_nav({
+				rowset      : field.lookup_rowset,
+				rowset_id   : field.lookup_rowset_id,
+				rowset_name : field.lookup_rowset_name,
+				rowset_url  : field.lookup_rowset_url,
+			})
+		} else {
+			let ln_id = field.lookup_nav_id
+			if (ln_id) {
+				ln = component.create(ln_id)
+				ln.id = null // not saving into the original.
 			}
 		}
+		if (ln) {
+			field.lookup_nav = ln
+			field.own_lookup_nav = true
+			e.add(ln)
+			bind_lookup_nav(field, true)
+		}
+	}
+
+	function free_field_own_lookup_nav(field) {
+		if (!field.own_lookup_nav)
+			return
+		bind_lookup_nav(field, false)
+		field.lookup_nav.remove()
+	}
+
+	function bind_lookup_nav(field, on) {
+		let ln = field.lookup_nav
+		if (!ln)
+			return
+		if (on && !field.lookup_nav_reset) {
+			field.lookup_nav_reset = function() {
+				field.lookup_fields = ln.flds(field.lookup_col || (ln.rowset && ln.rowset.pk_fields))
+				field.display_field = ln.fld(field.display_col || ln.name_col)
+				e.fire('display_vals_changed')
+				e.fire('display_vals_changed_for_'+field.name)
+			}
+			field.lookup_nav_display_vals_changed = function() {
+				e.fire('display_vals_changed')
+				e.fire('display_vals_changed_for_'+field.name)
+			}
+			if (ln.rowset)
+				field.lookup_nav_reset()
+		}
+		if (field.lookup_nav_reset) {
+			ln.on('reset'       , field.lookup_nav_reset, on)
+			ln.on('rows_changed', field.lookup_nav_display_vals_changed, on)
+			for (let col of field.lookup_col.names())
+				ln.on('cell_val_changed_for_'+col,
+					field.lookup_nav_display_vals_changed, on)
+			ln.on('cell_val_changed_for_'+(field.display_col || ln.name_col),
+				field.lookup_nav_display_vals_changed, on)
+		}
+	}
+
+	function bind_linked_lookup_navs(on) {
+		if (e.all_fields)
+			for (let field of e.all_fields)
+				if (!field.own_lookup_nav)
+					bind_lookup_nav(field, on)
 	}
 
 	function null_display_val(row, field) {
@@ -2506,7 +2533,7 @@ function nav_widget(e) {
 		let ln = field.lookup_nav
 		if (ln) {
 			if (field.lookup_fields && field.display_field) {
-				let row = ln.lookup(field.lookup_col, [v])[0]
+				let row = ln.lookup(field.lookup_fields, [v])[0]
 				if (row)
 					return ln.cell_display_val(row, field.display_field)
 			}
@@ -2569,14 +2596,14 @@ function nav_widget(e) {
 				// `undefined` allows for partial updates on specific fields only
 				// and allows for setting the field's default value on insert.
 				let val = isobject(vals) ? vals[field.name] : (vals ? vals[fi] : undefined)
-				// update with current param values if it's a filtered detail rowset.
+				// update with current param values if it's a detail rowset.
 				if (val === undefined && e.param_vals)
 					val = e.param_vals[0][field.name]
 				row[fi] = val
 			}
 
 			// check pk to perform an "insert or update" op.
-			let row0 = has_rows && e.pk && e.lookup(e.pk, e.cell_vals(row, e.pk))[0]
+			let row0 = has_rows && e.lookup(e.pk_fields, e.cell_vals(row, e.pk_fields))[0]
 
 			if (row0) {
 
@@ -2853,7 +2880,6 @@ function nav_widget(e) {
 			let index = 1
 			for (let ri = 0; ri < e.rows.length; ri++)
 				e.set_cell_val(e.rows[ri], e.index_field, index++)
-			print(index, e.changed_rows)
 		}
 	}
 
@@ -3009,20 +3035,10 @@ function nav_widget(e) {
 
 	}
 
-	e.reload = function(param_vals) {
-		if (!e.bound) {
-			e.update({reload: true})
-			return
-		}
-		init_param_vals(param_vals)
-		if (!e.rowset_url || e.param_vals === false) {
-			// client-side rowset or param vals not available: reset it.
-			e.reset()
-			return
-		}
-		let uri = href(e.rowset_url)
+	function rowset_url() {
+		let s = href(e.rowset_url)
 		if (e.param_vals) {
-			let u = url_arg(uri)
+			let u = url_arg(s)
 			u.args = u.args || obj()
 
 			// compress param_vals into a value array for single-key pks.
@@ -3038,7 +3054,21 @@ function nav_widget(e) {
 			}
 
 			u.args.filter = json(param_vals)
-			uri = url(u)
+			s = url(u)
+		}
+		return s
+	}
+
+	e.reload = function(param_vals) {
+		if (!e.bound) {
+			e.update({reload: true})
+			return
+		}
+		init_param_vals(param_vals)
+		if (!e.rowset_url || e.param_vals === false) {
+			// client-side rowset or param vals not available: reset it.
+			e.reset()
+			return
 		}
 		if (requests && requests.size && !e.load_request) {
 			e.notify('error',
@@ -3047,7 +3077,7 @@ function nav_widget(e) {
 		}
 		e.abort_loading()
 		let req = ajax({
-			url: uri,
+			url: rowset_url(),
 			progress: load_progress,
 			success: load_success,
 			fail: load_fail,
@@ -3098,9 +3128,8 @@ function nav_widget(e) {
 	function load_success(rs) {
 		set_rowset(rs)
 		e.reset()
-		if (e.pk && e.focus_state != null) {
-			e.focus_find_row(e.pk, json_arg(e.focus_state))
-		}
+		if (e.focus_state != null && e.pk_fields)
+			e.focus_find_row(e.pk_fields, json_arg(e.focus_state))
 	}
 
 	// saving changes ---------------------------------------------------------
@@ -3124,11 +3153,6 @@ function nav_widget(e) {
 		let rows = []
 		let changes = {rows: rows}
 
-		if (!e.pk)
-			warn('pk missing for', e.id)
-
-		let pk_fields = e.pk ? flds(e.pk) : e.all_fields
-
 		for (let row of e.changed_rows) {
 			if (row.save_request)
 				return // currently saving this row.
@@ -3140,25 +3164,23 @@ function nav_widget(e) {
 					if (val !== field.default && !field.nosave)
 						t.values[field.name] = val
 				}
-				for (let f of pk_fields)
-					t.values[f.name+':old'] = e.cell_old_val(row, f)
 				rows.push(t)
 			} else if (row.removed) {
 				let t = {type: 'remove', values: obj()}
-				for (let col of e.pk.names())
-					t.values[col+':old'] = e.cell_old_val(row, col)
+				for (let f of e.pk_fields)
+					t.values[f.name+':old'] = e.cell_old_val(row, f)
 				rows.push(t)
 			} else if (row.modified) {
 				let t = {type: 'update', values: obj()}
-				let found
+				let has_valuees
 				for (let field of e.all_fields) {
 					if (e.cell_modified(row, field) && !field.nosave) {
 						t.values[field.name] = row[field.val_index]
-						found = true
+						has_valuees = true
 					}
 				}
-				if (found) {
-					for (let f of pk_fields)
+				if (has_valuees) {
+					for (let f of e.pk_fields)
 						t.values[f.name+':old'] = e.cell_old_val(row, f)
 					rows.push(t)
 				}
@@ -3215,7 +3237,7 @@ function nav_widget(e) {
 
 	function save_to_server() {
 		let req = ajax({
-			url: e.rowset_url,
+			url: rowset_url(),
 			upload: pack_changes(),
 			changed_rows: Array.from(e.changed_rows),
 			success: save_success,
@@ -3677,9 +3699,11 @@ function nav_widget(e) {
 	}
 
 	e.dropdown_display_val = function(v) {
-		if (!e.val_field)
-			return 'no val field'
-		let row = e.lookup(e.val_col, [v])[0]
+		if (e.val_col == null) // not set up
+			return 'no val col'
+		if (!e.val_field) // not loaded yet
+			return
+		let row = e.lookup(e.val_field, [v])[0]
 		return e.row_display_val(row)
 	}
 
@@ -3730,21 +3754,11 @@ component('x-bare-nav', function(e) {
 
 	nav_widget(e)
 
+	e.hidden = true
+
 	e.scroll_to_cell = noop
 	e.do_update_cell_state = noop
 	e.do_update_row_state = noop
-
-	let init = e.init
-	e.init = function() {
-		init()
-		e.bind(true)
-		if (e.id)
-			window[e.id] = e
-	}
-
-	e.free = function() {
-		e.bind(false)
-	}
 
 	let val_widget_do_update = e.do_update
 	e.do_update = function(opt) {
@@ -3772,6 +3786,7 @@ global_val_nav = function() {
 			rows: [[]],
 		},
 	})
+	root.add(nav)
 	nav.focus_cell(true, false)
 	return nav
 }
@@ -3782,7 +3797,7 @@ global_val_nav = function() {
 
 function nav_dropdown_widget(e) {
 
-	dropdown_widget(e)
+	editbox_widget(e, {input: false, picker: true})
 
 	e.set_val_col = function(v) {
 		if (!e.picker) return
@@ -3815,9 +3830,10 @@ function nav_dropdown_widget(e) {
 
 component('x-lookup-dropdown', function(e) {
 
-	dropdown_widget(e)
+	editbox_widget(e, {input: false, picker: true})
 
 	e.create_picker = function(opt) {
+
 		let ln_id = e.field.lookup_nav_id
 		if (ln_id) {
 			opt.id = ln_id
@@ -3853,6 +3869,7 @@ component('x-lookup-dropdown', function(e) {
 	filesize
 	date
 	datetime
+	time
 	bool
 	enum
 	color
@@ -3877,7 +3894,7 @@ component('x-lookup-dropdown', function(e) {
 		min_w: 22,
 		max_w: 2000,
 		align: 'left',
-		allow_null: true,
+		not_null: false,
 		editable: true,
 		sortable: true,
 		maxlen: 256,
@@ -3886,26 +3903,32 @@ component('x-lookup-dropdown', function(e) {
 		lookup_failed_display_val: function(v) {
 			return this.format(v)
 		},
+		to_num: v => num(v, null),
+		from_num: return_arg,
 	}
 
-	all_field_types.validator_not_null = field => (!field.allow_null && {
+	all_field_types.validator_not_null = field => (field.not_null && {
 		validate : v => v != null,
 		message  : S('validation_empty', 'Value cannot be empty'),
 	})
 
 	all_field_types.validator_min = field => (field.min != null && {
-		validate : v => v >= field.min,
-		message  : S('validation_min_value', 'Value must be at least {0}', field.min),
+		validate : v => v == null || field.to_num(v) >= field.min,
+		message  : S('validation_min_value', 'Value must be at least {0}',
+			field.from_num(field.min)),
 	})
 
 	all_field_types.validator_max = field => (field.max != null && {
-		validate : v => v <= field.max,
-		message  : S('validation_max_value', 'Value must be at most {0}', field.max),
+		validate : v => v == null || field.to_num(v) <= field.max,
+		message  : S('validation_max_value', 'Value must be at most {0}',
+			field.from_num(field.max)),
 	})
 
 	all_field_types.validator_lookup = field => (field.lookup_nav && {
-		validate : v => field.lookup_nav.lookup(field.lookup_col, [v]).length,
-		message  : S('validation_lookup', 'Value must be in the list of allowed values.'),
+		validate : v => v == null
+			|| field.lookup_nav.lookup(field.lookup_col, [v]).length > 0,
+		message  : S('validation_lookup',
+			'Value must be in the list of allowed values.'),
 	})
 
 	all_field_types.format = function(v) {
@@ -3921,7 +3944,8 @@ component('x-lookup-dropdown', function(e) {
 			|| this.lookup_rowset
 		)
 			return lookup_dropdown(...opt)
-		return editbox(...opt)
+		else
+			return textedit(...opt)
 	}
 
 	all_field_types.to_text = function(v) {
@@ -3941,17 +3965,17 @@ component('x-lookup-dropdown', function(e) {
 	field_types.number = number
 
 	number.validator_number = field => ({
-		validate : val => { val = num(val); return isnum(val) && val === val; },
+		validate : v => v == null || (isnum(v) && v === v),
 		message  : S('validation_number', 'Value must be a number'),
 	})
 
 	number.validator_integer = field => (field.multiple_of == 1 && {
-		validate : v => v % 1 == 0,
+		validate : v => v == null || (v % 1 == 0),
 		message  : S('validation_integer', 'Value must be an integer'),
 	})
 
 	number.validator_multiple = field => (field.multiple_of != null && field.multiple_of != 1 && {
-		validate : v => v % field.multiple_of == 0,
+		validate : v => v == null || (v % field.multiple_of == 0),
 		message  : S('validation_multiple', 'Value must be multiple of {0}', field.multiple_of),
 	})
 
@@ -3989,60 +4013,151 @@ component('x-lookup-dropdown', function(e) {
 		return z < min ? span({class: 'x-dba-insignificant-size'}, s) : s
 	}
 
-	// dates
-
-	let date = {align: 'right', min: -(2**52), max: 2**52}
-	field_types.date = date
-
-	date.validator_date = field => ({
-		validate : v => isnum(val) && val === val,
-		message  : S('validation_date', 'Date must be valid'),
-	})
-
-	date.format = function(t) {
-		_d.setTime(t * 1000)
-		return _d.toLocaleString(locale, this.date_format)
-	}
-
-	date.date_format =
-		{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
-
-	date.editor = function(...opt) {
-		return date_dropdown(assign({
-			align: 'right',
-			mode: 'fixed',
-		}, ...opt))
-	}
-
-	// datetime
+	// datetimes
 
 	let datetime = {align: 'right'}
 	field_types.datetime = datetime
 
-	datetime.to_time = function(d) {
-		return Date.parse(d + ' UTC') / 1000
+	datetime.has_time = true // for x-calendar
+
+	datetime.to_time = function(s) {
+		if (s == null || s == '')
+			return null
+		s = s.trim()
+		let dm = s.match(/^(\d\d\d\d)[^\d]+(\d+)[^\d]+(\d+)(.*)$/)
+		if (!dm)
+			return null
+		if (this.has_time) {
+			let tm = dm[4].match(/^[^\d]+(\d+)[:\s]+(\d+)[:\s]+([\.\d]+)/)
+			if (tm)
+				return time(
+					num(dm[1]), num(dm[2]), num(dm[3]),
+					num(tm[1]), num(tm[2]), num(tm[3]))
+		}
+		return time(num(dm[1]), num(dm[2]), num(dm[3]))
 	}
 
+	let a = []
 	datetime.from_time = function(t) {
+		if (t == null)
+			return null
 		_d.setTime(t * 1000)
-		return _d.toISOString().slice(0, 19).replace('T', ' ')
+		let y = _d.getUTCFullYear()
+		let m = _d.getUTCMonth() + 1
+		let d = _d.getUTCDate()
+		let H = _d.getUTCHours()
+		let M = _d.getUTCMinutes()
+		let S = _d.getUTCSeconds()
+		a.length = 0
+		a[0] = y.base(10, 4)
+		a[1] = '-'
+		a[2] = m.base(10, 2)
+		a[3] = '-'
+		a[4] = d.base(10, 2)
+		if (this.has_time) {
+			a[5] = ' '
+			a[6] = H.base(10, 2)
+			a[7] = ':'
+			a[8] = M.base(10, 2)
+			if (this.has_seconds) {
+				a[9] = ':'
+				a[10] = S.base(10, 2)
+			}
+		}
+		return a.join('')
 	}
 
-	datetime.format = function(s) {
-		let t = datetime.to_time(s)
-		_d.setTime(t * 1000)
-		return _d.toLocaleString(locale, this.date_format)
+	datetime.to_num   = datetime.to_time
+	datetime.from_num = datetime.from_time
+
+	datetime.to_text = function(v) {
+		let t = this.to_time(v)
+		let s = this.from_time(t)
+		return s ? s : ''
 	}
 
-	datetime.date_format =
-		{weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
+	datetime.from_text = function(s) {
+		let t = this.to_time(s)
+		return this.from_time(t)
+	}
+
+	// range of MySQL DATETIME type
+	datetime.min = datetime.to_time('1000-01-01 00:00:00')
+	datetime.max = datetime.to_time('9999-12-31 23:59:59')
+
+	datetime.format = function(s, field) {
+		s = s || ''
+		if (!this.has_time)
+			return s.slice(0, 10)
+		else if (!this.has_seconds)
+			return s.slice(0, 16)
+		else
+			return s
+		/*
+		let t = this.to_time(s)
+		_d.setTime(t * 1000)
+		return _d.toLocaleString(locale,
+			field.has_seconds
+				? this.date_format_with_seconds
+				: this.date_format)
+		*/
+	}
+
+	datetime.date_format = {
+		weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+		hour: '2-digit', minute: '2-digit',
+		timeZone: 'UTC',
+	}
+
+	datetime.date_format_with_seconds = assign({
+		second: '2-digit',
+	}, datetime.date_format)
 
 	datetime.editor = function(...opt) {
+		return dateedit(assign({
+			align: 'right',
+			mode: 'fixed',
+		}, ...opt))
+		/*
 		return date_dropdown(assign({
 			align: 'right',
 			mode: 'fixed',
 		}, ...opt))
+		*/
 	}
+
+	datetime.validator_date = field => ({
+		validate : (v, row, field) => v == null || field.to_time(v) != null,
+		message  : S('validation_date', 'Date must be valid'),
+	})
+
+	// dates
+
+	let date = assign({}, datetime)
+	field_types.date = date
+
+	date.has_time = false
+
+	date.date_format = {
+		weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+		timeZone: 'UTC',
+	}
+
+	// timestamps
+
+	let timestamp = assign({}, datetime, {
+		min: 0, max: 2**32-1, // range of MySQL TIMESTAMP type
+	})
+
+	timestamp.to_time = return_arg
+	timestamp.from_time = return_arg
+
+	timestamp.validator_date = field => ({
+		validate : v => isnum(v) && v === v,
+		message  : S('validation_date', 'Date must be valid'),
+	})
+
+	field_types.timestamp = timestamp
 
 	// booleans
 

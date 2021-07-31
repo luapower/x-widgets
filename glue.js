@@ -6,7 +6,7 @@
 	types:
 		isobject(e)
 		isarray(a)
-		isplainobject(t)
+		isobj(t)
 		isstr(s)
 		isnum(n)
 		isbool(b)
@@ -149,7 +149,7 @@
 
 isobject = e => e != null && typeof e == 'object' // includes arrays, HTMLElements, etc.
 isarray = Array.isArray
-isplainobject = t => isobject(t) && (t.constructor == Object || t.constructor === undefined)
+isobj = t => isobject(t) && (t.constructor == Object || t.constructor === undefined)
 isstr = s => typeof s == 'string'
 isnum = n => typeof n == 'number'
 isbool = b => typeof b == 'boolean'
@@ -372,8 +372,19 @@ method(String, 'names', function() {
 	return this.trim().split(/\s+/)
 })
 
+// multi-language stubs replaced in webb_spa.js ------------------------------
+
 // stub for getting message strings that can be translated multiple languages.
-S = window.S || function S(label, msg) { return msg }
+if (!window.S)
+	function S(label, msg) { return msg }
+
+// stub for getting current language.
+if (!window.lang)
+	function lang() { return document.documentElement.lang }
+
+// stub for rewriting links for current language.
+if (!window.href)
+	href = return_arg
 
 // arrays --------------------------------------------------------------------
 
@@ -852,14 +863,14 @@ _d = new Date() // public temporary date object.
 // NOTE: months start at 1, and seconds can be fractionary.
 function time(y, m, d, H, M, s) {
 	if (isnum(y)) {
-		_d.setFullYear(y)
-		_d.setMonth(or(m, 1) - 1)
-		_d.setDate(or(d, 1))
-		_d.setHours(H || 0)
-		_d.setMinutes(M || 0)
+		_d.setUTCFullYear(y)
+		_d.setUTCMonth(or(m, 1) - 1)
+		_d.setUTCDate(or(d, 1))
+		_d.setUTCHours(H || 0)
+		_d.setUTCMinutes(M || 0)
 		s = s || 0
-		_d.setSeconds(s)
-		_d.setMilliseconds((s - floor(s)) * 1000)
+		_d.setUTCSeconds(s)
+		_d.setUTCMilliseconds((s - floor(s)) * 1000)
 		return _d.valueOf() / 1000
 	} else if (isstr(y)) {
 		return Date.parse(y) / 1000
@@ -872,60 +883,90 @@ function time(y, m, d, H, M, s) {
 
 // get the time at the start of the day of a given time, plus/minus a number of days.
 function day(t, offset) {
+	if (t == null) return null
 	_d.setTime(t * 1000)
-	_d.setMilliseconds(0)
-	_d.setSeconds(0)
-	_d.setMinutes(0)
-	_d.setHours(0)
-	_d.setDate(_d.getDate() + (offset || 0))
+	_d.setUTCMilliseconds(0)
+	_d.setUTCSeconds(0)
+	_d.setUTCMinutes(0)
+	_d.setUTCHours(0)
+	_d.setUTCDate(_d.getUTCDate() + (offset || 0))
 	return _d.valueOf() / 1000
 }
 
 // get the time at the start of the month of a given time, plus/minus a number of months.
 function month(t, offset) {
+	if (t == null) return null
 	_d.setTime(t * 1000)
-	_d.setMilliseconds(0)
-	_d.setSeconds(0)
-	_d.setMinutes(0)
-	_d.setHours(0)
-	_d.setDate(1)
-	_d.setMonth(_d.getMonth() + (offset || 0))
+	_d.setUTCMilliseconds(0)
+	_d.setUTCSeconds(0)
+	_d.setUTCMinutes(0)
+	_d.setUTCHours(0)
+	_d.setUTCDate(1)
+	_d.setUTCMonth(_d.getUTCMonth() + (offset || 0))
 	return _d.valueOf() / 1000
 }
 
 // get the time at the start of the year of a given time, plus/minus a number of years.
 function year(t, offset) {
+	if (t == null) return null
 	_d.setTime(t * 1000)
-	_d.setMilliseconds(0)
-	_d.setSeconds(0)
-	_d.setMinutes(0)
-	_d.setHours(0)
-	_d.setDate(1)
-	_d.setMonth(0)
-	_d.setFullYear(_d.getFullYear() + (offset || 0))
+	_d.setUTCMilliseconds(0)
+	_d.setUTCSeconds(0)
+	_d.setUTCMinutes(0)
+	_d.setUTCHours(0)
+	_d.setUTCDate(1)
+	_d.setUTCMonth(0)
+	_d.setUTCFullYear(_d.getUTCFullYear() + (offset || 0))
 	return _d.valueOf() / 1000
 }
 
 // get the time at the start of the week of a given time, plus/minus a number of weeks.
 function week(t, offset) {
+	if (t == null) return null
 	_d.setTime(t * 1000)
-	_d.setMilliseconds(0)
-	_d.setSeconds(0)
-	_d.setMinutes(0)
-	_d.setHours(0)
-	let days = -_d.getDay() + week_start_offset()
+	_d.setUTCMilliseconds(0)
+	_d.setUTCSeconds(0)
+	_d.setUTCMinutes(0)
+	_d.setUTCHours(0)
+	let days = -_d.getUTCDay() + week_start_offset()
 	if (days > 0) days -= 7
-	_d.setDate(_d.getDate() + days + (offset || 0) * 7)
+	_d.setUTCDate(_d.getUTCDate() + days + (offset || 0) * 7)
 	return _d.valueOf() / 1000
 }
 
 function days(dt) {
+	if (dt == null) return null
 	return dt / (3600 * 24)
 }
 
-function year_of      (t) { _d.setTime(t * 1000); return _d.getFullYear() }
-function month_of     (t) { _d.setTime(t * 1000); return _d.getMonth() + 1 }
-function month_day_of (t) { _d.setTime(t * 1000); return _d.getDay() }
+function year_of      (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCFullYear() }
+function month_of     (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCMonth() + 1 }
+function week_day_of  (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCDay() }
+function month_day_of (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCDate() }
+function hours_of     (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCHours() }
+function minutes_of   (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCMinutes() }
+function seconds_of   (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCSeconds() }
+
+function set_hours(t, x) {
+	if (t == null) return null
+	_d.setTime(t * 1000)
+	_d.setUTCHours(x)
+	return _d.valueOf() / 1000
+}
+
+function set_minutes(t, x) {
+	if (t == null) return null
+	_d.setTime(t * 1000)
+	_d.setUTCMinutes(x)
+	return _d.valueOf() / 1000
+}
+
+function set_seconds(t, x) {
+	if (t == null) return null
+	_d.setTime(t * 1000)
+	_d.setUTCSeconds(x)
+	return _d.valueOf() / 1000
+}
 
 locale = navigator.language
 
@@ -939,16 +980,19 @@ locale = navigator.language
 	}
 
 	function weekday_name(t, how) {
+		if (t == null) return null
 		_d.setTime(t * 1000)
 		return wd[how || 'short'][_d.getDay()]
 	}
 
 	function month_name(t, how) {
+		if (t == null) return null
 		_d.setTime(t * 1000)
 		return _d.toLocaleDateString(locale, {month: how || 'short'})
 	}
 
 	function month_year(t, how) {
+		if (t == null) return null
 		_d.setTime(t * 1000)
 		return _d.toLocaleDateString(locale, {month: how || 'short', year: 'numeric'})
 	}
@@ -1248,7 +1292,7 @@ function ajax(req) {
 	xhr.open(method, req.url, async, req.user, req.pass)
 
 	let upload = req.upload
-	if (isplainobject(upload)) {
+	if (isobj(upload)) {
 		upload = json(upload)
 		xhr.setRequestHeader('content-type', 'application/json')
 	}

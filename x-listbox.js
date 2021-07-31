@@ -43,8 +43,11 @@ function listbox_widget(e) {
 		item_template = item_template.html
 	}
 
-	let html_items = [...e.at]
-	e.clear()
+	let html_items
+	if (e.at.length) {
+		html_items = [...e.at]
+		e.clear()
+	}
 
 	function format_item(row, val) { // stub
 		if (val instanceof HTMLElement) // element, dupe it.
@@ -67,26 +70,38 @@ function listbox_widget(e) {
 
 	e.prop('items', {store: 'var', private: true})
 
-	e.set_items = function() {
+	function update_item_field() {
+		let field = assign({format: (val, row) => format_item(row, val)}, e.item_field)
+		if (e.rowset)
+			e.rowset.fields[0] = field
+	}
 
-		if (!e.items) {
+	e.set_items = function(items) {
+
+		if (!items) {
 			e.rowset = null
 			e.reload()
 			return
 		}
 
 		e.display_col = 0
+
 		let rows = []
-		for (let item of e.items)
+		for (let item of items)
 			rows.push([item])
 
 		e.rowset = {
-			fields: [assign({format: (val, row) => format_item(row, val)}, e.item_field)],
+			fields: [null],
 			rows: rows,
 		}
 
+		update_item_field()
+
 		e.reload()
 	}
+
+	e.set_item_field = update_item_field
+	e.prop('item_field', {store: 'var'})
 
 	e.child_widgets = function() {
 		let widgets = []

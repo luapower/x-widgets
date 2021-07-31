@@ -7,17 +7,17 @@
 
 		checkbox
 		radiogroup
-		editbox
+		textedit
 		passedit
 		spinedit
 		tagsedit
 		placeedit
 		googlemaps
 		slider
-		dropdown
 		calendar
 		date_dropdown
-		richtext
+		dateedit
+		richedit
 		image
 		sql_editor
 		chart
@@ -49,7 +49,7 @@ function row_widget(e, enabled_without_nav) {
 
 	e.do_update = function() {
 		let row = e.row
-		e.disabled = !(enabled_without_nav || row)
+		e.disabled = !(enabled_without_nav || e.nav.can_change_val(row))
 		e.do_update_row(row)
 	}
 
@@ -291,7 +291,8 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	// view -------------------------------------------------------------------
 
 	e.do_update = function() {
-		let disabled = !(enabled_without_nav || (e.row && e.field))
+		let disabled = !(enabled_without_nav
+			|| (e.row && e.field && e.nav.can_change_val(e.row, e.field)))
 		e.bool_attr('disabled', disabled || null) // for non-focusables
 		e.disabled = disabled
 		cell_state_changed(e.field, 'input_val', e.input_val)
@@ -316,18 +317,38 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		}
 		if (e.invalid) {
 			let errs = errors.filter(err => !err.passed).map(err => err.message)
-			e.error_tooltip.text = errs.length > 1 ? tag('ul', {style: 'text-align: start'}, ...errs.map(s => tag('li', 0, s))) : errs
+			e.error_tooltip.text = errs.length > 1
+				? tag('ul', {class: 'x-error-list'}, ...errs.map(s => tag('li', 0, s)))
+				: errs
 		}
 		e.error_tooltip.update()
 	}
 
 }
 
+/* ---------------------------------------------------------------------------
+// input-box widget mixin
 // ---------------------------------------------------------------------------
-// input widget mixin
-// ---------------------------------------------------------------------------
+features:
+	- layout with focus-box and info-box underneath.
+	- optional (animated) inner label.
+	- optional info button tied to the focus-box vs info-box underneath.
+publishes:
+	e.label
+	e.nolabel
+	e.align
+	e.mode
+	e.info
+	e.infomode
+calls:
+	add_info_button()
+	add_info_box()
+	create_label_placeholder()
+--------------------------------------------------------------------------- */
 
 function input_widget(e) {
+
+	e.class('x-input-widget')
 
 	e.prop('label'   , {store: 'var', slot: 'lang'})
 	e.prop('nolabel' , {store: 'var', type: 'bool'})
@@ -382,7 +403,7 @@ function input_widget(e) {
 
 	}
 
-	e.label_placeholder = function() {
+	e.create_label_placeholder = function() {
 		return div({class: 'x-input-placeholder'})
 	}
 
@@ -390,7 +411,7 @@ function input_widget(e) {
 		update_info()
 		let s = !e.nolabel && (e.label || (e.field && e.field.text)) || null
 		e.class('with-label', !!s)
-		e.label_box.set(!e.nolabel ? s || e.label_placeholder() : null)
+		e.label_box.set(!e.nolabel ? s || e.create_label_placeholder() : null)
 	})
 
 	e.on('keydown', function(key) {
@@ -401,7 +422,7 @@ function input_widget(e) {
 		}
 	})
 
-	e.on('mousedown', function(ev) {
+	e.on('pointerdown', function(ev) {
 		let fe = e.focusables()[0]
 		if (fe && ev.target != fe) {
 			fe.focus()
@@ -617,21 +638,36 @@ component('x-radiogroup', 'Input', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// editbox
+// editbox/dropdown
 // ---------------------------------------------------------------------------
 
-component('x-editbox', 'Input', function(e) {
+function editbox_widget(e, opt) {
+
+	let has_input  = or(opt && opt.input , true)
+	let has_picker = or(opt && opt.picker, false)
 
 	val_widget(e)
 	input_widget(e)
+	stylable_widget(e)
 
-	e.input = tag('input', {class: 'x-editbox-input'})
+	e.props.mode.enum_values = ['default', 'inline', 'wrap', 'fixed']
+
+	e.class('x-editbox')
+	e.class('x-dropdown', has_picker)
+
+	if (has_input)
+		e.input = tag('input', {class: 'x-editbox-input'})
+	else
+		e.val_box = div({class: 'x-editbox-input x-editbox-value'})
+
+	focusable_widget(e, e.input)
+
 	e.label_box = div({class: 'x-editbox-label'})
-	e.focus_box = div({class: 'x-focus-box'}, e.input, e.label_box)
+	e.focus_box = div({class: 'x-focus-box'}, e.input || e.val_box, e.label_box)
 	e.add(e.focus_box)
 
 	function do_update_state(s) {
-		e.input.class('empty', s == '')
+		;(e.input || e.val_box).class('empty', s == '')
 		e.label_box.class('empty', s == '')
 	}
 
@@ -639,108 +675,117 @@ component('x-editbox', 'Input', function(e) {
 	e.to_text = function(v) { return e.field ? e.field.to_text(v) : '' }
 
 	e.do_update_val = function(v, ev) {
-		if (ev && ev.input == e && ev.typing)
-			return
-		let s = e.to_text(v)
-		let maxlen = e.field && e.field.maxlen
-		e.input.value = s.slice(0, maxlen)
-		do_update_state(s)
+		if (e.input) {
+			if (ev && ev.typing)
+				return
+			let s = e.to_text(v)
+			let maxlen = e.field && e.field.maxlen
+			e.input.value = s.slice(0, maxlen)
+			do_update_state(s)
+		} else {
+			let dval = e.picker && e.picker.dropdown_display_val
+			let text = dval && dval(v)
+			if (text == null)
+				text = e.display_val_for(v)
+			e.val_box.set(text)
+			do_update_state(text)
+		}
 	}
 
-	e.input.on('input', function() {
-		let v = e.input.value
-		e.set_val(e.from_text(v), {input: e, typing: true})
-		do_update_state(v)
-	})
+	if (e.input) {
 
-	e.on('bind_field', function(on) {
-		e.input.attr('maxlength', on ? e.field.maxlen : null)
-		bind_picker(on)
-	})
+		e.input.on('input', function() {
+			let v = e.input.value
+			e.set_val(e.from_text(v), {input: e, typing: true})
+			do_update_state(v)
+		})
 
-	// focusing
+		e.on('bind_field', function(on) {
+			e.input.attr('maxlength', on ? e.field.maxlen : null)
+			bind_spicker(on)
+		})
 
-	focusable_widget(e, e.input)
+	}
 
 	// suggestion picker ------------------------------------------------------
 
-	e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
+	e.prop('spicker_w', {store: 'var', type: 'number', text: 'Suggestion Picker Width'})
 
-	e.create_picker = noop // stub
+	e.create_spicker = noop // stub
 
-	function bind_picker(on) {
+	function bind_spicker(on) {
 		assert(!(on && !e.bound))
 		if (on) {
-			e.picker = e.create_picker({
-				id: e.id && e.id + '.picker',
+			e.spicker = e.create_spicker({
+				id: e.id && e.id + '.spicker',
 				dropdown: e,
 				nav: e.nav,
 				col: e.col,
 				can_select_widget: false,
 				focusable: false,
 			})
-			if (!e.picker)
+			if (!e.spicker)
 				return
-			e.picker.class('picker', true)
-			e.picker.bind(true)
-			e.picker.on('val_picked', picker_val_picked)
-		} else if (e.picker) {
-			e.picker.popup(false)
-			e.picker.bind(false)
-			e.picker = null
+			e.spicker.class('picker', true)
+			e.spicker.bind(true)
+			e.spicker.on('val_picked', spicker_val_picked)
+		} else if (e.spicker) {
+			e.spicker.popup(false)
+			e.spicker.bind(false)
+			e.spicker = null
 		}
 		document.on('pointerdown'     , document_pointerdown, on)
 		document.on('rightpointerdown', document_pointerdown, on)
 		document.on('stopped_event'   , document_stopped_event, on)
-		e.input.on('keydown', keydown_for_picker, on)
+		e.input.on('keydown', keydown_for_spicker, on)
 	}
 
-	e.set_isopen = function(open) {
-		if (e.isopen == open)
+	e.set_spicker_isopen = function(open) {
+		if (e.spicker_isopen == open)
 			return
-		if (!e.picker)
+		if (!e.spicker)
 			return
-		e.class('open', open)
+		e.class('open spicker_open', open)
 		if (open) {
-			e.cancel_val = e.input_val
-			e.picker.min_w = e.rect().w
-			if (e.picker_w)
-				e.picker.auto_w = false
-			e.picker.w = e.picker_w
-			e.picker.show()
-			e.picker.popup(e, 'bottom', e.align)
+			e.spicker_cancel_val = e.input_val
+			e.spicker.min_w = e.rect().w
+			if (e.spicker_w)
+				e.spicker.auto_w = false
+			e.spicker.w = e.spicker_w
+			e.spicker.show()
+			e.spicker.popup(e, 'bottom', e.align)
 		} else {
-			e.cancel_val = null
-			e.picker.hide()
+			e.spicker_cancel_val = null
+			e.spicker.hide()
 		}
 	}
 
-	e.open   = function() { e.set_isopen(true) }
-	e.close  = function() { e.set_isopen(false) }
-	e.cancel = function(ev) {
-		if (e.isopen)
-			e.set_val(e.cancel_val, ev)
-		e.close()
+	e.open_spicker   = function() { e.set_spicker_isopen(true) }
+	e.close_spicker  = function() { e.set_spicker_isopen(false) }
+	e.cancel_spicker = function(ev) {
+		if (e.spicker_isopen)
+			e.set_val(e.spicker_cancel_val, ev)
+		e.close_spicker()
 	}
 
-	e.property('isopen', () => e.hasclass('open'), e.set_isopen)
+	e.property('spicker_isopen', () => e.hasclass('spicker_open'), e.set_spicker_isopen)
 
-	function picker_val_picked(ev) {
-		if (ev && ev.input == e.picker)
-			e.close()
+	function spicker_val_picked(ev) {
+		if (ev && ev.input == e.spicker)
+			e.close_spicker()
 	}
 
-	function keydown_for_picker(key) {
+	function keydown_for_spicker(key) {
 		if ((key == 'ArrowDown' || key == 'ArrowUp') && e.isopen) {
-			e.picker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
+			e.spicker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
 			return false
 		}
 		if (key == 'Enter') {
-			e.close()
+			e.close_spicker()
 			// don't return false so that grid can exit edit mode.
 		}
 		if (key == 'Escape') {
-			e.close()
+			e.close_spicker()
 			// don't return false so that grid can exit edit mode.
 		}
 	}
@@ -749,9 +794,9 @@ component('x-editbox', 'Input', function(e) {
 	function document_pointerdown(ev) {
 		if (e.contains(ev.target)) // clicked inside the editbox.
 			return
-		if (e.picker.contains(ev.target)) // clicked inside the picker.
+		if (e.spicker.contains(ev.target)) // clicked inside the picker.
 			return
-		e.close()
+		e.close_spicker()
 	}
 
 	// clicking outside the picker closes the picker, even if the click did something.
@@ -765,7 +810,7 @@ component('x-editbox', 'Input', function(e) {
 	e.set_copy_to_clipboard_button = function(v) {
 		if (v && !e.clipboard_button) {
 			function copy_to_clipboard() {
-				copy_text(e.input.value, function() {
+				copy_text(e.to_text(e.input_val), function() {
 					notify(S('copied_to_clipboard', 'Copied to clipboard'), 'info')
 				})
 			}
@@ -787,98 +832,367 @@ component('x-editbox', 'Input', function(e) {
 
 	e.prop('copy_to_clipboard_button', {store: 'var', type: 'bool'})
 
+	// more button ------------------------------------------------------------
+
+	e.set_more_action = function(action) {
+		if (!e.more_button && action) {
+			e.more_button = div({class: 'x-editbox-more-button x-dropdown-more-button fa fa-ellipsis-h'})
+			e.add(e.more_button)
+			e.more_button.on('pointerdown', function(ev) {
+				return this.capture_pointer(ev, null, function() {
+					e.more_action()
+					return false
+				})
+			})
+		} else if (e.more_button && !action) {
+			e.more_button.remove()
+			e.more_button = null
+		}
+	}
+	e.prop('more_action', {store: 'var', private: true})
+
 	// grid editor protocol ---------------------------------------------------
 
-	e.input.on('blur', function() {
-		e.close()
-		e.fire('lost_focus')
-	})
+	if (e.input) {
 
-	let editor_state
+		e.input.on('blur', function() {
+			e.close_spicker()
+			e.fire('lost_focus')
+		})
 
-	function update_editor_state(moved_forward, i0, i1) {
-		i0 = or(i0, e.input.selectionStart)
-		i1 = or(i1, e.input.selectionEnd)
-		let anchor_left =
-			e.input.selectionDirection != 'none'
-				? e.input.selectionDirection == 'forward'
-				: (moved_forward || e.align == 'left')
-		let imax = e.input.value.length
-		let leftmost  = i0 == 0
-		let rightmost = (i1 == imax || i1 == -1)
-		if (anchor_left) {
-			if (rightmost) {
-				if (i0 == i1)
-					i0 = -1
-				i1 = -1
-			}
-		} else {
-			i0 = i0 - imax - 1
-			i1 = i1 - imax - 1
-			if (leftmost) {
-				if (i0 == 1)
-					i1 = 0
-				i0 = 0
-			}
-		}
-		editor_state = [i0, i1]
-	}
+		let editor_state
 
-	e.input.on('keydown', function(key, shift, ctrl) {
-		// NOTE: we capture Ctrl+A on keydown because the user might
-		// depress Ctrl first and when we get the 'a' Ctrl is not pressed.
-		if (key == 'a' && ctrl)
-			update_editor_state(null, 0, -1)
-	})
-
-	e.input.on('keyup', function(key, shift, ctrl) {
-		if (key == 'ArrowLeft' || key == 'ArrowRight')
-			update_editor_state(key == 'ArrowRight')
-	})
-
-	e.editor_state = function(s) {
-		if (s) {
-			let i0 = e.input.selectionStart
-			let i1 = e.input.selectionEnd
+		function update_editor_state(moved_forward, i0, i1) {
+			i0 = or(i0, e.input.selectionStart)
+			i1 = or(i1, e.input.selectionEnd)
+			let anchor_left =
+				e.input.selectionDirection != 'none'
+					? e.input.selectionDirection == 'forward'
+					: (moved_forward || e.align == 'left')
 			let imax = e.input.value.length
 			let leftmost  = i0 == 0
-			let rightmost = i1 == imax
-			if (s == 'left')
-				return i0 == i1 && leftmost && 'left'
-			else if (s == 'right')
-				return i0 == i1 && rightmost && 'right'
-			else if (s == 'all_selected')
-				return leftmost && rightmost
-		} else {
-			if (!editor_state)
-				update_editor_state()
-			return editor_state
+			let rightmost = (i1 == imax || i1 == -1)
+			if (anchor_left) {
+				if (rightmost) {
+					if (i0 == i1)
+						i0 = -1
+					i1 = -1
+				}
+			} else {
+				i0 = i0 - imax - 1
+				i1 = i1 - imax - 1
+				if (leftmost) {
+					if (i0 == 1)
+						i1 = 0
+					i0 = 0
+				}
+			}
+			editor_state = [i0, i1]
 		}
+
+		e.input.on('keydown', function(key, shift, ctrl) {
+			// NOTE: we capture Ctrl+A on keydown because the user might
+			// depress Ctrl first and when we get the 'a' Ctrl is not pressed.
+			if (key == 'a' && ctrl)
+				update_editor_state(null, 0, -1)
+		})
+
+		e.input.on('keyup', function(key, shift, ctrl) {
+			if (key == 'ArrowLeft' || key == 'ArrowRight')
+				update_editor_state(key == 'ArrowRight')
+		})
+
+		e.editor_state = function(s) {
+			if (s) {
+				let i0 = e.input.selectionStart
+				let i1 = e.input.selectionEnd
+				let imax = e.input.value.length
+				let leftmost  = i0 == 0
+				let rightmost = i1 == imax
+				if (s == 'left')
+					return i0 == i1 && leftmost && 'left'
+				else if (s == 'right')
+					return i0 == i1 && rightmost && 'right'
+				else if (s == 'all_selected')
+					return leftmost && rightmost
+			} else {
+				if (!editor_state)
+					update_editor_state()
+				return editor_state
+			}
+		}
+
+		e.enter_editor = function(s) {
+			if (!s)
+				return
+			if (s == 'select_all')
+				s = [0, -1]
+			else if (s == 'left')
+				s = [0, 0]
+			else if (s == 'right')
+				s = [-1, -1]
+			editor_state = s
+			let [i0, i1] = s
+			let imax = e.input.value.length
+			if (i0 < 0) i0 = imax + i0 + 1
+			if (i1 < 0) i1 = imax + i1 + 1
+			e.input.select_range(i0, i1)
+		}
+
+		e.set_text_min_w = function(w) {
+			;(e.input || e.val_box).min_w = w
+		}
+
 	}
 
-	e.enter_editor = function(s) {
-		if (!s)
-			return
-		if (s == 'select_all')
-			s = [0, -1]
-		else if (s == 'left')
-			s = [0, 0]
-		else if (s == 'right')
-			s = [-1, -1]
-		editor_state = s
-		let [i0, i1] = s
-		let imax = e.input.value.length
-		if (i0 < 0) i0 = imax + i0 + 1
-		if (i1 < 0) i1 = imax + i1 + 1
-		e.input.select_range(i0, i1)
+	// dropdown ---------------------------------------------------------------
+
+	if (has_picker) {
+
+		e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
+
+		e.do_after('init', function() {
+			if (e.create_dropdown_button) {
+				e.dropdown_button = e.create_dropdown_button()
+			} else {
+				e.dropdown_button = span({class: 'x-dropdown-button fa fa-caret-down'})
+				e.dropdown_button.set_open = function(open) {
+					this.switch_class('fa-caret-down', 'fa-caret-up', open)
+				}
+			}
+			e.focus_box.insert(e.align == 'right' ? 0 : null, e.dropdown_button)
+		})
+
+		e.set_align = function(align) {
+			if (!e.dropdown_button)
+				return
+			if (align == 'right' == e.dropdown_button.index == 0)
+				e.dropdown_button.index = align == 'right' ? 0 : null
+		}
+
+		let inh_set_nav = e.set_nav
+		e.set_nav = function(v, v0) {
+			inh_set_nav(v, v0)
+			if (e.picker)
+				e.picker.nav = v
+		}
+
+		let inh_set_col = e.set_col
+		e.set_col = function(v, v0) {
+			inh_set_col(v, v0)
+			if (e.picker)
+				e.picker.col = v
+		}
+
+		function bind_picker(on) {
+			if (!e.create_picker)
+				return
+			assert(!(on && !e.bound))
+			if (on) {
+				assert(!e.picker)
+				e.picker = e.create_picker({
+					id: e.id && e.id + '.picker',
+					dropdown: e,
+					nav: e.nav,
+					col: e.col,
+					can_select_widget: false,
+				})
+				e.picker.class('picker', true)
+				e.picker.on('val_picked', picker_val_picked)
+				e.picker.on('keydown'   , picker_keydown)
+				e.picker.bind(true)
+			} else if (e.picker) {
+				e.picker.popup(false)
+				e.picker.bind(false)
+				e.picker = null
+			}
+			document.on('pointerdown'     , document_pointerdown, on)
+			document.on('rightpointerdown', document_pointerdown, on)
+			document.on('stopped_event'   , document_stopped_event, on)
+		}
+
+		e.on('bind_field', function(on) {
+			if (!on)
+				e.close()
+			bind_picker(on)
+		})
+
+		// val updating
+
+		let do_error_tooltip_check = e.do_error_tooltip_check
+		e.do_error_tooltip_check = function() {
+			return do_error_tooltip_check() || (e.invalid && e.isopen)
+		}
+
+		// opening & closing the picker
+
+		e.set_open = function(open, focus, hidden) {
+			if (e.isopen != open) {
+				e.class('open', open)
+				e.dropdown_button.switch_class('down', 'up', open)
+				if (e.dropdown_button.set_open)
+					e.dropdown_button.set_open(open)
+				if (open) {
+					e.cancel_val = e.input_val
+					e.picker.min_w = e.rect().w
+					if (e.picker_w)
+						e.picker.auto_w = false
+					e.picker.w = e.picker_w
+					e.picker.show(!hidden)
+					e.picker.popup(e, 'bottom', e.align == 'right' ? 'end' : 'start')
+					e.fire('opened')
+					e.picker.fire('dropdown_opened')
+				} else {
+					e.cancel_val = null
+					e.picker.hide()
+					e.fire('closed')
+					e.picker.fire('dropdown_closed')
+					if (!focus)
+						e.fire('lost_focus') // grid editor protocol
+				}
+			}
+			if (focus)
+				e.focus()
+		}
+
+		function picker_val_picked(ev) {
+			e.close(!(ev && ev.input == e))
+		}
+
+		// focusing
+
+		let inh_focus = e.focus
+		let focusing_picker
+		e.focus = function() {
+			if (e.isopen) {
+				focusing_picker = true // focusout barrier.
+				e.picker.focus()
+				focusing_picker = false
+			} else
+				inh_focus.call(this)
+		}
+
+		// clicking outside the picker closes the picker.
+		function document_pointerdown(ev) {
+			if (e.contains(ev.target)) // clicked inside the dropdown.
+				return
+			if (e.picker.contains(ev.target)) // clicked inside the picker.
+				return
+			e.close()
+		}
+
+		// clicking outside the picker closes the picker, even if the click did something.
+		function document_stopped_event(ev) {
+			if (ev.type.ends('pointerdown'))
+				document_pointerdown(ev)
+		}
+
+		e.on('focusout', function(ev) {
+			// prevent dropdown's focusout from bubbling to the parent when opening the picker.
+			if (focusing_picker)
+				return false
+			e.fire('lost_focus') // grid editor protocol
+		})
+
+		// scrolling through values with the wheel with the picker closed.
+
+		e.on('wheel', function(ev, dy) {
+			e.set_open(true, false, true)
+			e.picker.pick_near_val(dy / 100, {input: e})
+			return false
+		})
+
+		// cancelling on hitting Escape.
+
+		function picker_keydown(key) {
+			if (key == 'Escape') {
+				e.cancel(true)
+			}
+		}
+
+		if (!has_input) {
+
+			// use the entire surface of the dropdown for toggling.
+			e.on('pointerdown', function() {
+				e.toggle(true)
+				return false
+			})
+
+			e.on('keypress', function(c) {
+				if (e.picker.quicksearch) {
+					e.picker.quicksearch(c)
+					return false
+				}
+			})
+
+			e.on('keydown', function(key) {
+
+				if (key == 'ArrowDown' || key == 'ArrowUp') {
+					if (!e.hasclass('grid-editor')) {
+						e.set_open(true, false, true)
+						e.picker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
+						return false
+					}
+				}
+
+				if (key == 'Delete') {
+					e.set_val(null, {input: e})
+					return false
+				}
+
+			})
+
+		} else {
+
+			// use the entire surface of the dropdown to close the popup.
+			e.on('pointerdown', function() {
+				e.close(true)
+			})
+
+		}
+
+		// keyboard & mouse binding
+
+		e.on('keydown', function(key) {
+			if (key == 'Enter' || (!has_input && key == ' ')) {
+				e.toggle(true)
+				return false
+			}
+		})
+
+	} else {
+
+		e.set_open = noop
+
 	}
 
-	e.set_text_min_w = function(w) {
-		e.input.min_w = w
+	e.property('isopen',
+		function() {
+			return e.hasclass('open')
+		},
+		function(open) {
+			e.set_open(open, true)
+		}
+	)
+
+	e.open   = function(focus) { e.set_open(true, focus) }
+	e.close  = function(focus) { e.set_open(false, focus) }
+	e.toggle = function(focus) { e.set_open(!e.isopen, focus) }
+	e.cancel = function(focus, ev) {
+		if (e.isopen)
+			e.set_val(e.cancel_val, ev)
+		e.close(focus)
 	}
 
+}
+
+// ---------------------------------------------------------------------------
+// textedit
+// ---------------------------------------------------------------------------
+
+component('x-textedit', 'Input', function(e) {
+	editbox_widget(e)
 })
-
 
 // ---------------------------------------------------------------------------
 // passedit
@@ -886,7 +1200,7 @@ component('x-editbox', 'Input', function(e) {
 
 component('x-passedit', 'Input', function(e) {
 
-	editbox.construct(e)
+	editbox_widget(e)
 	e.input.attr('type', 'password')
 
 	e.view_password_button = button({
@@ -897,7 +1211,7 @@ component('x-passedit', 'Input', function(e) {
 		focusable: false,
 		title: S('view_password', 'View password'),
 	})
-	e.add(e.view_password_button)
+	e.focus_box.add(e.view_password_button)
 
 	e.view_password_button.on('active', function(on) {
 		let s1 = e.input.selectionStart
@@ -920,7 +1234,7 @@ component('x-passedit', 'Input', function(e) {
 
 component('x-spinedit', 'Input', function(e) {
 
-	editbox.construct(e)
+	editbox_widget(e)
 
 	e.align = 'right'
 	e.field_type = 'number'
@@ -955,16 +1269,16 @@ component('x-spinedit', 'Input', function(e) {
 		e.down.class('left right leftmost rightmost', false)
 
 		if (bp == 'each-side') {
-			e.insert(0, e.down)
-			e.add(e.up)
+			e.focus_box.insert(0, e.down)
+			e.focus_box.add(e.up)
 			e.down.class('left  leftmost')
 			e.up  .class('right rightmost')
 		} else if (bp == 'right') {
-			e.add(e.down, e.up)
+			e.focus_box.add(e.down, e.up)
 			e.down.class('right')
 			e.up  .class('right rightmost')
 		} else if (bp == 'left') {
-			e.insert(0, e.down, e.up)
+			e.focus_box.insert(0, e.down, e.up)
 			e.down.class('left leftmost')
 			e.up  .class('left')
 		}
@@ -973,16 +1287,22 @@ component('x-spinedit', 'Input', function(e) {
 
 	// controller
 
-	e.input.on('wheel', function(ev, dy) {
-		e.set_val(e.input_val + (dy / 100), {input: e})
+	function increment_val(increment) {
+		let v = e.input_val + increment
+		let r = v % or(e.field.multiple_of, 1)
+		e.set_val(v - r, {input: e})
 		e.input.select_range(0, -1)
+	}
+
+	e.input.on('wheel', function(ev, dy) {
+		increment_val(dy)
 		return false
 	})
 
 	// increment buttons click
 
 	let increment
-	function increment_val() {
+	function increment_val_again() {
 		if (!increment) return
 		let v = e.input_val + increment
 		let r = v % or(e.field.multiple_of, 1)
@@ -991,8 +1311,8 @@ component('x-spinedit', 'Input', function(e) {
 	}
 	let increment_timer
 	function start_incrementing() {
-		increment_val()
-		increment_timer = setInterval(increment_val, 100)
+		increment_val_again()
+		increment_timer = setInterval(increment_val_again, 100)
 	}
 	let start_incrementing_timer
 	function add_events(button, sign) {
@@ -1001,7 +1321,7 @@ component('x-spinedit', 'Input', function(e) {
 				return
 			e.input.focus()
 			increment = or(e.field.multiple_of, 1) * sign
-			increment_val()
+			increment_val_again()
 			start_incrementing_timer = after(.5, start_incrementing)
 			return this.capture_pointer(ev, null, function() {
 				clearTimeout(start_incrementing_timer)
@@ -1014,6 +1334,14 @@ component('x-spinedit', 'Input', function(e) {
 	}
 	add_events(e.up  , 1)
 	add_events(e.down, -1)
+
+	e.on('keydown', function(key) {
+		if (key == 'ArrowDown' || key == 'ArrowUp') {
+			let inc = (key == 'ArrowDown' ? 1 : -1) * e.field.multiple_of
+			increment_val(inc)
+			return false
+		}
+	})
 
 })
 
@@ -1296,7 +1624,7 @@ component('x-tagsedit', 'Input', function(e) {
 
 component('x-placeedit', 'Input', function(e) {
 
-	editbox.construct(e)
+	editbox_widget(e)
 
 	e.field_type = 'place'
 
@@ -1512,264 +1840,16 @@ component('x-slider', 'Input', function(e) {
 })
 
 // ---------------------------------------------------------------------------
-// dropdown widget mixin
-// ---------------------------------------------------------------------------
-
-function dropdown_widget(e) {
-
-	e.class('x-editbox')
-	e.class('x-dropdown')
-
-	val_widget(e)
-	input_widget(e)
-	focusable_widget(e)
-	stylable_widget(e)
-
-	e.props.mode.enum_values = ['default', 'inline', 'wrap', 'fixed']
-
-	e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
-
-	e.val_box = span({class: 'x-editbox-input x-dropdown-value'})
-	e.button = span({class: 'x-dropdown-button fa fa-caret-down'})
-	e.label_box = div({class: 'x-editbox-label x-dropdown-label'})
-	e.focus_box = div({class: 'x-focus-box'}, e.val_box, e.button, e.label_box)
-	e.add(e.focus_box)
-
-	e.set_more_action = function(action) {
-		if (!e.more_btn && action) {
-			e.more_btn = div({class: 'x-editbox-more-button x-dropdown-more-button fa fa-ellipsis-h'})
-			e.add(e.more_btn)
-			e.more_btn.on('pointerdown', function(ev) {
-				return this.capture_pointer(ev, null, function() {
-					e.more_action()
-					return false
-				})
-			})
-		} else if (e.more_btn && !action) {
-			e.more_btn.remove()
-			e.more_btn = null
-		}
-	}
-	e.prop('more_action', {store: 'var', private: true})
-
-	let inh_set_nav = e.set_nav
-	e.set_nav = function(v, v0) {
-		inh_set_nav(v, v0)
-		if (e.picker)
-			e.picker.nav = v
-	}
-
-	let inh_set_col = e.set_col
-	e.set_col = function(v, v0) {
-		inh_set_col(v, v0)
-		if (e.picker)
-			e.picker.col = v
-	}
-
-	function bind_picker(on) {
-		assert(!(on && !e.bound))
-		if (on) {
-			assert(!e.picker)
-			e.picker = e.create_picker({
-				id: e.id && e.id + '.picker',
-				dropdown: e,
-				nav: e.nav,
-				col: e.col,
-				can_select_widget: false,
-			})
-			e.picker.class('picker', true)
-			e.picker.on('val_picked', picker_val_picked)
-			e.picker.on('keydown'   , picker_keydown)
-			e.picker.bind(true)
-		} else if (e.picker) {
-			e.picker.popup(false)
-			e.picker.bind(false)
-			e.picker = null
-		}
-		document.on('pointerdown'     , document_pointerdown, on)
-		document.on('rightpointerdown', document_pointerdown, on)
-		document.on('stopped_event'   , document_stopped_event, on)
-	}
-
-	e.on('bind_field', function(on) {
-		if (!on)
-			e.close()
-		bind_picker(on)
-	})
-
-	// val updating
-
-	e.do_update_val = function(v, ev) {
-		let text = e.picker && e.picker.dropdown_display_val(v)
-		if (text == null)
-			text = e.display_val_for(v)
-		let empty = text === ''
-		e.val_box.class('empty', empty)
-		e.label_box.class('empty', empty)
-		e.val_box.set(text)
-	}
-
-	let do_error_tooltip_check = e.do_error_tooltip_check
-	e.do_error_tooltip_check = function() {
-		return do_error_tooltip_check() || (e.invalid && e.isopen)
-	}
-
-	// focusing
-
-	let inh_focus = e.focus
-	let focusing_picker
-	e.focus = function() {
-		if (e.isopen) {
-			focusing_picker = true // focusout barrier.
-			e.picker.focus()
-			focusing_picker = false
-		} else
-			inh_focus.call(this)
-	}
-
-	// opening & closing the picker
-
-	e.set_open = function(open, focus, hidden) {
-		if (e.isopen != open) {
-			e.class('open', open)
-			e.button.switch_class('down', 'up', open)
-			e.button.switch_class('fa-caret-down', 'fa-caret-up', open)
-			if (open) {
-				e.cancel_val = e.input_val
-				e.picker.min_w = e.rect().w
-				if (e.picker_w)
-					e.picker.auto_w = false
-				e.picker.w = e.picker_w
-				e.picker.show(!hidden)
-				e.picker.popup(e, 'bottom', e.align == 'right' ? 'end' : 'start')
-				e.fire('opened')
-			} else {
-				e.cancel_val = null
-				e.picker.hide()
-				e.fire('closed')
-				if (!focus)
-					e.fire('lost_focus') // grid editor protocol
-			}
-		}
-		if (focus)
-			e.focus()
-	}
-
-	e.open   = function(focus) { e.set_open(true, focus) }
-	e.close  = function(focus) { e.set_open(false, focus) }
-	e.toggle = function(focus) { e.set_open(!e.isopen, focus) }
-	e.cancel = function(focus, ev) {
-		if (e.isopen)
-			e.set_val(e.cancel_val, ev)
-		e.close(focus)
-	}
-
-	e.property('isopen',
-		function() {
-			return e.hasclass('open')
-		},
-		function(open) {
-			e.set_open(open, true)
-		}
-	)
-
-	// picker protocol
-
-	function picker_val_picked(ev) {
-		e.close(!(ev && ev.input == e))
-	}
-
-	// grid editor protocol
-
-	e.set_text_min_w = function(w) {
-		e.val_box.min_w = w
-	}
-
-	// keyboard & mouse binding
-
-	e.on('pointerdown', function() {
-		e.toggle(true)
-		return false
-	})
-
-	e.on('keydown', function(key) {
-		if (key == 'Enter' || key == ' ') {
-			e.toggle(true)
-			return false
-		}
-		if (key == 'ArrowDown' || key == 'ArrowUp') {
-			if (!e.hasclass('grid-editor')) {
-				e.set_open(true, false, true)
-				e.picker.pick_near_val(key == 'ArrowDown' ? 1 : -1, {input: e})
-				return false
-			}
-		}
-		if (key == 'Delete') {
-			e.set_val(null, {input: e})
-			return false
-		}
-	})
-
-	e.on('keypress', function(c) {
-		if (e.picker.quicksearch) {
-			e.picker.quicksearch(c)
-			return false
-		}
-	})
-
-	function picker_keydown(key) {
-		if (key == 'Escape') {
-			e.cancel(true)
-			return false
-		}
-		if (key == 'Tab') {
-			e.close(true)
-			return false
-		}
-	}
-
-	e.on('wheel', function(ev, dy) {
-			e.set_open(true, false, true)
-		e.picker.pick_near_val(dy / 100, {input: e})
-		return false
-	})
-
-	// clicking outside the picker closes the picker.
-	function document_pointerdown(ev) {
-		if (e.contains(ev.target)) // clicked inside the dropdown.
-			return
-		if (e.picker.contains(ev.target)) // clicked inside the picker.
-			return
-		e.close()
-	}
-
-	// clicking outside the picker closes the picker, even if the click did something.
-	function document_stopped_event(ev) {
-		if (ev.type.ends('pointerdown'))
-			document_pointerdown(ev)
-	}
-
-	e.on('focusout', function(ev) {
-		// prevent dropdown's focusout from bubbling to the parent when opening the picker.
-		if (focusing_picker)
-			return false
-		e.fire('lost_focus') // grid editor protocol
-	})
-
-}
-
-// ---------------------------------------------------------------------------
 // calendar widget
 // ---------------------------------------------------------------------------
 
 component('x-calendar', 'Input', function(e) {
 
-	focusable_widget(e)
-	e.class('x-focusable-items')
 	val_widget(e)
+	focusable_widget(e)
 
-	function format_month(i) {
-		return month_name(time(0, i), 'short')
+	function format_month(v) {
+		return month_name(time(0, v), 'short')
 	}
 
 	e.sel_day = div({class: 'x-calendar-sel-day'})
@@ -1780,72 +1860,147 @@ component('x-calendar', 'Input', function(e) {
 		items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
 		field: {format: format_month},
 		val_col: 0,
-		display_col: 0,
-		listbox: {
-			format_item: format_month,
+		item_field: {
+			format: format_month,
 		},
 	})
 
 	e.sel_year = spinedit({
 		classes: 'x-calendar-sel-year',
 		field: {
-			min: -10000,
-			max:  10000,
+			// MySQL range for DATETIME
+			min: 1000,
+			max: 9999,
 		},
 		button_style: 'left-right',
+	})
+
+	e.sel_hour = spinedit({
+		classes: 'x-calendar-sel-hms',
+		//attrs: {mode: 'inline'},
+		field: {
+			min: 0,
+			max: 24,
+		},
+		button_style: 'up-down',
+		button_placement: 'none',
+	})
+
+	e.sel_minute = spinedit({
+		classes: 'x-calendar-sel-hms',
+		//attrs: {mode: 'inline'},
+		field: {
+			min: 0,
+			max: 60,
+		},
+		button_style: 'up-down',
+		button_placement: 'none',
+	})
+
+	e.sel_second = spinedit({
+		classes: 'x-calendar-sel-hms',
+		//attrs: {mode: 'inline'},
+		field: {
+			min: 0,
+			max: 60,
+		},
+		button_style: 'up-down',
+		button_placement: 'none',
 	})
 
 	e.header = div({class: 'x-calendar-header'},
 		e.sel_day, e.sel_day_suffix, e.sel_month, e.sel_year)
 
-	e.weekview = tag('table', {class: 'x-calendar-weekview'})
+	e.weekview = tag('table', {class: 'x-calendar-weekview x-focusable-items',
+		tabindex: 0})
 
-	e.add(e.header, e.weekview)
+	e.date_box = div({class: 'x-calendar-date-box'}, e.header, e.weekview)
+	e.time_box = span({class: 'x-calendar-time-box'},
+		e.sel_hour, ':', e.sel_minute, span(0, ':'), e.sel_second)
 
-	function as_ts(v) {
-		return v != null && e.field && e.field.to_time ? e.field.to_time(v) : v
-	}
+	e.add(e.date_box, e.time_box)
 
-	e.on('bind', function(on) {
-		e.sel_year.bind(on)
-		e.sel_month.bind(on)
+	e.on('bind', function() {
+		e.time_box.show(e.field && e.field.has_time || false)
+		for (let ce of [e.time_box.last.prev, e.time_box.last])
+			ce.show(e.field && e.field.has_seconds || false)
 	})
 
-	e.do_update_val = function(v) {
-		assert(e.bound)
-		v = or(as_ts(v), time())
-		let t = day(v)
-		update_weekview(t, 6)
-		let y = year_of(t)
-		let n = floor(1 + days(t - month(t)))
-		e.sel_day.set(n)
-		let day_suffixes = ['', 'st', 'nd', 'rd']
-		e.sel_day_suffix.set(locale.starts('en') ?
-			(n < 11 || n > 13) && day_suffixes[n % 10] || 'th' : '')
-		e.sel_month.val = month_of(t)
-		e.sel_year.val = y
+	e.on('focus', function() {
+		e.weekview.focus()
+	})
+
+	function as_ts(v) {
+		return e.field && e.field.to_time ? e.field.to_time(v) : v
 	}
 
+	function as_dt(t) {
+		return e.field.from_time ? e.field.from_time(t) : t
+	}
+
+	function set_ts(t, ev) {
+		e.set_val(as_dt(t), ev || {input: e})
+	}
+
+	function update_sel_day(t) {
+		if (t != null) {
+			let n = floor(1 + days(t - month(t)))
+			e.sel_day.set(n)
+			let day_suffixes = ['', 'st', 'nd', 'rd']
+			e.sel_day_suffix.set(lang() == 'en' ?
+				(n < 11 || n > 13) && day_suffixes[n % 10] || 'th' : '')
+		} else {
+			e.sel_day.html = ''
+			e.sel_day_suffix.html = ''
+		}
+		e.sel_day.bool_attr('disabled', t == null || null)
+	}
+
+	let start_week
 	let sel_td
-	function update_weekview(d, weeks) {
-		let today = day(time())
-		let this_month = month(d)
-		let sel_d = day(as_ts(e.input_val))
-		d = week(this_month)
-		e.weekview.clear()
+	function update_view(sel_t, new_start_week) {
+
+		let weeks = 6
+		let sel_d = day(sel_t)
+		let sel_m = month(sel_d)
+		let first_week = week(sel_m)
+		start_week = or(new_start_week, first_week)
+		let focused_week = week(start_week, 2)
+		let focused_month = month(focused_week)
+
+		if (focused_week != null) {
+			e.sel_month.val = month_of(focused_week)
+			e.sel_year.val = year_of(focused_week)
+			e.sel_hour.val = hours_of(sel_t)
+			e.sel_minute.val = minutes_of(sel_t)
+			e.sel_second.val = seconds_of(sel_t)
+		}
+		update_sel_day(sel_d)
 		sel_td = null
+		e.weekview.clear()
+
+		let d = start_week
+		let cur_d = day(time())
 		for (let week = 0; week <= weeks; week++) {
 			let tr = tag('tr')
 			for (let weekday = 0; weekday < 7; weekday++) {
 				if (!week) {
-					let th = tag('th', {class: 'x-calendar-weekday'}, weekday_name(day(d, weekday)))
+					let th = tag('th', {class: 'x-calendar-weekday'},
+						d != null ? weekday_name(day(d, weekday)) : '???')
 					tr.add(th)
 				} else {
-					let m = month(d)
-					let s = d == today ? ' today' : ''
-					s = s + (m == this_month ? ' current-month' : '')
-					s = s + (d == sel_d ? ' focused selected' : '')
-					let td = tag('td', {class: 'x-calendar-day x-item'+s}, floor(1 + days(d - m)))
+					let s, n
+					if (d != null) {
+						let m = month(d)
+						s = d == cur_d ? ' today' : ''
+						s = s + (m == focused_month ? ' current-month' : '')
+						s = s + (d == sel_d ? ' focused selected' : '')
+						n = floor(1 + days(d - m))
+					} else {
+						s = ''
+						n = '??'
+					}
+					let td = tag('td', {class: 'x-calendar-day x-item'+s}, n)
 					td.day = d
 					tr.add(td)
 					if (d == sel_d)
@@ -1857,13 +2012,16 @@ component('x-calendar', 'Input', function(e) {
 		}
 	}
 
-	// controller
-
-	function set_ts(v, ev) {
-		if (v != null && e.field.from_time)
-			v = e.field.from_time(v)
-		e.set_val(v, ev || {input: e})
+	e.do_update_val = function(v, ev) {
+		assert(e.bound)
+		let t = as_ts(v)
+		let new_start_week
+		if (t == null && !(ev && ev.input == e))
+			new_start_week = week(month(time()))
+		update_view(t, new_start_week)
 	}
+
+	// controller
 
 	e.weekview.on('pointerdown', function(ev) {
 		let td = ev.target
@@ -1885,35 +2043,58 @@ component('x-calendar', 'Input', function(e) {
 
 	e.sel_month.on('val_changed', function(v, ev) {
 		if (ev && ev.input) {
-			_d.setTime(as_ts(e.input_val) * 1000)
-			_d.setMonth(this.val - 1)
-			set_ts(_d.valueOf() / 1000)
+			let t = as_ts(e.input_val)
+			let y = year_of(t)
+			let m = v
+			let d = month_day_of(t)
+			t = y != null && m != null && d != null ? time(y, m, d) : null
+			set_ts(t)
 		}
 	})
 
 	e.sel_year.on('val_changed', function(v, ev) {
 		if (ev && ev.input) {
-			_d.setTime(as_ts(e.input_val) * 1000)
-			_d.setFullYear(this.val)
-			set_ts(_d.valueOf() / 1000)
+			let t = as_ts(e.input_val)
+			let y = v
+			let m = month_of(t)
+			let d = month_day_of(t)
+			t = y != null && m != null && d != null ? time(y, m, d) : null
+			set_ts(t)
+		}
+	})
+
+	e.sel_hour.on('val_changed', function(v, ev) {
+		if (ev && ev.input) {
+			let t = as_ts(e.input_val)
+			t = set_hours(t, v)
+			set_ts(t)
+		}
+	})
+
+	e.sel_minute.on('val_changed', function(v, ev) {
+		if (ev && ev.input) {
+			let t = as_ts(e.input_val)
+			t = set_minutes(t, v)
+			set_ts(t)
+		}
+	})
+
+	e.sel_second.on('val_changed', function(v, ev) {
+		if (ev && ev.input) {
+			let t = as_ts(e.input_val)
+			t = set_seconds(t, v)
+			set_ts(t)
 		}
 	})
 
 	e.weekview.on('wheel', function(ev, dy) {
-		set_ts(day(as_ts(e.input_val), 7 * dy / 100))
+		let t = as_ts(e.input_val)
+		update_view(t, week(or(start_week, month(t)), dy))
 		return false
 	})
 
-	e.on('keydown', function(key, shift) {
-		if (!e.focused) // other inside element got focus
-			return
-		if (key == 'Tab' && e.hasclass('picker')) { // capture Tab navigation.
-			if (shift)
-				e.sel_year.focus()
-			else
-				e.sel_month.focus()
-			return false
-		}
+	e.weekview.on('keydown', function(key, shift) {
+		let t = or(as_ts(e.input_val), time())
 		let d, m
 		switch (key) {
 			case 'ArrowLeft'  : d = -1; break
@@ -1924,26 +2105,18 @@ component('x-calendar', 'Input', function(e) {
 			case 'PageDown'   : m =  1; break
 		}
 		if (d) {
-			set_ts(day(as_ts(e.input_val), d))
+			set_ts(day(t, d))
 			return false
 		}
 		if (m) {
-			let t = as_ts(e.input_val)
-			_d.setTime(t * 1000)
-			if (shift)
-				_d.setFullYear(year_of(t) + m)
-			else
-				_d.setMonth(month_of(t) + m - 1)
-			set_ts(_d.valueOf() / 1000)
+			set_ts(month(t, m))
 			return false
 		}
 		if (key == 'Home') {
-			let t = as_ts(e.input_val)
 			set_ts(shift ? year(t) : month(t))
 			return false
 		}
 		if (key == 'End') {
-			let t = as_ts(e.input_val)
 			set_ts(day(shift ? year(t, 1) : month(t, 1), -1))
 			return false
 		}
@@ -1953,24 +2126,9 @@ component('x-calendar', 'Input', function(e) {
 		}
 	})
 
-	e.sel_month.on('keydown', function(key, shift) {
-		if (key == 'Tab' && e.hasclass('picker')) {// capture Tab navigation.
-			if (shift)
-				e.focus()
-			else
-				e.sel_year.focus()
-			return false
-		}
-	})
-
-	e.sel_year.on('keydown', function(key, shift) {
-		if (key == 'Tab' && e.hasclass('picker')) { // capture Tab navigation.
-			if (shift)
-				e.sel_month.focus()
-			else
-				e.focus()
-			return false
-		}
+	e.on('dropdown_opened', function() {
+		if (e.input_val == null)
+			set_ts(time())
 	})
 
 	// hack: trick dropdown into thinking that our own opened dropdown picker
@@ -1983,7 +2141,7 @@ component('x-calendar', 'Input', function(e) {
 	}
 
 	e.pick_near_val = function(delta, ev) {
-		set_ts(day(as_ts(e.input_val), delta), ev)
+		set_ts(day(as_ts(or(e.input_val, time())), delta), ev)
 		e.fire('val_picked', ev)
 	}
 
@@ -1994,9 +2152,40 @@ component('x-calendar', 'Input', function(e) {
 // ---------------------------------------------------------------------------
 
 component('x-date-dropdown', 'Input', function(e) {
-	dropdown_widget(e)
-	e.field_type = 'date'
 	e.create_picker = calendar
+	e.field_type = 'date'
+	editbox_widget(e, {input: false, picker: true})
+})
+
+// ---------------------------------------------------------------------------
+// date edit
+// ---------------------------------------------------------------------------
+
+component('x-dateedit', 'Input', function(e) {
+
+	editbox_widget(e, {picker: true})
+
+	e.create_picker = calendar
+
+	e.calendar_button = button({
+		classes: 'x-dateedit-calendar-button',
+		icon: 'far fa-calendar-alt',
+		text: '',
+		bare: true,
+		focusable: false,
+		title: S('button_pick_from_calendar', 'Pick from calendar'),
+	})
+
+	e.calendar_button.on('activate', function() {
+		e.toggle(true)
+	})
+
+	e.calendar_button.set_open = noop
+
+	e.create_dropdown_button = function() {
+		return e.calendar_button
+	}
+
 })
 
 // ---------------------------------------------------------------------------
@@ -2189,6 +2378,26 @@ component('x-image', 'Input', function(e) {
 		link.click()
 		link.remove()
 	})
+
+})
+
+// ---------------------------------------------------------------------------
+// mustache row
+// ---------------------------------------------------------------------------
+
+component('x-mu-row', 'Input', function(e) {
+
+	assert(e.at[0] && e.at[0].tag == 'script',
+		'mustache widget is missing the <script> tag')
+
+	e.template_string = e.at[0].html
+
+	row_widget(e)
+
+	e.do_update_row = function(row) {
+		let vals = row && e.nav.serialize_row_vals(row)
+		return e.render(vals)
+	}
 
 })
 
@@ -2822,7 +3031,7 @@ component('x-input', 'Input', function(e) {
 	function widget_type(type) {
 		if (type) return type
 		let types = input.widget_types[e.field.type]
-		return types && types[0] || 'editbox'
+		return types && types[0] || 'textedit'
 	}
 
 	function bind_field(on) {
@@ -2888,14 +3097,14 @@ component('x-input', 'Input', function(e) {
 })
 
 input.widget_types = {
-	number   : ['spinedit', 'slider'],
-	bool     : ['checkbox'],
-	datetime : ['date_dropdown'],
-	date     : ['date_dropdown'],
-	enum     : ['enum_dropdown'],
-	image    : ['image'],
-	tags     : ['tagsedit'],
-	place    : ['placeedit', 'googlemaps'],
+	number    : ['spinedit', 'slider'],
+	bool      : ['checkbox'],
+	datetime  : ['dateedit'],
+	date      : ['dateedit'],
+	enum      : ['enum_dropdown'],
+	image     : ['image'],
+	tags      : ['tagsedit'],
+	place     : ['placeedit', 'googlemaps'],
 }
 
 input.widget_type_options = {

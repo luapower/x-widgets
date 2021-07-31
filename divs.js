@@ -32,6 +32,12 @@
 		$(sel) -> ea
 		E(sel|e)
 		ea.each(f)
+		root
+		body
+	dom tree de/serialization:
+		e.html -> s
+		html(s) -> e
+		e.[unsafe_]html = s
 	safe dom tree manipulation:
 		T(te[,whitespace]) where `te` is f|e|text_str
 		e.clone()
@@ -39,14 +45,11 @@
 		e.add(te1,...)
 		e.insert(i, te1,...)
 		e.replace([e0], te)
+		e.move([pe], [i0])
 		e.clear()
 		tag(s, [attrs], te1,...)
 		div(...)
 		span(...)
-	unsafe dom tree manipulation:
-		[unsafe_]html(he) where `he` is f|e|html_str|null
-		e.html -> s
-		e.[unsafe_]html = s
 	components:
 		bind_component(tag, initializer, [selector])
 		e.bind(t|f)
@@ -79,11 +82,11 @@
 		on_dom_load([priority_bucket, ]fn)
 	element geometry:
 		px(x)
-		e.x, e.y, e.x1, e.y1, e.x2, e.y2, e.w, e.h
+		e.x, e.y, e.x1, e.y1, e.x2, e.y2, e.w, e.h, e.ox, e.oy
 		e.min_w, e.min_h, e.max_w, e.max_h
-		e.rect()
-		e.ox, e.oy
-		e.contains(x, y)
+		e.rect() -> r
+		r.x, r.y, r.x1, r.y1, r.x2, r.y2, r.w, r.h
+		r.contains(x, y)
 	element visibility:
 		e.show([on][, ev])
 		e.hide([ev])
@@ -94,6 +97,7 @@
 		e.hasfocus
 		e.focusables()
 		e.effectively_disabled
+		e.effectively_hidden
 	text editing:
 		input.select_range(i, j)
 		e.select(i, j)
@@ -257,6 +261,10 @@ method(NodeList, 'each', function(f) {
 	Array.prototype.forEach.call(this, f)
 })
 
+property(NodeList, 'last', function() {
+	return this[this.length-1]
+})
+
 /* dom tree manipulation with lifecycle management ---------------------------
 
 The "lifecycle management" part of this is basically poor man's web components.
@@ -359,11 +367,15 @@ function unsafe_html(s) {
 	return e
 }
 
-function html(s) {
+function sanitize_html(s) {
 	if (s == null)
 		return null
 	assert(DOMPurify.isSupported)
 	return DOMPurify.sanitize(s)
+}
+
+function html(s) {
+	return unsafe_html(sanitize_html(s))
 }
 
 // create a HTML element from an attribute map and a list of child nodes.
@@ -389,7 +401,7 @@ property(Element, 'html', {
 		return this.innerHTML
 	},
 	set: function(s) {
-		this.unsafe_html = html(s)
+		this.unsafe_html = sanitize_html(s)
 	}
 })
 
@@ -413,6 +425,8 @@ method(Element, 'set', function(s, whitespace) {
 		s = s()
 	this.clear()
 	if (s instanceof Node) {
+		if (s instanceof Element && s.isConnected)
+			s.bind(false)
 		this.append(s)
 		if (s instanceof Element && this.isConnected)
 			s.bind(true)
@@ -428,6 +442,8 @@ method(Element, 'add', function(...args) {
 	for (let s of args)
 		if (s != null) {
 			s = T(s)
+			if (s instanceof Element && s.isConnected)
+				s.bind(false)
 			this.append(s)
 			if (s instanceof Element) {
 				if (this.isConnected)
@@ -442,7 +458,9 @@ method(Element, 'insert', function(i0, ...args) {
 		let s = args[i]
 		if (s != null) {
 			s = T(s)
-			this.insertBefore(s, this.at[i0])
+			if (s instanceof Element && s.isConnected)
+				s.bind(false)
+			this.insertBefore(s, this.at[max(0, or(i0, 1/0))])
 			if (s instanceof Element) {
 				if (this.isConnected)
 					s.bind(true)
@@ -470,6 +488,16 @@ method(Element, 'replace', function(e0, s) {
 	if (s instanceof Element && this.isConnected)
 		s.bind(true)
 	return this
+})
+
+// move element to a new parent/index without rebinding.
+method(Element, 'move', function(pe, i0) {
+	assert(this.isConnected)
+	pe = pe || this.parent
+	if (pe == this.parent) // change index preserving current scroll.
+		this.index == or(i0, 1/0)
+	else // change parent and index.
+		pe.insertBefore(this, pe.at[max(0, or(i0, 1/0))])
 })
 
 /* instance method overriding for components ---------------------------------
@@ -783,7 +811,7 @@ var dom_load_order = ''
 function on_dom_load(name, fn) {
 	if (isfunc(name)) {
 		fn = name
-		name = '<default>'
+		name = ':after'
 	}
 	if (document.readyState === 'loading')
 		attr(load_slots, name, Array).push(fn)
@@ -795,22 +823,26 @@ document.once('DOMContentLoaded', function() {
 		for (let fn of a)
 			fn()
 	}
-	for (let s of dom_load_order.names()) {
+	for (let s of (':before '+dom_load_order).names()) {
 		if (load_slots[s]) {
 			run(load_slots[s])
 			delete load_slots[s]
 		}
 	}
-	for (let s in load_slots)
+	for (let s in load_slots) // unordered slots remain, like `after:`.
 		run(load_slots[s])
 })
 }
 
+on_dom_load(':before', function() {
+	root = document.documentElement
+	body = document.body
+})
+
 on_dom_load('components', function() {
-	let e = document.documentElement
-	e.init_child_components()
-	e.init_component()
-	e.bind(true)
+	root.init_child_components()
+	root.init_component()
+	root.bind(true)
 })
 
 // inter-window event broadcasting.
@@ -923,12 +955,30 @@ property(Element, 'hasfocus', {get: function() {
 }})
 
 method(Element, 'focusables', function() {
-	return this.$('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+	let t = []
+	for (e of this.$('button, a[href] area[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+		if (!e.effectively_hidden && !e.effectively_disabled)
+			t.push(e)
+	return t
 })
 
 property(Element, 'effectively_disabled', {get: function() {
 	return this.bool_attr('disabled') || (this.parent && this.parent.effectively_disabled)
 }})
+
+property(Element, 'effectively_hidden', {get: function() {
+	if (this.bool_attr('hidden'))
+		return true
+	let css = this.css()
+	if (css.display == 'none')
+		return true
+	if (css.visibility == 'hidden')
+		return true
+	if (this.parent && this.parent.effectively_hidden)
+		return true
+	return false
+}})
+
 
 // text editing --------------------------------------------------------------
 
@@ -1131,17 +1181,17 @@ method(Element, 'hit_test_sides', function(mx, my, d1, d2) {
 
 Why is this so complicated? Because the forever not-quite-there-yet web
 platform doesn't have the notion of a global z-index so we can't have
-in-DOM (i.e. relatively positioned and styled) popups that are also
-painted last i.e. on top of everything, so we have to choose between popups
-that are well-positioned but most probably clipped or obscured by other
-elements, or popups that stay on top but have to be manually positioned
-and styled, and kept in sync with the position of their target. We chose
-the latter since we have a lot of implicit "stacking contexts" (read:
-abstraction leaks of the graphics engine) and we try to auto-update the
-popup position the best we can, but there will be cases where you'll have
-to call popup() to update the popup's position manually. We simply don't
-have an observer for tracking changes to an element's position on screen
-or relative to another element.
+relatively positioned and styled popups that are also painted last i.e.
+on top of everything, so we have to choose between popups that are
+well-positioned but most probably clipped or obscured by other elements,
+or popups that stay on top but have to be manually positioned and styled,
+and kept in sync with the position of their target. We chosethe latter
+since we have a lot of implicit "stacking contexts" (read: abstraction
+leaks of the graphics engine) and we try to auto-update the popup position
+the best we can, but there will be cases where you'll have to call popup()
+to update the popup's position manually. We simply don't have an observer
+for tracking changes to an element's position on screen or relative to
+another element.
 
 `popup_target_updated` hook allows changing/animating popup's visibility
 based on target's hover state or focused state.
@@ -1180,6 +1230,20 @@ let popup_timer = function() {
 
 popup_timer = popup_timer()
 
+property(Element, 'popup_level',
+	function() {
+		if (this._popup_level != null)
+			return this._popup_level
+		if (this.parent instanceof Element)
+			return this.parent.popup_level
+		else
+			return 0
+	},
+	function(n) {
+		this._popup_level = n
+	}
+)
+
 let popup_state = function(e) {
 
 	let s = {}
@@ -1195,6 +1259,8 @@ let popup_state = function(e) {
 		ph    = or(ph1, ph)
 		ox    = or(ox1, ox)
 		oy    = or(oy1, oy)
+		if (e.local_z == null) // get local z-index from css on first bind.
+			e.local_z = num(e.css('z-index'), 0)
 		target1 = strict_or(target1, target) // because `null` means remove...
 		if (target1 != target) {
 			if (target)
@@ -1205,7 +1271,7 @@ let popup_state = function(e) {
 			e.popup_target = target
 		}
 		if (target)
-			update()
+			after(0, update)
 	}
 
 	function init() {
@@ -1247,13 +1313,19 @@ let popup_state = function(e) {
 				}
 			}
 			e.class('popup')
+			e.style.visibility = 'hidden'
 			document.body.add(e)
+			e.popup_level = target.popup_level + 1
+			// NOTE: this limits local z-index range to 0..9.
+			e.style.zIndex = e.popup_level * 10 + e.local_z
 			update()
 			popup_timer.add(update)
 		} else {
 			for (k in e.__css_inherited)
 				e.style[k] = null
 			e.remove()
+			e.popup_level = null
+			e.local_z = null
 			e.class('popup', false)
 			popup_timer.remove(update)
 		}
@@ -1281,25 +1353,12 @@ let popup_state = function(e) {
 
 	}
 
-	function target_updated() {
-		if (e.popup_target_updated)
-			e.popup_target_updated(target)
-	}
-
-	function update() {
-		if (!(target && target.isConnected))
-			return
-
-		if (fixed == null)
-			fixed = e.css().position == 'fixed'
+	function layout(w, h) {
 
 		let tr = target.rect()
-		let er = e.rect()
 
 		let x = ox || 0
 		let y = oy || 0
-		let w = er.w
-		let h = er.h
 		let tx1 = tr.x + or(px, 0)
 		let ty1 = tr.y + or(py, 0)
 		let tx2 = tx1 + or(pw, tr.w)
@@ -1314,6 +1373,9 @@ let popup_state = function(e) {
 			;[x0, y0] = [tx1 - w, ty1]
 		} else if (side == 'top') {
 			;[x0, y0] = [tx1, ty1 - h]
+		} else if (side == 'bottom') {
+			side = 'bottom'
+			;[x0, y0] = [tx1, ty2]
 		} else if (side == 'inner-right') {
 		 	;[x0, y0] = [tx2 - w, ty1]
 		} else if (side == 'inner-left') {
@@ -1328,8 +1390,7 @@ let popup_state = function(e) {
 				ty1 + (th - h) / 2
 			]
 		} else {
-			side = 'bottom' // default
-			;[x0, y0] = [tx1, ty2]
+			assert(false)
 		}
 
 		let sd = side.replace('inner-', '')
@@ -1347,27 +1408,76 @@ let popup_state = function(e) {
 		x0 += (side == 'inner-right'  || (sdy && align == 'end')) ? -x : x
 		y0 += (side == 'inner-bottom' || (sdx && align == 'end')) ? -y : y
 
-		if (side.starts('inner-')) {
-			// adjust the offset of inner popups to fit the screen.
-			let br = window.rect()
-			let d = 10
-			let bw = br.w - d
-			let bh = br.h - d
-			let ox2 = max(0, x0 + w - bw)
-			let ox1 = min(0, x0)
-			let oy2 = max(0, y0 + h - bh)
-			let oy1 = min(0, y0)
-			x0 -= ox1 ? ox1 : ox2
-			y0 -= oy1 ? oy1 : oy2
-		} else {
-			// change the alignment of outer popups to fit the screen.
-			// TODO
+		return [x0, y0]
+	}
+
+	function update() {
+		if (!(target && target.isConnected) || e.hidden)
+			return
+
+		if (fixed == null)
+			fixed = e.css().position == 'fixed'
+
+		let er = e.rect()
+		let w = er.w
+		let h = er.h
+
+		let [x0, y0] = layout(w, h)
+
+		// if popup doesn't fit the screen, first try to change its side
+		// or alignment and relayout, and if that didn't work, its offset.
+
+		let br = window.rect()
+		let d = 10
+		let bw = br.w
+		let bh = br.h
+
+		let out_x1 = x0 < d
+		let out_y1 = y0 < d
+		let out_x2 = x0 + w > (bw - d)
+		let out_y2 = y0 + h > (bh - d)
+
+		let re
+		if (side == 'bottom' && out_y2) {
+			re = 1; side = 'top'
+		} else if (side == 'top' && out_y1) {
+			re = 1; side = 'bottom'
+		} else if (side == 'right' && out_x2) {
+			re = 1; side = 'left'
+		} else if (side == 'top' && out_x1) {
+			re = 1; side = 'bottom'
 		}
+
+		let vert =
+			   side == 'bottom'
+			|| side == 'top'
+			|| side == 'inner-bottom'
+			|| side == 'inner-top'
+
+		if (align == 'end' && ((vert && out_x2) || (!vert && out_y2))) {
+			re = 1; align = 'start'
+		} else if (align == 'start' && ((vert && out_x1) || (!vert && out_y1))) {
+			re = 1; align = 'end'
+		}
+
+		if (re)
+			[x0, y0] = layout(w, h)
+
+		// if nothing else works, adjust the offset to fit the screen.
+		let ox2 = max(0, x0 + w - (bw - d))
+		let ox1 = min(0, x0)
+		let oy2 = max(0, y0 + h - (bh - d))
+		let oy1 = min(0, y0)
+		x0 -= ox1 ? ox1 : ox2
+		y0 -= oy1 ? oy1 : oy2
 
 		e.x = fixed ? x0 : window.scrollX + x0
 		e.y = fixed ? y0 : window.scrollY + y0
 
-		target_updated()
+		if (e.popup_target_updated)
+			e.popup_target_updated(target)
+
+		e.style.visibility = null
 	}
 
 	return s
@@ -1375,7 +1485,7 @@ let popup_state = function(e) {
 
 method(HTMLElement, 'popup', function(target, side, align, px, py, pw, ph, ox, oy) {
 	this.__popup_state = this.__popup_state || popup_state(this)
-	this.__popup_state.update(target, side, align, px, py, pw, ph, ox, oy)
+	this.__popup_state.update(target, side || 'bottom', align || 'start', px, py, pw, ph, ox, oy)
 })
 
 }
@@ -1413,6 +1523,26 @@ method(Element, 'modal', function(on) {
 		if (dialog.showModal) // Firefox doesn't have this.
 			dialog.showModal()
 		e.focus()
+	}
+})
+
+// tab focus trapping on popups ----------------------------------------------
+
+document.on('keydown', function(key, shift, ctrl, alt, ev) {
+	if (key == 'Tab') {
+		let popup = ev.target.closest('.popup')
+		if (!popup)
+			return
+		let focusables = popup.focusables()
+		if (!focusables.length)
+			return
+		if (shift && ev.target == focusables[0]) {
+			focusables.last.focus()
+			return false
+		} else if (!shift && ev.target == focusables.last) {
+			focusables[0].focus()
+			return false
+		}
 	}
 })
 

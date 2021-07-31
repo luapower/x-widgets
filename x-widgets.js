@@ -17,6 +17,8 @@
 		dialog
 		toolbox
 		widget_switcher
+		pagenav
+		richtext
 
 */
 
