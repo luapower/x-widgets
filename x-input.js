@@ -153,16 +153,18 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		if (e.updating)
 			return
 		bind_field(true)
-		if (key == 'input_val')
+		if (key == 'input_val') {
 			e.do_update_val(val, ev)
-		else if (key == 'val')
+			e.fire('input_val_changed', val, ev)
+		} else if (key == 'val') {
 			e.fire('val_changed', val, ev)
-		else if (key == 'errors') {
+		} else if (key == 'errors') {
 			e.invalid = val != null && !val.passed
 			e.class('invalid', e.invalid)
 			e.do_update_errors(val, ev)
-		} else if (key == 'modified')
+		} else if (key == 'modified') {
 			e.class('modified', val)
+		}
 	}
 
 	function bind_nav(nav, col, on) {
@@ -426,7 +428,10 @@ function input_widget(e) {
 		let fe = e.focusables()[0]
 		if (fe && ev.target != fe) {
 			fe.focus()
-			return false
+			// preventDefault() is to avoid focusing back the target.
+			// at the same time we don't want to prevent other 'pointerdown'
+			// handlers so we're not just returning false.
+			ev.preventDefault()
 		}
 	})
 
@@ -1098,7 +1103,7 @@ function editbox_widget(e, opt) {
 
 		e.on('wheel', function(ev, dy) {
 			e.set_open(true, false, true)
-			e.picker.pick_near_val(dy / 100, {input: e})
+			e.picker.pick_near_val(dy, {input: e})
 			return false
 		})
 
@@ -1858,7 +1863,10 @@ component('x-calendar', 'Input', function(e) {
 	e.sel_month = list_dropdown({
 		classes: 'x-calendar-sel-month',
 		items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-		field: {format: format_month},
+		field: {
+			format: format_month,
+			not_null: true,
+		},
 		val_col: 0,
 		item_field: {
 			format: format_month,
@@ -1871,16 +1879,17 @@ component('x-calendar', 'Input', function(e) {
 			// MySQL range for DATETIME
 			min: 1000,
 			max: 9999,
+			not_null: true,
 		},
 		button_style: 'left-right',
 	})
 
 	e.sel_hour = spinedit({
 		classes: 'x-calendar-sel-hms',
-		//attrs: {mode: 'inline'},
 		field: {
 			min: 0,
 			max: 24,
+			not_null: true,
 		},
 		button_style: 'up-down',
 		button_placement: 'none',
@@ -1888,10 +1897,10 @@ component('x-calendar', 'Input', function(e) {
 
 	e.sel_minute = spinedit({
 		classes: 'x-calendar-sel-hms',
-		//attrs: {mode: 'inline'},
 		field: {
 			min: 0,
 			max: 60,
+			not_null: true,
 		},
 		button_style: 'up-down',
 		button_placement: 'none',
@@ -1899,10 +1908,10 @@ component('x-calendar', 'Input', function(e) {
 
 	e.sel_second = spinedit({
 		classes: 'x-calendar-sel-hms',
-		//attrs: {mode: 'inline'},
 		field: {
 			min: 0,
 			max: 60,
+			not_null: true,
 		},
 		button_style: 'up-down',
 		button_placement: 'none',
@@ -1920,10 +1929,12 @@ component('x-calendar', 'Input', function(e) {
 
 	e.add(e.date_box, e.time_box)
 
-	e.on('bind', function() {
-		e.time_box.show(e.field && e.field.has_time || false)
-		for (let ce of [e.time_box.last.prev, e.time_box.last])
-			ce.show(e.field && e.field.has_seconds || false)
+	e.on('bind_field', function(on) {
+		if (on) {
+			e.time_box.show(e.field.has_time || false)
+			for (let ce of [e.time_box.last.prev, e.time_box.last])
+				ce.show(e.field.has_seconds || false)
+		}
 	})
 
 	e.on('focus', function() {
@@ -1936,10 +1947,6 @@ component('x-calendar', 'Input', function(e) {
 
 	function as_dt(t) {
 		return e.field.from_time ? e.field.from_time(t) : t
-	}
-
-	function set_ts(t, ev) {
-		e.set_val(as_dt(t), ev || {input: e})
 	}
 
 	function update_sel_day(t) {
@@ -1957,28 +1964,22 @@ component('x-calendar', 'Input', function(e) {
 	}
 
 	let start_week
-	let sel_td
-	function update_view(sel_t, new_start_week) {
+
+	function focused_month(t) {
+		return month(week(t, 2))
+	}
+
+	function update_weekview(new_start_week, sel_t) {
 
 		let weeks = 6
 		let sel_d = day(sel_t)
 		let sel_m = month(sel_d)
-		let first_week = week(sel_m)
-		start_week = or(new_start_week, first_week)
-		let focused_week = week(start_week, 2)
-		let focused_month = month(focused_week)
+		let cur_m = focused_month(new_start_week)
 
-		if (focused_week != null) {
-			e.sel_month.val = month_of(focused_week)
-			e.sel_year.val = year_of(focused_week)
-			e.sel_hour.val = hours_of(sel_t)
-			e.sel_minute.val = minutes_of(sel_t)
-			e.sel_second.val = seconds_of(sel_t)
-		}
 		update_sel_day(sel_d)
-		sel_td = null
-		e.weekview.clear()
 
+		start_week = new_start_week
+		e.weekview.clear()
 		let d = start_week
 		let cur_d = day(time())
 		for (let week = 0; week <= weeks; week++) {
@@ -1993,7 +1994,7 @@ component('x-calendar', 'Input', function(e) {
 					if (d != null) {
 						let m = month(d)
 						s = d == cur_d ? ' today' : ''
-						s = s + (m == focused_month ? ' current-month' : '')
+						s = s + (m == cur_m ? ' current-month' : '')
 						s = s + (d == sel_d ? ' focused selected' : '')
 						n = floor(1 + days(d - m))
 					} else {
@@ -2003,37 +2004,56 @@ component('x-calendar', 'Input', function(e) {
 					let td = tag('td', {class: 'x-calendar-day x-item'+s}, n)
 					td.day = d
 					tr.add(td)
-					if (d == sel_d)
-						sel_td = td
 					d = day(d, 1)
 				}
 			}
 			e.weekview.add(tr)
 		}
+
+	}
+
+	function update_ym(t) {
+		e.sel_month.val = month_of(t)
+		e.sel_year .val =  year_of(t)
+	}
+
+	function update_hms(t) {
+		e.sel_hour.val = hours_of(t)
+		e.sel_minute.val = minutes_of(t)
+		e.sel_second.val = seconds_of(t)
+	}
+
+	function update_view(t) {
+		let ct = or(t, time()) // calendar view time
+		update_weekview(week(month(ct)), t)
+		update_ym(ct)
+		update_hms(t)
 	}
 
 	e.do_update_val = function(v, ev) {
 		assert(e.bound)
-		let t = as_ts(v)
-		let new_start_week
-		if (t == null && !(ev && ev.input == e))
-			new_start_week = week(month(time()))
-		update_view(t, new_start_week)
+		if (ev && ev.input == e)
+			return
+		let t = as_ts(v) // selected time
+		update_view(t)
 	}
 
 	// controller
+
+	function set_ts(t, update_view_too) {
+		e.set_val(as_dt(t), {input: e})
+		if (update_view_too)
+			update_view(t)
+	}
 
 	e.weekview.on('pointerdown', function(ev) {
 		let td = ev.target
 		if (td.day == null)
 			return
-		if (sel_td) {
-			sel_td.class('focused', false)
-			sel_td.class('selected', false)
-		}
-		e.sel_month.cancel()
+		e.sel_month.close()
 		e.focus()
-		td.classes = 'focused selected'
+		update_weekview(start_week, td.day)
+		update_ym(td.day)
 		return this.capture_pointer(ev, null, function() {
 			set_ts(td.day)
 			e.fire('val_picked') // picker protocol
@@ -2042,59 +2062,78 @@ component('x-calendar', 'Input', function(e) {
 	})
 
 	e.sel_month.on('val_changed', function(v, ev) {
-		if (ev && ev.input) {
-			let t = as_ts(e.input_val)
-			let y = year_of(t)
-			let m = v
-			let d = month_day_of(t)
-			t = y != null && m != null && d != null ? time(y, m, d) : null
+		if (!(ev && ev.input))
+			return
+		let t = as_ts(e.val)
+		let ct
+		if (t != null) {
+			t = set_month(t, v)
+			ct = week(month(t))
 			set_ts(t)
+		} else {
+			let y = e.sel_year.val
+			let m = v
+			ct = y != null && m != null ? week(time(y, m)) : null
 		}
+		update_weekview(ct, t)
 	})
 
 	e.sel_year.on('val_changed', function(v, ev) {
-		if (ev && ev.input) {
-			let t = as_ts(e.input_val)
-			let y = v
-			let m = month_of(t)
-			let d = month_day_of(t)
-			t = y != null && m != null && d != null ? time(y, m, d) : null
+		if (!(ev && ev.input))
+			return
+		let t = as_ts(e.val)
+		if (t != null) {
+			t = set_year(t, v)
+			ct = week(month(t))
 			set_ts(t)
+		} else {
+			let y = v
+			let m = e.sel_month.val
+			ct = y != null && m != null ? week(time(y, m)) : null
 		}
+		update_weekview(ct, t)
 	})
 
 	e.sel_hour.on('val_changed', function(v, ev) {
-		if (ev && ev.input) {
-			let t = as_ts(e.input_val)
+		if (!(ev && ev.input))
+			return
+		let t = as_ts(e.val)
+		if (t != null) {
 			t = set_hours(t, v)
 			set_ts(t)
 		}
 	})
 
 	e.sel_minute.on('val_changed', function(v, ev) {
-		if (ev && ev.input) {
-			let t = as_ts(e.input_val)
+		if (!(ev && ev.input))
+			return
+		let t = as_ts(e.val)
+		if (t != null) {
 			t = set_minutes(t, v)
 			set_ts(t)
 		}
 	})
 
 	e.sel_second.on('val_changed', function(v, ev) {
-		if (ev && ev.input) {
-			let t = as_ts(e.input_val)
+		if (!(ev && ev.input))
+			return
+		let t = as_ts(e.val)
+		if (t != null) {
 			t = set_seconds(t, v)
 			set_ts(t)
 		}
 	})
 
 	e.weekview.on('wheel', function(ev, dy) {
-		let t = as_ts(e.input_val)
-		update_view(t, week(or(start_week, month(t)), dy))
+		let t = as_ts(e.val)
+		let ct = or(week(start_week, dy), week(month(or(t, time()))))
+		update_weekview(ct, t)
+		update_ym(focused_month(ct))
 		return false
 	})
 
 	e.weekview.on('keydown', function(key, shift) {
-		let t = or(as_ts(e.input_val), time())
+		let t = as_ts(e.val)
 		let d, m
 		switch (key) {
 			case 'ArrowLeft'  : d = -1; break
@@ -2105,30 +2144,25 @@ component('x-calendar', 'Input', function(e) {
 			case 'PageDown'   : m =  1; break
 		}
 		if (d) {
-			set_ts(day(t, d))
+			set_ts(or(day(t, d), day(time())), true)
 			return false
 		}
 		if (m) {
-			set_ts(month(t, m))
+			set_ts(or(month(t, m), month(time())), true)
 			return false
 		}
 		if (key == 'Home') {
-			set_ts(shift ? year(t) : month(t))
+			set_ts(shift ? year(or(t, time())) : month(or(t, time())), true)
 			return false
 		}
 		if (key == 'End') {
-			set_ts(day(shift ? year(t, 1) : month(t, 1), -1))
+			set_ts(day(shift ? year(or(t, time()), 1) : month(or(t, time()), 1), -1), true)
 			return false
 		}
 		if (key == 'Enter') {
 			e.fire('val_picked', {input: e}) // picker protocol
 			return false
 		}
-	})
-
-	e.on('dropdown_opened', function() {
-		if (e.input_val == null)
-			set_ts(time())
 	})
 
 	// hack: trick dropdown into thinking that our own opened dropdown picker
@@ -2141,9 +2175,13 @@ component('x-calendar', 'Input', function(e) {
 	}
 
 	e.pick_near_val = function(delta, ev) {
-		set_ts(day(as_ts(or(e.input_val, time())), delta), ev)
+		set_ts(day(or(as_ts(e.val), time()), delta))
 		e.fire('val_picked', ev)
 	}
+
+	e.on('dropdown_opened', function() {
+		update_view(as_ts(e.val))
+	})
 
 })
 

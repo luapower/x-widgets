@@ -382,7 +382,7 @@ if (!window.S)
 if (!window.lang)
 	function lang() { return document.documentElement.lang }
 
-// stub for rewriting links for current language.
+// stub for rewriting links to current language.
 if (!window.href)
 	href = return_arg
 
@@ -947,6 +947,27 @@ function hours_of     (t) { if (t == null) return null; _d.setTime(t * 1000); re
 function minutes_of   (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCMinutes() }
 function seconds_of   (t) { if (t == null) return null; _d.setTime(t * 1000); return _d.getUTCSeconds() }
 
+function set_year(t, x) {
+	if (t == null) return null
+	_d.setTime(t * 1000)
+	_d.setUTCFullYear(x)
+	return _d.valueOf() / 1000
+}
+
+function set_month(t, x) {
+	if (t == null) return null
+	_d.setTime(t * 1000)
+	_d.setUTCMonth(x)
+	return _d.valueOf() / 1000
+}
+
+function set_month_day(t, x) {
+	if (t == null) return null
+	_d.setTime(t * 1000)
+	_d.setUTCDate(x)
+	return _d.valueOf() / 1000
+}
+
 function set_hours(t, x) {
 	if (t == null) return null
 	_d.setTime(t * 1000)
@@ -976,7 +997,7 @@ locale = navigator.language
 	for (let i = 0; i < 7; i++) {
 		_d.setTime(1000 * 3600 * 24 * (3 + i))
 		for (how of ['short', 'long'])
-			wd[how][i] = _d.toLocaleDateString(locale, {weekday: how, timeZone: 'UTC'})
+			wd[how][i] = _d.toLocaleDateString(lang() || locale, {weekday: how, timeZone: 'UTC'})
 	}
 
 	function weekday_name(t, how) {

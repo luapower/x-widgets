@@ -65,7 +65,6 @@ rowset field attributes:
 		align          : 'left'|'right'|'center'
 		format         : f(v, row) -> s
 		attr           : custom value for html attribute `field`, for styling
-		date_format    : toLocaleString format options for the date type
 		true_text      : display value for boolean true
 		false_text     : display value for boolean false
 		null_text      : display value for null
@@ -3191,6 +3190,8 @@ function nav_widget(e) {
 	}
 
 	function apply_result(result, changed_rows) {
+		e.begin_update()
+
 		let rows_to_remove = []
 		for (let i = 0; i < result.rows.length; i++) {
 			let rt = result.rows[i]
@@ -3228,6 +3229,8 @@ function nav_widget(e) {
 
 		if (result.sql_trace && result.sql_trace.length)
 			debug(result.sql_trace.join('\n'))
+
+		e.end_update()
 	}
 
 	function set_save_state(rows, req) {
@@ -3306,18 +3309,27 @@ function nav_widget(e) {
 	e.revert_changes = function() {
 		if (!e.changed_rows)
 			return
+
 		e.begin_update()
-		/*
-		for (let row of e.changed_rows)
+
+		let rows_to_remove = []
+		for (let row of e.changed_rows) {
 			if (row.is_new)
-				//
+				rows_to_remove.push(row)
 			else if (row.removed)
-				//
-			else if (row.modified)
-				//
-		*/
+				e.set_row_state(row, 'removed', false)
+			else if (row.modified) {
+				e.set_row_state(row, 'modified', false)
+				for (let field of e.all_fields)
+					e.reset_cell_val(row, field, e.cell_old_val(row, field))
+			}
+		}
+		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
+
 		e.changed_rows = null
+		rows_moved = false
 		e.show_action_band(false)
+
 		e.end_update()
 	}
 
@@ -3602,10 +3614,15 @@ function nav_widget(e) {
 		if (on && !e.action_band) {
 			e.action_band = action_band({
 				classes: 'x-grid-action-band',
-				layout: 'save:ok',
+				layout: 'cancel:cancel save:ok',
 				buttons: {
+					'cancel': function() {
+						e.revert_changes()
+						e.exit_focused_row(true)
+					},
 					'save': function() {
-						e.save()
+						if (e.exit_focused_row())
+							e.save()
 					},
 				}
 			})
@@ -4093,37 +4110,13 @@ component('x-lookup-dropdown', function(e) {
 			return s.slice(0, 16)
 		else
 			return s
-		/*
-		let t = this.to_time(s)
-		_d.setTime(t * 1000)
-		return _d.toLocaleString(locale,
-			field.has_seconds
-				? this.date_format_with_seconds
-				: this.date_format)
-		*/
 	}
-
-	datetime.date_format = {
-		weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
-		hour: '2-digit', minute: '2-digit',
-		timeZone: 'UTC',
-	}
-
-	datetime.date_format_with_seconds = assign({
-		second: '2-digit',
-	}, datetime.date_format)
 
 	datetime.editor = function(...opt) {
 		return dateedit(assign({
 			align: 'right',
 			mode: 'fixed',
 		}, ...opt))
-		/*
-		return date_dropdown(assign({
-			align: 'right',
-			mode: 'fixed',
-		}, ...opt))
-		*/
 	}
 
 	datetime.validator_date = field => ({
@@ -4137,11 +4130,6 @@ component('x-lookup-dropdown', function(e) {
 	field_types.date = date
 
 	date.has_time = false
-
-	date.date_format = {
-		weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
-		timeZone: 'UTC',
-	}
 
 	// timestamps
 

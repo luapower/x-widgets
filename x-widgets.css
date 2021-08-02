@@ -3,7 +3,10 @@
 
 [hidden] { display: none !important; } /* because css `display` overrides it! */
 
-.popup { position: absolute !important; }
+.popup {
+	position: absolute !important;
+	white-space: nowrap; /* expand width to fit contents for `absolute` elements. I know... */
+}
 
 /* element disabled state ------------------------------------------------- */
 

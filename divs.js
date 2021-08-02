@@ -16,7 +16,7 @@
 		e.attrs = {k: v}
 		e.tag
 	element css class list manipulation:
-		e.class(k[, enable])
+		e.class('k1 ...'[, enable])
 		e.hasclass(k)
 		e.switch_class(k1, k2, normal)
 		e.classess = 'k1 k2 ...'
@@ -1259,8 +1259,6 @@ let popup_state = function(e) {
 		ph    = or(ph1, ph)
 		ox    = or(ox1, ox)
 		oy    = or(oy1, oy)
-		if (e.local_z == null) // get local z-index from css on first bind.
-			e.local_z = num(e.css('z-index'), 0)
 		target1 = strict_or(target1, target) // because `null` means remove...
 		if (target1 != target) {
 			if (target)
@@ -1315,6 +1313,8 @@ let popup_state = function(e) {
 			e.class('popup')
 			e.style.visibility = 'hidden'
 			document.body.add(e)
+			if (e.local_z == null) // get local z-index from css on first bind.
+				e.local_z = num(e.css('z-index'), 0)
 			e.popup_level = target.popup_level + 1
 			// NOTE: this limits local z-index range to 0..9.
 			e.style.zIndex = e.popup_level * 10 + e.local_z
