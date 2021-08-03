@@ -797,9 +797,9 @@ function editbox_widget(e, opt) {
 
 	// clicking outside the picker closes the picker.
 	function document_pointerdown(ev) {
-		if (e.contains(ev.target)) // clicked inside the editbox.
+		if (e.positionally_contains(ev.target)) // clicked inside the editbox.
 			return
-		if (e.spicker.contains(ev.target)) // clicked inside the picker.
+		if (e.spicker.positionally_contains(ev.target)) // clicked inside the picker.
 			return
 		e.close_spicker()
 	}
@@ -1079,9 +1079,9 @@ function editbox_widget(e, opt) {
 
 		// clicking outside the picker closes the picker.
 		function document_pointerdown(ev) {
-			if (e.contains(ev.target)) // clicked inside the dropdown.
+			if (e.positionally_contains(ev.target)) // clicked inside the dropdown.
 				return
-			if (e.picker.contains(ev.target)) // clicked inside the picker.
+			if (e.picker.positionally_contains(ev.target)) // clicked inside the picker.
 				return
 			e.close()
 		}
@@ -1978,6 +1978,15 @@ component('x-calendar', 'Input', function(e) {
 
 		update_sel_day(sel_d)
 
+		if (start_week == new_start_week) {
+			for (let td of e.weekview.$('td'))
+				td.class('focused selected', false)
+			for (let td of e.weekview.$('td'))
+				if (td.day == sel_d)
+					td.class('focused selected', true)
+			return
+		}
+
 		start_week = new_start_week
 		e.weekview.clear()
 		let d = start_week
@@ -2047,15 +2056,15 @@ component('x-calendar', 'Input', function(e) {
 	}
 
 	e.weekview.on('pointerdown', function(ev) {
-		let td = ev.target
-		if (td.day == null)
+		let d = ev.target.day
+		if (d == null)
 			return
 		e.sel_month.close()
 		e.focus()
-		update_weekview(start_week, td.day)
-		update_ym(td.day)
+		update_weekview(start_week, d)
+		update_ym(d)
 		return this.capture_pointer(ev, null, function() {
-			set_ts(td.day)
+			set_ts(d)
 			e.fire('val_picked') // picker protocol
 			return false
 		})
@@ -2164,15 +2173,6 @@ component('x-calendar', 'Input', function(e) {
 			return false
 		}
 	})
-
-	// hack: trick dropdown into thinking that our own opened dropdown picker
-	// is our child, which is how we would implement dropdowns if this fucking
-	// rendering model would allow us to decouple painting order from element's
-	// position in the tree (IOW we need the concept of global z-index).
-	let builtin_contains = e.contains
-	e.contains = function(e1) {
-		return builtin_contains.call(this, e1) || e.sel_month.picker.contains(e1)
-	}
 
 	e.pick_near_val = function(delta, ev) {
 		set_ts(day(or(as_ts(e.val), time()), delta))

@@ -27,6 +27,7 @@
 		e.parent
 		e.index
 		e.first, e.last, e.next, e.prev
+		e.positionally_contains(ce) -> t|f
 	dom tree querying:
 		e.$(sel) -> ea
 		$(sel) -> ea
@@ -263,6 +264,20 @@ method(NodeList, 'each', function(f) {
 
 property(NodeList, 'last', function() {
 	return this[this.length-1]
+})
+
+method(Element, 'positionally_contains', function(e) {
+	if (this.contains(e))
+		return true
+	let pe = e
+	while(1) {
+		pe = pe.popup_target || pe.parent
+		if (!pe)
+			break
+		if (pe == this)
+			return true
+	}
+	return false
 })
 
 /* dom tree manipulation with lifecycle management ---------------------------
