@@ -4045,7 +4045,7 @@ component('x-lookup-dropdown', function(e) {
 		if (!dm)
 			return null
 		if (this.has_time) {
-			let tm = dm[4].match(/^[^\d]+(\d+)[:\s]+(\d+)[:\s]+([\.\d]+)/)
+			let tm = dm[4].match(/^[^\d]+(\d+)[:\s]+(\d+)[:\s]*([\.\d]*)/)
 			if (tm)
 				return time(
 					num(dm[1]), num(dm[2]), num(dm[3]),

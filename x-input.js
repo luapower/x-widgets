@@ -1945,6 +1945,10 @@ component('x-calendar', 'Input', function(e) {
 		return e.field && e.field.to_time ? e.field.to_time(v) : v
 	}
 
+	function daytime(t) {
+		return t != null ? t - day(t) : null
+	}
+
 	function as_dt(t) {
 		return e.field.from_time ? e.field.from_time(t) : t
 	}
@@ -2064,7 +2068,7 @@ component('x-calendar', 'Input', function(e) {
 		update_weekview(start_week, d)
 		update_ym(d)
 		return this.capture_pointer(ev, null, function() {
-			set_ts(d)
+			set_ts(d + daytime(as_ts(e.val)))
 			e.fire('val_picked') // picker protocol
 			return false
 		})
@@ -2153,19 +2157,23 @@ component('x-calendar', 'Input', function(e) {
 			case 'PageDown'   : m =  1; break
 		}
 		if (d) {
-			set_ts(or(day(t, d), day(time())), true)
+			let dt = daytime(t) || 0
+			set_ts(or(day(t, d), day(time())) + dt, true)
 			return false
 		}
 		if (m) {
-			set_ts(or(month(t, m), month(time())), true)
+			let dt = t != null ? t - month(t) : 0
+			set_ts(or(month(t, m), month(time())) + dt, true)
 			return false
 		}
 		if (key == 'Home') {
-			set_ts(shift ? year(or(t, time())) : month(or(t, time())), true)
+			let dt = daytime(t) || 0
+			set_ts((shift ? year(or(t, time())) : month(or(t, time()))) + dt, true)
 			return false
 		}
 		if (key == 'End') {
-			set_ts(day(shift ? year(or(t, time()), 1) : month(or(t, time()), 1), -1), true)
+			let dt = daytime(t) || 0
+			set_ts((day(shift ? year(or(t, time()), 1) : month(or(t, time()), 1), -1)) + dt, true)
 			return false
 		}
 		if (key == 'Enter') {
@@ -2173,6 +2181,20 @@ component('x-calendar', 'Input', function(e) {
 			return false
 		}
 	})
+
+	function pick_on_enter(key) {
+		if (key == 'Enter') {
+			e.fire('val_picked', {input: e}) // picker protocol
+			return false
+		}
+	}
+	e.weekview  .on('keydown', pick_on_enter)
+	e.sel_month .on('keydown', pick_on_enter)
+	e.sel_year  .on('keydown', pick_on_enter)
+	e.sel_hour  .on('keydown', pick_on_enter)
+	e.sel_minute.on('keydown', pick_on_enter)
+	e.sel_second.on('keydown', pick_on_enter)
+
 
 	e.pick_near_val = function(delta, ev) {
 		set_ts(day(or(as_ts(e.val), time()), delta))
