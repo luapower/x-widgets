@@ -114,8 +114,10 @@
 		e.make_visible()
 		e.is_in_viewport()
 	animation easing:
-		raf(f)
-		transition(f, [dt], [x0], [x1], [easing])
+		raf(f) -> raf_id
+		transition(f, [dt], [x0], [x1], [easing]) -> tr
+			tr.stop()
+			tr.finish = func
 	hit testing:
 		hit_test_rect_sides(x0, y0, d1, d2, x, y, w, h)
 		e.hit_test_sides(mx, my, [d1], [d2])
@@ -376,10 +378,8 @@ function unsafe_html(s) {
 		return s
 	let span = document.createElement('span')
 	span.unsafe_html = s.trim()
-	let e = span.childNodes.length > 1 ? span : span.firstChild
-	e.init_child_components()
-	e.init_component()
-	return e
+	span.init_child_components()
+	return span.childNodes.length > 1 ? span : span.firstChild
 }
 
 function sanitize_html(s) {
@@ -1129,6 +1129,21 @@ easing.sine   = t => -cos(t * (PI * .5)) + 1
 easing.circ   = t => -(sqrt(1 - t**2) - 1)
 easing.back   = t => t**2 * (2.7 * t - 1.7)
 
+easing.bounce = function(t) {
+	if (t < 1 / 2.75) {
+		return 7.5625 * t**2
+	} else if (t < 2 / 2.75) {
+		t = t - 1.5 / 2.75
+		return 7.5625 * t**2 + 0.75
+	} else if (t < 2.5 / 2.75) {
+		t = t - 2.25 / 2.75
+		return 7.5625 * t**2 + 0.9375
+	} else {
+ 		t = t - 2.625 / 2.75
+		return 7.5625 * t**2 + 0.984375
+	}
+}
+
 raf = requestAnimationFrame
 
 function transition(f, dt, y0, y1, ease_f, ease_way, ...ease_args) {
@@ -1136,20 +1151,30 @@ function transition(f, dt, y0, y1, ease_f, ease_way, ...ease_args) {
 	y0 = or(y0, 0)
 	y1 = or(y1, 1)
 	ease_f = or(ease_f, 'cubic')
-	let t0
+	let raf_id, t0, finished
+	let e = {}
+	e.stop = function() {
+		if (raf_id)
+			cancelAnimationFrame(raf_id)
+		finished = true
+	}
 	let wrapper = function(t) {
 		t0 = or(t0, t)
 		let lin_x = lerp(t, t0, t0 + dt * 1000, 0, 1)
-		if (lin_x < 1) {
+		if (lin_x < 1 && !finished) {
 			let eas_x = easing.ease(ease_f, ease_way, lin_x, ...ease_args)
 			let y = lerp(eas_x, 0, 1, y0, y1)
-			if (f(y) !== false)
-				raf(wrapper)
+			if (f(y, lin_x) !== false)
+				raf_id = raf(wrapper)
 		} else {
-			f(y1, true)
+			f(y1, lin_x, true)
+			if (e.finish)
+				e.finish()
+			finished = true
 		}
 	}
-	raf(wrapper)
+	raf_id = raf(wrapper)
+	return e
 }
 
 // hit-testing ---------------------------------------------------------------

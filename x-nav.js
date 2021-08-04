@@ -287,6 +287,16 @@ field_types : {type -> {attr->val}}
 
 --------------------------------------------------------------------------- */
 
+function map_keys_different(m1, m2) {
+	for (let k1 of m1.keys())
+		if (!m2.has(k1))
+			return true
+	for (let k2 of m2.keys())
+		if (!m1.has(k2))
+			return true
+	return false
+}
+
 function nav_widget(e) {
 
 	e.isnav = true // for resolver
@@ -1117,12 +1127,11 @@ function nav_widget(e) {
 			e.set_val(val, assign({input: e}, ev))
 		}
 
-		let sel_rows_changed
+		let old_selected_rows = map(e.selected_rows)
 		if (ev.preserve_selection) {
 			// leave it
 		} else if (ev.selected_rows) {
 			e.selected_rows = map(ev.selected_rows)
-			sel_rows_changed = true
 		} else if (e.can_focus_cells) {
 			if (expand_selection) {
 				e.selected_rows.clear()
@@ -1138,7 +1147,6 @@ function nav_widget(e) {
 							let field = e.fields[fi]
 							if (e.can_select_cell(row, field)) {
 								sel_fields.add(field)
-								sel_rows_changed = true
 							}
 						}
 						if (sel_fields.size)
@@ -1167,7 +1175,6 @@ function nav_widget(e) {
 				else
 					e.selected_rows.delete(row)
 
-				sel_rows_changed = true
 			}
 		} else {
 			if (expand_selection) {
@@ -1179,7 +1186,6 @@ function nav_widget(e) {
 					if (!e.selected_rows.has(row)) {
 						if (e.can_select_cell(row)) {
 							e.selected_rows.set(row, true)
-							sel_rows_changed = true
 						}
 					}
 				}
@@ -1191,7 +1197,6 @@ function nav_widget(e) {
 						e.selected_rows.delete(row)
 					else
 						e.selected_rows.set(row, true)
-				sel_rows_changed = true
 			}
 		}
 
@@ -1201,6 +1206,7 @@ function nav_widget(e) {
 		if (row_changed)
 			e.fire('focused_row_changed', row, row0, ev)
 
+		let sel_rows_changed = map_keys_different(old_selected_rows, e.selected_rows)
 		if (sel_rows_changed)
 			e.fire('selected_rows_changed')
 
@@ -3016,6 +3022,7 @@ function nav_widget(e) {
 		let refocus = refocus_state('val')
 		force_unfocus_focused_cell()
 
+		e.show_action_band(false)
 		e.changed_rows = null // Set(row)
 		rows_moved = false
 
@@ -4041,17 +4048,20 @@ component('x-lookup-dropdown', function(e) {
 		if (s == null || s == '')
 			return null
 		s = s.trim()
-		let dm = s.match(/^(\d\d\d\d)[^\d]+(\d+)[^\d]+(\d+)(.*)$/)
+		let tm =
+			   s.match(/(.*?)\s*(\d+)\s*:\s*(\d+)\s*:\s*([\.\d]+)$/)
+			|| s.match(/(.*?)\s*(\d+)\s*:\s*(\d+)$/)
+		s = tm ? tm[1] : s
+		let dm = s.match(/^(\d\d\d\d)[^\d:]+(\d+)[^\d:]+(\d+)$/)
 		if (!dm)
 			return null
-		if (this.has_time) {
-			let tm = dm[4].match(/^[^\d]+(\d+)[:\s]+(\d+)[:\s]*([\.\d]*)/)
-			if (tm)
-				return time(
-					num(dm[1]), num(dm[2]), num(dm[3]),
-					num(tm[1]), num(tm[2]), num(tm[3]))
-		}
-		return time(num(dm[1]), num(dm[2]), num(dm[3]))
+
+		if (this.has_time && tm)
+			return time(
+				num(dm[1]), num(dm[2]), num(dm[3]),
+				num(tm[2]), num(tm[3]), num(tm[4]))
+		else
+			return time(num(dm[1]), num(dm[2]), num(dm[3]))
 	}
 
 	let a = []
@@ -4095,7 +4105,7 @@ component('x-lookup-dropdown', function(e) {
 
 	datetime.from_text = function(s) {
 		let t = this.to_time(s)
-		return this.from_time(t)
+		return t != null ? this.from_time(t) : s
 	}
 
 	// range of MySQL DATETIME type
@@ -4271,6 +4281,25 @@ component('x-lookup-dropdown', function(e) {
 	place.editor = function(...opt) {
 		return placeedit(...opt)
 	}
+
+	// phone
+
+	let phone = {}
+	field_types.phone = phone
+
+	phone.validator_phone = function() {
+
+
+	}
+
+	// email
+	let email = {}
+	field_types.email = email
+
+	email.validator_email = function() {
+
+	}
+
 
 }
 

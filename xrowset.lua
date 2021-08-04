@@ -142,7 +142,7 @@ function virtual_rowset(init, ...)
 	end
 
 	local function db_error(err, s)
-		return config'hide_errors' and s or s..'\n'..err.message
+		return config'hide_errors' and s or s..(err and err.message and '\n'..err.message or '')
 	end
 
 	function rs:can_add_row(values)
@@ -167,7 +167,7 @@ function virtual_rowset(init, ...)
 		end
 	end
 
-	function rs:apply_changes(changes)
+	function rs:apply_changes(changes, params)
 
 		local res = {rows = {}}
 
@@ -176,12 +176,12 @@ function virtual_rowset(init, ...)
 			if row.type == 'new' then
 				local can, err, field_errors = rs:can_add_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.insert_row, rs, row.values)
+					local ok, affected_rows = catch('db', rs.insert_row, rs, row.values, params)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_inserted', 'row not inserted')
 						elseif rs.load_row then
-							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							local ok, rows = catch('db', rs.load_row, rs, row.values, params)
 							if ok then
 								if #rows == 0 then
 									rt.error = S('inserted_row_not_found',
@@ -196,13 +196,13 @@ function virtual_rowset(init, ...)
 								local err = rows
 								rt.error = db_error(err,
 									S('load_inserted_row_error',
-										'db error on loading back inserted row'))
+										'error on loading back inserted row'))
 							end
 						end
 					else
 						local err = affected_rows
 						rt.error = db_error(err,
-							S('insert_error', 'db error on inserting row'))
+							S('insert_error', 'error on inserting row'))
 					end
 				else
 					rt.error = err or true
@@ -211,7 +211,7 @@ function virtual_rowset(init, ...)
 			elseif row.type == 'update' then
 				local can, err, field_errors = rs:can_change_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.update_row, rs, row.values)
+					local ok, affected_rows = catch('db', rs.update_row, rs, row.values, params)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_updated', 'row not updated')
@@ -223,7 +223,7 @@ function virtual_rowset(init, ...)
 									row.values[k1] = v
 								end
 							end
-							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							local ok, rows = catch('db', rs.load_row, rs, row.values, params)
 							if ok then
 								if #rows == 0 then
 									rt.remove = true
@@ -253,12 +253,12 @@ function virtual_rowset(init, ...)
 			elseif row.type == 'remove' then
 				local can, err, field_errors = rs:can_remove_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.delete_row, rs, row.values)
+					local ok, affected_rows = catch('db', rs.delete_row, rs, row.values, params)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_removed', 'row not removed')
 						elseif rs.load_row then
-							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							local ok, rows = catch('db', rs.load_row, rs, row.values, params)
 							if ok then
 								if #rows == 1 then
 									rt.error = S('removed_row_found',
@@ -296,20 +296,24 @@ function virtual_rowset(init, ...)
 	function rs:respond()
 		local filter = json_arg(args'filter') or {}
 		local params = {}
-		params.lang = lang()
-		local t = {}
-		for k,v in pairs(params) do
-			t['param:'..k] = v
+		--params are prefixed so that they can be used in col_maps.
+		--:old variants are added too for update where sql.
+		for k,v in pairs{
+			['param:lang'        ] = lang(),
+			['param:default_lang'] = default_lang(),
+			['param:filter'      ] = filter,
+		} do
+			params[k] = v
+			params[k..':old'] = v
 		end
-		params.filter = filter
 		if method'post' then
 			local changes = post()
 			for _,row_change in ipairs(changes.rows) do
 				if row_change.values then
-					update(row_change.values, t)
+					update(row_change.values, params)
 				end
 			end
-			return rs:apply_changes(changes)
+			return rs:apply_changes(changes, params)
 		else
 			return rs:load(params)
 		end
@@ -376,7 +380,7 @@ rowset.S = virtual_rowset(function(self, ...)
 	self.cols = 'id en_text text'
 	function self:load_rows(rs, params)
 		rs.rows = {}
-		local lang = params.lang
+		local lang = lang()
 		for ext_id, t in pairs(get_ids()) do
 			local ext, id = ext_id:match'^(.-):(.*)$'
 			local s = S_texts(lang, ext)[id]

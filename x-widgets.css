@@ -174,7 +174,8 @@ body[opensans] {
 .x-widget {
 	z-index: 0; /* make `z-index` of children context-free */
 	position: relative; /* make `position: absolute` of children context-free */
-	margin: var(--x-margin);
+	margin-top    : var(--x-margin);
+	margin-bottom : var(--x-margin);
 }
 
 .x-widget:focus {
@@ -495,6 +496,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 	/* animation */
 	opacity: 0;
+	pointer-events: none;
 	animation-duration: .2s;
 	animation-timing-function: ease-out;
 	animation-fill-mode: forwards;
@@ -518,6 +520,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-tooltip.visible {
 	opacity: 1;
+	pointer-events: all;
 }
 
 @keyframes x-tooltip-left   { from { opacity: 0; transform: translate(-1em, 0); } }
@@ -2484,7 +2487,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 /* grid cells: grid > view > ct > (cells, editor) > cell */
 
 .x-grid-cells-view {
-	overflow-x: overlay;       /* show scrollbars as needed */
+	overflow-x: auto;          /* show scrollbars as needed */
 	overflow-y: scroll;        /* show scrollbars always */
 	position: relative;        /* anchor rows div */
 	flex: 1 0 0;               /* grow to fill container but ignore overflow */

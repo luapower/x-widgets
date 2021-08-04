@@ -1037,8 +1037,7 @@ gl.fat_lines_renderer = function(e) {
 gl.skybox = function(opt) {
 
 	let gl = this
-	let e = {}
-	events_mixin(e)
+	let e = new EventTarget()
 
 	let prog = gl.program('skybox', `
 

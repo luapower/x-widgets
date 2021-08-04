@@ -184,9 +184,8 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	let field_opt
 	let init = e.init
 	e.init = function() {
-		if (e.field) {
-			// `field` option enables standalone mode.
-			field_opt = e.field
+		if (!e.nav && !e.nav_id && !e.col) { // standalone mode.
+			field_opt = e.field || {}
 			field_opt.type = or(field_opt.type, e.field_type)
 			e.owns_field = true
 		} else {
@@ -358,6 +357,7 @@ function input_widget(e) {
 	e.prop('mode'    , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default', attr: true})
 	e.prop('info'    , {store: 'var', slot: 'lang'})
 	e.prop('infomode', {store: 'var', slot: 'lang', type: 'enum', enum_values: ['under', 'button', 'hidden'], attr: true, default: 'under'})
+	e.prop('field_type', {store: 'var', attr: true, internal: true})
 
 	e.add_info_button = e.add // stub
 	e.add_info_box = e.add // stub
@@ -1241,8 +1241,8 @@ component('x-spinedit', 'Input', function(e) {
 
 	editbox_widget(e)
 
-	e.align = 'right'
-	e.field_type = 'number'
+	e.props.align.default = 'right'
+	e.props.field_type.default = 'number'
 
 	e.prop('button_style'    , {store: 'var', type: 'enum', enum_values: ['plus-minus', 'up-down', 'left-right'], default: 'plus-minus', attr: true})
 	e.prop('button_placement', {store: 'var', type: 'enum', enum_values: ['each-side', 'left', 'right'], default: 'each-side', attr: true})
@@ -1358,7 +1358,7 @@ component('x-tagsedit', 'Input', function(e) {
 
 	e.class('x-editbox')
 
-	e.field_type = 'tags'
+	e.props.field_type.default = 'tags'
 
 	val_widget(e)
 	input_widget(e)
@@ -1631,7 +1631,7 @@ component('x-placeedit', 'Input', function(e) {
 
 	editbox_widget(e)
 
-	e.field_type = 'place'
+	e.props.field_type.default = 'place'
 
 	e.pin_ct = span()
 	e.add(e.pin_ct)
@@ -1704,7 +1704,7 @@ component('x-googlemaps', 'Input', function(e) {
 	e.class('x-stretched')
 	e.classes = 'fa fa-map-marked-alt'
 
-	e.field_type = 'place'
+	e.props.field_type.default = 'place'
 
 	e.map = google_maps_iframe()
 	e.map.class('x-googlemaps-iframe')
@@ -1740,7 +1740,7 @@ component('x-slider', 'Input', function(e) {
 
 	val_widget(e)
 
-	e.field_type = 'number'
+	e.props.field_type.default = 'number'
 
 	let inh_do_update = e.do_update
 	e.do_update = function() {
@@ -2146,7 +2146,6 @@ component('x-calendar', 'Input', function(e) {
 	})
 
 	e.weekview.on('keydown', function(key, shift) {
-		let t = as_ts(e.val)
 		let d, m
 		switch (key) {
 			case 'ArrowLeft'  : d = -1; break
@@ -2156,6 +2155,7 @@ component('x-calendar', 'Input', function(e) {
 			case 'PageUp'     : m = -1; break
 			case 'PageDown'   : m =  1; break
 		}
+		let t = as_ts(e.val)
 		if (d) {
 			let dt = daytime(t) || 0
 			set_ts(or(day(t, d), day(time())) + dt, true)
@@ -2197,7 +2197,8 @@ component('x-calendar', 'Input', function(e) {
 
 
 	e.pick_near_val = function(delta, ev) {
-		set_ts(day(or(as_ts(e.val), time()), delta))
+		let dt = daytime(as_ts(e.val)) || 0
+		set_ts(day(or(as_ts(e.val), time()), delta) + dt)
 		e.fire('val_picked', ev)
 	}
 
@@ -2213,7 +2214,7 @@ component('x-calendar', 'Input', function(e) {
 
 component('x-date-dropdown', 'Input', function(e) {
 	e.create_picker = calendar
-	e.field_type = 'date'
+	e.props.field_type.default = 'date'
 	editbox_widget(e, {input: false, picker: true})
 })
 

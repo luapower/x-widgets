@@ -89,20 +89,14 @@
 			.grow(cap, [preserve_contents=true], [pow2=true])
 			.grow_type(arr_type|max_index|[...]|arr, [preserve_contents=true])
 			.setlen(len)
-	events:
-		events_mixin(o)
 	timestamps:
 		time() -> ts
 		time(y, m, d, H, M, s, ms) -> ts
 		time(date_str) -> ts
-		day   (ts[, offset]) -> ts
-		month (ts[, offset]) -> ts
-		year  (ts[, offset]) -> ts
-		week  (ts[, offset]) -> ts
+		[day|month|year|week](ts[, offset]) -> ts
 		days(delta_ts) -> ds
-		year_of      (ts)
-		month_of     (ts)
-		month_day_of (ts)
+		[year|month|week_day|month_day|hours|minutes|seconds]_of(ts)
+		set_[year|month|month_day|hours|minutes|seconds](ts)
 		locale
 		weekday_name (ts, ['long'])
 		month_name   (ts, ['long'])
@@ -142,7 +136,8 @@
 			done: f('success'|'fail', ...),
 			...
 		}) -> req
-
+		get(url, success, [error], [opt]) -> req
+		post(url, data, [success], [error], [opt]) -> req
 */
 
 // types ---------------------------------------------------------------------
@@ -811,51 +806,6 @@ function freelist_stack(create, init, destroy) {
 	return e
 }
 
-// events --------------------------------------------------------------------
-
-function events_mixin(o) {
-	let obs = new Map()
-	o.on = function(topic, handler, enable) {
-		assert(enable === undefined || typeof enable == 'boolean')
-		if (enable !== undefined && enable !== true)
-			return o.off(topic, handler)
-		if (!handler)
-			return
-		let handlers = obs.get(topic)
-		if (!handlers) {
-			handlers = []
-			obs.set(topic, handlers)
-		}
-		handlers.push(handler)
-	}
-	o.off = function(topic, handler) {
-		let handlers = obs.get(topic)
-		if (handlers)
-			if (handler)
-				handlers.remove_value(handler)
-			else
-				handlers.clear()
-	}
-	o.once = function(topic, handler) {
-		let wrapper = function(...args) {
-			let ret = handler(...args)
-			o.off(topic, wrapper)
-			return ret
-		}
-		o.on(topic, wrapper)
-	}
-	o.fire = function(topic, ...args) {
-		var a = obs.get(topic)
-		if (!a) return
-		for (let f of a) {
-			let ret = f.call(o, ...args)
-			if (ret !== undefined)
-				return ret
-		}
-	}
-	return o
-}
-
 // timestamps ----------------------------------------------------------------
 
 _d = new Date() // public temporary date object.
@@ -1302,8 +1252,7 @@ function url(t) {
 */
 function ajax(req) {
 
-	req = assign({slow_timeout: 4}, req)
-	events_mixin(req)
+	req = assign(new EventTarget(), {slow_timeout: 4}, req)
 
 	let xhr = new XMLHttpRequest()
 
@@ -1431,4 +1380,21 @@ function ajax(req) {
 		req.send()
 
 	return req
+}
+
+function get(url, success, error, opt) {
+	return ajax(assign({
+		url: url,
+		success: success,
+		error: error,
+	}, opt))
+}
+
+function post(url, upload, success, error, opt) {
+	return ajax(assign({
+		url: url,
+		upload: upload,
+		success: success,
+		error: error,
+	}, opt))
 }

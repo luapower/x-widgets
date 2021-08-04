@@ -75,9 +75,9 @@
 		transform
 
 	box3 [min_p, max_p]
-	set assign to clone equals reset to_array to[_box3]_array from[_box3]_array add
-	is_empty center delta contains_point contains_box intersects_box
-	transform translate
+		set assign to clone equals reset to_array to[_box3]_array from[_box3]_array add
+		is_empty center delta contains_point contains_box intersects_box
+		transform translate
 
 	camera[3]
 		view_size pos dir up perspective ortho dolly orbit

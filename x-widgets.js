@@ -1315,6 +1315,9 @@ component('x-button', 'Input', function(e) {
 	editable_widget(e)
 	contained_widget(e)
 
+	let html_text = unsafe_html(e.html)
+	e.clear()
+
 	e.icon_box = span({class: 'x-button-icon'})
 	e.text_box = span({class: 'x-button-text'})
 	e.icon_box.hide()
@@ -1445,6 +1448,9 @@ component('x-button', 'Input', function(e) {
 	e.text_box.on('blur', function() {
 		e.widget_editing = false
 	})
+
+	if (html_text != null)
+		e.text = html_text
 
 })
 

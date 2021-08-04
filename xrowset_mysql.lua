@@ -42,9 +42,9 @@
 		- `where_row` is auto-generated if all pk fields map to table columns.
 
 	How to use rowset param values in queries:
-		- :filter      : in where_all:
-			- `tbl.pk in (:filter)`, if the rowset's pk is a single column.
-			- `$filter(foo = :foo and bar = :bar, :filter)` for composite pks.
+		- :param:filter: in where_all:
+			- `tbl.pk in (:param:filter)`, if the rowset's pk is a single column.
+			- `$filter(foo = :foo and bar = :bar, :param:filter)` for composite pks.
 		- :param:lang  : in select where clause.
 		- :COL         : as insert and update values.
 		- :COL:old     : in update and delete where clause.
@@ -77,12 +77,12 @@ local function namemap(s)
 	local t = {}
 	for _,s in ipairs(names(s)) do
 		local tbl_col, sel_col = s:match'^(.-)%=(.*)$'
-		if not sel_col then
+		if not tbl_col then
 			tbl_col, sel_col = s, s
 		end
-		t[tbl_col] = select_col
+		t[tbl_col] = sel_col
 	end
-	return t
+	return next(t) ~= nil and t or nil
 end
 
 local col_attrs = {} --{sch_tbl_col->attrs}
@@ -248,7 +248,7 @@ local mysql_charsize = {
 	[45] = 4, --utf8mb4
 }
 
-local function infer_fields(fields, cur_schema)
+local function infer_fields(fields, cur_schema, field_attrs)
 
 	local rs = {}
 	rs.fields = {}
@@ -263,10 +263,11 @@ local function infer_fields(fields, cur_schema)
 		rs.field_map[t.name] = f
 
 		--augment col def with metadata from information_schema.
-		local tbl_alias = t.table
-		local sch = t.schema
-		local tbl = t.orig_table
-		local col = t.orig_name
+		local fa = field_attrs and field_attrs[t.name]
+		local tbl_alias = t.table or (fa and fa.table_alias or fa.table)
+		local sch = t.schema or cur_schema
+		local tbl = t.orig_table or (fa and fa.table)
+		local col = t.orig_name or (fa and fa.col) or t.name
 		local tbl_def
 		if sch and tbl and col then
 			tbl_def = table_def(sch, tbl)
@@ -277,6 +278,7 @@ local function infer_fields(fields, cur_schema)
 		f.type = t.field_type or mysql_types[t.type]
 		f.not_null = t.not_null
 		f.enum_values = t.enum_values
+		f.default = t.default
 
 		if t.auto_increment then
 			f.editable = false
@@ -296,7 +298,7 @@ local function infer_fields(fields, cur_schema)
 		end
 
 		if tbl_def then
-			sch = sch ~= (cur_schema or dbname()) and sch or nil
+			sch = sch ~= cur_schema and sch or nil
 			local tbl = (sch and sch..'.' or '')..tbl
 			local quoted_tbl = (sch and sqlname(sch)..'.' or '')..sqlname(tbl)
 			local quoted_tbl_alias = (sch and sqlname(sch)..'.' or '')..sqlname(tbl_alias)
@@ -310,6 +312,7 @@ local function infer_fields(fields, cur_schema)
 		else
 			f.editable = false
 		end
+
 	end
 
 	return rs
@@ -390,10 +393,14 @@ function sql_rowset(...)
 			return concat(t)
 		end
 
-		local function set_sql(ut, vals)
+		local function set_sql(ut, vals, last_ids, for_insert)
 			local t = {}
 			for tbl_col, sel_col in glue.sortedpairs(ut.col_map) do
-				if rs.field_map[sel_col].editable ~= false then
+				local field = rs.field_map[sel_col]
+				if (field and (field.editable ~= false or (last_ids and last_ids[sel_col] ~= nil)))
+					--allowed to be changed or server_generated
+					or (for_insert and not field) --mapped to a param pseudo-col
+				then
 					local v = vals[sel_col]
 					if v ~= nil then
 						add(t, sqlname(tbl_col)..' = '..sqlval(v))
@@ -405,7 +412,7 @@ function sql_rowset(...)
 
 		local function where_sql(ut, vals)
 			if ut.where then
-				return ut.where
+				return sqlparams(ut.where, vals)
 			end
 			ut.pk = names(ut.pk)
 			local t = {}
@@ -425,7 +432,8 @@ function sql_rowset(...)
 				ut = tbl
 				tbl = ut.table
 			else
-				ut = update({},
+				ut = update(
+					{table = tbl},
 					rs.select_tables[tbl],
 					rs.tables and rs.tables[tbl],
 					ut)
@@ -436,9 +444,9 @@ function sql_rowset(...)
 			return ut, quoted_tbl
 		end
 
-		function rs:insert_in(tbl, vals, ut)
+		function rs:insert_in(tbl, vals, ut, last_ids)
 			local ut, tbl = ut_tbl(tbl, ut)
-			local set_sql = set_sql(ut, vals)
+			local set_sql = set_sql(ut, vals, last_ids, true)
 			local r
 			if not set_sql then --no fields, special syntax.
 				r = query('insert into ::_tbl values ()', {_tbl = tbl})
@@ -453,10 +461,7 @@ function sql_rowset(...)
 			end
 			local id = repl(r.insert_id, 0, nil)
 			local id_sel_col = ut.col_map[ut.ai_col]
-			if id_sel_col then
-				vals[id_sel_col] = id
-			end
-			return r.affected_rows, id
+			return r.affected_rows, id_sel_col and {[id_sel_col] = id}
 		end
 
 		function rs:update_in(tbl, vals)
@@ -497,8 +502,8 @@ function sql_rowset(...)
 
 		if not rs.load_rows then
 			assert(rs.select_all, 'select_all missing')
-			function rs:load_rows(res, param_values)
-				local rows, fields, params = query(rs.select_all, param_values)
+			function rs:load_rows(res, param_vals)
+				local rows, fields, params = query(rs.select_all, param_vals)
 				if configure then
 					configure(fields)
 					rs.params = params
@@ -519,12 +524,12 @@ function sql_rowset(...)
 		if update_tables then
 			assert(rs.select_none, 'select_none missing')
 			local apply_changes = rs.apply_changes
-			function rs:apply_changes(changes)
+			function rs:apply_changes(changes, param_vals)
 				if configure then
 					local _, fields = query(rs.select_none)
 					configure(fields)
 				end
-				return apply_changes(self, changes)
+				return apply_changes(self, changes, param_vals)
 			end
 			--make virtual_rowset believe this rowset is updatable.
 			rs.insert_row = noop
@@ -536,7 +541,7 @@ function sql_rowset(...)
 
 			configure = nil --one-shot.
 
-			merge(rs, infer_fields(fields, rs.schema))
+			merge(rs, infer_fields(fields, rs.schema or dbname(), rs.field_attrs))
 
 			rs:init_fields()
 
@@ -558,13 +563,17 @@ function sql_rowset(...)
 
 			if not rs.load_row then
 				assert(rs.select, 'select missing to create load_row()')
-				function rs:load_row(vals)
+				function rs:load_row(vals, param_vals)
 					local select_sql = outdent(rs.select)
-					local where_sql = where_row_sql(vals)
-					local sql = rs.where_all
-						and format('%s\nwhere (%s) and (%s)', select_sql, rs.where_all, where_sql)
-						 or format('%s\nwhere %s', select_sql, where_sql)
-					local rows = query(sql)
+					local where_row_sql = where_row_sql(vals)
+					local where_all_sql = rs.where_all and sqlparams(rs.where_all, param_vals)
+					local sql = select_sql .. (where_all_sql
+						and '\nwhere ({_where_all}) and ({_where_row})'
+						 or '\nwhere {_where_row}')
+					local rows = query(sql, {
+						_where_all = where_all_sql,
+						_where_row = where_row_sql,
+					})
 					if convert_row and #rows > 0 then
 						convert_row(rows[1])
 					end
@@ -591,15 +600,17 @@ function sql_rowset(...)
 				if not has_insert_row and insert_in then
 					local last_insert_row = rs.insert_row
 					mins = mins or (rs.insert_row and true)
-					function rs:insert_row(row)
+					function rs:insert_row(row, param_vals)
 						if last_insert_row then
-							local affected_rows, id0 = last_insert_row(self, row)
+							local affected_rows, last_ids = last_insert_row(self, row)
 							if affected_rows == 0 then --stop here.
 								return 0
 							end
 						end
-						local affected_rows, id = insert_in(self, ut, row)
-						return affected_rows, id or id0
+						local affected_rows, ids = insert_in(self, ut, row, nil, last_ids)
+						ids = ids and update(ids, last_ids) or last_ids
+						update(row, ids)
+						return affected_rows, ids
 					end
 				end
 				if not has_update_row and update_in then
@@ -609,7 +620,7 @@ function sql_rowset(...)
 						if last_update_row then
 							last_update_row(self, row)
 						end
-						return update_in(self, ut, row)
+						update_in(self, ut, row)
 					end
 				end
 				if not has_delete_row and delete_in then
