@@ -172,6 +172,9 @@ function component(tag, category, cons) {
 		// call the after-properties-are-set init function.
 		e.initialized = true
 		e.init()
+
+		if (e.id)
+			document.fire(e.id+'.init', e)
 	}
 
 	bind_component(tag, initialize)
@@ -1329,7 +1332,8 @@ component('x-button', 'Input', function(e) {
 			if (!e.link) { // make a link for google bot to follow.
 				let noscript = tag('noscript')
 				e.add(noscript)
-				e.link = tag('a', {}, e.text)
+				e.link = tag('a')
+				e.link.set(TC(e.text))
 				e.link.title = e.title
 				noscript.set(e.link)
 			}
@@ -1343,11 +1347,16 @@ component('x-button', 'Input', function(e) {
 		e.text_box.set(s, 'pre-wrap')
 		e.class('empty', !s)
 		if (e.link)
-			e.link.set(s)
+			e.link.set(TC(e.text))
 	}
 	e.prop('text', {store: 'var', default: 'OK', slot: 'lang'})
 
-	e.set_text(e.text)
+	e.do_after('init', function() {
+		if (html_text != null && html_text != e.text)
+			e.text = html_text
+		else
+			e.set_text(e.text) // set default
+	})
 
 	e.set_icon = function(v) {
 		if (isstr(v))
@@ -1448,9 +1457,6 @@ component('x-button', 'Input', function(e) {
 	e.text_box.on('blur', function() {
 		e.widget_editing = false
 	})
-
-	if (html_text != null)
-		e.text = html_text
 
 })
 
@@ -3015,9 +3021,15 @@ component('x-slides', 'Containers', function(e) {
 		if (e0) e0.class('x-slide-selected', false)
 		if (e1) e1.class('x-slide-selected', true)
 		if (e1) e.fire('slide_changed', i1)
+		if (e1)
+			e1.focus_first_input_element()
 	}
 
-	e.prop('selected_index', {store: 'var', default: 0})
+	e.prop('selected_index', {store: 'var'})
+
+	e.slide = function(i) {
+		e.selected_index = i
+	}
 
 	return {items: html_items}
 

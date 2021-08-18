@@ -40,10 +40,18 @@
 ]]
 
 require'webb'
+
+local glue = require'glue'
 local errors = require'errors'
 
 local catch = errors.catch
 local raise = errors.raise
+
+local update = glue.update
+local names = glue.names
+local index = glue.index
+local empty = glue.empty
+local noop = glue.noop
 
 rowset = {}
 
@@ -66,31 +74,31 @@ function virtual_rowset(init, ...)
 
 	function rs.init_fields(rs)
 
-		local hide_cols = glue.index(glue.names(rs.hide_cols) or glue.empty)
-		local   ro_cols = glue.index(glue.names(rs.  ro_cols) or glue.empty)
+		local hide_cols = index(names(rs.hide_cols) or empty)
+		local   ro_cols = index(names(rs.  ro_cols) or empty)
 
 		rs.client_fields = {}
 
-		for fi,field in ipairs(rs.fields) do
-			if hide_cols[field.name]
-				or field.name == rs.index_col
-				or field.name == rs.parent_col
+		for fi,f in ipairs(rs.fields) do
+			if hide_cols[f.name]
+				or f.name == rs.index_col
+				or f.name == rs.parent_col
 			then
-				field.hidden = true
+				f.hidden = true
 			end
-			if ro_cols[field.name] then
-				field.editable = false
+			if ro_cols[f.name] then
+				f.editable = false
 			end
-			update(field,
-				field_type_attrs[field.type],
-				field_name_attrs[field.name],
-				rs.field_attrs and rs.field_attrs[field.name]
+			update(f,
+				field_type_attrs[f.type],
+				field_name_attrs[f.name],
+				rs.field_attrs and rs.field_attrs[f.name]
 			)
 
 			local client_field = {}
-			for k in pairs(field) do
+			for k in pairs(f) do
 				if not server_field_attrs[k] then
-					client_field[k] = field[k]
+					client_field[k] = f[k]
 				end
 			end
 			rs.client_fields[fi] = client_field
@@ -111,7 +119,7 @@ function virtual_rowset(init, ...)
 			can_change_rows = rs.can_change_rows,
 			fields = rs.client_fields,
 			pk = rs.pk,
-			index_col = rs.index_col,
+			index_col = rs.index_col or 'pos',
 			cols = rs.cols,
 			params = rs.params,
 			id_col = rs.id_col,
@@ -167,7 +175,7 @@ function virtual_rowset(init, ...)
 		end
 	end
 
-	function rs:apply_changes(changes, params)
+	function rs:apply_changes(changes)
 
 		local res = {rows = {}}
 
@@ -176,12 +184,12 @@ function virtual_rowset(init, ...)
 			if row.type == 'new' then
 				local can, err, field_errors = rs:can_add_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.insert_row, rs, row.values, params)
+					local ok, affected_rows = catch('db', rs.insert_row, rs, row.values)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_inserted', 'row not inserted')
 						elseif rs.load_row then
-							local ok, rows = catch('db', rs.load_row, rs, row.values, params)
+							local ok, rows = catch('db', rs.load_row, rs, row.values)
 							if ok then
 								if #rows == 0 then
 									rt.error = S('inserted_row_not_found',
@@ -211,7 +219,7 @@ function virtual_rowset(init, ...)
 			elseif row.type == 'update' then
 				local can, err, field_errors = rs:can_change_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.update_row, rs, row.values, params)
+					local ok, affected_rows = catch('db', rs.update_row, rs, row.values)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_updated', 'row not updated')
@@ -223,7 +231,7 @@ function virtual_rowset(init, ...)
 									row.values[k1] = v
 								end
 							end
-							local ok, rows = catch('db', rs.load_row, rs, row.values, params)
+							local ok, rows = catch('db', rs.load_row, rs, row.values)
 							if ok then
 								if #rows == 0 then
 									rt.remove = true
@@ -253,12 +261,12 @@ function virtual_rowset(init, ...)
 			elseif row.type == 'remove' then
 				local can, err, field_errors = rs:can_remove_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.delete_row, rs, row.values, params)
+					local ok, affected_rows = catch('db', rs.delete_row, rs, row.values)
 					if ok then
 						if (affected_rows or 1) == 0 then
 							rt.error = S('row_not_removed', 'row not removed')
 						elseif rs.load_row then
-							local ok, rows = catch('db', rs.load_row, rs, row.values, params)
+							local ok, rows = catch('db', rs.load_row, rs, row.values)
 							if ok then
 								if #rows == 1 then
 									rt.error = S('removed_row_found',
@@ -313,7 +321,7 @@ function virtual_rowset(init, ...)
 					update(row_change.values, params)
 				end
 			end
-			return rs:apply_changes(changes, params)
+			return rs:apply_changes(changes)
 		else
 			return rs:load(params)
 		end
@@ -337,7 +345,7 @@ local files = {}
 local ids --{id->{files=,n=,en_s}}
 
 function Sfile(filenames)
-	for _,file in ipairs(glue.names(filenames)) do
+	for _,file in ipairs(names(filenames)) do
 		files[file] = true
 	end
 	ids = nil

@@ -198,6 +198,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		if (e.owns_field) {
 			if (on) {
 				let nav = global_val_nav()
+				//print(e.tag, e.id, field_opt)
 				let field = nav.add_field(field_opt)
 				if (initial_val !== undefined)
 					nav.reset_cell_val(nav.all_rows[0], field, initial_val, {validate: true})
@@ -269,10 +270,16 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		return row && e.field ? e.from_val(e.nav.cell_input_val(e.row, e.field)) : null
 	})
 
-	e.property('errors', function() {
-		let row = e.row
-		return row && e.field ? e.nav.cell_errors(row, e.field) : undefined
-	})
+	e.property('errors',
+		function() {
+			let row = e.row
+			return row && e.field ? e.nav.cell_errors(row, e.field) : undefined
+		},
+		function(errors) {
+			if (e.row && e.field)
+				e.nav.set_cell_errors(e.row, e.field, errors)
+		},
+	)
 
 	e.property('modified', function() {
 		let row = e.row

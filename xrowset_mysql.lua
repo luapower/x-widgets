@@ -9,17 +9,17 @@
 		- pk            : 'foo bar ...', required as it can't be inferred reliably.
 		- db            : optional, connection alias to query on.
 		- schema        : optional, different current schema to use for query.
-		- update_tables : 'tbl1 ...', tables to I/U/D into/from, in order.
+		- update_tables : '[sch.]tbl1 ...', tables to I/U/D into/from, in order.
 
 	More complex cases can specify:
 		- select_all    : instead of select + where_all.
-		- where_row     : where clause for single row: 'tbl.pk1 = :pk1_alias and ...'.
+		- where_row     : where clause for single row: 'tbl.pk1 = :as_pk1 and ...'.
 		- select_row    : instead of select + where_row.
 		- select_none   : instead of select_row or (select + 'where 1 = 0').
-		- tables        : {tbl->ut}, table definition for I/U/D query generation.
-			ut.col_map = 'col1[=col1_alias] ...'
-			ut.pk = 'col1 ...'
-			ut.ai_col = 'col'
+		- table_attrs   : {tbl->ut}, table definition for I/U/D query generation.
+		  - ut.col_map  : {col->as_col}
+		  - ut.pk       : 'col1 ...'
+		  - ut.ai_col   : 'col'
 
 	If all else fails, you can always DIY by implementing any of the
 	virtual_rowset's S/U/I/D methods. Just make sure to wrap multiple update
@@ -52,6 +52,9 @@
 ]]
 
 require'xrowset'
+require'webb_query'
+
+local glue = require'glue'
 
 local format = string.format
 local concat = table.concat
@@ -61,28 +64,20 @@ local outdent = glue.outdent
 local names = glue.names
 local noop = glue.noop
 local index = glue.index
-local keys = glue.keys
-local count = glue.count
-local merge = glue.merge
 local assertf = glue.assert
+local repl = glue.repl
+local memoize = glue.memoize
+local sortedpairs = glue.sortedpairs
 
-local function repl(x, v, r)
-	if x == v then return r else return x end
-end
-
-local function namemap(s)
-	if type(s) ~= 'string' then
-		return s
-	end
+--usage in sql:
+	-- single-key: foo in (:param:filter)
+	-- multi-key : $filter(foo <=> :foo and bar <=> :bar, :param:filter)
+function qmacro.filter(expr, filter)
 	local t = {}
-	for _,s in ipairs(names(s)) do
-		local tbl_col, sel_col = s:match'^(.-)%=(.*)$'
-		if not tbl_col then
-			tbl_col, sel_col = s, s
-		end
-		t[tbl_col] = sel_col
+	for i,vals in ipairs(filter) do
+		t[i] = sqlparams(expr, vals)
 	end
-	return next(t) ~= nil and t or nil
+	return concat(t, ' or ')
 end
 
 local col_attrs = {} --{sch_tbl_col->attrs}
@@ -109,214 +104,31 @@ local function parse_enum(s)
 	return 'enum', t
 end
 
-local table_def = memoize(function(sch, tbl)
-	local fields, pk, ai_col = {}, {}
-	for i,t in ipairs(kv_query([[
-		select
-			c.column_name as col,
-			c.column_type as col_type,
-			c.column_key as pri_key,
-			c.column_default,
-			c.is_nullable,
-			c.extra
-
-			--c.data_type,
-			--c.character_maximum_length,
-			--c.numeric_precision,
-			--c.numeric_scale,
-			--c.datetime_precision,
-			--c.character_set_name,
-			--c.is_generated,
-
-		from
-			information_schema.columns c
-		where
-			c.table_schema = ? and c.table_name = ?
-		]], sch, tbl))
-	do
-		local field_type, enum_values = parse_enum(t.col_type)
-		local default = repl(t.column_default, null, nil)
-		local has_default = default ~= nil
-		if t.col_type == 'tinyint' then --bool
-			field_type = 'bool'
-			default = repl(default, '1', true)
-			default = repl(default, '0', false)
-			if has_default and default ~= true and default ~= false then
-				default = nil --expression, can't send to client.
-			end
-		elseif t.col_type == 'timestamp' then
-			default = repl(default, 'CURRENT_TIMESTAMP', nil)
-			--TODO: parse date/time and remove if not parsing.
-		end
-		local sch_tbl_col = sch_tbl_col(sch, tbl, t.col)
-		local col_attrs = col_attrs[sch_tbl_col]
-		if t.extra == 'auto_increment' then
-			assert(not ai_col)
-			ai_col = t.col
-		end
-		if t.pri_key == 'PRI' then
-			pk[#pk+1] = t.col
-		end
-		fields[t.col] = update({
-			field_type = field_type,
-			enum_values = enum_values,
-			has_default = has_default or nil,
-			default = default,
-			auto_increment = t.extra == 'auto_increment' or nil,
-			not_null = t.is_nullable == 'NO' or nil, --redundant
-		}, col_attrs)
-	end
-	return {fields = fields, pk = pk, ai_col = ai_col}
-end)
-
-local MYSQL_TYPE_DECIMAL     =   0
-local MYSQL_TYPE_TINY        =   1
-local MYSQL_TYPE_SHORT       =   2
-local MYSQL_TYPE_LONG        =   3
-local MYSQL_TYPE_FLOAT       =   4
-local MYSQL_TYPE_DOUBLE      =   5
-local MYSQL_TYPE_NULL        =   6
-local MYSQL_TYPE_TIMESTAMP   =   7
-local MYSQL_TYPE_LONGLONG    =   8
-local MYSQL_TYPE_INT24       =   9
-local MYSQL_TYPE_DATE        =  10
-local MYSQL_TYPE_TIME        =  11
-local MYSQL_TYPE_DATETIME    =  12
-local MYSQL_TYPE_YEAR        =  13
-local MYSQL_TYPE_NEWDATE     =  14
-local MYSQL_TYPE_VARCHAR     =  15
-local MYSQL_TYPE_BIT         =  16
-local MYSQL_TYPE_TIMESTAMP2  =  17
-local MYSQL_TYPE_DATETIME2   =  18
-local MYSQL_TYPE_TIME2       =  19
-local MYSQL_TYPE_NEWDECIMAL  = 246
-local MYSQL_TYPE_ENUM        = 247
-local MYSQL_TYPE_SET         = 248
-local MYSQL_TYPE_TINY_BLOB   = 249
-local MYSQL_TYPE_MEDIUM_BLOB = 250
-local MYSQL_TYPE_LONG_BLOB   = 251
-local MYSQL_TYPE_BLOB        = 252
-local MYSQL_TYPE_VAR_STRING  = 253
-local MYSQL_TYPE_STRING      = 254
-local MYSQL_TYPE_GEOMETRY    = 255
-
-local mysql_types = {
-	[MYSQL_TYPE_DECIMAL    ] = 'number',
-	[MYSQL_TYPE_TINY       ] = 'bool',
-	[MYSQL_TYPE_SHORT      ] = 'number',
-	[MYSQL_TYPE_LONG       ] = 'number',
-	[MYSQL_TYPE_FLOAT      ] = 'number',
-	[MYSQL_TYPE_DOUBLE     ] = 'number',
-	[MYSQL_TYPE_TIMESTAMP  ] = 'datetime',
-	[MYSQL_TYPE_LONGLONG   ] = 'number',
-	[MYSQL_TYPE_INT24      ] = 'number',
-	[MYSQL_TYPE_DATE       ] = 'date', --used before MySQL 5.0 (4 bytes)
-	[MYSQL_TYPE_TIME       ] = 'time',
-	[MYSQL_TYPE_DATETIME   ] = 'datetime',
-	[MYSQL_TYPE_YEAR       ] = 'number',
-	[MYSQL_TYPE_NEWDATE    ] = 'date', --new from MySQL 5.0 (3 bytes)
-	[MYSQL_TYPE_VARCHAR    ] = 'text',
-	[MYSQL_TYPE_TIMESTAMP2 ] = 'datetime',
-	[MYSQL_TYPE_DATETIME2  ] = 'datetime',
-	[MYSQL_TYPE_TIME2      ] = 'time',
-	[MYSQL_TYPE_NEWDECIMAL ] = 'number',
-	[MYSQL_TYPE_ENUM       ] = 'enum',
-	--[MYSQL_TYPE_SET        ] = '',
-	[MYSQL_TYPE_TINY_BLOB  ] = 'file',
-	[MYSQL_TYPE_MEDIUM_BLOB] = 'file',
-	[MYSQL_TYPE_LONG_BLOB  ] = 'file',
-	[MYSQL_TYPE_BLOB       ] = 'file',
-	--[MYSQL_TYPE_VAR_STRING ] = '',
-	--[MYSQL_TYPE_STRING     ] = '',
-	--[MYSQL_TYPE_GEOMETRY   ] = '',
+local mysql_type = {
+	tinyint     = 'bool',
+	shortint    = 'number',
+	mediumint   = 'number',
+	int         = 'number',
+	bigint      = 'number',
+	float       = 'number',
+	double      = 'number',
+	decimal     = 'number',
+	year        = 'number',
+	enum        = 'enum',
+	timestamp   = 'datetime',
+	datetime    = 'datetime',
+	date        = 'date',
+	time        = 'time',
+	varchar     = 'text',
+	char        = 'text',
+	tinytext    = 'text',
+	mediumtext  = 'text',
+	longtext    = 'text',
+	blob        = 'file',
+	tinyblob    = 'file',
+	mediumblob  = 'file',
+	longblob    = 'file',
 }
-
-local mysql_range = {
-	--[MYSQL_TYPE_DECIMAL    ] = {},
-	[MYSQL_TYPE_TINY       ] = {-127, 127, 0, 255},
-	[MYSQL_TYPE_SHORT      ] = {-32768, 32767, 0, 65535},
-	[MYSQL_TYPE_LONG       ] = {},
-	--[MYSQL_TYPE_FLOAT      ] = {},
-	--[MYSQL_TYPE_DOUBLE     ] = {},
-	[MYSQL_TYPE_LONGLONG   ] = {},
-	[MYSQL_TYPE_INT24      ] = {-2^23, 2^23-1, 0, 2^24-1},
-	--[MYSQL_TYPE_NEWDECIMAL ] = {},
-}
-
-local mysql_charsize = {
-	[33] = 3, --utf8
-	[45] = 4, --utf8mb4
-}
-
-local function infer_fields(fields, cur_schema, field_attrs)
-
-	local rs = {}
-	rs.fields = {}
-	rs.select_tables = {}
-	rs.field_map = {} --{sel_col->field}
-	rs.where_col_map = {} --{sel_col->sch.tbl_alias.col}
-
-	for i,t in ipairs(fields) do
-
-		local f = {}
-		rs.fields[i] = f
-		rs.field_map[t.name] = f
-
-		--augment col def with metadata from information_schema.
-		local fa = field_attrs and field_attrs[t.name]
-		local tbl_alias = t.table or (fa and fa.table_alias or fa.table)
-		local sch = t.schema or cur_schema
-		local tbl = t.orig_table or (fa and fa.table)
-		local col = t.orig_name or (fa and fa.col) or t.name
-		local tbl_def
-		if sch and tbl and col then
-			tbl_def = table_def(sch, tbl)
-			update(t, tbl_def.fields[col])
-		end
-
-		f.name = t.name
-		f.type = t.field_type or mysql_types[t.type]
-		f.not_null = t.not_null
-		f.enum_values = t.enum_values
-		f.default = t.default
-
-		if t.auto_increment then
-			f.editable = false
-		end
-
-		if f.type == 'number' then
-			local range = mysql_range[t.type]
-			if range then
-				f.min = range[1 + (t.unsigned and 2 or 0)]
-				f.max = range[2 + (t.unsigned and 2 or 0)]
-			end
-			if t.type ~= MYSQL_TYPE_FLOAT and t.type ~= MYSQL_TYPE_DOUBLE then
-				f.multiple_of = 1 / 10^t.decimals
-			end
-		elseif not f.type then
-			f.maxlen = t.length * (mysql_charsize[t.charsetnr] or 1)
-		end
-
-		if tbl_def then
-			sch = sch ~= cur_schema and sch or nil
-			local tbl = (sch and sch..'.' or '')..tbl
-			local quoted_tbl = (sch and sqlname(sch)..'.' or '')..sqlname(tbl)
-			local quoted_tbl_alias = (sch and sqlname(sch)..'.' or '')..sqlname(tbl_alias)
-			rs.where_col_map[t.name] = quoted_tbl_alias..'.'..sqlname(col)
-			local ut = rs.select_tables[tbl]
-			if not ut then
-				ut = {table = quoted_tbl, pk = tbl_def.pk, ai_col = tbl_def.ai_col}
-				rs.select_tables[tbl] = ut
-			end
-			attr(ut, 'col_map')[col] = t.name
-		else
-			f.editable = false
-		end
-
-	end
-
-	return rs
-end
 
 function sql_rowset(...)
 	return virtual_rowset(function(rs, sql, ...)
@@ -330,6 +142,7 @@ function sql_rowset(...)
 		rs.delay_init_fields = true
 
 		--the rowset's pk cannot be reliably inferred so it must be user-supplied.
+
 		rs.pk = names(rs.pk)
 		assert(rs.pk and #rs.pk > 0, 'pk missing')
 		table.sort(rs.pk)
@@ -351,147 +164,33 @@ function sql_rowset(...)
 
 		--query wrappers.
 
-		local atomic = patomic
-		local function use_schema()
-			if not rs.schema then return end
-			pquery_on(rs.db, 'use '..sqlname(rs.schema))
-		end
-		local query_options = {
-			auto_array_result = false,
-			convert_result = rs.convert_result,
-		}
 		local function query(...)
-			use_schema()
-			return pquery_on(rs.connection, query_options, ...)
+			local db = db(rs.db)
+			if rs.schema then
+				db:query('use '..sqlname(rs.schema))
+			end
+			return db:query(...)
 		end
 
 		--see if we can make a static load_row().
 
-		local convert_row
-
 		if not rs.load_row and rs.select_row then
 			function rs:load_row(vals)
-				local rows = query(rs.select_row, vals)
-				if convert_row and #rows == 1 then
-					convert_row(rows[1])
-				end
-				return rows
+				return query(rs.select_row, vals)
 			end
 		end
 
-		--dynamic query generation based on RTTI obtained from first-time
-		--running the select query.
+		--dynamic query generation based on RTTI obtained from running
+		--the select query the first time.
 
-		local function where_row_sql(vals)
+		local function where_row_sql()
 			local t = {}
-			for _,sel_col in ipairs(rs.pk) do
-				local where_col = rs.where_col_map[sel_col]
-				local v = vals[sel_col]
-				append(t, where_col, ' = ', sqlval(v), ' and ')
+			for i, as_col in ipairs(rs.pk) do
+				local where_col = rs.where_col_map[as_col]
+				if i > 1 then add(t, ' and ') end
+				add(t, where_col..' = :'..as_col)
 			end
-			t[#t] = nil --remove the last ' and '.
 			return concat(t)
-		end
-
-		local function set_sql(ut, vals, last_ids, for_insert)
-			local t = {}
-			for tbl_col, sel_col in glue.sortedpairs(ut.col_map) do
-				local field = rs.field_map[sel_col]
-				if (field and (field.editable ~= false or (last_ids and last_ids[sel_col] ~= nil)))
-					--allowed to be changed or server_generated
-					or (for_insert and not field) --mapped to a param pseudo-col
-				then
-					local v = vals[sel_col]
-					if v ~= nil then
-						add(t, sqlname(tbl_col)..' = '..sqlval(v))
-					end
-				end
-			end
-			return #t > 0 and concat(t, ',\n\t')
-		end
-
-		local function where_sql(ut, vals)
-			if ut.where then
-				return sqlparams(ut.where, vals)
-			end
-			ut.pk = names(ut.pk)
-			local t = {}
-			for _,tbl_col in ipairs(ut.pk) do
-				local sel_col = ut.col_map[tbl_col]
-				local v = vals[sel_col..':old']
-				append(t, sqlname(tbl_col), ' = ', sqlval(v), ' and ')
-			end
-			t[#t] = nil --remove the last ' and '.
-			return concat(t)
-		end
-
-		--usage: ut_tbl(tbl[, ut]) or ut_tbl(ut)
-		local function ut_tbl(tbl, ut)
-			local ut
-			if type(tbl) == 'table' then
-				ut = tbl
-				tbl = ut.table
-			else
-				ut = update(
-					{table = tbl},
-					rs.select_tables[tbl],
-					rs.tables and rs.tables[tbl],
-					ut)
-			end
-			ut.col_map = namemap(ut.col_map)
-			assertf(ut.col_map, 'col_map missing for %s', tbl)
-			local quoted_tbl = ut.table or sqlname(tbl)
-			return ut, quoted_tbl
-		end
-
-		function rs:insert_in(tbl, vals, ut, last_ids)
-			local ut, tbl = ut_tbl(tbl, ut)
-			local set_sql = set_sql(ut, vals, last_ids, true)
-			local r
-			if not set_sql then --no fields, special syntax.
-				r = query('insert into ::_tbl values ()', {_tbl = tbl})
-			else
-				r = query(outdent([[
-					insert into ::_tbl set
-						{_set}
-				]]), update({
-					_tbl = tbl,
-					_set = set_sql,
-				}, vals))
-			end
-			local id = repl(r.insert_id, 0, nil)
-			local id_sel_col = ut.col_map[ut.ai_col]
-			return r.affected_rows, id_sel_col and {[id_sel_col] = id}
-		end
-
-		function rs:update_in(tbl, vals)
-			local ut, tbl = ut_tbl(tbl)
-			local set_sql = set_sql(ut, vals)
-			if not set_sql then
-				return
-			end
-			local r = query(outdent([[
-				update ::_tbl set
-					{_set}
-				where
-					{_where}
-			]]), update({
-				_tbl = tbl,
-				_set = set_sql,
-				_where = where_sql(ut, vals),
-			}, vals))
-			return r.affected_rows
-		end
-
-		function rs:delete_in(tbl, vals)
-			local ut, tbl = ut_tbl(tbl)
-			local r = query(outdent([[
-				delete from ::_tbl where {_where}
-			]]), update({
-				_tbl = tbl,
-				_where = where_sql(ut, vals),
-			}, vals))
-			return r.affected_rows
 		end
 
 		--create SIUD-row methods that reconfigure the rowset for updating
@@ -500,18 +199,18 @@ function sql_rowset(...)
 
 		local configure
 
+		local load_opt = {
+			compact = 1,
+			null_value = null,
+		}
+
 		if not rs.load_rows then
 			assert(rs.select_all, 'select_all missing')
 			function rs:load_rows(res, param_vals)
-				local rows, fields, params = query(rs.select_all, param_vals)
+				local rows, fields, params = query(load_opt, rs.select_all, param_vals)
 				if configure then
 					configure(fields)
 					rs.params = params
-				end
-				if convert_row then
-					for i,row in ipairs(rows) do
-						convert_row(row)
-					end
 				end
 				res.rows = rows
 			end
@@ -524,12 +223,12 @@ function sql_rowset(...)
 		if update_tables then
 			assert(rs.select_none, 'select_none missing')
 			local apply_changes = rs.apply_changes
-			function rs:apply_changes(changes, param_vals)
+			function rs:apply_changes(changes)
 				if configure then
 					local _, fields = query(rs.select_none)
 					configure(fields)
 				end
-				return apply_changes(self, changes, param_vals)
+				return apply_changes(self, changes)
 			end
 			--make virtual_rowset believe this rowset is updatable.
 			rs.insert_row = noop
@@ -541,21 +240,81 @@ function sql_rowset(...)
 
 			configure = nil --one-shot.
 
-			merge(rs, infer_fields(fields, rs.schema or dbname(), rs.field_attrs))
+			rs.fields = {} --{field1,...}
+			rs.field_map = {} --{as_col->field}
+			rs.where_col_map = {} --{as_col->`sch`.`as_tbl`.`col`}
 
-			rs:init_fields()
+			local get_ut = memoize(function(sch, tbl)
+				local tbl_def = table_def(sch, tbl)
+				local sch_tbl = sch_tbl(sch, tbl)
+				return update({
+						table = sqltablename(sch, tbl),
+						pk = tbl_def.pk,
+						ai_col = tbl_def.ai_col,
+					}, rs.table_attrs and rs.table_attrs[sch_tbl])
+			end)
+			function rs:ut(sch_tbl)
+				if type(sch_tbl) == 'table' then --ut: pass-through
+					return sch_tbl
+				end
+				return get_ut(sch_tbl_arg(sch_tbl))
+			end
 
-			--build a convert_row() function that calls on each field's converter.
-			for fi,field in ipairs(rs.fields) do
-				local convert_val = field.from_server
-				if convert_val then
-					local last_convert_row = convert_row or noop
-					convert_row = function(row)
-						last_convert_row(row)
-						row[fi] = convert_val(row[fi])
+			local function map_col(sch, tbl, col, as_col)
+				local ut = self:ut(sch, tbl)
+				attr(ut, 'col_map')[col] = as_col
+			end
+
+			for fi,t in ipairs(fields) do
+
+				local as_col = t.name
+				local f = {}
+				rs.fields[fi] = f
+				rs.field_map[as_col] = f
+
+				--augment the field def with metadata from information_schema.
+				--create a column mapping too while we're at it.
+				local fa = rs.field_attrs and rs.field_attrs[as_col]
+				local as_tbl = t.table or (fa and (fa.as_table or fa.table))
+				local sch = t.schema or cur_schema
+				local tbl = t.origin_table or (fa and fa.table)
+				local col = t.origin_name or (fa and fa.table_col) or as_col
+				if sch and as_tbl and col then
+					rs.where_col_map[as_col] = sqlcolname(sch, as_tbl, col)
+				end
+				if sch and tbl and col then
+					local tbl_def = table_def(sch, tbl)
+					update(t, tbl_def.fields[col])
+					map_col(sch, tbl, col, as_col)
+				else
+					f.editable = false
+				end
+
+				f.name = as_col
+				f.type = t.field_type or mysql_type[t.type]
+				f.not_null = t.not_null
+				f.enum_values = t.enum_values
+				f.default = t.default
+
+				if t.auto_increment then
+					f.editable = false
+				end
+
+			end
+
+			--create implicit column mappings.
+			if update_tables then
+				for _,sch_tbl in ipairs(update_tables) do
+					local sch, tbl = sch_tbl_arg(sch_tbl)
+					local tbl_def = table_def(sch, tbl)
+					for col, t in pairs(tbl_def.fields) do
+						local as_col = col
+						map_col(sch, tbl, tbl_col, as_col)
 					end
 				end
 			end
+
+			rs:init_fields()
 
 			if not update_tables then
 				return
@@ -563,21 +322,12 @@ function sql_rowset(...)
 
 			if not rs.load_row then
 				assert(rs.select, 'select missing to create load_row()')
-				function rs:load_row(vals, param_vals)
-					local select_sql = outdent(rs.select)
-					local where_row_sql = where_row_sql(vals)
-					local where_all_sql = rs.where_all and sqlparams(rs.where_all, param_vals)
-					local sql = select_sql .. (where_all_sql
-						and '\nwhere ({_where_all}) and ({_where_row})'
-						 or '\nwhere {_where_row}')
-					local rows = query(sql, {
-						_where_all = where_all_sql,
-						_where_row = where_row_sql,
-					})
-					if convert_row and #rows > 0 then
-						convert_row(rows[1])
-					end
-					return rows
+				local where_row = where_row_sql()
+				function rs:load_row(vals)
+					local sql = outdent(rs.select) .. (where_all
+						and format('\nwhere ({%s}) and ({%s})', where_all, where_row)
+						 or format('\nwhere {%s}', where_row))
+					return query(load_opt, sql, vals)
 				end
 			end
 
@@ -592,35 +342,32 @@ function sql_rowset(...)
 
 			--chain update methods and wrap multiple queries in transactions.
 			local mins, mupd, mdel --multiple* flags
-			for _,tbl in ipairs(update_tables) do
-				local ut = ut_tbl(tbl)
+			for _,sch_tbl in ipairs(update_tables) do
+				local ut = self:ut(sch_tbl)
 				local insert_in = rs.insert_in
 				local update_in = rs.update_in
-				local delete_in = not nodelete[tbl] and ut.delete ~= false and rs.delete_in
+				local delete_in = not nodelete[sch_tbl] and ut.delete ~= false and rs.delete_in
 				if not has_insert_row and insert_in then
 					local last_insert_row = rs.insert_row
 					mins = mins or (rs.insert_row and true)
-					function rs:insert_row(row, param_vals)
+					function rs:insert_row(row, server_vals)
 						if last_insert_row then
-							local affected_rows, last_ids = last_insert_row(self, row)
+							local affected_rows = last_insert_row(self, row, server_vals)
 							if affected_rows == 0 then --stop here.
 								return 0
 							end
 						end
-						local affected_rows, ids = insert_in(self, ut, row, nil, last_ids)
-						ids = ids and update(ids, last_ids) or last_ids
-						update(row, ids)
-						return affected_rows, ids
+						return insert_in(self, ut, row, server_vals)
 					end
 				end
 				if not has_update_row and update_in then
 					local last_update_row = rs.update_row
 					mupd = mupd or (rs.update_row and true)
-					function rs:update_row(row)
+					function rs:update_row(row, server_vals)
 						if last_update_row then
-							last_update_row(self, row)
+							last_update_row(self, row, server_vals)
 						end
-						update_in(self, ut, row)
+						update_in(self, ut, row, server_vals)
 					end
 				end
 				if not has_delete_row and delete_in then
@@ -646,8 +393,8 @@ function sql_rowset(...)
 end
 
 field_type_attrs.bool = {
-	from_server = function(v)
+	from_server = function(self, v)
 		if v == nil then return nil end
-		return v == 1
+		return v ~= 0
 	end,
 }

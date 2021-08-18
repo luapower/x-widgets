@@ -37,10 +37,10 @@
 		body
 	dom tree de/serialization:
 		e.html -> s
-		html(s) -> e
+		[unsafe_]html(s) -> e
 		e.[unsafe_]html = s
 	safe dom tree manipulation:
-		T(te[,whitespace]) where `te` is f|e|text_str
+		T[C](te[,whitespace]) where `te` is f|e|text_str
 		e.clone()
 		e.set(te[,whitespace])
 		e.add(te1,...)
@@ -80,7 +80,7 @@
 		~layout_changed()
 		e.capture_pointer(ev, on_pointermove, on_pointerup)
 		DEBUG_EVENTS = false
-		on_dom_load([priority_bucket, ]fn)
+		on_dom_load(fn)
 	element geometry:
 		px(x)
 		e.x, e.y, e.x1, e.y1, e.x2, e.y2, e.w, e.h, e.ox, e.oy
@@ -97,6 +97,7 @@
 		e.focused
 		e.hasfocus
 		e.focusables()
+		e.focus_first_input_element()
 		e.effectively_disabled
 		e.effectively_hidden
 	text editing:
@@ -362,13 +363,23 @@ function T(s, whitespace) {
 		s = s()
 	if (s instanceof Node)
 		return s
-	if (whitespace) {
+	else if (whitespace) {
 		let e = document.createElement('span')
 		e.style['white-space'] = whitespace
 		e.textContent = s
 		return e
-	}
-	return document.createTextNode(s)
+	} else
+		return document.createTextNode(s)
+}
+
+// like T() but clones nodes instead of passing them through.
+function TC(s, whitespace) {
+	if (typeof s == 'function')
+		s = s()
+	if (s instanceof Node)
+		return s.clone()
+	else
+		return T(s, whitespace)
 }
 
 // create a html element or text node from a html string.
@@ -383,8 +394,8 @@ function unsafe_html(s) {
 }
 
 function sanitize_html(s) {
-	if (s == null)
-		return null
+	if (typeof s != 'string') // pass-through nulls and elements
+		return s
 	assert(DOMPurify.isSupported)
 	return DOMPurify.sanitize(s)
 }
@@ -407,7 +418,7 @@ function tag(tag, attrs, ...children) {
 div  = (...a) => tag('div' , ...a)
 span = (...a) => tag('span', ...a)
 
-method(Element, 'clone', function() {
+method(Node, 'clone', function() {
 	return this.cloneNode(true)
 })
 
@@ -820,45 +831,20 @@ method(EventTarget, 'fireup' , fireup)
 
 // DOM load event.
 
-{
-let load_slots = obj()
-var dom_load_order = ''
-function on_dom_load(name, fn) {
-	if (isfunc(name)) {
-		fn = name
-		name = ':after'
-	}
+function on_dom_load(fn) {
 	if (document.readyState === 'loading')
-		attr(load_slots, name, Array).push(fn)
+		document.on('DOMContentLoaded', fn)
 	else // `DOMContentLoaded` already fired
 		fn()
 }
-document.once('DOMContentLoaded', function() {
-	function run(a) {
-		for (let fn of a)
-			fn()
-	}
-	for (let s of (':before '+dom_load_order).names()) {
-		if (load_slots[s]) {
-			run(load_slots[s])
-			delete load_slots[s]
-		}
-	}
-	for (let s in load_slots) // unordered slots remain, like `after:`.
-		run(load_slots[s])
-})
-}
 
-on_dom_load(':before', function() {
+function init_components() {
 	root = document.documentElement
 	body = document.body
-})
-
-on_dom_load('components', function() {
 	root.init_child_components()
 	root.init_component()
 	root.bind(true)
-})
+}
 
 // inter-window event broadcasting.
 
@@ -875,12 +861,13 @@ window.addEventListener('storage', function(e) {
 
 // broadcast a message to other windows.
 function broadcast(topic, ...args) {
-	store('__broadcast', '')
-	store('__broadcast', json({
+	fire(topic, ...args)
+	save('__broadcast', '')
+	save('__broadcast', json({
 		topic: topic,
 		args: args,
 	}))
-	store('__broadcast', '')
+	save('__broadcast', '')
 }
 
 }
@@ -975,6 +962,14 @@ method(Element, 'focusables', function() {
 		if (!e.effectively_hidden && !e.effectively_disabled)
 			t.push(e)
 	return t
+})
+
+method(Element, 'focus_first_input_element', function() {
+	for (e of this.$('input, select, textarea, .x-input-widget'))
+		if (!e.effectively_hidden && !e.effectively_disabled) {
+			e.focus()
+			break
+		}
 })
 
 property(Element, 'effectively_disabled', {get: function() {

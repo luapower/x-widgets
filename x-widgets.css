@@ -49,8 +49,8 @@
 	--x-padding-x-button-icon       : .4em;
 	--x-padding-x-input             : .5em;  /* x-padding for inputs and grid cells */
 	--x-padding-y-input             : .25em; /* y-padding for inputs and grid cells */
-	--x-padding-y1-input-il-label-empty : .2em;  /* shift label to focus-box middle */
-	--x-padding-y1-input-il-label       : .2em;  /* shift label up away from the input */
+	--x-padding-y1-input-il-label-empty : .35em;  /* shift label to focus-box middle */
+	--x-padding-y1-input-il-label       : .35em;  /* shift label up away from the input */
 	--x-padding-y2-input-il-dropdown-button : .5em;
 
 	--x-min-height-input            : 3.6em;

@@ -2297,6 +2297,11 @@ function nav_widget(e) {
 		return !invalid
 	}
 
+
+	e.set_cell_errors = function(row, col, errors, ev) {
+		return e.set_cell_state(row, col, 'errors', errors, undefined, true, ev)
+	}
+
 	// responding to val changes ----------------------------------------------
 
 	e.do_update_val = function(v, ev) {

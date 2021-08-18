@@ -308,12 +308,13 @@ function init_xmodule(opt) {
 				}
 				if (name.starts('local:')) {
 					let shortname = name.replace(/^local\:/, '')
-					store('xmodule-layers/'+shortname, t.props)
+					save('xmodule-layers/'+shortname, json(t.props))
 					saved(t)
 				} else if (!t.save_request) {
 					t.save_request = ajax({
 						url: '/xmodule-layer.json/'+name,
 						upload: json(t.props, null, '\t'),
+						headers: {'content-type': 'application/json'},
 						done: () => t.save_request = null,
 						success: saved,
 					})
@@ -328,7 +329,7 @@ function init_xmodule(opt) {
 		return widget_select_editor(xm.instances, e => e.isnav, ...options)
 	}
 
-	on_dom_load('xmodule', function() {
+	on_dom_load(function() {
 		init_prop_layers()
 		init_root_widget()
 	})

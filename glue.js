@@ -122,8 +122,8 @@
 	clipboard:
 		copy_to_clipboard(text, done_func)
 	local storage:
-		store(key, t)
-		load(key) -> t
+		save(key, s)
+		load(key) -> s
 	url decoding, encoding and updating:
 		url_arg(s) -> t
 		url(t) -> s
@@ -132,7 +132,7 @@
 			url: s,
 			upload: json|s, ...,
 			success: f(json|res),
-			fail: f('http'|'timeout'|'network'|'abort'[, status, msg, body]),
+			fail: f(error, 'http'|'timeout'|'network'|'abort'[, status, msg, content]),
 			done: f('success'|'fail', ...),
 			...
 		}) -> req
@@ -1126,12 +1126,12 @@ function copy_to_clipboard(text, done) {
 
 // local storage -------------------------------------------------------------
 
-function store(key, value) {
-	Storage.setItem(key, json(value))
+function save(key, s) {
+	localStorage.setItem(key, s)
 }
 
 function load(key) {
-	return json_arg(Storage.getItem(key))
+	return localStorage.getItem(key)
 }
 
 // URL encoding & decoding ---------------------------------------------------
@@ -1245,8 +1245,8 @@ function url(t) {
 	^progress(p, loaded, [total])
 	^upload_progress(p, loaded, [total])
 	^success(res)
-	^fail('timeout'|'network'|'abort')
-	^fail('http', status, message, body_text)
+	^fail(error, 'timeout'|'network'|'abort')
+	^fail(error, 'http', status, message, content)
 	^done('success' | 'fail', ...)
 
 */
@@ -1315,34 +1315,40 @@ function ajax(req) {
 
 	xhr.ontimeout = function() {
 		req.failtype = 'timeout'
-		fire('done', 'fail', 'timeout')
+		fire('done', 'fail', req.error_message('timeout'), 'timeout')
 	}
 
 	// NOTE: only fired on network errors like connection refused!
 	xhr.onerror = function() {
 		req.failtype = 'network'
-		fire('done', 'fail', 'network')
+		fire('done', 'fail', req.error_message('network'), 'network')
 	}
 
 	xhr.onabort = function() {
 		req.failtype = 'abort'
-		fire('done', 'fail', 'abort')
+		fire('done', 'fail', req.error_message('abort'), 'abort')
 	}
 
 	xhr.onreadystatechange = function(ev) {
 		if (xhr.readyState > 1)
 			stop_slow_watch()
 		if (xhr.readyState == 4) {
-			if (xhr.status == 200) {
+			let status = xhr.status
+			if (status) { // status is 0 for network errors, incl. timeout.
 				let res = xhr.response
 				if (!xhr.responseType || xhr.responseType == 'text')
 					if (xhr.getResponseHeader('content-type') == 'application/json' && res)
 						res = json_arg(res)
 				req.response = res
-				fire('done', 'success', res)
-			} else if (xhr.status) { // status is 0 for network errors, incl. timeout.
-				req.failtype = 'http'
-				fire('done', 'fail', 'http', xhr.status, xhr.statusText, xhr.responseText)
+				if (status == 200) {
+					fire('done', 'success', res)
+				} else {
+					req.failtype = 'http'
+					let status_message = xhr.statusText
+					fire('done', 'fail',
+						req.error_message('http', status, status_message, res),
+						'http', status, status_message, res)
+				}
 			}
 		}
 	}
@@ -1367,13 +1373,18 @@ function ajax(req) {
 
 	req.xhr = xhr
 
-	req.error_message = function(type, status, message, body) {
-		if (type == 'http')
-			return S('error_http', 'Server returned {0} {1}', status, message)
-		else if (type == 'network')
-			return S('error_load_network', 'Loading failed: network error.')
-		else if (type == 'timeout')
-			return S('error_load_timeout', 'Loading failed: timed out.')
+	req.error_message = function(type, status, status_message, content) {
+		if (type == 'http') {
+			return S('error_http', '{error}', {
+				status: status,
+				status_message: status_message,
+				error: (isobj(content) ? content.error : content) || status_message,
+			})
+		} else if (type == 'network') {
+			return S('error_network', 'Network error')
+		} else if (type == 'timeout') {
+			return S('error_timeout', 'Timed out')
+		}
 	}
 
 	if (!req.dont_send)
@@ -1382,19 +1393,19 @@ function ajax(req) {
 	return req
 }
 
-function get(url, success, error, opt) {
+function get(url, success, fail, opt) {
 	return ajax(assign({
 		url: url,
 		success: success,
-		error: error,
+		fail: fail,
 	}, opt))
 }
 
-function post(url, upload, success, error, opt) {
+function post(url, upload, success, fail, opt) {
 	return ajax(assign({
 		url: url,
 		upload: upload,
 		success: success,
-		error: error,
+		fail: fail,
 	}, opt))
 }
