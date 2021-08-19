@@ -34,8 +34,8 @@ rowset field attributes:
 		internal       : field cannot be made visible in a grid (false).
 		hidden         : field is hidden by default but can be made visible (false).
 		w              : field's width.
-		min_w          : field's minimum width.
-		max_w          : field's maximum width.
+		min_w          : field's minimum width, in pixels.
+		max_w          : field's maximum width, in pixels.
 
 	navigation:
 		focusable      : field can be focused (true).
@@ -57,9 +57,7 @@ rowset field attributes:
 		min            : min value (0).
 		max            : max value (inf).
 		maxlen         : max text length (256).
-		multiple_of    : number that the value must be multiple of (1).
-		max_digits     : max number of digits allowed.
-		max_decimals   : max number of decimals allowed.
+		decimals       : max number of decimals.
 
 	formatting:
 		align          : 'left'|'right'|'center'
@@ -3990,7 +3988,7 @@ component('x-lookup-dropdown', function(e) {
 
 	// numbers
 
-	let number = {align: 'right', min: 0, max: 1/0, multiple_of: 1}
+	let number = {align: 'right', min: 0, max: 1/0, decimals: 0}
 	field_types.number = number
 
 	number.validator_number = field => ({
@@ -3998,14 +3996,9 @@ component('x-lookup-dropdown', function(e) {
 		message  : S('validation_number', 'Value must be a number'),
 	})
 
-	number.validator_integer = field => (field.multiple_of == 1 && {
+	number.validator_integer = field => (field.decimals == 0 && {
 		validate : v => v == null || (v % 1 == 0),
 		message  : S('validation_integer', 'Value must be an integer'),
-	})
-
-	number.validator_multiple = field => (field.multiple_of != null && field.multiple_of != 1 && {
-		validate : v => v == null || (v % field.multiple_of == 0),
-		message  : S('validation_multiple', 'Value must be multiple of {0}', field.multiple_of),
 	})
 
 	number.editor = function(...opt) {

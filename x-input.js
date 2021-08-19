@@ -1297,11 +1297,13 @@ component('x-spinedit', 'Input', function(e) {
 
 	}
 
+	let multiple = () => or(1 / 10 ** e.field.decimals, 1)
+
 	// controller
 
 	function increment_val(increment) {
 		let v = e.input_val + increment
-		let r = v % or(e.field.multiple_of, 1)
+		let r = v % multiple()
 		e.set_val(v - r, {input: e})
 		e.input.select_range(0, -1)
 	}
@@ -1317,7 +1319,7 @@ component('x-spinedit', 'Input', function(e) {
 	function increment_val_again() {
 		if (!increment) return
 		let v = e.input_val + increment
-		let r = v % or(e.field.multiple_of, 1)
+		let r = v % multiple()
 		e.set_val(v - r, {input: e})
 		e.input.select_range(0, -1)
 	}
@@ -1332,7 +1334,7 @@ component('x-spinedit', 'Input', function(e) {
 			if (start_incrementing_timer || increment_timer)
 				return
 			e.input.focus()
-			increment = or(e.field.multiple_of, 1) * sign
+			increment = multiple() * sign
 			increment_val_again()
 			start_incrementing_timer = after(.5, start_incrementing)
 			return this.capture_pointer(ev, null, function() {
@@ -1349,7 +1351,7 @@ component('x-spinedit', 'Input', function(e) {
 
 	e.on('keydown', function(key) {
 		if (key == 'ArrowDown' || key == 'ArrowUp') {
-			let inc = (key == 'ArrowDown' ? 1 : -1) * e.field.multiple_of
+			let inc = (key == 'ArrowDown' ? 1 : -1) * multiple()
 			increment_val(inc)
 			return false
 		}
@@ -1752,7 +1754,7 @@ component('x-slider', 'Input', function(e) {
 	let inh_do_update = e.do_update
 	e.do_update = function() {
 		inh_do_update()
-		e.class('animated', e.field && e.field.multiple_of >= 5) // TODO: that's not the point of this.
+		e.class('animated', false) // TODO: decide when to animate!
 	}
 
 	function progress_for(v) {
@@ -1762,10 +1764,12 @@ component('x-slider', 'Input', function(e) {
 	function cmin() { return max(or(e.field && e.field.min, -1/0), e.from) }
 	function cmax() { return min(or(e.field && e.field.max, 1/0), e.to) }
 
+	let multiple = () => or(1 / 10 ** e.field.decimals, 1)
+
 	e.set_progress = function(p, ev) {
 		let v = lerp(p, 0, 1, e.from, e.to)
-		if (e.field.multiple_of != null)
-			v = floor(v / e.field.multiple_of + .5) * e.field.multiple_of
+		if (e.field.decimals != null)
+			v = floor(v / multiple() + .5) * multiple()
 		e.set_val(clamp(v, cmin(), cmax()), ev)
 	}
 
@@ -1842,7 +1846,7 @@ component('x-slider', 'Input', function(e) {
 
 		{name: 'from', type: 'number'},
 		{name: 'to', type: 'number'},
-		{name: 'multiple_of', type: 'number'},
+		{name: 'decimals', type: 'number'},
 
 		{name: 'grid_area'},
 		{name: 'tabIndex', type: 'number'},
@@ -3076,7 +3080,7 @@ component('x-chart', 'Input', function(e) {
 
 	e.prop('sum_col' , {store: 'var', type: 'col', col_nav: () => e.nav})
 	e.prop('cat_cols', {store: 'var', type: 'col', col_nav: () => e.nav})
-	e.prop('other_threshold', {store: 'var', type: 'number', default: .05, multiple_of: null})
+	e.prop('other_threshold', {store: 'var', type: 'number', default: .05, decimals: null})
 	e.prop('other_text', {store: 'var', default: 'Other'})
 	e.prop('shape', {
 		store: 'var', type: 'enum',

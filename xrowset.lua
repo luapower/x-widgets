@@ -62,9 +62,11 @@ end
 field_type_attrs = {}
 field_name_attrs = {}
 
-server_field_attrs = {
-	from_server = 1,
-	to_server = 1,
+local client_field_attrs = {
+	hidden=1, editable=1,
+	name=1, type=1, default=1,
+	enum_values=1, not_null=1, min=1, max=1, decimals=1, maxlen=1,
+	w=1, min_w=1, max_w=1, max_char_w=1,
 }
 
 function virtual_rowset(init, ...)
@@ -97,7 +99,7 @@ function virtual_rowset(init, ...)
 
 			local client_field = {}
 			for k in pairs(f) do
-				if not server_field_attrs[k] then
+				if client_field_attrs[k] then
 					client_field[k] = f[k]
 				end
 			end
