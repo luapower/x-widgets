@@ -10,7 +10,7 @@
 		cols             : 'col1 ...'    default visible columns list
 		hide_cols        : 'col1 ...'    columns hidden by default
 		ro_cols          : 'col1 ...'    read-only (i.e. non-editable) columns
-		index_col        : 'col'         index column for manual ordering of rows
+		pos_col          : 'col'         pos column for manual ordering of rows
 		id_col           : 'col'         id column for tree-building
 		parent_col       : 'col'         parent column for tree-building
 		name_col         : 'col'         default display_col in lookup rowsets
@@ -30,7 +30,7 @@
 
 	Sets by default:
 		- can_*_rows are set to false on missing row update methods.
-		- index_col and parent_col are set to hidden by default.
+		- pos_col and parent_col are set to hidden by default.
 		- on client-side, id_col is set to pk if pk is single-column.
 
 	Field defaults based on field's name or type:
@@ -83,7 +83,7 @@ function virtual_rowset(init, ...)
 
 		for fi,f in ipairs(rs.fields) do
 			if hide_cols[f.name]
-				or f.name == rs.index_col
+				or f.name == rs.pos_col
 				or f.name == rs.parent_col
 			then
 				f.hidden = true
@@ -121,7 +121,7 @@ function virtual_rowset(init, ...)
 			can_change_rows = rs.can_change_rows,
 			fields = rs.client_fields,
 			pk = rs.pk,
-			index_col = rs.index_col or 'pos',
+			pos_col = rs.pos_col == nil and 'pos' or rs.pos_col or nil,
 			cols = rs.cols,
 			params = rs.params,
 			id_col = rs.id_col,

@@ -20,8 +20,10 @@ rowset:
 rowset attributes:
 	fields: [field1,...]
 	rows: [row1,...]
-	pk: 'col1 ...'
-	id_col: 'col'
+	pk: 'col1 ...'    : primary key for making changesets.
+	id_col: 'col'     : id column for tree-forming along with parent_col.
+	parent_col: 'col' : parent colum for tree-forming.
+	pos_col: 'col'    : position column for manual reordering of rows.
 
 rowset field attributes:
 
@@ -568,8 +570,8 @@ function nav_widget(e) {
 		e.parent_field = e.id_field && e.all_fields[rs.parent_col]
 		init_tree_field()
 
-		e.val_field   = e.all_fields[e.val_col]
-		e.index_field = e.all_fields[rs.index_col]
+		e.val_field = e.all_fields[e.val_col]
+		e.pos_field = e.all_fields[rs.pos_col]
 
 		for (let field of e.all_fields)
 			init_field_validators(field)
@@ -1753,8 +1755,8 @@ function nav_widget(e) {
 		let order_by = map(order_by_map)
 
 		// use index-based ordering by default, unless otherwise specified.
-		if (e.index_field && order_by.size == 0)
-			order_by.set(e.index_field, 'asc')
+		if (e.pos_field && order_by.size == 0)
+			order_by.set(e.pos_field, 'asc')
 
 		// the tree-building comparator requires a stable sort order
 		// for all parents so we must always compare rows by id after all.
@@ -1768,7 +1770,7 @@ function nav_widget(e) {
 			cmps[i] = field_comparator(field)
 			let r = dir == 'desc' ? -1 : 1
 			let errors_i = cell_state_val_index('errors', field)
-			if (field != e.index_field) {
+			if (field != e.pos_field) {
 				// invalid rows come first
 				s.push('{')
 				s.push('  let v1 = r1.errors == null')
@@ -1819,7 +1821,7 @@ function nav_widget(e) {
 	}
 
 	function sort_rows(force) {
-		let must_sort = !!(e.parent_field || e.index_field || order_by_map.size)
+		let must_sort = !!(e.parent_field || e.pos_field || order_by_map.size)
 		if (must_sort)
 			e.rows.sort(row_comparator())
 		else if (force)
@@ -2197,10 +2199,10 @@ function nav_widget(e) {
 	e.row_is_user_modified = function(row) {
 		if (!row.modified)
 			return false
-		if (!e.index_field)
+		if (!e.pos_field)
 			return true
 		for (let field of e.all_fields)
-			if (e.cell_state(row, field, 'modified') && field !== e.index_field)
+			if (e.cell_state(row, field, 'modified') && field !== e.pos_field)
 				return true
 		return false
 	}
@@ -2695,7 +2697,7 @@ function nav_widget(e) {
 			update_row_index()
 
 			if (ev.input)
-				update_index_field()
+				update_pos_field()
 
 		}
 
@@ -2822,7 +2824,7 @@ function nav_widget(e) {
 			}
 
 			if (ev.input)
-				update_index_field()
+				update_pos_field()
 
 		}
 
@@ -2865,7 +2867,7 @@ function nav_widget(e) {
 		return n
 	}
 
-	function update_index_field_for_children_of(row) {
+	function update_pos_field_for_children_of(row) {
 		let index = 1
 		let min_parent_count = row ? row.parent_rows.length + 1 : 0
 		for (let ri = row ? e.row_index(row) + 1 : 0; ri < e.rows.length; ri++) {
@@ -2873,21 +2875,21 @@ function nav_widget(e) {
 			if (child_row.parent_rows.length < min_parent_count)
 				break
 			if (child_row.parent_row == row)
-				e.set_cell_val(child_row, e.index_field, index++)
+				e.set_cell_val(child_row, e.pos_field, index++)
 		}
 	}
 
-	function update_index_field(old_parent_row, parent_row) {
-		if (!e.index_field)
+	function update_pos_field(old_parent_row, parent_row) {
+		if (!e.pos_field)
 			return
 		if (e.parent_field) {
-			update_index_field_for_children_of(old_parent_row)
+			update_pos_field_for_children_of(old_parent_row)
 			if (parent_row != old_parent_row)
-				update_index_field_for_children_of(parent_row)
+				update_pos_field_for_children_of(parent_row)
 		} else {
 			let index = 1
 			for (let ri = 0; ri < e.rows.length; ri++)
-				e.set_cell_val(e.rows[ri], e.index_field, index++)
+				e.set_cell_val(e.rows[ri], e.pos_field, index++)
 		}
 	}
 
@@ -2970,7 +2972,7 @@ function nav_widget(e) {
 
 			e.begin_update()
 
-			update_index_field(old_parent_row, parent_row)
+			update_pos_field(old_parent_row, parent_row)
 
 			rows_moved = true
 			if (e.save_row_move_on == 'input')
