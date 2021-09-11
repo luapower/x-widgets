@@ -3,9 +3,10 @@
 	Server-side rowsets for nav-based x-widgets.
 	Written by Cosmin Apreutesei. Public Domain.
 
-	Must set:
+	Properties to set:
 		fields           : {field1, ...} field list (required)
-		pk               : 'col1 ...'    primary key columns (required)
+		pk               : 'col1 ...'    primary key (required)
+		uks              : ['col1 ...',] unique keys (to validate on the client)
 		field_attrs      : {col->field}  extra field attributes
 		cols             : 'col1 ...'    default visible columns list
 		hide_cols        : 'col1 ...'    columns hidden by default
@@ -16,12 +17,31 @@
 		name_col         : 'col'         default display_col in lookup rowsets
 		tree_col         : 'col'         tree column (the one with [+] icons)
 		params           : 'par1 ...'    detail param names for master-detail
-		can_edit         : t|f           allow editing of any kind (true)
-		can_add_rows     : t|f           allow adding new rows
-		can_remove_rows  : t|f           allow removing rows
-		can_change_rows  : t|f           allow editing existing rows
+		can_edit         : f             allow editing of any kind (true)
+		can_add_rows     : f             allow adding new rows
+		can_remove_rows  : f             allow removing rows
+		can_change_rows  : f             allow editing existing rows
 
-	Must implement:
+	Field attributes sent to client:
+		name             : 'col'         name for use in code
+		type             : 'number'|...  client-side type
+		text             : 'Foo Bar'     input-box label / grid column header
+		default          : val           default value (if it's a constant)
+		internal         : t             cannot be made visible
+		hidden           : t             not visible by default
+		editable         : f             can be changed
+		enum_values      : ['foo',...]   enum values
+		not_null         : t             can't be null
+		min              : n             min allowed value
+		max              : n             max allowed value
+		decimals         : n             number of decimals
+		maxlen           : n             max length in characters
+		w                : px            default grid column width
+		min_w            : px            min grid column width
+		max_w            : px            max grid column width
+		max_char_w       : n             max grid column width in characters
+
+	Methods to implement:
 		- load_rows(result, params)
 		- insert_row(vals)
 		- update_row(vals)
@@ -29,9 +49,9 @@
 		- load_row(vals)
 
 	Sets by default:
-		- can_*_rows are set to false on missing row update methods.
-		- pos_col and parent_col are set to hidden by default.
-		- on client-side, id_col is set to pk if pk is single-column.
+		- `can_[add|change|remove]_rows` are set to false on missing row update methods.
+		- `pos_col` and `parent_col` are set to hidden by default.
+		- on client-side, `id_col` is set to pk if pk is single-column.
 
 	Field defaults based on field's name or type:
 		field_name_attrs = {col->field}
@@ -63,8 +83,8 @@ field_type_attrs = {}
 field_name_attrs = {}
 
 local client_field_attrs = {
-	hidden=1, editable=1,
-	name=1, type=1, default=1,
+	internal=1, hidden=1, editable=1,
+	name=1, type=1, text=1, default=1,
 	enum_values=1, not_null=1, min=1, max=1, decimals=1, maxlen=1,
 	w=1, min_w=1, max_w=1, max_char_w=1,
 }
@@ -81,7 +101,7 @@ function virtual_rowset(init, ...)
 
 		rs.client_fields = {}
 
-		for fi,f in ipairs(rs.fields) do
+		for i,f in ipairs(rs.fields) do
 			if hide_cols[f.name]
 				or f.name == rs.pos_col
 				or f.name == rs.parent_col
@@ -103,7 +123,7 @@ function virtual_rowset(init, ...)
 					client_field[k] = f[k]
 				end
 			end
-			rs.client_fields[fi] = client_field
+			rs.client_fields[i] = client_field
 		end
 
 		if not rs.insert_row then rs.can_add_rows    = false end
@@ -157,7 +177,7 @@ function virtual_rowset(init, ...)
 
 	function rs:can_add_row(values)
 		if rs.can_add_rows == false then
-			return false, 'adding rows not allowed'
+			return false, 'adding rows is not allowed'
 		end
 		local errors = rs:validate_fields(values)
 		if errors then return false, nil, errors end
@@ -165,7 +185,7 @@ function virtual_rowset(init, ...)
 
 	function rs:can_change_row(values)
 		if rs.can_change_rows == false then
-			return false, 'updating rows not allowed'
+			return false, 'updating rows is not allowed'
 		end
 		local errors = rs:validate_fields(values)
 		if errors then return false, nil, errors end
@@ -173,7 +193,7 @@ function virtual_rowset(init, ...)
 
 	function rs:can_remove_row(values)
 		if rs.can_remove_rows == false then
-			return false, 'removing rows not allowed'
+			return false, 'removing rows is not allowed'
 		end
 	end
 
@@ -186,11 +206,9 @@ function virtual_rowset(init, ...)
 			if row.type == 'new' then
 				local can, err, field_errors = rs:can_add_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.insert_row, rs, row.values)
+					local ok, err = catch('db', rs.insert_row, rs, row.values)
 					if ok then
-						if (affected_rows or 1) == 0 then
-							rt.error = S('row_not_inserted', 'row not inserted')
-						elseif rs.load_row then
+						if rs.load_row then
 							local ok, rows = catch('db', rs.load_row, rs, row.values)
 							if ok then
 								if #rows == 0 then
@@ -210,7 +228,6 @@ function virtual_rowset(init, ...)
 							end
 						end
 					else
-						local err = affected_rows
 						rt.error = db_error(err,
 							S('insert_error', 'error on inserting row'))
 					end
@@ -221,11 +238,9 @@ function virtual_rowset(init, ...)
 			elseif row.type == 'update' then
 				local can, err, field_errors = rs:can_change_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.update_row, rs, row.values)
+					local ok, err = catch('db', rs.update_row, rs, row.values)
 					if ok then
-						if (affected_rows or 1) == 0 then
-							rt.error = S('row_not_updated', 'row not updated')
-						elseif rs.load_row then
+						if rs.load_row then
 							--copy :foo:old to :foo so we can select the row back.
 							for k,v in pairs(row.values) do
 								local k1 = k:match'^(.-):old$'
@@ -249,12 +264,11 @@ function virtual_rowset(init, ...)
 								local err = rows
 								rt.error = db_error(err,
 									S('load_updated_row_error',
-										'db error on loading back updated row'))
+										'error on loading back updated row'))
 							end
 						end
 					else
-						local err = affected_rows
-						rt.error = db_error(err, S('update_error', 'db error on updating row'))
+						rt.error = db_error(err, S('update_error', 'error on updating row'))
 					end
 				else
 					rt.error = err or true
@@ -263,11 +277,9 @@ function virtual_rowset(init, ...)
 			elseif row.type == 'remove' then
 				local can, err, field_errors = rs:can_remove_row(row.values)
 				if can ~= false then
-					local ok, affected_rows = catch('db', rs.delete_row, rs, row.values)
+					local ok, err = catch('db', rs.delete_row, rs, row.values)
 					if ok then
-						if (affected_rows or 1) == 0 then
-							rt.error = S('row_not_removed', 'row not removed')
-						elseif rs.load_row then
+						if rs.load_row then
 							local ok, rows = catch('db', rs.load_row, rs, row.values)
 							if ok then
 								if #rows == 1 then
@@ -281,13 +293,12 @@ function virtual_rowset(init, ...)
 								local err = rows
 								rt.error = db_error(err,
 									S('load_removed_row_error',
-										'db error on loading back removed row'))
+										'error on loading back removed row'))
 							end
 						end
 					else
-						local err = affected_rows
 						rt.error = db_error(err,
-							S('delete_error', 'db error on removing row'))
+							S('delete_error', 'error on removing row'))
 					end
 				else
 					rt.error = err or true
