@@ -3,12 +3,12 @@
 	Polygon-based editable 3D model components.
 	Written by Cosmin Apreutesei. Public domain.
 
-	Comoonents are made primarily of polygons enclosed and connected by
+	Components are made primarily of polygons enclosed and connected by
 	lines defined over a common point cloud. A component can contain instances
 	of other components at relative transforms. A component can also contain
 	standalone lines.
 
-	The editing API implements the direct manipulation UI and is performs
+	The editing API implements the direct manipulation UI and performs
 	automatic creation/removal/intersection of points/lines/polygons
 	while keeping the model numerically stable and clean. In particular:
 	- editing operations never leave duplicate points/lines/polygons.

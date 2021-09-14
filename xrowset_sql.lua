@@ -1,6 +1,6 @@
 --[[
 
-	MySQL rowsets.
+	SQL rowsets.
 	Written by Cosmin Apreutesei. Public Domain.
 
 	What must be specified manually:
