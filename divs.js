@@ -33,6 +33,8 @@
 		e.first, e.last, e.next, e.prev
 		e.positionally_contains(ce) -> t|f
 	dom tree querying:
+		iselem(v) -> t|f
+		isnode(v) -> t|f
 		e.$(sel) -> ea
 		$(sel) -> ea
 		E(sel|e)
@@ -257,9 +259,16 @@ property(Element, 'index', {
 
 // dom tree querying ---------------------------------------------------------
 
-alias(Element, '$', 'querySelectorAll')
+function iselem(e) { return e instanceof Element }
+function isnode(e) { return e instanceof Node }
+
+alias(Element         , '$', 'querySelectorAll')
 alias(DocumentFragment, '$', 'querySelectorAll')
 function $(s) { return document.querySelectorAll(s) }
+
+alias(Element         , '$1', 'querySelector')
+alias(DocumentFragment, '$1', 'querySelector')
+function $1(s) { return document.querySelector(s) }
 
 function E(s) {
 	return typeof s == 'string' ? document.querySelector(s) : s
@@ -365,7 +374,7 @@ method(Element, 'bind', function(on) {
 function T(s, whitespace) {
 	if (typeof s == 'function')
 		s = s()
-	if (s instanceof Node)
+	if (isnode(s))
 		return s
 	else if (whitespace) {
 		let e = document.createElement('span')
@@ -380,7 +389,7 @@ function T(s, whitespace) {
 function TC(s, whitespace) {
 	if (typeof s == 'function')
 		s = s()
-	if (s instanceof Node)
+	if (isnode(s))
 		return s.clone()
 	else
 		return T(s, whitespace)
@@ -393,7 +402,6 @@ function unsafe_html(s) {
 		return s
 	let span = document.createElement('span')
 	span.unsafe_html = s.trim()
-	span.init_child_components()
 	return span.childNodes.length > 1 ? span : span.firstChild
 }
 
@@ -454,11 +462,11 @@ method(Element, 'set', function(s, whitespace) {
 	if (typeof s == 'function')
 		s = s()
 	this.clear()
-	if (s instanceof Node) {
-		if (s instanceof Element && s.isConnected)
+	if (isnode(s)) {
+		if (iselem(s) && s.isConnected)
 			s.bind(false)
 		this.append(s)
-		if (s instanceof Element && this.isConnected)
+		if (iselem(s) && this.isConnected)
 			s.bind(true)
 	} else {
 		this.textContent = s
@@ -472,10 +480,10 @@ method(Element, 'add', function(...args) {
 	for (let s of args)
 		if (s != null) {
 			s = T(s)
-			if (s instanceof Element && s.isConnected)
+			if (iselem(s) && s.isConnected)
 				s.bind(false)
 			this.append(s)
-			if (s instanceof Element) {
+			if (iselem(s)) {
 				if (this.isConnected)
 					s.bind(true)
 			}
@@ -488,10 +496,10 @@ method(Element, 'insert', function(i0, ...args) {
 		let s = args[i]
 		if (s != null) {
 			s = T(s)
-			if (s instanceof Element && s.isConnected)
+			if (iselem(s) && s.isConnected)
 				s.bind(false)
 			this.insertBefore(s, this.at[max(0, or(i0, 1/0))])
-			if (s instanceof Element) {
+			if (iselem(s)) {
 				if (this.isConnected)
 					s.bind(true)
 			}
@@ -509,13 +517,13 @@ override(Element, 'remove', function(inherited) {
 method(Element, 'replace', function(e0, s) {
 	s = T(s)
 	if (e0 != null) {
-		if (e0 instanceof Element)
+		if (iselem(e0))
 			e0.bind(false)
 		this.replaceChild(s, e0)
 	} else {
 		this.appendChild(s)
 	}
-	if (s instanceof Element && this.isConnected)
+	if (iselem(s) && this.isConnected)
 		s.bind(true)
 	return this
 })
@@ -1273,7 +1281,7 @@ property(Element, 'popup_level',
 	function() {
 		if (this._popup_level != null)
 			return this._popup_level
-		if (this.parent instanceof Element)
+		if (iselem(this.parent))
 			return this.parent.popup_level
 		else
 			return 0

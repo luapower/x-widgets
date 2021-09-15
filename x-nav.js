@@ -2565,7 +2565,7 @@ function nav_widget(e) {
 
 	e.cell_text_val = function(row, field) {
 		let v = e.cell_display_val(row, field)
-		if (v instanceof Node)
+		if (isnode(v))
 			return v.textContent
 		if (!isstr(v))
 			return ''

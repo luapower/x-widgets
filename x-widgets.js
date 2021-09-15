@@ -199,7 +199,7 @@ component.types = {} // {type -> create}
 component.categories = {} // {cat -> {craete1,...}}
 
 component.create = function(t, e0) {
-	if (t instanceof Node || (isobject(t) && t.isinstance))
+	if (iselem(t) || (isobject(t) && t.isinstance))
 		return t // instances pass through.
 	let id = isstr(t) ? t : t.id
 	if (e0 && e0.id == id)
@@ -2622,7 +2622,7 @@ component('x-action-band', 'Input', function(e) {
 			let spec = new Set(s)
 			let btn = e.buttons && e.buttons[name.replaceAll('-', '_').replace(/[^\w]/g, '')]
 			let btn_sets_text
-			if (!(btn instanceof Node)) {
+			if (!(isnode(btn))) {
 				if (typeof btn == 'function')
 					btn = {action: btn}
 				else
@@ -2670,21 +2670,33 @@ component('x-dialog', function(e) {
 
 	focusable_widget(e)
 
-	e.x_button = true
+	e.prop('heading', {store: 'var', attr: true}) // because title is taken
+	e.prop('xbutton', {store: 'var', type: 'bool', attr: true, default: true})
 
 	e.init = function() {
-		if (e.title != null) {
-			let title = div({class: 'x-dialog-title'})
-			title.set(e.title)
-			e.header = div({class: 'x-dialog-header'}, title)
+
+		e.header  = e.header  || e.$1('header' ) || tag('header' )
+		e.content = e.content || e.$1('content') || tag('content')
+		e.footer  = e.footer  || e.$1('footer' ) || tag('footer' )
+		e.clear()
+
+		e.header  .classes = 'x-dialog-header'
+		e.content .classes = 'x-dialog-content'
+		e.footer  .classes = 'x-dialog-footer'
+
+		if (e.heading != null) {
+			e.heading = div({class: 'x-dialog-title'}, e.heading)
+			e.header.add(e.heading)
 		}
-		if (!e.content)
-			e.content = div()
-		e.content.class('x-dialog-content')
-		if (e.footer && !(e.footer instanceof Node))
-			e.footer = action_band({layout: e.footer, buttons: e.buttons})
+
+		if (e.buttons || e.buttons_layout)
+			e.footer.set(action_band({
+				layout: e.buttons_layout, buttons: e.buttons
+			}))
+
 		e.add(e.header, e.content, e.footer)
-		if (e.x_button) {
+
+		if (e.xbutton) {
 			e.x_button = div({class: 'x-dialog-xbutton fa fa-times'})
 			e.x_button.on('click', function() {
 				e.cancel()

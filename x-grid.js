@@ -499,7 +499,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		let invalid = !!(errors && !errors.passed)
 		let s = invalid && errors
 				.filter(e => !e.passed)
-				.map(e => e.message instanceof Node ? e.message.textContent : e.message)
+				.map(e => isnode(e.message) ? e.message.textContent : e.message)
 				.join('\n')
 		cell.class('invalid', invalid)
 		cell.attr('title', s)

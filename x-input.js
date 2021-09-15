@@ -584,7 +584,7 @@ component('x-radiogroup', 'Input', function(e) {
 
 	e.set_items = function(items) {
 		for (let item of items) {
-			if (isstr(item) || item instanceof Node)
+			if (isstr(item) || isnode(item))
 				item = {text: item}
 			let radio_box = span({class: 'x-markbox-icon x-radio-icon far fa-circle'})
 			let text_box = span({class: 'x-markbox-label x-radio-label'})

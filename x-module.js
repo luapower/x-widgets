@@ -1040,7 +1040,6 @@ function sql_rowset_editor_dialog() {
 	let d = dialog({
 		text: 'SQL Rowset Editor',
 		content: ed,
-		footer: '',
 	})
 	d.editor = ed
 	return d
