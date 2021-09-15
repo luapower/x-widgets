@@ -6,9 +6,11 @@ require'xrowset_sql'
 jsfile'x-auth.js'
 cssfile'x-auth.css'
 
-Sfile'webb_auth'
+Sfile'webb_auth.lua'
+Sfile'xrowset.lua'
+Sfile'xrowset_sql.lua'
 Sfile'x-auth.js'
-Sfile'x_auth.lua'
+Sfile'xauth.lua'
 
 wwwfile['x-auth.css'] = [[
 
@@ -31,18 +33,18 @@ wwwfile['x-auth.css'] = [[
 
 ]]
 
-template.x_auth_dialog = [[
+template.sign_in_dialog = [[
 <x-dialog heading="Sign-In">
 	<content>
 		<x-slides id=sign_in_page_slides class=sign-in-page>
 
 			<div vflex class="x-flex">
 				<div class=breadcrumbs>
-					<a href="/">Home</a> &gt; Sign-in
+					Sign-in
 				</div>
 				<p small>
 				The security of your account is our priority.
-				So instead having you set up and remember a password,
+				So instead having you set up a hard-to-remember password,
 				we will send you a one-time activation code every time
 				you need to sign in.
 				</p>
@@ -52,7 +54,6 @@ template.x_auth_dialog = [[
 
 			<div vflex class="x-flex">
 				<div class=breadcrumbs>
-					<a href="/">Home</a> &gt;
 					<a href="/sign-in">Sign-in</a> &gt;
 					Enter code
 				</div>
@@ -65,6 +66,14 @@ template.x_auth_dialog = [[
 		</x-slides>
 	</content>
 </x-dialog>
+]]
+
+template.sign_in_email = [[
+
+Your sign-in code:
+
+{{code}}
+
 ]]
 
 action['login.json'] = function()
@@ -81,8 +90,7 @@ action['sign_in_email.json'] = function()
 	local code = allow(gen_auth_code('email', email))
 	log('SIGN-IN', 'email=%s code=%s', email, code)
 	local subj = S('sign_in_email_subject', 'Your sign-in code')
-	local msg = S('sign_in_email_message',
-		'Your sign-in code for {1} is: {0}', code, host())
+	local msg = render('sign_in_email', {code = code, host = host()})
 	sendmail(noreply, email, subj, msg)
 	return {ok = true}
 end

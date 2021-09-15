@@ -197,7 +197,7 @@ function init_auth() {
 }
 
 action.sign_in = function() {
-	let dialog = unsafe_html(render('x_auth_dialog')).modal()
+	let dialog = unsafe_html(render('sign_in_dialog')).modal()
 	dialog.on('close', function() {
 		exec('/')
 	})
