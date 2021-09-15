@@ -996,6 +996,8 @@ property(Element, 'effectively_hidden', {get: function() {
 		return true
 	if (css.visibility == 'hidden')
 		return true
+	if (num(css.opacity) == 0)
+		return true
 	if (this.parent && this.parent.effectively_hidden)
 		return true
 	return false
@@ -1546,8 +1548,8 @@ method(Element, 'modal', function(on) {
 			e.dialog.remove()
 			e.dialog = null
 		}
-	} else if (!e.__dialog) {
-		let dialog = tag('dialog', {
+	} else if (!e.dialog) {
+		let dialog = div({
 			style: `
 				position: fixed;
 				left: 0;
@@ -1562,11 +1564,11 @@ method(Element, 'modal', function(on) {
 				display: grid;
 				justify-content: center;
 				align-content: center;
-				z-index: 100;
+				z-index: 100; /* show over 10 levels of popups */
 			`,
 		}, e)
-		dialog.on('pointerdown', () => false)
 		e.dialog = dialog
+		dialog.popup_level = 10 // make popups aware of our level.
 		document.body.add(dialog)
 		e.focus()
 	}

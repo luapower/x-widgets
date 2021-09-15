@@ -18,6 +18,8 @@ randomseed(require'time'.clock())
 
 css[[
 
+/* reset ------------------------------------------------------------------ */
+
 * { box-sizing: border-box; }
 
 html, body, table, tr, td, div, img, hr, button {
@@ -36,6 +38,47 @@ html, body {
 	width: 100%;
 	height: 100%;
 }
+
+body[opensans] {
+	font-size: 14px;
+	line-height: 150%;
+}
+
+img {
+	display: block; /* don't align to surrounding text */
+	max-width: 100%; /* make shrinkable */
+}
+
+a {
+	cursor: pointer;
+	text-decoration: none;
+}
+
+a:not([disabled]),
+a:not([disabled]):visited
+{
+	color: #000;
+}
+
+a[href]:not([disabled]):hover {
+	color: #cc8800;
+}
+
+hr {
+	border-top: 1px solid #ccc;
+	margin-top: 20px;
+	margin-bottom: 20px;
+}
+
+/* general vocabulary ----------------------------------------------------- */
+
+[nowrap] { white-space: nowrap; }
+[gray], [gray] a, [gray] a:visited { color: #999; }
+[gray] a { text-decoration: underline; }
+[small] { font-size: 13px; }
+[tight] { line-height: 130%; }
+
+[vflex] { display: flex; flex-flow: column; }
 
 ]]
 
@@ -80,6 +123,8 @@ x-module.js
 
 fontfile'fa-solid-900.ttf'
 
+require'xauth'
+
 function xapp.app(codename)
 
 	local app = {}
@@ -114,6 +159,7 @@ function xapp.app(codename)
 
 	action['404.html'] = function(action)
 		spa(update({
+				body = html(),
 				body_classes = 'x-container',
 				client_action = true,
 			}, app))

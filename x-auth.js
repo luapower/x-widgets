@@ -93,7 +93,7 @@ component('x-settings-button', function(e) {
 
 			let sign_in_button = button({
 				text: S('button_text_sign_in', 'Sign-In'),
-				action: () => { tt.close(); exec('/sign-in'); },
+				action: () => { tt.close(); sign_in(); },
 			})
 
 			let settings_form = div({style: `
@@ -120,88 +120,81 @@ component('x-settings-button', function(e) {
 
 // sign-in form --------------------------------------------------------------
 
-// 'firstname lastname' -> 'firstname'; 'email@domain' -> 'email'
-function firstname(name, email) {
-	if (name) {
-		name = name.trim()
-		var a = name.split(' ', 1)
-		return a.length > 0 ? a[0] : name
-	} else if (email) {
-		email = email.trim()
-		var a = email.split('@', 1)
-		return a.length > 0 ? a[0] : email
-	} else {
-		return ''
+let sign_in_dialog = memoize(function() {
+
+	let e = unsafe_html(render('sign_in_dialog'))
+
+	e.slides       = e.$1('.sign-in-page')
+	e.email_edit   = e.$1('.sign-in-email-edit')
+	e.code_edit    = e.$1('.sign-in-code-edit')
+	e.email_button = e.$1('.sign-in-email-button')
+	e.code_button  = e.$1('.sign-in-code-button')
+
+	e.email_edit.field = {not_null: true}
+	e.code_edit.field = {not_null: true}
+
+	e.email_button.action = function() {
+		let d = sign_in_dialog()
+		e.email_button.post(href('/sign-in-email.json'), {
+			email: e.email_edit.val,
+		}, function() {
+			sign_in_code()
+		}, function(err) {
+			e.email_edit.errors = [{message: err, passed: false}]
+			e.email_edit.focus()
+		})
 	}
-}
 
-action.sign_in = function() {
-	sign_in_email_edit.errors = null
-	sign_in_page_slides.slide(0)
-}
+	e.code_button.action = function() {
+		let d = sign_in_dialog()
+		e.code_button.post(href('/login.json'), {
+			type: 'code',
+			code: e.code_edit.val,
+		}, function(s) {
+			if (location.pathname.starts('/sign-in'))
+				exec('/')
+			else
+				e.close()
+		}, function(err) {
+			e.code_edit.errors = [{message: err, passed: false}]
+			e.code_edit.focus()
+		})
+	}
 
-action.sign_in_code = function() {
-	sign_in_code_edit.errors = null
-	sign_in_page_slides.slide(1)
-}
+	return e
+})
 
 flap.sign_in = function(on) {
-	sign_in_page_slides.show(on)
-	if (!on)
-		sign_in_page_slides.slide(0)
+	let d = sign_in_dialog()
+	if (on) {
+		d.modal()
+	} else if (d) {
+		d.close()
+	}
 }
 
-document.on('sign_in_email_edit.init', function(e) {
-	e.field = {not_null: true}
-})
+function sign_in() {
+	setflaps('sign_in')
+	let d = sign_in_dialog()
+	d.email_edit.errors = null
+	d.slides.slide(0)
+}
 
-document.on('sign_in_code_edit.init', function(e) {
-	e.field = {not_null: true}
-})
+function sign_in_code() {
+	setflaps('sign_in')
+	let d = sign_in_dialog()
+	d.code_edit.errors = null
+	d.slides.slide(1)
+}
 
-document.on('sign_in_email_button.init', function(e) {
-	e.action = function() {
-		post(href('/sign-in-email.json'), {
-			email: sign_in_email_edit.val,
-		}, function() {
-			exec('/sign-in-code')
-		}, function(err) {
-			sign_in_email_edit.errors = [{message: err, passed: false}]
-			sign_in_email_edit.focus()
-		})
-	}
-})
-
-document.on('sign_in_code_button.init', function(e) {
-	e.action = function() {
-		post(href('/login.json'), {
-			type: 'code',
-			code: sign_in_code_edit.val,
-		}, function(s) {
-			exec('/account')
-		}, function(err) {
-			sign_in_code_edit.errors = [{message: err, passed: false}]
-			sign_in_code_edit.focus()
-		})
-	}
-})
+action.sign_in = sign_in
+action.sign_in_code = sign_in_code
 
 function init_auth() {
-
 	post(href('/login.json'), {}, function(usr) {
 		broadcast('usr_changed', usr)
 	}, function(err) {
 		notify(err, 'error')
 	})
-
-}
-
-action.sign_in = function() {
-	let dialog = unsafe_html(render('sign_in_dialog')).modal()
-	dialog.on('close', function() {
-		exec('/')
-	})
-	sign_in_email_edit.errors = null
-	sign_in_page_slides.slide(0)
 }
 

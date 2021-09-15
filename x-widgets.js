@@ -1371,7 +1371,7 @@ component('x-button', 'Input', function(e) {
 	e.prop('bare'   , {store: 'var', type: 'bool', attr: true})
 
 	e.activate = function() {
-		if (e.disabled)
+		if (e.effectively_hidden || e.effectively_disabled)
 			return
 		if (e.href) {
 			exec(e.href)
@@ -1457,6 +1457,25 @@ component('x-button', 'Input', function(e) {
 	e.text_box.on('blur', function() {
 		e.widget_editing = false
 	})
+
+	// ajax actions -----------------------------------------------------------
+
+	e.set_loading = function(on) {
+		e.disabled = on
+	}
+
+	e.post = function(url, data, success, fail, opt) {
+		e.set_loading(true)
+		function on_success(...args) {
+			e.set_loading(false)
+			success(...args)
+		}
+		function on_fail(...args) {
+			e.set_loading(false)
+			fail(...args)
+		}
+		post(url, data, on_success, on_fail, opt)
+	}
 
 })
 
@@ -2675,9 +2694,9 @@ component('x-dialog', function(e) {
 
 	e.init = function() {
 
-		e.header  = e.header  || e.$1('header' ) || tag('header' )
+		e.header  = e.header  || e.$1('header' ) || tag('header', {hidden: true})
 		e.content = e.content || e.$1('content') || tag('content')
-		e.footer  = e.footer  || e.$1('footer' ) || tag('footer' )
+		e.footer  = e.footer  || e.$1('footer' ) || tag('footer', {hidden: true})
 		e.clear()
 
 		e.header  .classes = 'x-dialog-header'
@@ -2687,12 +2706,15 @@ component('x-dialog', function(e) {
 		if (e.heading != null) {
 			let heading = div({class: 'x-dialog-heading'}, e.heading)
 			e.header.add(heading)
+			e.header.show()
 		}
 
-		if (e.buttons || e.buttons_layout)
+		if (e.buttons || e.buttons_layout) {
 			e.footer.set(action_band({
 				layout: e.buttons_layout, buttons: e.buttons
 			}))
+			e.footer.show()
+		}
 
 		e.add(e.header, e.content, e.footer)
 
@@ -2712,8 +2734,11 @@ component('x-dialog', function(e) {
 	})
 
 	e.on('keyup', function(key) {
-		if (key == 'Escape')
+		if (key == 'Escape') {
+			if (e.x_button)
+				e.x_button.class('active', false)
 			e.cancel()
+		}
 		else if (key == 'Enter')
 			e.ok()
 	})
@@ -2726,13 +2751,21 @@ component('x-dialog', function(e) {
 	}
 
 	e.cancel = function() {
-		if (e.fire('cancel'))
+		let cancel_btn = e.$('x-button[cancel]')[0]
+		if (cancel_btn)
+			cancel_btn.activate()
+		else
 			e.close()
 	}
 
 	e.ok = function() {
-		if (e.fire('ok'))
-			e.close()
+		for (btn of e.$('x-button[primary]')) {
+			if (!(btn.effectively_hidden || btn.effectively_disabled)) {
+				btn.activate()
+				return
+			}
+		}
+		e.close()
 	}
 
 })
@@ -3034,14 +3067,16 @@ component('x-slides', 'Containers', function(e) {
 		if (e0) e0.class('x-slide-selected', false)
 		if (e1) e1.class('x-slide-selected', true)
 		if (e1) e.fire('slide_changed', i1)
-		if (e1)
-			e1.focus_first_input_element()
 	}
 
 	e.prop('selected_index', {store: 'var'})
 
+	e.property('selected_item', () => e.items[e.selected_index])
+
 	e.slide = function(i) {
 		e.selected_index = i
+		if (e.selected_item)
+			e.selected_item.focus_first_input_element()
 	}
 
 	return {items: html_items}
