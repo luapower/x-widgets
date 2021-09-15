@@ -3,10 +3,14 @@
 	DOM manipulation & extensions.
 	Written by Cosmin Apreutesei. Public domain.
 
-	Dependencies: glue.js.
+	Dependencies:
+		glue.js.
 
 	CSS Requirements:
 		[hidden] { display: none !important; }
+
+	Init requirements:
+		init_components()
 
 	element attribute manipulation:
 		e.hasattr(k)
@@ -1559,6 +1563,7 @@ method(Element, 'modal', function(on) {
 			dialog.showModal()
 		e.focus()
 	}
+	return e
 })
 
 // tab focus trapping on popups ----------------------------------------------

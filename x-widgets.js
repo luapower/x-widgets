@@ -2710,6 +2710,7 @@ component('x-dialog', function(e) {
 		e.modal(false)
 		if (e.x_button)
 			e.x_button.class('active', false)
+		e.fire('close')
 	}
 
 	e.cancel = function() {
