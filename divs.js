@@ -1560,15 +1560,14 @@ method(Element, 'modal', function(on) {
 				padding: 0;
 				background-color: rgba(0,0,0,0.4);
 				display: grid;
-				justify-content: stretch;
+				justify-content: center;
+				align-content: center;
 				z-index: 100;
 			`,
 		}, e)
 		dialog.on('pointerdown', () => false)
 		e.dialog = dialog
 		document.body.add(dialog)
-		if (dialog.showModal) // Firefox doesn't have this.
-			dialog.showModal()
 		e.focus()
 	}
 	return e

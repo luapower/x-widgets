@@ -2685,8 +2685,8 @@ component('x-dialog', function(e) {
 		e.footer  .classes = 'x-dialog-footer'
 
 		if (e.heading != null) {
-			e.heading = div({class: 'x-dialog-title'}, e.heading)
-			e.header.add(e.heading)
+			let heading = div({class: 'x-dialog-heading'}, e.heading)
+			e.header.add(heading)
 		}
 
 		if (e.buttons || e.buttons_layout)

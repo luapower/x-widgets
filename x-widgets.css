@@ -2156,7 +2156,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	color: var(--x-fg);
 }
 
-.x-dialog-title {
+.x-dialog-heading {
 	color: var(--x-fg-disabled);
 	font-size: 200%;
 	font-weight: bold;
