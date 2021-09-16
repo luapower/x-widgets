@@ -26,13 +26,13 @@ wwwfile['x-auth.css'] = [[
 	font-size: 1.2em;
 }
 
-.sign-in-page {
+.sign-in-slides {
 	align-self: center;
 	width: 300px;
 	padding: 1em 2em;
 }
 
-.sign-in-page .x-button {
+.sign-in-slides .x-button {
 	//margin: .25em 0;
 }
 
@@ -41,7 +41,10 @@ wwwfile['x-auth.css'] = [[
 template.sign_in_dialog = [[
 <x-dialog>
 	<content>
-		<x-slides class=sign-in-page>
+		{{#logo}}
+			<img class=sign-in-logo src="{{logo}}">
+		{{/logo}}
+		<x-slides class=sign-in-slides>
 
 			<div vflex class="x-flex">
 				<div class=x-dialog-heading>

@@ -1,3 +1,4 @@
+{
 
 function set_night_mode(v) {
 	document.body.attr('theme', v ? 'dark' : null)
@@ -56,7 +57,7 @@ function init_user_settings_nav(module) {
 let settings_nav
 
 window.on('load', function() {
-	let module = $('x-settings-button')[0].module
+	let module = $1('x-settings-button').module
 	settings_nav = init_user_settings_nav(module)
 })
 
@@ -67,7 +68,7 @@ component('x-settings-button', function(e) {
 	e.xoff()
 	e.bare = true
 	e.text = ''
-	e.icon = 'fa fa-cog'
+	e.icon = 'fa fa-user-circle'
 	e.xon()
 
 	let tt
@@ -91,10 +92,20 @@ component('x-settings-button', function(e) {
 				set_night_mode(v)
 			})
 
-			let sign_in_button = button({
-				text: S('button_text_sign_in', 'Sign-In'),
-				action: () => { tt.close(); sign_in(); },
-			})
+			let sign_in_button, logout_button
+			if (!usr || usr.anonymous) {
+				sign_in_button = button({
+					text: S('button_text_sign_in', 'Sign-In'),
+					action: () => { tt.close(); sign_in(); },
+				})
+			} else {
+				logout_button = button({
+					text: S('button_text_log_out', 'Log out'),
+					bare: true,
+					icon: 'fa fa-sign-out-alt',
+					action: () => { tt.close(); sign_out(); },
+				})
+			}
 
 			let settings_form = div({style: `
 					display: flex;
@@ -102,6 +113,7 @@ component('x-settings-button', function(e) {
 				`},
 				night_mode,
 				sign_in_button,
+				logout_button,
 			)
 
 			tt = tooltip({
@@ -122,9 +134,9 @@ component('x-settings-button', function(e) {
 
 let sign_in_dialog = memoize(function() {
 
-	let e = unsafe_html(render('sign_in_dialog'))
+	let e = unsafe_html(render('sign_in_dialog', window.sign_in_options))
 
-	e.slides       = e.$1('.sign-in-page')
+	e.slides       = e.$1('.sign-in-slides')
 	e.email_edit   = e.$1('.sign-in-email-edit')
 	e.code_edit    = e.$1('.sign-in-code-edit')
 	e.email_button = e.$1('.sign-in-email-button')
@@ -147,54 +159,82 @@ let sign_in_dialog = memoize(function() {
 
 	e.code_button.action = function() {
 		let d = sign_in_dialog()
-		e.code_button.post(href('/login.json'), {
-			type: 'code',
-			code: e.code_edit.val,
-		}, function(s) {
-			if (location.pathname.starts('/sign-in'))
-				exec('/')
-			else
-				e.close()
-		}, function(err) {
-			e.code_edit.errors = [{message: err, passed: false}]
-			e.code_edit.focus()
-		})
+		call_login({
+				type: 'code',
+				code: e.code_edit.val,
+			},
+			e.code_button,
+			function() {
+				if (location.pathname.starts('/sign-in'))
+					exec('/')
+				else
+					e.close()
+			},
+			function(err) {
+				e.code_edit.errors = [{message: err, passed: false}]
+				e.code_edit.focus()
+			}
+		)
 	}
 
 	return e
 })
 
-flap.sign_in = function(on) {
-	let d = sign_in_dialog()
-	if (on) {
-		d.modal()
-	} else if (d) {
-		d.close()
-	}
+let sign_in_dialog_modal = function() {
+	return sign_in_dialog().modal()
 }
 
-function sign_in() {
-	setflaps('sign_in')
-	let d = sign_in_dialog()
+let sign_in = function() {
+	let d = sign_in_dialog_modal()
 	d.email_edit.errors = null
 	d.slides.slide(0)
 }
 
-function sign_in_code() {
-	setflaps('sign_in')
-	let d = sign_in_dialog()
+let sign_in_code = function() {
+	let d = sign_in_dialog_modal()
 	d.code_edit.errors = null
 	d.slides.slide(1)
 }
 
-action.sign_in = sign_in
-action.sign_in_code = sign_in_code
+flap.sign_in = function(on) {
+	let d = sign_in_dialog()
+	if (!on && d)
+		d.close()
+}
 
-function init_auth() {
-	post(href('/login.json'), {}, function(usr) {
-		broadcast('usr_changed', usr)
-	}, function(err) {
-		notify(err, 'error')
+action.sign_in = function() {
+	setflaps('sign_in')
+	sign_in()
+}
+
+action.sign_in_code = function() {
+	setflaps('sign_in')
+	sign_in_code()
+}
+
+let call_login = function(upload, notify_widget, success, fail) {
+	ajax({
+		url: href('/login.json'),
+		upload: upload || empty,
+		notify: notify_widget,
+		success: function(usr1) {
+			usr = usr1
+			print('usr_changed', usr)
+			broadcast('usr_changed', usr)
+			if (success) success()
+		},
+		fail: function(err) {
+			notify(err, 'error')
+			if (fail) fail(err)
+		},
 	})
+}
+
+init_auth = call_login
+
+let sign_out = function() {
+	call_login({type: 'logout'})
+}
+
 }
 

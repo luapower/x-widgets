@@ -1545,31 +1545,18 @@ method(Element, 'modal', function(on) {
 	let e = this
 	if (on == false) {
 		if (e.dialog) {
+			e.class('modal', false)
+			e.on('modal', false)
 			e.dialog.remove()
 			e.dialog = null
 		}
 	} else if (!e.dialog) {
-		let dialog = div({
-			style: `
-				position: fixed;
-				left: 0;
-				top: 0;
-				width: 100%;
-				height: 100%;
-				overflow: auto;
-				border: 0;
-				margin: 0;
-				padding: 0;
-				background-color: rgba(0,0,0,0.4);
-				display: grid;
-				justify-content: center;
-				align-content: center;
-				z-index: 100; /* show over 10 levels of popups */
-			`,
-		}, e)
+		let dialog = div({class: 'modal-dialog'}, e)
 		e.dialog = dialog
+		e.class('modal')
 		dialog.popup_level = 10 // make popups aware of our level.
 		document.body.add(dialog)
+		e.on('modal', true)
 		e.focus()
 	}
 	return e
@@ -1579,7 +1566,7 @@ method(Element, 'modal', function(on) {
 
 document.on('keydown', function(key, shift, ctrl, alt, ev) {
 	if (key == 'Tab') {
-		let popup = ev.target.closest('.popup')
+		let popup = ev.target.closest('.popup, .modal')
 		if (!popup)
 			return
 		let focusables = popup.focusables()

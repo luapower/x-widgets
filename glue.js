@@ -1229,7 +1229,7 @@ function url(t) {
 	ajax(opt) -> req
 		opt.url
 		opt.upload: object (sent as json) | s
-		opt.timeout
+		opt.timeout (browser default)
 		opt.method ('POST' or 'GET' based on req.upload)
 		opt.slow_timeout (4)
 		opt.headers: {h->v}
@@ -1237,6 +1237,7 @@ function url(t) {
 		opt.pass
 		opt.async (true)
 		opt.dont_send (false)
+		opt.notify: widget to send 'load' events to
 
 	req.send()
 	req.abort()
@@ -1293,6 +1294,7 @@ function ajax(req) {
 	}
 
 	req.send = function() {
+		fire('start')
 		slow_watch = after(req.slow_timeout, slow_expired)
 		xhr.send(upload)
 		return req
@@ -1369,6 +1371,9 @@ function ajax(req) {
 		req.fire('event', name, arg1, ...rest)
 		if (req.event)
 			req.event(name, arg1, ...rest)
+
+		if (req.notify)
+			req.notify.fire('load', name, arg1, ...rest)
 	}
 
 	req.xhr = xhr

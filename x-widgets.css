@@ -1,26 +1,4 @@
 
-/* divs.js ---------------------------------------------------------------- */
-
-[hidden] { display: none !important; } /* because css `display` overrides it! */
-
-.popup {
-	position: absolute !important;
-	white-space: nowrap; /* expand width to fit contents for `absolute` elements. I know... */
-}
-
-/* element disabled state ------------------------------------------------- */
-
-[disabled] {
-	opacity: .5;
-	filter: grayscale();
-}
-
-[disabled],
-[disabled] *
-{
-	cursor: default !important;
-}
-
 /* variables -------------------------------------------------------------- */
 
 :root {
@@ -549,6 +527,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	border-left-width: 1px;
 	border-color: var(--x-faint);
 	pointer-events: all;
+	cursor: pointer;
 }
 
 .x-tooltip-xbutton:hover {
@@ -2152,8 +2131,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-dialog {
 	display: flex;
 	flex-flow: column;
+	margin: 20px;
 	padding: 1em 1em;
 	color: var(--x-fg);
+	background-color: var(--x-bg-popup);
+	border: 0;
+	border-radius: calc(var(--x-border-radius) * 2);
+	box-shadow: var(--x-shadow-dialog);
 }
 
 .x-dialog-heading {
@@ -2161,14 +2145,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	font-size: 200%;
 	font-weight: bold;
 	margin: .25em 0;
-}
-
-.x-dialog {
-	background-color: var(--x-bg-popup);
-	border-radius: calc(var(--x-border-radius) * 2);
-	margin: 20px;
-	border: 0;
-	box-shadow: var(--x-shadow-dialog);
 }
 
 .x-dialog-xbutton {

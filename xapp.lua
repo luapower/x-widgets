@@ -16,84 +16,22 @@ require'xrowset_sql'
 
 randomseed(require'time'.clock())
 
-css[[
-
-/* reset ------------------------------------------------------------------ */
-
-* { box-sizing: border-box; }
-
-html, body, table, tr, td, div, img, hr, button {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
-
-img {
-	display: block; /* don't align to surrounding text */
-	max-width: 100%; /* make shrinkable */
-}
-
-html, body {
-	overflow-y: auto; /* fix the most annoying thing */
-	width: 100%;
-	height: 100%;
-}
-
-body[opensans] {
-	font-size: 14px;
-	line-height: 150%;
-}
-
-img {
-	display: block; /* don't align to surrounding text */
-	max-width: 100%; /* make shrinkable */
-}
-
-a {
-	cursor: pointer;
-	text-decoration: none;
-}
-
-a:not([disabled]),
-a:not([disabled]):visited
-{
-	color: #000;
-}
-
-a[href]:not([disabled]):hover {
-	color: #cc8800;
-}
-
-hr {
-	border-top: 1px solid #ccc;
-	margin-top: 20px;
-	margin-bottom: 20px;
-}
-
-/* general vocabulary ----------------------------------------------------- */
-
-[nowrap] { white-space: nowrap; }
-[gray], [gray] a, [gray] a:visited { color: #999; }
-[gray] a { text-decoration: underline; }
-[small] { font-size: 13px; }
-[tight] { line-height: 130%; }
-
-[vflex] { display: flex; flex-flow: column; }
-
-]]
+cmd = {}
 
 js[[
 
-on_dom_load(function() {
+function init() {
 	init_components()
 	init_auth()
 	init_action()
-})
+}
+on_dom_load(init)
 
 ]]
 
 cssfile[[
 fontawesome.css
+divs.css
 x-widgets.css
 ]]
 
@@ -129,14 +67,18 @@ function xapp.app(codename)
 
 	local app = {}
 
-	local cmd = {}
-	app.cmd = cmd
-
 	--config ------------------------------------------------------------------
 
 	config('app_codename', codename)
 	pcall(require, codename..'_conf')
 	Sfile(codename..'.lua')
+
+	if app.font == 'opensans' then
+		fontfile'OpenSans-Regular.ttf'
+		fontfile'OpenSans-SemiBold.ttf'
+		fontfile'OpenSansCondensed-Light.ttf'
+		fontfile'OpenSansCondensed-Bold.ttf'
+	end
 
 	--schema ------------------------------------------------------------------
 
@@ -153,16 +95,22 @@ function xapp.app(codename)
 
 	--website -----------------------------------------------------------------
 
+	app.respond = glue.noop
+	app.spa = glue.noop
+
 	config('main_module', function()
-		check(action(unpack(args())))
+		if not app.respond() then
+			check(action(unpack(args())))
+		end
 	end)
 
 	action['404.html'] = function(action)
 		spa(update({
 				body = html(),
 				body_classes = 'x-container',
+				body_attrs = catargs(' ', app.fullscreen, app.font),
 				client_action = true,
-			}, app))
+			}, app.spa(action)))
 	end
 
 	--cmdline -----------------------------------------------------------------

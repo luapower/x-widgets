@@ -1458,23 +1458,18 @@ component('x-button', 'Input', function(e) {
 		e.widget_editing = false
 	})
 
-	// ajax actions -----------------------------------------------------------
+	// ajax notifications -----------------------------------------------------
 
-	e.set_loading = function(on) {
-		e.disabled = on
+	e.on('load', function(ev, ...args) {
+		e.disabled = ev == 'start'
+	})
+
+	e.load = function(url, success, fail, opt) {
+		return get(url, success, fail, assign({notify: e}, opt))
 	}
 
-	e.post = function(url, data, success, fail, opt) {
-		e.set_loading(true)
-		function on_success(...args) {
-			e.set_loading(false)
-			success(...args)
-		}
-		function on_fail(...args) {
-			e.set_loading(false)
-			fail(...args)
-		}
-		post(url, data, on_success, on_fail, opt)
+	e.post = function(url, upload, success, fail, opt) {
+		return post(url, upload, success, fail, assign({notify: e}, opt))
 	}
 
 })
@@ -2727,20 +2722,36 @@ component('x-dialog', function(e) {
 		}
 	}
 
-	e.on('keydown', function(key) {
-		if (key == 'Escape')
-			if (e.x_button)
-				e.x_button.class('active', true)
+	e.on('bind', function(on) {
+		document.on('keydown', doc_keydown, on)
+		document.on('keyup', doc_keyup, on)
+		document.on('pointerdown', doc_pointerdown, on)
 	})
 
-	e.on('keyup', function(key) {
-		if (key == 'Escape') {
-			if (e.x_button)
-				e.x_button.class('active', false)
+	function doc_keydown(key) {
+		if (key == 'Escape' && e.x_button) {
+			e.x_button.class('active', true)
+		}
+	}
+
+	function doc_keyup(key) {
+		if (key == 'Escape' && e.x_button && e.x_button.hasclass('active')) {
+			e.x_button.class('active', false)
 			e.cancel()
 		}
-		else if (key == 'Enter')
+	}
+
+	function doc_pointerdown(ev) {
+		if (e.positionally_contains(ev.target)) // clicked inside the dialog
+			return
+		e.cancel()
+	}
+
+	e.on('keyup', function(key) {
+		if (key == 'Enter') {
 			e.ok()
+			return false
+		}
 	})
 
 	e.close = function() {
@@ -2751,7 +2762,7 @@ component('x-dialog', function(e) {
 	}
 
 	e.cancel = function() {
-		let cancel_btn = e.$('x-button[cancel]')[0]
+		let cancel_btn = e.$1('x-button[cancel]')
 		if (cancel_btn)
 			cancel_btn.activate()
 		else
