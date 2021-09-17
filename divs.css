@@ -35,7 +35,9 @@ img {
 }
 
 hr {
-	border-top: 1px solid #ccc;
+	border: 0;
+	border-top-width: 1px;
+	border-top-style: solid;
 }
 
 [hidden] { display: none !important; } /* because css `display` overrides it! */

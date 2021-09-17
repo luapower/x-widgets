@@ -119,6 +119,9 @@ function virtual_rowset(init, ...)
 
 			local client_field = {}
 			for k in pairs(f) do
+				if type(f[k]) == 'function' then
+					f[k] = f[k]()
+				end
 				if client_field_attrs[k] then
 					client_field[k] = f[k]
 				end

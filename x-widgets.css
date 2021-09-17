@@ -83,6 +83,8 @@
 	--x-selected-widget-outline-color         : #666;
 	--x-selected-widget-outline-color-focused : blue;
 
+	--x-outline-focused            : #000;
+
 	/* these need to be opaque! */
 	--x-item-bg-unfocused          : #999;
 	--x-item-bg-focused            : #ddd;
@@ -649,7 +651,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-widget:focus-within > .x-focus-box {
 	border-color: var(--x-border-focused);
 	box-shadow  : var(--x-shadow-focused);
-	outline: 2px solid black;
+	outline: 2px solid var(--x-outline-focused);
 	outline-offset: -1px;
 }
 
@@ -2160,7 +2162,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background-color: var(--x-bg-button);
 	color: var(--x-fg-button);
 	-webkit-text-stroke: 1px var(--x-stroke-dialog-xbutton);
 }
@@ -2168,7 +2169,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-dialog-xbutton:hover,
 .x-dialog-xbutton.active
 {
-	background-color: var(--x-bg-error);
+	background-color: var(--x-bg-button);
 }
 
 .x-dialog-header {
@@ -3100,6 +3101,8 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-fg-inverted          : #fff;
 	--x-p                    : #bbb;
 	--x-bg                   : #151519;
+	--x-fg-info              : var(--x-fg-inverted);
+	--x-bg-error             : var(--x-bg);
 	--x-bg-popup             : #26262c;
 	--x-fg-disabled          : #ffffff66;
 	--x-fg-disabled-inverted : var(--x-fg-disabled);
@@ -3128,6 +3131,8 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-selected-widget-outline-color         : #aaa;
 	--x-selected-widget-outline-color-focused : var(--x-markbox-icon-color);
 
+	--x-outline-focused: #999;
+
 	/* these need to be opaque! */
 	--x-item-bg-unfocused-selected : #3a3f42;
 	--x-item-bg-unselected         : #1d2021;
@@ -3139,22 +3144,14 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	color: var(--x-fg);
 }
 
-body[theme=dark] {
+[theme=dark] {
 	background-color: var(--x-bg);
 }
 
 /* dark widget on white body */
 body:not([theme=dark]) [theme=dark] {
+	--x-bg: var(--x-bg-popup);
 	background-color: var(--x-bg);
-
-	--x-l-border-focused                :  #99d;
-	--x-l-border-focused-button         :  #aab;
-	--x-l-border-focused-button-primary :  #363;
-
-	/* copy-pasted from the light theme to re-evaluate `--x-border-*` vars */
-	--x-shadow-focused                :  0    0    0   1px var(--x-l-border-focused);
-	--x-shadow-focused-button         :  0    0    0px 1px var(--x-l-border-focused-button);
-	--x-shadow-focused-button-primary :  0    0    0px 1px var(--x-l-border-focused-button-primary);
 }
 
 [theme=dark]::-webkit-scrollbar,
@@ -3182,6 +3179,10 @@ body:not([theme=dark]) [theme=dark] {
 {
 	color: #000;
 	background-color: #ff0;
+}
+
+[theme=dark] img[invertable] {
+	filter: invert(1);
 }
 
 /* thin scrollbars option ------------------------------------------------- */

@@ -1734,3 +1734,31 @@ function live_move_mixin(e) {
 	return e
 }
 
+
+// lazy image loading --------------------------------------------------------
+
+{
+let lazy_load_all = function() {
+	for (let img of $('img[data-src]')) {
+		if (img.is_in_viewport(300)) {
+			let src = img.attr('data-src')
+			img.attr('data-src', null)
+			img.attr('src', src)
+		}
+	}
+}
+window.on('scroll', lazy_load_all)
+window.on('resize', lazy_load_all)
+on_dom_load(function() {
+	document.body.on('scroll', lazy_load_all)
+})
+
+let lazy_load = function(img) {
+	if (img.is_in_viewport(300)) {
+		let src = img.attr('data-src')
+		img.attr('data-src', null)
+		img.attr('src', src)
+	}
+}
+bind_component('img', lazy_load, 'img[data-src]')
+}

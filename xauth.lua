@@ -52,7 +52,7 @@ template.sign_in_dialog = [[
 				</div>
 				<p small>
 				The security of your account is important to us.
-				So instead having you set up a hard-to-remember password,
+				That is why instead of having you set up a hard-to-remember password,
 				we will send you a one-time activation code every time
 				you need to sign in.
 				</p>
