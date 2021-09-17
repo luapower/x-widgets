@@ -73,7 +73,12 @@ hr {
 
 /* general vocabulary ----------------------------------------------------- */
 
-[nowrap] { white-space: nowrap; }
+[nowrap] {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
 [gray], [gray] a, [gray] a:visited { color: #999; }
 [gray] a { text-decoration: underline; }
 [small] { font-size: 95%; }
@@ -82,4 +87,3 @@ hr {
 [i] { font-style: italic; }
 
 [vflex] { display: flex; flex-flow: column; }
-

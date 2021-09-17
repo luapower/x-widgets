@@ -2363,12 +2363,15 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 /* grid ------------------------------------------------------------------- */
 
+:root {
+	--x-grid-header-height: 3.4em;
+}
+
 .x-grid {
 	display: flex;
 	flex-flow: column;
 	overflow: hidden;          /* hide header overflow */
 	cursor: default;           /* don't show caret over text */
-	--header-height: 3.4em;
 }
 
 .x-vgrid {
@@ -2387,11 +2390,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	border-color: var(--x-border-light);
 	border-style: solid;
 	border-bottom-width: 1px;
-	min-height: calc(var(--header-height) + 1px);
+	min-height: calc(var(--x-grid-header-height) + 1px);
 }
 
 .x-grid-header.with-filters {
-	min-height: calc(var(--header-height) + 1px + .9em);
+	min-height: calc(var(--x-grid-header-height) + 1px + .9em);
 }
 
 .x-vgrid > .x-grid-header {
@@ -2641,7 +2644,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 .x-grid-progress-bar {
 	position: absolute;
-	top: calc(var(--header-height) - 2px);
+	top: calc(var(--x-grid-header-height) - 2px);
 	width: 0%;
 	height: 2px;
 	pointer-events: none;
