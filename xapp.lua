@@ -138,7 +138,7 @@ function xapp.app(codename)
 
 		local s = ... or 'help'
 		local cmd = s and cmd[s:gsub('-', '_')] or cmd.help
-		cmd(select(2, ...))
+		return cmd(select(2, ...))
 	end
 
 	return app
