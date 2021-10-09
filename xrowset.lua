@@ -76,7 +76,7 @@ local noop = glue.noop
 rowset = {}
 
 action['rowset.json'] = function(name)
-	return check(rowset[name])()
+	return checkfound(rowset[name])()
 end
 
 field_type_attrs = {}
@@ -413,9 +413,9 @@ rowset.S = virtual_rowset(function(self, ...)
 	end
 
 	local function update_key(vals)
-		local ext  = check(json_str_arg(vals['ext:old']))
-		local id   = check(json_str_arg(vals['id:old']))
-		local lang = check(json_str_arg(vals['param:lang']))
+		local ext  = checkarg(json_str_arg(vals['ext:old']))
+		local id   = checkarg(json_str_arg(vals['id:old']))
+		local lang = checkarg(json_str_arg(vals['param:lang']))
 		return ext, id, lang
 	end
 

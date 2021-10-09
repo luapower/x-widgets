@@ -1,22 +1,17 @@
 --[==[
 
-	x-widgets-based apps
+	webb | x-widgets-based apps
 	Written by Cosmin Apreutesei. Public Domain.
 
 ]==]
 
-local xapp = {}
-
 local ffi = require'ffi'
 ffi.tls_libname = 'tls_bearssl'
 
-require'$'
 require'webb_spa'
 require'xrowset_sql'
 
-randomseed(require'time'.clock())
-
-cmd = {}
+math.randomseed(require'time'.clock())
 
 js[[
 
@@ -63,15 +58,13 @@ fontfile'fa-solid-900.ttf'
 
 require'xauth'
 
-function xapp.app(codename)
+return function(app)
 
-	local app = {}
+	config('app_name', app_name)
 
 	--config ------------------------------------------------------------------
 
-	config('app_codename', codename)
-	pcall(require, codename..'_conf')
-	Sfile(codename..'.lua')
+	Sfile((config'app_name')..'.lua')
 
 	if app.font == 'opensans' then
 		fontfile'OpenSans-Regular.ttf'
@@ -84,7 +77,7 @@ function xapp.app(codename)
 
 	function cmd.install()
 		srun(function()
-			local schema = config('db_schema', codename)
+			local schema = config('db_schema', app_name)
 			with_config({db_schema = false}, function()
 				create_schema(schema)
 				use_schema(schema)
@@ -100,7 +93,7 @@ function xapp.app(codename)
 
 	config('main_module', function()
 		if not app.respond() then
-			check(action(unpack(args())))
+			checkfound(action(unpack(args())))
 		end
 	end)
 
@@ -115,33 +108,10 @@ function xapp.app(codename)
 
 	--cmdline -----------------------------------------------------------------
 
-	function cmd.help()
-		print'Commands:'
-		for k,v in sortedpairs(cmd) do
-			print('', k)
-		end
-	end
-
 	function cmd.start()
-		local server = http_server()
+		local server = webb.server()
 		server.start()
-	end
-
-	function app.run(...)
-		if ... == codename then --loaded with require().
-			return app
-		else
-			--loaded from cmdline: consider this module loaded so that
-			--other submodules that require it don't try to load it again.
-			package.loaded[codename] = app
-		end
-
-		local s = ... or 'help'
-		local cmd = s and cmd[s:gsub('-', '_')] or cmd.help
-		return cmd(select(2, ...))
 	end
 
 	return app
 end
-
-return xapp
