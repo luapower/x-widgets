@@ -109,7 +109,7 @@ return function(app)
 	--cmdline -----------------------------------------------------------------
 
 	function cmd.start()
-		local server = webb.server()
+		local server = webb.server(app.server_options)
 		server.start()
 	end
 
