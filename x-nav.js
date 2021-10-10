@@ -96,6 +96,7 @@ rowset row attributes:
 	row.is_new         : new row, not added on server yet.
 	row.modified       : one or more row cells were modified.
 	row.removed        : removed row, not removed on server yet.
+	row.has_errors     : row has errors, cannot be saved (null means not validated).
 
 fields:
 	publishes:
@@ -315,8 +316,7 @@ function nav_widget(e) {
 	e.prop('stay_in_edit_mode'       , {store: 'var', type: 'bool', default: true , hint: 're-enter edit mode after navigating'})
 	e.prop('auto_advance_row'        , {store: 'var', type: 'bool', default: false, hint: 'jump row on horizontal navigation limits'})
 	e.prop('save_row_on'             , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual']})
-	e.prop('save_new_row_on'         , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['insert', 'input', 'exit_edit', 'exit_row', 'manual']})
-	e.prop('save_row_on_insert'      , {store: 'var', type: 'bool', default: false})
+	e.prop('save_new_row_on'         , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual', 'insert']})
 	e.prop('save_row_remove_on'      , {store: 'var', type: 'enum', default: 'input'    , enum_values: ['input', 'exit_row', 'manual']})
 	e.prop('save_row_move_on'        , {store: 'var', type: 'enum', default: 'input'    , enum_values: ['input', 'manual']})
 	e.prop('can_exit_edit_on_errors' , {store: 'var', type: 'bool', default: true , hint: 'allow exiting edit mode on validation errors'})
@@ -2190,6 +2190,28 @@ function nav_widget(e) {
 			return false
 	}
 
+	function validate_row(row) {
+		if (row.has_errors == false)
+			return true
+		let has_errors = false
+		let can_exit_row = true
+		for (let field of e.all_fields) {
+			let errors = e.cell_state(row, field, 'errors')
+			if (!errors) { // not validated
+				let val = e.cell_input_val(row, field)
+				errors = e.validate_val(field, val, row)
+				e.set_cell_state(row, field, 'errors', errors)
+			}
+			if (!errors.passed) {
+				has_errors = true
+				if (errors.must_not_allow_exit_row)
+					can_exit_row = false
+			}
+		}
+		row.has_errors = has_errors
+		return !has_errors || (can_exit_row && e.can_exit_row_on_errors)
+	}
+
 	function cells_modified(row) {
 		for (let field of e.all_fields)
 			if (e.cell_state(row, field, 'modified'))
@@ -2207,26 +2229,49 @@ function nav_widget(e) {
 		return false
 	}
 
+	function save_when(when, row) {
+		if (e.save_row == 'manual')
+			return
+		if (
+			   (row.is_new   && e.save_new_row_on    == when)
+			|| (row.modified && e.save_row_on        == when)
+			|| (row.removed  && e.save_row_remove_on == when)
+		) {
+			e.save()
+		}
+	}
+
 	e.set_cell_val = function(row, col, val, ev) {
+
 		let field = fld(col)
+
 		if (field.nosave) {
 			e.reset_cell_val(row, field, val, ev)
 			return
 		}
+
 		if (val === undefined)
 			val = null
 		val = e.convert_val(field, val, row, ev)
 
 		let cur_val = row[field.val_index]
 
-		// some validators use `input_val` directly instead of the supplied `val`.
+		// some validators use `input_val` directly instead of the supplied `val` !
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
+
+		if (!input_val_changed)
+			return
+
+		let errors0 = cell_state(row, field, 'errors')
+		let invalid0 = errors0 ? !errors0.passed : null
 
 		let errors = e.validate_val(field, val, row, ev)
 		let invalid = !errors.passed
 		let val_changed = !invalid && val !== cur_val
-
 		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
+
+		if (invalid !== invalid0)
+			row.has_errors = null
 
 		if (val_changed) {
 
@@ -2258,8 +2303,7 @@ function nav_widget(e) {
 		if (cell_errors_changed)
 			cell_state_changed(row, field, 'errors', errors, ev)
 
-		if (e.save_row_on == 'input' && (!row.is_new || e.save_new_row_on == 'input'))
-			e.save()
+		save_when('input', row)
 
 		return !invalid
 	}
@@ -2296,7 +2340,6 @@ function nav_widget(e) {
 
 		return !invalid
 	}
-
 
 	e.set_cell_errors = function(row, col, errors, ev) {
 		return e.set_cell_state(row, col, 'errors', errors, undefined, true, ev)
@@ -2382,20 +2425,17 @@ function nav_widget(e) {
 		if (!e.editor)
 			return true
 
+		let row = e.focused_row
+
 		if (!force)
-			if (!cell_is_valid(e.focused_row, e.focused_field, 'exit_edit'))
+			if (!cell_is_valid(row, e.focused_field, 'exit_edit'))
 				return false
 
 		if (!e.fire('exit_edit', e.focused_row_index, e.focused_field_index, force))
 			if (!force)
 				return false
 
-		if (e.save_row_on == 'exit_edit'
-			|| (e.save_row_on != 'manual' && row.is_new   && e.save_new_row_on == 'exit_edit')
-			|| (e.save_row_on != 'manual' && row.modified && e.save_row_on     == 'exit_edit')
-		) {
-			e.save()
-		}
+		save_when('exit_edit', row)
 
 		let had_focus = e.hasfocus
 
@@ -2429,12 +2469,10 @@ function nav_widget(e) {
 			if (!cell_is_valid(e.focused_row, e.focused_field, 'exit_row'))
 				return false
 
-		if (e.save_row_on == 'exit_row'
-			|| (e.save_row_on != 'manual' && row.is_new  && e.save_new_row_on     == 'exit_row')
-			|| (e.save_row_on != 'manual' && row.removed && e.save_row_remove_on  == 'exit_row')
-		) {
-			e.save()
-		}
+		if (!validate_row(row))
+			return false
+
+		save_when('exit_row', row)
 
 		return true
 	}
@@ -2628,8 +2666,6 @@ function nav_widget(e) {
 				changed_rows.push(row0)
 				rows_updated = true
 
-				row_changed(row0)
-
 			} else {
 
 				// set server default value for `undefined` values only.
@@ -2685,7 +2721,7 @@ function nav_widget(e) {
 
 				// force-save even though it wasn't modified (no user input).
 				// `client_default` values must be enough for an insert in db.
-				if (e.save_row_on_insert)
+				if (e.save_new_row_on == 'insert')
 					row_changed(row, true)
 
 			}
@@ -2709,8 +2745,10 @@ function nav_widget(e) {
 		if (ev.focus_it)
 			e.focus_cell(ri1, true, 0, 0, ev)
 
-		if (e.save_row_on != 'manual' && e.save_row_on_insert)
-			e.save()
+		if (rows_added)
+			if (e.save_row_on != 'manual')
+				if (e.save_new_row_on == 'insert')
+					e.save()
 
 		e.end_update()
 
@@ -2834,8 +2872,10 @@ function nav_widget(e) {
 		if (changed_rows.length || removed_rows.size)
 			e.update({state: !!changed_rows.length, rows: !!removed_rows.size})
 
-		if (rows_marked && e.save_row_on != 'manual' && e.save_row_remove_on == 'input')
-			e.save()
+		if (rows_marked)
+			if (e.save_row_on != 'manual')
+				if (e.save_row_remove_on == 'input')
+					e.save()
 
 		e.end_update()
 
@@ -3166,7 +3206,9 @@ function nav_widget(e) {
 
 		for (let row of e.changed_rows) {
 			if (row.save_request)
-				return // currently saving this row.
+				continue // currently saving this row.
+			if (row.has_errors != false)
+				continue
 			if (row.is_new) {
 				let t = {type: 'new', values: obj()}
 				for (let fi = 0; fi < e.all_fields.length; fi++) {
@@ -3393,7 +3435,7 @@ function nav_widget(e) {
 	e.serialize_all_rows = function(row) {
 		let rows = []
 		for (let row of e.all_rows)
-			if (!row.removed && !row.nosave) {
+			if (!row.removed && !row.nosave && row.has_errors != false) {
 				let drow = e.serialize_row(row)
 				rows.push(drow)
 			}
@@ -3422,7 +3464,7 @@ function nav_widget(e) {
 	e.serialize_all_row_vals = function() {
 		let rows = []
 		for (let row of e.all_rows)
-			if (!row.removed && !row.nosave) {
+			if (!row.removed && !row.nosave && row.has_errors != false) {
 				let vals = e.serialize_row_vals(row)
 				if (e.save_row(vals) !== 'skip')
 					rows.push(vals)

@@ -2055,7 +2055,7 @@ component('x-modeleditor', function(e) {
 			header_visible: false,
 			stay_in_edit_mode: false,
 			can_exit_edit_on_errors: false,
-			save_row_on_insert: true,
+			save_new_row_on: 'insert',
 			enable_context_menu: false,
 			can_select_widget: false,
 
