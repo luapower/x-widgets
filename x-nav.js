@@ -16,12 +16,12 @@ rowset:
 		e.reset()
 
 rowset attributes:
-	fields: [field1,...]
-	rows: [row1,...]
-	pk: 'col1 ...'    : primary key for making changesets.
-	id_col: 'col'     : id column for tree-forming along with parent_col.
-	parent_col: 'col' : parent colum for tree-forming.
-	pos_col: 'col'    : position column for manual reordering of rows.
+	fields     : [field1,...]
+	rows       : [row1,...]
+	pk         : 'col1 ...'    : primary key for making changesets.
+	id_col     : 'col'         : id column for tree-forming along with parent_col.
+	parent_col : 'col'         : parent colum for tree-forming.
+	pos_col    : 'col'         : position column for manual reordering of rows.
 
 rowset field attributes:
 
@@ -81,16 +81,19 @@ rowset field attributes:
 		compare_types  : f(v1, v2) -> -1|0|1  (for sorting)
 		compare_values : f(v1, v2) -> -1|0|1  (for sorting)
 
-rowset row attributes:
+rowset cell attributes:
 	row[i]             : current cell value (always valid).
+	row[input_val_i]   : currently set cell value, whether valid or not.
+	row[errors_i]      : cell errors array; errors.passed indicates valid input value.
+	row[modified_i]    : value was modified, change not on server yet.
+	row[old_val_i]     : initial value before modifying.
+	row[prev_val_i]    : value before last change.
+
+rowset row attributes:
 	row.focusable      : row can be focused (true).
 	row.editable       : allow modifying (true).
 	row.can_remove     : allow removing (true).
 	row.nosave         : skip saving.
-	row[input_val_i]   : currently set cell value, whether valid or not.
-	row[errors_i]      : cell errors array, only if the cell is invalid.
-	row[modified_i]    : value was modified, change not on server yet.
-	row[old_val_i]     : initial value before modifying.
 	row.is_new         : new row, not added on server yet.
 	row.modified       : one or more row cells were modified.
 	row.removed        : removed row, not removed on server yet.
@@ -253,10 +256,12 @@ loading & saving to server:
 		e.do_update_load_fail()
 		e.load_overlay()
 
-loading & saving to local:
+loading & saving to memory:
 	needs:
 		e.static_rowset
-		e.rowset_vals
+		e.save_row_states
+		e.row_vals
+		e.row_states
 
 display val & text val:
 	publishes:
@@ -352,7 +357,6 @@ function nav_widget(e) {
 				e.free_row(row)
 		e.rowset = rs
 	}
-	e.prop('rowset', {})
 
 	e.on('bind', function(on) {
 		bind_param_nav(on)
