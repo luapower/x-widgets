@@ -11,7 +11,7 @@ typing:
 
 rowset:
 	needs:
-		e.rowset <- rs
+		e.rowset
 	publishes:
 		e.reset()
 
@@ -22,6 +22,10 @@ rowset attributes:
 	id_col     : 'col'         : id column for tree-forming along with parent_col.
 	parent_col : 'col'         : parent colum for tree-forming.
 	pos_col    : 'col'         : position column for manual reordering of rows.
+	can_edit
+	can_add_rows
+	can_remove_rows
+	can_change_rows
 
 rowset field attributes:
 
@@ -381,13 +385,6 @@ function nav_widget(e) {
 		assert(e.focus_cell(false, false, 0, 0, {force_exit_edit: true}))
 	}
 
-	function set_rowset(rs) {
-		if (e.rowset && e.free_row)
-			for (let row of e.rowset.rows)
-				e.free_row(row)
-		e.rowset = rs
-	}
-
 	e.on('bind', function(on) {
 		bind_param_nav(on)
 		bind_linked_lookup_navs(on)
@@ -401,7 +398,7 @@ function nav_widget(e) {
 	})
 
 	e.set_static_rowset = function(rs) {
-		set_rowset(rs)
+		e.rowset = rs
 		e.reload()
 	}
 	e.prop('static_rowset', {store: 'var'})
@@ -425,7 +422,7 @@ function nav_widget(e) {
 	e.prop('rowset_name', {store: 'var', type: 'rowset'})
 
 	e.set_rowset_id = function(v) {
-		set_rowset(xmodule.rowset(v))
+		e.rowset = xmodule.rowset(v)
 		e.reload()
 	}
 	e.prop('rowset_id', {store: 'var', type: 'rowset'})
@@ -938,7 +935,15 @@ function nav_widget(e) {
 
 	// all rows in load order -------------------------------------------------
 
+	function free_all_rows() {
+		if (e.all_rows && e.free_row)
+			for (let row of e.all_rows)
+				e.free_row(row)
+		e.all_rows = null
+	}
+
 	function init_all_rows() {
+		free_all_rows()
 		e.do_update_load_fail(false)
 		update_indices('invalidate')
 		e.all_rows = e.bound && e.rowset && (
@@ -999,8 +1004,30 @@ function nav_widget(e) {
 	e.property('selected_row_index'  , () => e.row_index(e.selected_row))
 	e.property('selected_field_index', () => e.field_index(e.selected_field))
 
+	function can_edit() {
+		return e.can_edit && (!e.rowset || e.rowset.can_edit != false)
+	}
+
+	function can_add_rows() {
+		return can_edit()
+			&& e.can_add_rows
+			&& (!e.rowset || e.rowset.can_add_rows != false)
+	}
+
+	function can_remove_rows() {
+		return can_edit()
+			&& e.can_remove_rows
+			&& (!e.rowset || e.rowset.can_remove_rows != false)
+	}
+
+	function can_change_rows() {
+		return can_edit()
+			&& e.can_change_rows
+			&& (!e.rowset || e.rowset.can_change_rows != false)
+	}
+
 	e.can_change_val = function(row, field) {
-		return e.can_edit && e.can_change_rows
+		return can_change_rows()
 			&& (!row || (row.editable != false && !row.removed))
 			&& (!field || field.editable)
 			&& e.can_focus_cell(row, field)
@@ -2650,7 +2677,7 @@ function nav_widget(e) {
 	// row adding & removing --------------------------------------------------
 
 	e.insert_rows = function(row_vals, ev) {
-		if (!e.can_edit || !e.can_add_rows)
+		if (!can_add_rows())
 			return false
 
 		ev = ev || empty
@@ -2794,7 +2821,7 @@ function nav_widget(e) {
 	}
 
 	e.can_remove_row = function(row, ev) {
-		if (!(e.can_edit && e.can_remove_rows))
+		if (!can_remove_rows())
 			return false
 		if (!row)
 			return true
@@ -3107,11 +3134,6 @@ function nav_widget(e) {
 		e.changed_rows = null // Set(row)
 		rows_moved = false
 
-		e.can_edit        = strict_or(e.rowset.can_edit       , true) && e.can_edit
-		e.can_add_rows    = strict_or(e.rowset.can_add_rows   , true) && e.can_add_rows
-		e.can_remove_rows = strict_or(e.rowset.can_remove_rows, true) && e.can_remove_rows
-		e.can_change_rows = strict_or(e.rowset.can_change_rows, true) && e.can_change_rows
-
 		init_all()
 
 		e.begin_update()
@@ -3213,7 +3235,7 @@ function nav_widget(e) {
 	e.prop('focus_state', {store: 'var'})
 
 	function load_success(rs) {
-		set_rowset(rs)
+		e.rowset = rs
 		e.reset()
 		if (e.focus_state != null && e.pk_fields)
 			e.focus_find_row(e.pk_fields, json_arg(e.focus_state))
