@@ -946,7 +946,7 @@ locale = navigator.language
 
 	for (let i = 0; i < 7; i++) {
 		_d.setTime(1000 * 3600 * 24 * (3 + i))
-		for (how of ['short', 'long'])
+		for (let how of ['short', 'long'])
 			wd[how][i] = _d.toLocaleDateString(lang() || locale, {weekday: how, timeZone: 'UTC'})
 	}
 

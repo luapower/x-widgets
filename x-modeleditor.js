@@ -931,7 +931,7 @@ component('x-modeleditor', function(e) {
 		cur_path.set(path)
 		cur_model.reset()
 		cur_comp = cur_path.last.comp
-		for (node of path)
+		for (let node of path)
 			cur_model.mul(node)
 		cur_inv_model.set(cur_model).invert()
 		axes.model.set(cur_model)

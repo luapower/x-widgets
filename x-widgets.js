@@ -1148,7 +1148,7 @@ component('x-tooltip', function(e) {
 	e.prop('target'      , {store: 'var', private: true})
 	e.prop('text'        , {store: 'var', slot: 'lang'})
 	e.prop('icon_visible', {store: 'var', type: 'bool'})
-	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top', attr: true})
+	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
 	e.prop('align'       , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center', attr: true})
 	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default', attr: true})
 	e.prop('px'          , {store: 'var', type: 'number'})
@@ -1163,9 +1163,10 @@ component('x-tooltip', function(e) {
 		e.popup(e.target, e.side, e.align, e.px, e.py, e.pw, e.ph)
 	}
 
-	e.popup_target_updated = function(target) {
+	e.popup_target_updated = function(target, side) {
 		let visible = !!(!e.check || e.check(target))
 		e.class('visible', visible)
+		e.attr('side', side)
 	}
 
 	e.close = function() {
@@ -2770,7 +2771,7 @@ component('x-dialog', function(e) {
 	}
 
 	e.ok = function() {
-		for (btn of e.$('x-button[primary]')) {
+		for (let btn of e.$('x-button[primary]')) {
 			if (!(btn.effectively_hidden || btn.effectively_disabled)) {
 				btn.activate()
 				return

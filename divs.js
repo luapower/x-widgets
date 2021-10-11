@@ -336,7 +336,7 @@ method(Element, 'init_child_components', function() {
 		return
 	}
 	let children = this.$(component_query)
-	for (ce of children) // depth-first, so creates children first.
+	for (let ce of children) // depth-first, so creates children first.
 		component_init[ce.tagName](ce)
 })
 
@@ -970,14 +970,14 @@ property(Element, 'hasfocus', {get: function() {
 
 method(Element, 'focusables', function() {
 	let t = []
-	for (e of this.$('button, a[href] area[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+	for (let e of this.$('button, a[href] area[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
 		if (!e.effectively_hidden && !e.effectively_disabled)
 			t.push(e)
 	return t
 })
 
 method(Element, 'focus_first_input_element', function() {
-	for (e of this.$('input, select, textarea, .x-input-widget'))
+	for (let e of this.$('input, select, textarea, .x-input-widget'))
 		if (!e.effectively_hidden && !e.effectively_disabled) {
 			e.focus()
 			break
@@ -1353,7 +1353,7 @@ let popup_state = function(e) {
 			// the element is displayed as a popup, which leaves `!important`
 			// as the only way to override back these properties from css.
 			e.__css_inherited = obj()
-			for (k of ['font-family', 'font-size', 'line-height']) {
+			for (let k of ['font-family', 'font-size', 'line-height']) {
 				if (!e.style[k]) {
 					e.style[k] = css[k]
 					e.__css_inherited[k] = true
@@ -1370,7 +1370,7 @@ let popup_state = function(e) {
 			update()
 			popup_timer.add(update)
 		} else {
-			for (k in e.__css_inherited)
+			for (let k in e.__css_inherited)
 				e.style[k] = null
 			e.remove()
 			e.popup_level = null
@@ -1524,7 +1524,7 @@ let popup_state = function(e) {
 		e.y = fixed ? y0 : window.scrollY + y0
 
 		if (e.popup_target_updated)
-			e.popup_target_updated(target)
+			e.popup_target_updated(target, side)
 
 		e.style.visibility = null
 	}

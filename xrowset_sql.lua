@@ -110,6 +110,27 @@ local rowset_type = {
 	longblob    = 'file',
 }
 
+local function guess_name_col(tdef)
+	if tdef.name_col then return tdef.name_col end
+	if tdef.fields.name then return 'name' end
+end
+
+local function lookup_rowset(tbl)
+	local rs = 'lookup_'..tbl
+	if not rowset[rs] then
+		local tdef = table_def(tbl)
+		local name_col = guess_name_col(tdef)
+		local t = glue.extend({name_col}, tdef.pk)
+		local cols = concat(glue.map(t, sqlname), ', ')
+		rowset[rs] = sql_rowset{
+			select = format('select %s from %s', cols, tbl),
+			pk = concat(tdef.pk, ' '),
+			name_col = name_col,
+		}
+	end
+	return rs, rs.name_col
+end
+
 function sql_rowset(...)
 
 	return virtual_rowset(function(rs, sql, ...)
@@ -207,6 +228,10 @@ function sql_rowset(...)
 				end
 				if not f.col or f.auto_increment then
 					f.editable = false
+				end
+				if f.ref_table then
+					f.lookup_rowset_name, f.display_col = lookup_rowset(f.ref_table)
+					f.lookup_col = f.ref_col
 				end
 			end
 			rs:init_fields()

@@ -76,7 +76,7 @@ return function(app)
 	--schema ------------------------------------------------------------------
 
 	function cmd.install()
-		srun(function()
+		webb.run(function()
 			local schema = config('db_schema', app_name)
 			with_config({db_schema = false}, function()
 				create_schema(schema)
