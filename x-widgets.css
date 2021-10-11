@@ -143,15 +143,12 @@ body[opensans] {
 
 /* widget defaults -------------------------------------------------------- */
 
-.x-widget {
-	display: inline-block;
-}
-
 .x-widget, .x-widget * {
 	box-sizing: border-box;
 }
 
 .x-widget {
+	display: inline-block;
 	z-index: 0; /* make `z-index` of children context-free */
 	position: relative; /* make `position: absolute` of children context-free */
 	margin-top    : var(--x-margin);
@@ -452,6 +449,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	border-radius: 0;
 	display: flex;
 	justify-content: flex-end;
+	padding: var(--x-margin);
+}
+
+.x-action-band > .x-button {
+	margin: var(--x-margin);
 }
 
 /* tooltip ---------------------------------------------------------------- */

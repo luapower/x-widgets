@@ -11,8 +11,6 @@ typing:
 
 rowset:
 	needs:
-		e.static_rowset
-		e.rowset_vals
 		e.rowset <- rs
 	publishes:
 		e.reset()
@@ -134,6 +132,7 @@ tree:
 		e.name_col
 	publishes:
 		e.each_child_row(row, f)
+		e.row_and_each_child_row(row, f)
 		e.expanded_child_row_count(ri) -> n
 
 focusing and selection:
@@ -141,7 +140,7 @@ focusing and selection:
 		e.focused_row, e.focused_field
 		e.selected_row, e.selected_field
 		e.last_focused_col
-		e.selected_rows: Map(row -> true|Set(field))
+		e.selected_rows: map(row -> true|Set(field))
 		e.focus_cell()
 		e.focus_next_cell()
 		e.focus_find_row()
@@ -237,7 +236,7 @@ editing:
 	calls:
 		e.create_editor()
 
-loading & saving:
+loading & saving to server:
 	needs:
 		e.rowset_name
 		e.rowset_url
@@ -253,6 +252,11 @@ loading & saving:
 		e.do_update_load_slow()
 		e.do_update_load_fail()
 		e.load_overlay()
+
+loading & saving to local:
+	needs:
+		e.static_rowset
+		e.rowset_vals
 
 display val & text val:
 	publishes:
@@ -316,7 +320,7 @@ function nav_widget(e) {
 	e.prop('stay_in_edit_mode'       , {store: 'var', type: 'bool', default: true , hint: 're-enter edit mode after navigating'})
 	e.prop('auto_advance_row'        , {store: 'var', type: 'bool', default: false, hint: 'jump row on horizontal navigation limits'})
 	e.prop('save_row_on'             , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual']})
-	e.prop('save_new_row_on'         , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual', 'insert']})
+	e.prop('save_new_row_on'         , {store: 'var', type: 'enum', default: 'exit_row' , enum_values: ['input', 'exit_edit', 'exit_row', 'manual', 'insert']})
 	e.prop('save_row_remove_on'      , {store: 'var', type: 'enum', default: 'input'    , enum_values: ['input', 'exit_row', 'manual']})
 	e.prop('save_row_move_on'        , {store: 'var', type: 'enum', default: 'input'    , enum_values: ['input', 'manual']})
 	e.prop('can_exit_edit_on_errors' , {store: 'var', type: 'bool', default: true , hint: 'allow exiting edit mode on validation errors'})
@@ -348,6 +352,7 @@ function nav_widget(e) {
 				e.free_row(row)
 		e.rowset = rs
 	}
+	e.prop('rowset', {})
 
 	e.on('bind', function(on) {
 		bind_param_nav(on)
@@ -355,7 +360,7 @@ function nav_widget(e) {
 		if (on) {
 			e.update({reload: true})
 		} else {
-			abort_ajax_requests()
+			abort_all_requests()
 			force_unfocus_focused_cell()
 			init_all()
 		}
@@ -1550,6 +1555,11 @@ function nav_widget(e) {
 			}
 	}
 
+	e.row_and_each_child_row = function(row, f) {
+		f(row)
+		e.each_child_row(row, f)
+	}
+
 	function init_parent_rows_for_row(row, parent_rows) {
 
 		if (!init_parent_rows_for_rows(row.child_rows))
@@ -2163,34 +2173,13 @@ function nav_widget(e) {
 		return row.can_have_children != false
 	}
 
-	e.set_row_is_new = function(row, is_new, ev) {
-		e.set_row_state(row, 'is_new'  , is_new, false, ev)
-		e.set_row_state(row, 'modified', is_new, false, ev)
-		if (is_new)
-			row_changed(row)
+	e.set_row_is_new = function(row, ev) {
+		e.set_row_state(row, 'is_new'  , true, false, ev)
+		e.set_row_state(row, 'modified', true, false, ev)
+		row_changed(row)
 	}
 
-	function cell_is_valid(row, field, purpose) {
-		let errors = e.cell_errors(row, field)
-		if (!errors || errors.passed)
-			return true
-		if (purpose == 'exit_edit')
-			if (e.can_exit_edit_on_errors)
-				return true
-			else
-				return errors.must_allow_exit_edit
-		else if (purpose == 'exit_row')
-			if (errors.must_not_allow_exit_row)
-				return false
-			else if (e.can_exit_row_on_errors)
-				return true
-			else
-				return false
-		else
-			return false
-	}
-
-	function validate_row(row) {
+	function validate_row(row, purpose) {
 		if (row.has_errors == false)
 			return true
 		let has_errors = false
@@ -2209,7 +2198,11 @@ function nav_widget(e) {
 			}
 		}
 		row.has_errors = has_errors
-		return !has_errors || (can_exit_row && e.can_exit_row_on_errors)
+		if (!has_errors)
+			return true
+		if (purpose == 'exit_row' && can_exit_row && e.can_exit_row_on_errors)
+			return true
+		return false
 	}
 
 	function cells_modified(row) {
@@ -2229,13 +2222,13 @@ function nav_widget(e) {
 		return false
 	}
 
-	function save_when(when, row) {
+	function save_when(event, row) {
 		if (e.save_row == 'manual')
 			return
 		if (
-			   (row.is_new   && e.save_new_row_on    == when)
-			|| (row.modified && e.save_row_on        == when)
-			|| (row.removed  && e.save_row_remove_on == when)
+			   (row.is_new   && e.save_new_row_on == event)
+			|| (!row.is_new && row.modified && e.save_row_on == event)
+			|| (row.removed && e.save_row_remove_on == event)
 		) {
 			e.save()
 		}
@@ -2256,22 +2249,17 @@ function nav_widget(e) {
 
 		let cur_val = row[field.val_index]
 
-		// some validators use `input_val` directly instead of the supplied `val` !
+		// some validators use `input_val` directly instead of the supplied `val`,
+		// which is why we're setting it before validating it!
 		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
 
 		if (!input_val_changed)
 			return
 
-		let errors0 = cell_state(row, field, 'errors')
-		let invalid0 = errors0 ? !errors0.passed : null
-
 		let errors = e.validate_val(field, val, row, ev)
 		let invalid = !errors.passed
 		let val_changed = !invalid && val !== cur_val
 		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
-
-		if (invalid !== invalid0)
-			row.has_errors = null
 
 		if (val_changed) {
 
@@ -2295,13 +2283,19 @@ function nav_widget(e) {
 			if (row_modified_changed)
 				row_state_changed(row, 'modified', true, ev)
 
-			row_changed(row)
 		}
 
 		if (input_val_changed)
 			cell_state_changed(row, field, 'input_val', val, ev)
 		if (cell_errors_changed)
 			cell_state_changed(row, field, 'errors', errors, ev)
+
+		if (invalid)
+			row.has_errors = true
+		else
+			row.has_errors = null // depends on other cells.
+
+		row_changed(row)
 
 		save_when('input', row)
 
@@ -2337,6 +2331,11 @@ function nav_widget(e) {
 			cell_state_changed(row, field, 'modified', false, ev)
 		if (row_is_new_changed)
 			row_state_changed(row, 'is_new', false, ev)
+
+		if (invalid)
+			row.has_errors = true
+		else
+			row.has_errors = null // possibly not validated; also depends on other cells.
 
 		return !invalid
 	}
@@ -2421,6 +2420,16 @@ function nav_widget(e) {
 		return true
 	}
 
+	function can_exit_edit(row, field) {
+		let errors = e.cell_errors(row, field)
+		if (!errors || errors.passed)
+			return true
+		else if (e.can_exit_edit_on_errors)
+			return true
+		else
+			return errors.must_allow_exit_edit
+	}
+
 	e.exit_edit = function(force) {
 		if (!e.editor)
 			return true
@@ -2428,7 +2437,7 @@ function nav_widget(e) {
 		let row = e.focused_row
 
 		if (!force)
-			if (!cell_is_valid(row, e.focused_field, 'exit_edit'))
+			if (!can_exit_edit(row, e.focused_field))
 				return false
 
 		if (!e.fire('exit_edit', e.focused_row_index, e.focused_field_index, force))
@@ -2461,19 +2470,13 @@ function nav_widget(e) {
 		let row = e.focused_row
 		if (!row)
 			return true
-
 		if (!e.exit_edit(force))
 			return false
-
-		if (!force)
-			if (!cell_is_valid(e.focused_row, e.focused_field, 'exit_row'))
+		if (!force) {
+			if (!validate_row(row, 'exit_row'))
 				return false
-
-		if (!validate_row(row))
-			return false
-
-		save_when('exit_row', row)
-
+			save_when('exit_row', row)
+		}
 		return true
 	}
 
@@ -2719,10 +2722,7 @@ function nav_widget(e) {
 					}
 				}
 
-				// force-save even though it wasn't modified (no user input).
-				// `client_default` values must be enough for an insert in db.
-				if (e.save_new_row_on == 'insert')
-					row_changed(row, true)
+				row_changed(row)
 
 			}
 
@@ -2759,19 +2759,21 @@ function nav_widget(e) {
 		return e.insert_rows([row_vals], ev)
 	}
 
-	e.can_remove_row = function(row) {
+	e.can_remove_row = function(row, ev) {
 		if (!(e.can_edit && e.can_remove_rows))
 			return false
 		if (!row)
 			return true
 		if (row.can_remove === false) {
-			e.notify('error', S('error_not_removable', 'Not removable'))
+			if (ev && ev.input)
+				e.notify('error', S('error_row_not_removable', 'Row not removable'))
 			return false
 		}
 		if (row.is_new && row.save_request) {
-			e.notify('error',
-				S('error_remove_while_saving',
-					'Cannot remove a row that is in the process of being added to the server'))
+			if (ev && ev.input)
+				e.notify('error',
+					S('error_remove_row_while_saving',
+						'Cannot remove a row that is in the process of being added to the server'))
 			return false
 		}
 		return true
@@ -2791,56 +2793,56 @@ function nav_widget(e) {
 
 		for (let row of rows_to_remove) {
 
-			if (e.can_remove_row(row)) {
+			if (!e.can_remove_row(row, ev))
+				continue
 
-				if (forever || row.is_new) {
+			if (forever || row.is_new) {
 
-					if (ev.refocus) {
-						let row_index = e.row_index(row)
-						if (top_row_index == null || row_index < top_row_index)
-							top_row_index = row_index
-					}
+				if (ev.refocus) {
+					let row_index = e.row_index(row)
+					if (top_row_index == null || row_index < top_row_index)
+						top_row_index = row_index
+				}
 
+				e.row_and_each_child_row(row, function(row) {
+					row_unchanged(row)
+					e.selected_rows.delete(row)
 					removed_rows.add(row)
 					if (e.free_row)
 						e.free_row(row, ev)
-					e.each_child_row(row, function(row) {
-						removed_rows.add(row)
-						if (e.free_row)
-							e.free_row(row, ev)
-					})
+				})
 
-					remove_row_from_tree(row)
+				remove_row_from_tree(row)
 
-					update_indices('row_removed', row)
+				update_indices('row_removed', row)
 
-					row.removed = true
+				row.removed = true
 
-				} else {
+			} else {
 
-					let removed = !ev.toggle || !row.removed
-
-					e.each_child_row(row, function(row) {
-						row.removed = removed
-						changed_rows.push(row)
-					})
+				let removed = !ev.toggle || !row.removed
+				e.row_and_each_child_row(row, function(row) {
 					row.removed = removed
 					changed_rows.push(row)
+				})
 
-					rows_marked = rows_marked || removed
-
-					row_changed(row)
-				}
+				rows_marked = rows_marked || removed
 
 			}
 
 		}
 
+		for (let row of changed_rows)
+			if (!row.removed && !row.is_new && !row.modified && validate_row(row))
+				row_unchanged(row)
+			else
+				row_changed(row)
+
 		if (removed_rows.size) {
 
 			if (removed_rows.size < 100) {
 				// much faster removal for a small number of rows (common case).
-				for (let row of removed_rows.keys()) {
+				for (let row of removed_rows) {
 					e.rows.remove_value(row)
 					e.all_rows.remove_value(row)
 				}
@@ -3049,7 +3051,7 @@ function nav_widget(e) {
 		requests.add(req)
 	}
 
-	function abort_ajax_requests() {
+	function abort_all_requests() {
 		if (requests)
 			for (let req of requests)
 				req.abort()
@@ -3185,24 +3187,32 @@ function nav_widget(e) {
 
 	// saving changes ---------------------------------------------------------
 
-	function row_changed(row, force) {
+	function row_changed(row) {
 		if (row.nosave)
 			return
-		if (force || row.modified || !row.removed != !row.is_new) {
-			e.changed_rows = e.changed_rows || set()
-			e.changed_rows.add(row)
-		} else if (e.changed_rows) {
-			e.changed_rows.delete(row)
-			if (!e.changed_rows.size)
-				e.changed_rows = null
+		if (!e.changed_rows)
+			e.changed_rows = set()
+		else if (e.changed_rows.has(row))
+			return
+		e.changed_rows.add(row)
+		e.show_action_band(true)
+	}
+
+	function row_unchanged(row) {
+		if (!e.changed_rows)
+			return
+		e.changed_rows.delete(row)
+		if (!e.changed_rows.size) {
+			e.changed_rows = null
+			e.show_action_band(false)
 		}
-		e.show_action_band(!!e.changed_rows)
 	}
 
 	function pack_changes() {
 
 		let rows = []
 		let changes = {rows: rows}
+		let changed_rows = []
 
 		for (let row of e.changed_rows) {
 			if (row.save_request)
@@ -3218,29 +3228,32 @@ function nav_widget(e) {
 						t.values[field.name] = val
 				}
 				rows.push(t)
+				changed_rows.push(row)
 			} else if (row.removed) {
 				let t = {type: 'remove', values: obj()}
 				for (let f of e.pk_fields)
 					t.values[f.name+':old'] = e.cell_old_val(row, f)
 				rows.push(t)
+				changed_rows.push(row)
 			} else if (row.modified) {
 				let t = {type: 'update', values: obj()}
-				let has_valuees
+				let has_values
 				for (let field of e.all_fields) {
 					if (e.cell_modified(row, field) && !field.nosave) {
 						t.values[field.name] = row[field.val_index]
-						has_valuees = true
+						has_values = true
 					}
 				}
-				if (has_valuees) {
+				if (has_values) {
 					for (let f of e.pk_fields)
 						t.values[f.name+':old'] = e.cell_old_val(row, f)
 					rows.push(t)
 				}
+				changed_rows.push(row)
 			}
 		}
 
-		return changes
+		return [changes, changed_rows]
 	}
 
 	function apply_result(result, changed_rows) {
@@ -3258,6 +3271,7 @@ function nav_widget(e) {
 			if (rt.remove) {
 				rows_to_remove.push(row)
 			} else {
+				row.has_errors = null
 				if (!row_failed) {
 					let is_new_changed   = e.set_row_state(row, 'is_new'  , false, false, false)
 					let modified_changed = e.set_row_state(row, 'modified', false, false, false)
@@ -3265,18 +3279,20 @@ function nav_widget(e) {
 						row_state_changed(row, 'is_new', false)
 					if (modified_changed)
 						row_state_changed(row, 'modified', false)
+					row_unchanged(row)
 				}
 				if (rt.field_errors) {
 					for (let k in rt.field_errors) {
 						let field = e.all_fields[k]
 						let err = rt.field_errors[k]
-						err = isstr(err) ? err : undefined
 						e.set_cell_state(row, field, 'errors', [{message: err, passed: false}])
+						row.has_errors = true
 					}
 				}
-				if (rt.values)
+				if (rt.values) {
 					for (let k in rt.values)
 						e.reset_cell_val(row, e.all_fields[k], rt.values[k])
+				}
 			}
 		}
 		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
@@ -3288,26 +3304,27 @@ function nav_widget(e) {
 	}
 
 	function set_save_state(rows, req) {
-		for (let row of e.all_rows)
-			e.set_row_state(row, 'save_request', req, undefined, false)
+		for (let row of rows)
+			row.save_request = req
 	}
 
 	function save_to_server() {
+		let [changes, changed_rows] = pack_changes()
+		if (!changed_rows.length)
+			return
 		let req = ajax({
 			url: rowset_url(),
-			upload: pack_changes(),
-			changed_rows: Array.from(e.changed_rows),
+			upload: changes,
+			changed_rows: changed_rows,
 			success: save_success,
 			fail: save_fail,
 			done: save_done,
 			slow: save_slow,
 			slow_timeout: e.slow_timeout,
 		})
-		e.changed_rows = null
 		rows_moved = false
-		e.show_action_band(false)
 		add_request(req)
-		set_save_state(req.rows, req)
+		set_save_state(changed_rows, req)
 		e.fire('saving', true)
 	}
 
@@ -3315,9 +3332,22 @@ function nav_widget(e) {
 		return !!(e.rowset_url || e.static_rowset)
 	}
 
+	e.validate_row = validate_row
+
 	e.save = function() {
 		if (!e.changed_rows && !rows_moved)
 			return
+
+		let some_valid
+		for (let row of e.changed_rows)
+			if (!row.save_request)
+				if (validate_row(row))
+					some_valid = true
+
+		if (!some_valid) {
+			notify(S('save_nothing', 'No valid rows'))
+			return
+		}
 
 		if (e.static_rowset) {
 			if (e.save_row_states)
@@ -3338,7 +3368,7 @@ function nav_widget(e) {
 
 	function save_done() {
 		requests.delete(this)
-		set_save_state(this.rows, null)
+		set_save_state(this.changed_rows, null)
 		e.fire('saving', false)
 	}
 
@@ -3435,7 +3465,7 @@ function nav_widget(e) {
 	e.serialize_all_rows = function(row) {
 		let rows = []
 		for (let row of e.all_rows)
-			if (!row.removed && !row.nosave && row.has_errors != false) {
+			if (!row.removed && !row.nosave && row.has_errors == false) {
 				let drow = e.serialize_row(row)
 				rows.push(drow)
 			}
@@ -3464,7 +3494,7 @@ function nav_widget(e) {
 	e.serialize_all_row_vals = function() {
 		let rows = []
 		for (let row of e.all_rows)
-			if (!row.removed && !row.nosave && row.has_errors != false) {
+			if (!row.removed && !row.nosave && row.has_errors == false) {
 				let vals = e.serialize_row_vals(row)
 				if (e.save_row(vals) !== 'skip')
 					rows.push(vals)
