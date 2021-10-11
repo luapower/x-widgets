@@ -119,9 +119,10 @@ rows:
 		e.row_index(row) -> ri
 
 indexing:
-	e.index_tree()
-	e.lookup()
-	e.row_group()
+	publishes:
+		e.index_tree(cols, range_defs)
+		e.lookup(cols, [v1, ...]) -> [row1, ...]
+		e.row_group(cols, range_defs) -> [row1, ...]
 
 master-detail:
 	needs:
@@ -139,6 +140,12 @@ tree:
 		e.expanded_child_row_count(ri) -> n
 
 focusing and selection:
+	config:
+		can_focus_cells
+		auto_advance_row
+		can_select_multiple
+		can_select_non_siblings
+		auto_focus_first_cell
 	publishes:
 		e.focused_row, e.focused_field
 		e.selected_row, e.selected_field
@@ -164,6 +171,8 @@ scrolling:
 		e.scroll_to_cell(ri, [fi])
 
 sorting:
+	config:
+		can_sort_rows
 	publishes:
 		e.order_by <- 'col1[:desc] ...'
 	calls:
@@ -180,15 +189,17 @@ tree node collapsing:
 
 row adding, removing, moving:
 	publishes:
-		e.remove_rows()
-		e.remove_selected_rows()
-		e.insert_rows()
-		e.start_move_selected_rows() -> state; state.finish()
+		e.remove_rows([row1, ...], ev)
+		e.remove_row(row, ev)
+		e.remove_selected_rows(ev)
+		e.insert_rows([{col->val}, ...], ev)
+		e.insert_row({col->val}, ev)
+		e.start_move_selected_rows(ev) -> state; state.finish()
 	calls:
-		e.can_remove_row()
-		e.init_row()
-		e.free_row()
-		e.rows_moved()
+		e.can_remove_row(row, ev)
+		e.init_row(row, ri, ev)
+		e.free_row(row)
+		e.rows_moved(from_ri, n, insert_ri, ev)
 
 cell values & state:
 	publishes:
@@ -204,11 +215,11 @@ cell values & state:
 updating cells:
 	publishes:
 		e.set_cell_state()
-		e.validator_*: f(field) -> {validate: f(v) -> true|false, message: text}
-		e.validate_val()
 		e.set_cell_val()
 		e.reset_cell_val()
 	calls:
+		e.validator_*(field) -> {validate: f(v) -> true|false, message: text}
+		e.validate_val()
 		e.do_update_cell_state(ri, fi, prop, val, ev)
 		e.do_update_cell_editing(ri, [fi], editing)
 
@@ -231,6 +242,16 @@ updating rowset:
 		e.set_null_selected_cells()
 
 editing:
+	config:
+		can_edit
+		can_add_rows
+		can_remove_rows
+		can_change_rows
+		auto_edit_first_cell
+		stay_in_edit_mode
+		can_exit_edit_on_errors
+		can_exit_row_on_errors
+		exit_edit_on_lost_focus
 	publishes:
 		e.editor
 		e.enter_edit()
@@ -239,27 +260,36 @@ editing:
 	calls:
 		e.create_editor()
 
-loading & saving to server:
+loading from server:
 	needs:
 		e.rowset_name
 		e.rowset_url
 	publishes:
-		e.can_save_changes()
 		e.reload()
 		e.abort_loading()
-		e.save()
 	calls:
-		e.notify()
 		e.do_update_loading()
 		e.do_update_load_progress()
 		e.do_update_load_slow()
 		e.do_update_load_fail()
 		e.load_overlay()
 
-loading & saving to memory:
+saving:
+	config:
+		save_row_on         : exit_edit : input | exit_edit | exit_row | manual
+		save_new_row_on     : exit_row  : input | exit_edit | exit_row | manual | insert
+		save_row_remove_on  : input     : input | exit_row  | manual
+		save_row_move_on    : input     : input | manual
+		action_band_visible : auto      : auto | always | no
+	publishes:
+		e.can_save_changes()
+		e.save()
+
+loading & saving from/to memory:
+	config
+		save_row_states
 	needs:
 		e.static_rowset
-		e.save_row_states
 		e.row_vals
 		e.row_states
 
@@ -318,12 +348,12 @@ function nav_widget(e) {
 	e.prop('can_move_rows'           , {store: 'var', type: 'bool', default: true})
 	e.prop('can_sort_rows'           , {store: 'var', type: 'bool', default: true})
 	e.prop('can_focus_cells'         , {store: 'var', type: 'bool', default: true , hint: 'can focus individual cells vs entire rows'})
+	e.prop('auto_advance_row'        , {store: 'var', type: 'bool', default: false, hint: 'jump row on horizontal navigation limits'})
 	e.prop('can_select_multiple'     , {store: 'var', type: 'bool', default: true})
 	e.prop('can_select_non_siblings' , {store: 'var', type: 'bool', default: true})
-	e.prop('auto_focus_first_cell'   , {store: 'var', type: 'bool', default: true , hint: 'focus first cell automatically on loading'})
-	e.prop('auto_edit_first_cell'    , {store: 'var', type: 'bool', default: false, hint: 'automatically enter edit mode on loading'})
+	e.prop('auto_focus_first_cell'   , {store: 'var', type: 'bool', default: true , hint: 'focus first cell automatically after loading'})
+	e.prop('auto_edit_first_cell'    , {store: 'var', type: 'bool', default: false, hint: 'automatically enter edit mode after loading'})
 	e.prop('stay_in_edit_mode'       , {store: 'var', type: 'bool', default: true , hint: 're-enter edit mode after navigating'})
-	e.prop('auto_advance_row'        , {store: 'var', type: 'bool', default: false, hint: 'jump row on horizontal navigation limits'})
 	e.prop('save_row_on'             , {store: 'var', type: 'enum', default: 'exit_edit', enum_values: ['input', 'exit_edit', 'exit_row', 'manual']})
 	e.prop('save_new_row_on'         , {store: 'var', type: 'enum', default: 'exit_row' , enum_values: ['input', 'exit_edit', 'exit_row', 'manual', 'insert']})
 	e.prop('save_row_remove_on'      , {store: 'var', type: 'enum', default: 'input'    , enum_values: ['input', 'exit_row', 'manual']})
