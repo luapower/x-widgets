@@ -427,7 +427,7 @@ function nav_widget(e) {
 	}
 	e.prop('rowset_id', {store: 'var', type: 'rowset'})
 
-	// utils ------------------------------------------------------------------
+	// fields utils -----------------------------------------------------------
 
 	let fld     = col => isstr(col) ? assert(e.all_fields[col]) : col
 	let fldname = col => isstr(col) ? col : col.name
@@ -997,12 +997,7 @@ function nav_widget(e) {
 		e.end_update()
 	}
 
-	// navigation and selection -----------------------------------------------
-
-	e.property('focused_row_index'   , () => e.row_index(e.focused_row))
-	e.property('focused_field_index' , () => e.field_index(e.focused_field))
-	e.property('selected_row_index'  , () => e.row_index(e.selected_row))
-	e.property('selected_field_index', () => e.field_index(e.selected_field))
+	// editing utils ----------------------------------------------------------
 
 	function can_edit() {
 		return e.can_edit && (!e.rowset || e.rowset.can_edit != false)
@@ -1026,17 +1021,26 @@ function nav_widget(e) {
 			&& (!e.rowset || e.rowset.can_change_rows != false)
 	}
 
-	e.can_change_val = function(row, field) {
-		return can_change_rows()
-			&& (!row || (row.editable != false && !row.removed))
+	function can_change_val(row, field) {
+		return (!row || (row.editable != false && !row.removed))
 			&& (!field || field.editable)
-			&& e.can_focus_cell(row, field)
 	}
+
+	e.can_change_val = function(row, field) {
+		return can_change_val(row, field) && e.can_focus_cell(row, field)
+	}
+
+	// navigation and selection -----------------------------------------------
+
+	e.property('focused_row_index'   , () => e.row_index(e.focused_row))
+	e.property('focused_field_index' , () => e.field_index(e.focused_field))
+	e.property('selected_row_index'  , () => e.row_index(e.selected_row))
+	e.property('selected_field_index', () => e.field_index(e.selected_field))
 
 	e.can_focus_cell = function(row, field, for_editing) {
 		return (!row || row.focusable != false)
 			&& (field == null || !e.can_focus_cells || field.focusable != false)
-			&& (!for_editing || e.can_change_val(row, field))
+			&& (!for_editing || can_change_val(row, field))
 	}
 
 	e.is_cell_disabled = function(row, field) {
