@@ -202,7 +202,7 @@ row adding, removing, moving:
 	calls:
 		e.can_remove_row(row, ev)
 		e.init_row(row, ri, ev)
-		e.free_row(row)
+		e.free_row(row, ev)
 		e.rows_moved(from_ri, n, insert_ri, ev)
 
 cell values & state:
@@ -2889,6 +2889,10 @@ function nav_widget(e) {
 				e.row_and_each_child_row(row, function(row) {
 					row.removed = removed
 					changed_rows.push(row)
+					if (!row.removed && !row.is_new && !row.modified && validate_row(row))
+						row_unchanged(row)
+					else
+						row_changed(row)
 				})
 
 				rows_marked = rows_marked || removed
@@ -2896,12 +2900,6 @@ function nav_widget(e) {
 			}
 
 		}
-
-		for (let row of changed_rows)
-			if (!row.removed && !row.is_new && !row.modified && validate_row(row))
-				row_unchanged(row)
-			else
-				row_changed(row)
 
 		if (removed_rows.size) {
 
