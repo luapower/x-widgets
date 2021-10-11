@@ -155,7 +155,7 @@ focusing and selection:
 		e.selected_row, e.selected_field
 		e.last_focused_col
 		e.selected_rows: map(row -> true|Set(field))
-		e.focus_cell()
+		e.focus_cell(ri|true|false|0, fi|true|false|0, rows, cols, ev)
 		e.focus_next_cell()
 		e.focus_find_row()
 		e.select_all_cells()
@@ -166,7 +166,11 @@ focusing and selection:
 		e.can_select_cell()
 		e.is_row_selected()
 		e.is_last_row_focused()
-		e.first_focusable_cell()
+		e.first_focusable_cell(ri|true|0, fi|true|0, rows, cols, opt)
+			opt.editable
+			opt.must_move
+			opt.must_not_move_row
+			opt.must_not_move_col
 
 scrolling:
 	publishes:
