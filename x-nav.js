@@ -1351,6 +1351,8 @@ function nav_widget(e) {
 		return true
 	}
 
+	e.scroll_to_cell = noop
+
 	e.scroll_to_focused_cell = function() {
 		if (e.focused_row_index != null)
 			e.scroll_to_cell(e.focused_row_index, e.focused_field_index)
@@ -2174,6 +2176,9 @@ function nav_widget(e) {
 		return true
 	}
 
+	e.do_update_cell_state = noop
+	e.do_update_row_state = noop
+
 	function cell_state_changed(row, field, key, val, ev) {
 		if (ev && ev.fire_changed_events === false)
 			return
@@ -2308,7 +2313,7 @@ function nav_widget(e) {
 					can_exit_row = false
 			}
 		}
-		set_row_state(row, 'has_errors', has_errors)
+		e.set_row_state(row, 'has_errors', has_errors)
 		if (!has_errors)
 			return true
 		if (purpose == 'exit_row' && can_exit_row && e.can_exit_row_on_errors)
@@ -2390,9 +2395,9 @@ function nav_widget(e) {
 			cell_state_changed(row, field, 'errors', errors, ev)
 
 		if (invalid)
-			set_row_state(row, 'has_errors', true)
+			e.set_row_state(row, 'has_errors', true)
 		else
-			set_row_state(row, 'has_errors', undefined) // depends on other cells.
+			e.set_row_state(row, 'has_errors', undefined) // depends on other cells.
 
 		if (val_changed)
 			save_rows([row], 'input')
@@ -2431,10 +2436,10 @@ function nav_widget(e) {
 			row_state_changed(row, 'is_new', false, ev)
 
 		if (invalid)
-			set_row_state(row, 'has_errors', true)
+			e.set_row_state(row, 'has_errors', true)
 		else
 			// possibly not validated; also depends on other cells.
-			set_row_state(row, 'has_errors', undefined)
+			e.set_row_state(row, 'has_errors', undefined)
 
 		return !invalid
 	}
@@ -3375,7 +3380,7 @@ function nav_widget(e) {
 			if (rt.remove) {
 				rows_to_remove.push(row)
 			} else {
-				set_row_state(row, 'has_errors', undefined)
+				e.set_row_state(row, 'has_errors', undefined)
 				if (!row_failed) {
 					let is_new_changed   = e.set_row_state(row, 'is_new'  , false, false, false)
 					let modified_changed = e.set_row_state(row, 'modified', false, false, false)
@@ -3390,7 +3395,7 @@ function nav_widget(e) {
 						let field = e.all_fields[k]
 						let err = rt.field_errors[k]
 						e.set_cell_state(row, field, 'errors', [{message: err, passed: false}])
-						set_row_state(row, 'has_errors', true)
+						e.set_row_state(row, 'has_errors', true)
 					}
 				}
 				if (rt.values) {
@@ -4042,10 +4047,6 @@ component('x-bare-nav', function(e) {
 	nav_widget(e)
 
 	e.hidden = true
-
-	e.scroll_to_cell = noop
-	e.do_update_cell_state = noop
-	e.do_update_row_state = noop
 
 	let val_widget_do_update = e.do_update
 	e.do_update = function(opt) {
