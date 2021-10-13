@@ -492,7 +492,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			cell.replace(node, v)
 		}
 		cell.class('null', input_val == null)
-		cell.class('empty', input_val == '')
+		cell.class('empty', input_val === '')
 	}
 
 	e.do_update_cell_errors = function(cell, row, field, errors) {

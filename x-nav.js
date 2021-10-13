@@ -1036,7 +1036,8 @@ function nav_widget(e) {
 	}
 
 	function can_change_val(row, field) {
-		return (!row || (row.editable != false && !row.removed))
+		return can_change_rows()
+			&& (!row || (row.editable != false && !row.removed))
 			&& (!field || field.editable)
 	}
 
