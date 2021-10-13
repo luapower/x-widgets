@@ -1948,7 +1948,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		items.push({
 			text: e.changed_rows ?
 				S('discard_changes_and_reload', 'Discard changes and reload') : S('reload', 'Reload'),
-			disabled: !e.changed_rows || !e.rowset_url,
+			disabled: e.changed_rows || !e.rowset_url,
 			icon: 'fa fa-sync',
 			action: function() {
 				e.reload()
