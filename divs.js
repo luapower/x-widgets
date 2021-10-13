@@ -517,6 +517,8 @@ override(Element, 'remove', function(inherited) {
 method(Element, 'replace', function(e0, s) {
 	s = T(s)
 	if (e0 != null) {
+		if (s === e0)
+			return this
 		if (iselem(e0))
 			e0.bind(false)
 		this.replaceChild(s, e0)
