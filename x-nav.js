@@ -165,7 +165,7 @@ focusing and selection:
 			ev.expand_selection
 			ev.invert_selection
 		e.focus_next_cell()
-		e.focus_find_row()
+		e.focus_find_cell()
 		e.select_all_cells()
 	calls:
 		e.can_change_val()
@@ -344,6 +344,8 @@ field_types : {type -> {attr->val}}
 --------------------------------------------------------------------------- */
 
 function map_keys_different(m1, m2) {
+	if (m1.size != m2.size)
+		return true
 	for (let k1 of m1.keys())
 		if (!m2.has(k1))
 			return true
@@ -1330,8 +1332,9 @@ function nav_widget(e) {
 			|| (auto_advance_row && e.focus_cell(true, true, dir, dir * -1/0, ev))
 	}
 
-	e.focus_find_row = function(lookup_cols, lookup_vals) {
-		e.focus_cell(e.row_index(e.lookup(lookup_cols, lookup_vals)[0]))
+	e.focus_find_cell = function(lookup_cols, lookup_vals, col) {
+		let fi = fld(col) && fld(col).index
+		e.focus_cell(e.row_index(e.lookup(lookup_cols, lookup_vals)[0]), fi)
 	}
 
 	e.is_last_row_focused = function() {
@@ -2852,7 +2855,7 @@ function nav_widget(e) {
 	e.remove_rows = function(rows_to_remove, ev) {
 
 		ev = ev || empty
-		let forever = (ev.forever) || !e.can_save_changes()
+		let forever = ev.forever || !e.can_save_changes()
 
 		e.begin_update()
 
@@ -3189,6 +3192,12 @@ function nav_widget(e) {
 			return
 		}
 		e.abort_loading()
+		if (e.focused_row && e.pk_fields)
+			e.focus_state = {
+				pk_vals: e.cell_vals(e.focused_row, e.pk_fields),
+				col: e.focused_field && e.focused_field.name,
+				focused: e.hasfocus,
+			}
 		let req = ajax({
 			url: rowset_url(),
 			progress: load_progress,
@@ -3239,10 +3248,16 @@ function nav_widget(e) {
 	e.prop('focus_state', {store: 'var'})
 
 	function load_success(rs) {
+		if (e.diff_merge(rs))
+			return
 		e.rowset = rs
 		e.reset()
-		if (e.focus_state != null && e.pk_fields)
-			e.focus_find_row(e.pk_fields, json_arg(e.focus_state))
+		if (e.focus_state != null && e.pk_fields) {
+			let fs = json_arg(e.focus_state)
+			e.focus_find_cell(e.pk_fields, fs.pk_vals, fs.col)
+			if (fs.focused)
+				e.focus()
+		}
 	}
 
 	// saving changes ---------------------------------------------------------
@@ -3359,6 +3374,58 @@ function nav_widget(e) {
 
 		if (result.sql_trace && result.sql_trace.length)
 			debug(result.sql_trace.join('\n'))
+
+		e.end_update()
+	}
+
+	e.diff_merge = function(rs) {
+
+		return false
+
+		if (rs.fields) {
+			if (rs.fields.length != e.all_fields.length)
+				return false
+			for (let fi = 0; fi < rs.fields.length; fi++) {
+				let f1 = rs.fields[fi]
+				let f0 = e.all_fields[fi]
+				if (f1.name !== f0.name || f1.type !== f0.type)
+					return false
+			}
+			let rs_pk = isarray(rs.pk) ? rs.pk.join(' ') : rs.pk
+			if (rs_pk !== e.pk)
+				return false
+		}
+
+		e.begin_update()
+
+		let pk = flds(e.pk)
+		let pk_fi = pk.map(f => f.val_index)
+		let pk_vs = []
+		let ins_rows = []
+		for (let row of rs.rows) {
+			for (let i = 0; i < pk.length; i++)
+				pk_vs[i] = row[pk_fi[i]]
+			let row0 = e.lookup(pk, pk_vs)[0]
+			if (!row0) { // new row: add
+				ins_rows.push(row)
+				row0.merged = true
+			} else { // existing row: reset values that are different.
+				for (let fi = 0; fi < e.all_fields.length; fi++)
+					if (row0[fi] !== undefined && row[fi] !== row0[fi])
+						e.reset_cell_val(row, e.all_fields[fi], row0[fi])
+				row.merged = true
+			}
+		}
+
+		e.insert_rows(ins_rows)
+
+		let rm_rows = []
+		for (let row of e.all_rows)
+			if (row.merged)
+				row.merged = null
+			else if (!row.is_new)
+				rm_rows.push(row)
+		e.remove_rows(rm_rows, {forever: true})
 
 		e.end_update()
 	}
@@ -4126,12 +4193,12 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	all_field_types.to_text = function(v) {
-		return v != null ? String(v).replace('\n', '\\n') : ''
+		return v != null ? String(v) : ''
 	}
 
 	all_field_types.from_text = function(s) {
 		s = s.trim()
-		return s !== '' ? s.replace('\\n', '\n') : null
+		return s !== '' ? s : null
 	}
 
 	field_types = obj() // {type->field}
@@ -4166,6 +4233,10 @@ component('x-lookup-dropdown', function(e) {
 
 	number.to_text = function(x) {
 		return x != null ? String(x) : ''
+	}
+
+	number.format = function(x) {
+		return x != null ? x.dec(this.decimals) : ''
 	}
 
 	// file sizes
@@ -4260,7 +4331,7 @@ component('x-lookup-dropdown', function(e) {
 	datetime.min = datetime.to_time('1000-01-01 00:00:00')
 	datetime.max = datetime.to_time('9999-12-31 23:59:59')
 
-	datetime.format = function(s, field) {
+	datetime.format = function(s) {
 		s = s || ''
 		if (!this.has_time)
 			return s.slice(0, 10)
@@ -4291,19 +4362,38 @@ component('x-lookup-dropdown', function(e) {
 
 	// timestamps
 
-	let timestamp = assign({}, datetime, {
-		min: 0, max: 2**32-1, // range of MySQL TIMESTAMP type
-	})
+	let timestamp = {align: 'right'}
+	field_types.timestamp = timestamp
 
-	timestamp.to_time = return_arg
+	timestamp.has_time = true // for x-calendar
+
+	timestamp.to_time   = return_arg
 	timestamp.from_time = return_arg
+
+	datetime.to_num   = return_arg
+	datetime.from_num = return_arg
+
+	timestamp.to_text = function(t) {
+		let s = datetime.from_time(t)
+		return s ? s : ''
+	}
+
+	timestamp.from_text = function(s) {
+		let t = datetime.to_time(s)
+		return t != null ? t : s
+	}
+
+	timestamp.min = 0
+	timestamp.max = 2**32-1 // range of MySQL TIMESTAMP type
+
+	timestamp.format = function(t) {
+		return datetime.from_time(t)
+	}
 
 	timestamp.validator_date = field => ({
 		validate : v => isnum(v) && v === v,
 		message  : S('validation_date', 'Date must be valid'),
 	})
-
-	field_types.timestamp = timestamp
 
 	// booleans
 

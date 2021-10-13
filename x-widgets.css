@@ -1005,6 +1005,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	filter: contrast(.8);
 }
 
+/* textarea --------------------------------------------------------------- */
+
+.x-textarea > .x-focus-box > .x-editbox-input {
+	align-self: stretch;
+}
+
 /* dropdown --------------------------------------------------------------- */
 
 /* NOTE: .x-dropdown is applied along with .x-editbox ! */
