@@ -1011,6 +1011,10 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	align-self: stretch;
 }
 
+.x-textarea[mono] > .x-focus-box > .x-editbox-input {
+	font-family: monospace;
+}
+
 /* dropdown --------------------------------------------------------------- */
 
 /* NOTE: .x-dropdown is applied along with .x-editbox ! */
