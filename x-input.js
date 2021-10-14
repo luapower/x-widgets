@@ -3056,7 +3056,7 @@ component('x-chart', 'Input', function(e) {
 	}
 
 	e.prop('nav', {store: 'var', private: true})
-	e.prop('nav_id' , {store: 'var', bind_id: 'nav', type: 'nav'})
+	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav'})
 
 	e.set_sum_col         = redraw
 	e.set_other_threshold = redraw

@@ -1253,7 +1253,7 @@ function url(t) {
 */
 function ajax(req) {
 
-	req = assign(new EventTarget(), {slow_timeout: 4}, req)
+	req = assign_opt(new EventTarget(), {slow_timeout: 4}, req)
 
 	let xhr = new XMLHttpRequest()
 

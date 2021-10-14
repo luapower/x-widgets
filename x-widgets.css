@@ -2666,15 +2666,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	background-color: green;
 }
 
-.x-widget.x-grid.loading {
-	opacity: 1;
-}
-
-.x-grid.loading > .x-grid-header,
-.x-grid.loading > .x-grid-cells-view {
-	opacity: .9;
-}
-
 /* grid action band */
 
 .x-grid-action-band {
