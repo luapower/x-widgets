@@ -26,6 +26,7 @@
 		name             : 'col'         name for use in code
 		type             : 'number'|...  client-side type
 		text             : 'Foo Bar'     input-box label / grid column header
+		hint             : '...'         tooltip
 		default          : val           default value (if it's a constant)
 		internal         : t             cannot be made visible
 		hidden           : t             not visible by default
@@ -84,7 +85,7 @@ field_name_attrs = {}
 
 local client_field_attrs = {
 	internal=1, hidden=1, editable=1,
-	name=1, type=1, text=1, default=1,
+	name=1, type=1, text=1, hint=1, default=1,
 	enum_values=1, not_null=1, min=1, max=1, decimals=1, maxlen=1,
 	lookup_rowset_name=1, lookup_col=1, display_col=1, name_col=1,
 	w=1, min_w=1, max_w=1, max_char_w=1,
