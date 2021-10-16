@@ -355,6 +355,36 @@ function virtual_rowset(init, ...)
 	return rs
 end
 
+--reload push-notifications --------------------------------------------------
+
+local events_thread
+local changed_rowsets = {}
+function rowset_changed(rowset_name)
+	changed_rowsets[rowset_name] = true
+	if events_thread then
+		resume(events_thread)
+	end
+end
+
+action['xrowset.events'] = function()
+	setheader('cache-control', 'no-cache')
+	while true do
+		if not next(changed_rowsets) then
+			events_thread = currentthread()
+			suspend()
+			assert(events_thread == currentthread())
+			events_thread = nil
+		end
+		local t = {}
+		for rowset_name in pairs(changed_rowsets) do
+			t[#t+1] = 'data: '..rowset_name..'\n\n'
+			changed_rowsets[rowset_name] = nil
+		end
+		assert(not out_buffering())
+		out(table.concat(t))
+	end
+end
+
 --S translation rowset -------------------------------------------------------
 
 do

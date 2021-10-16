@@ -122,6 +122,7 @@ function listbox_widget(e) {
 
 	// responding to nav changes ----------------------------------------------
 
+	/* TODO: remove this
 	function rows_added(rows, ri1) {
 		for (let row of rows) {
 			let item = create_item(row)
@@ -129,6 +130,7 @@ function listbox_widget(e) {
 		}
 	}
 	e.on('rows_added', rows_added)
+	*/
 
 	let inh_do_update = e.do_update
 	e.do_update = function(opt) {
@@ -565,4 +567,3 @@ component('x-icon-dropdown', function(e) {
 	e.prop('colors', {store: 'var', default: default_icons()})
 	e.set_icons(default_icons())
 })
-

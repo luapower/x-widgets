@@ -385,6 +385,8 @@ function map_keys_different(m1, m2) {
 	return false
 }
 
+rowset_navs = {} // {rowset_name -> set(nav)}
+
 function nav_widget(e) {
 
 	e.isnav = true // for resolver
@@ -432,6 +434,7 @@ function nav_widget(e) {
 	e.on('bind', function(on) {
 		bind_param_nav(on)
 		bind_linked_lookup_navs(on)
+		bind_rowset_name(e.rowset_name, on)
 		if (on) {
 			e.update({reload: true})
 		} else {
@@ -459,7 +462,22 @@ function nav_widget(e) {
 	}
 	e.prop('row_states', {store: 'var', slot: 'app'})
 
-	e.set_rowset_name = function(v) {
+	function bind_rowset_name(name, on) {
+		if (on) {
+			attr(rowset_navs, name, Set).add(e)
+		} else {
+			let navs = rowset_navs[name]
+			if (navs) {
+				navs.delete(e)
+				if (!navs.size)
+					delete rowset_navs[name]
+			}
+		}
+	}
+
+	e.set_rowset_name = function(v, v0) {
+		bind_rowset_name(v0, false)
+		bind_rowset_name(v, true)
 		e.rowset_url = v ? '/rowset.json/' + v : null
 		e.reload()
 	}
@@ -4584,4 +4602,18 @@ component('x-lookup-dropdown', function(e) {
 
 
 }
+
+// reload push-notifications -------------------------------------------------
+
+on_dom_load(function() {
+	let es = new EventSource('/xrowset.events')
+	es.onmessage = function(ev) {
+		let rowset_name = ev.data
+		let navs = rowset_navs[rowset_name]
+		if (navs)
+			for (let nav of navs)
+				if (!nav.load_request)
+					nav.reload()
+	}
+})
 

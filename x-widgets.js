@@ -1533,6 +1533,7 @@ component('x-menu', function(e) {
 		table.attr('tabindex', 0)
 		for (let i = 0; i < items.length; i++) {
 			let item = items[i]
+			item.menu = e
 			let tr = item.heading ? create_heading(item) : create_item(item, disabled)
 			table.add(tr)
 			if (item.separator)
@@ -3016,6 +3017,10 @@ component('x-switcher', 'Containers', function(e) {
 	}
 
 	e.match_item = function(item, vals) { // stub
+		// special case: listbox with html elements with "action" attr
+		// and the switcher's items also have the "action" attr, so match those.
+		if (item.hasattr('action') && vals.f0 && iselem(vals.f0) && vals.f0.hasattr('action'))
+			return item.attr('action') == vals.f0.attr('action')
 		return item.id == e.format_item_id(vals)
 	}
 

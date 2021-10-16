@@ -1933,15 +1933,14 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	// column context menu ----------------------------------------------------
 
-	let context_menu
 	function context_menu_popup(fi, mx, my) {
 
 		if (!e.enable_context_menu)
 			return
 
-		if (context_menu) {
-			context_menu.close()
-			context_menu = null
+		if (e.context_menu) {
+			e.context_menu.close()
+			e.context_menu = null
 		}
 
 		let items = []
@@ -2074,11 +2073,17 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			})
 		}
 
-		context_menu = menu({items: items})
+		e.fire('init_context_menu_items', e, items)
+
+		e.context_menu = menu({
+			items: items,
+			id: e.id ? e.id + '.context_menu' : null,
+			grid: e,
+		})
 		let r = e.rect()
 		let px = mx - r.x
 		let py = my - r.y
-		context_menu.popup(e, 'inner-top', null, null, null, null, null, px, py)
+		e.context_menu.popup(e, 'inner-top', null, null, null, null, null, px, py)
 	}
 
 })

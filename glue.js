@@ -358,9 +358,10 @@ method(String, 'display_name', function() {
 
 {
 let non_null = (s) => s != null
-method(String, 'cat', function(sep, ...args) {
+function catargs(sep, ...args) {
 	return args.filter(non_null).join(sep)
-})
+}
+method(String, 'cat', catargs)
 }
 
 method(String, 'names', function() {
