@@ -465,6 +465,7 @@ function nav_widget(e) {
 	function bind_rowset_name(name, on) {
 		if (on) {
 			attr(rowset_navs, name, Set).add(e)
+			init_rowset_events()
 		} else {
 			let navs = rowset_navs[name]
 			if (navs) {
@@ -4605,8 +4606,11 @@ component('x-lookup-dropdown', function(e) {
 
 // reload push-notifications -------------------------------------------------
 
-on_dom_load(function() {
-	let es = new EventSource('/xrowset.events')
+{
+let es
+function init_rowset_events() {
+	if (es) return
+	es = new EventSource('/xrowset.events')
 	es.onmessage = function(ev) {
 		let rowset_name = ev.data
 		let navs = rowset_navs[rowset_name]
@@ -4615,5 +4619,5 @@ on_dom_load(function() {
 				if (!nav.load_request)
 					nav.reload()
 	}
-})
-
+}
+}
