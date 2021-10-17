@@ -506,7 +506,7 @@ function assign_opt(dt, ...ts) {
 	for (let t of ts)
 		if (t != null)
 			for (let k in t)
-				if (t.hasOwnProperty(k))
+				if (!t.hasOwnProperty || t.hasOwnProperty(k))
 					if (t[k] !== undefined)
 						dt[k] = t[k]
 	return dt
@@ -977,8 +977,6 @@ function week_start_offset() {
 
 // time formatting -----------------------------------------------------------
 
-{
-
 method(Number, 'duration', function() {
 	let d = this
 	if (d > 2 * 365 * 24 * 3600)
@@ -991,31 +989,16 @@ method(Number, 'duration', function() {
 		return S('hours', '{0} hours', (d / 3600).dec())
 	else if (d > 2 * 60)
 		return S('minutes', '{0} minutes', (d / 60).dec())
-	else
+	else if (d >= 60)
 		return S('one_minute', '1 minute')
+	else
+		return S('seconds', 'seconds')
 })
 
 method(Number, 'timeago', function() {
 	var d = time() - this
 	return (d > 0 ? S('time_ago', '{0} ago') : S('in_time', 'in {0}')).subst(abs(d).duration())
 })
-
-setInterval(function() {
-	for (let e of $('.timeago')) {
-		let t = num(e.attr('time'))
-		if (!t) {
-			// set client-relative time from timeago attribute.
-			var time_ago = num(e.attr('timeago'))
-			if (!time_ago)
-				return
-			t = time() - time_ago
-			e.attr('time', t)
-		}
-		e.set(t.timeago())
-	}
-}, 60 * 1000)
-
-}
 
 // file size formatting ------------------------------------------------------
 

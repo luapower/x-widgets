@@ -306,6 +306,7 @@ exclusively for components to work.
 
 */
 
+{
 let component_init = obj() // {tag->init}
 let component_selector = obj() // {tag->selector}
 let component_query = ''
@@ -339,6 +340,7 @@ method(Element, 'init_child_components', function() {
 	for (let ce of children) // depth-first, so creates children first.
 		component_init[ce.tagName](ce)
 })
+}
 
 method(Element, 'bind_children', function(on) {
 	if (!this.len)
@@ -816,8 +818,8 @@ function event(name, bubbles, ...args) {
 		: name
 }
 
-var ev = obj()
-var ep = obj()
+let ev = obj()
+let ep = obj()
 let log_fire = DEBUG_EVENTS && function(e) {
 	ev[e.type] = (ev[e.type] || 0) + 1
 	if (e.type == 'prop_changed') {
@@ -1764,3 +1766,20 @@ let lazy_load = function(img) {
 }
 bind_component('img', lazy_load, 'img[data-src]')
 }
+
+// timeago auto-updating -----------------------------------------------------
+
+setInterval(function() {
+	for (let e of $('[timeago]')) {
+		let t = num(e.attr('time'))
+		if (!t) {
+			// set client-relative time from timeago attribute.
+			let time_ago = num(e.attr('timeago'))
+			if (!time_ago)
+				return
+			t = time() - time_ago
+			e.attr('time', t)
+		}
+		e.set(t.timeago())
+	}
+}, 60 * 1000)

@@ -1466,6 +1466,7 @@ component('x-button', 'Input', function(e) {
 
 	e.on('load', function(ev, ...args) {
 		e.disabled = ev == 'start'
+		e.icon_box.class('fa-spin', e.disabled)
 	})
 
 	e.load = function(url, success, fail, opt) {

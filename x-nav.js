@@ -370,8 +370,12 @@ server-side properties:
 		e.sql_db
 
 field_types : {type -> {attr->val}}
+rowset_field_attrs : {ROWSET_NAME.COL -> {attr->val}}
 
 --------------------------------------------------------------------------- */
+
+field_types = obj()
+rowset_field_attrs = obj()
 
 function map_keys_different(m1, m2) {
 	if (m1.size != m2.size)
@@ -537,11 +541,12 @@ function nav_widget(e) {
 
 		let pt = e.prop_col_attrs && e.prop_col_attrs[name]
 		let ct = e.col_attrs && e.col_attrs[name]
+		let rt = e.rowset_name && rowset_field_attrs[e.rowset_name+'.'+name]
 		let type = f.type || (ct && ct.type)
 		let tt = field_types[type]
 		let att = all_field_types
 
-		assign(field, att, tt, f, ct, pt)
+		assign(field, att, tt, f, rt, ct, pt)
 
 		for (let k in convert_field_attr)
 			field[k] = convert_field_attr[k](field, field[k], f)
@@ -555,11 +560,13 @@ function nav_widget(e) {
 		if (v === undefined) {
 
 			let ct = e.col_attrs && e.col_attrs[field.name]
+			let rt = e.rowset_name && rowset_field_attrs[e.rowset_name+'.'+field.name]
 			let type = f.type || (ct && ct.type)
 			let tt = type && field_types[type]
 			let att = all_field_types
 
 			v = ct && ct[k]
+			v = strict_or(v, rt)
 			v = strict_or(v, f[k])
 			v = strict_or(v, tt && tt[k])
 			v = strict_or(v, att[k])
@@ -4171,13 +4178,14 @@ component('x-lookup-dropdown', function(e) {
 })
 
 /* ---------------------------------------------------------------------------
-// field types and prop attrs
+// field type definitions
 // ---------------------------------------------------------------------------
 
 	number
 	filesize
-	date
 	datetime
+	date
+	timestamp
 	time
 	bool
 	enum
@@ -4188,6 +4196,8 @@ component('x-lookup-dropdown', function(e) {
 	image
 	tags
 	place
+	phone
+	email
 
 */
 
@@ -4265,8 +4275,6 @@ component('x-lookup-dropdown', function(e) {
 		s = s.trim()
 		return s !== '' ? s : null
 	}
-
-	field_types = obj() // {type->field}
 
 	// numbers
 
@@ -4399,11 +4407,10 @@ component('x-lookup-dropdown', function(e) {
 	datetime.format = function(s) {
 		s = s || ''
 		if (!this.has_time)
-			return s.slice(0, 10)
+			s = s.slice(0, 10)
 		else if (!this.has_seconds)
-			return s.slice(0, 16)
-		else
-			return s
+			s = s.slice(0, 16)
+		return s
 	}
 
 	datetime.editor = function(...opt) {
@@ -4452,7 +4459,7 @@ component('x-lookup-dropdown', function(e) {
 	timestamp.max = 2**32-1 // range of MySQL TIMESTAMP type
 
 	timestamp.format = function(t) {
-		return datetime.from_time(t)
+		return span({timeago: '', time: t}, t.timeago())
 	}
 
 	timestamp.validator_date = field => ({
@@ -4596,13 +4603,13 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	// email
+
 	let email = {}
 	field_types.email = email
 
 	email.validator_email = function() {
 
 	}
-
 
 }
 

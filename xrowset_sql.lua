@@ -86,7 +86,7 @@ end
 
 local rowset_type = {
 	tinyint     = 'number',
-	shortint    = 'number',
+	smallint    = 'number',
 	mediumint   = 'number',
 	int         = 'number',
 	bigint      = 'number',
