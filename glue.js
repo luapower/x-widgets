@@ -1366,6 +1366,9 @@ function ajax(req) {
 		if (name == 'done')
 			fire(arg1, ...rest)
 
+		if (name == 'fail' && window.notify)
+			window.notify(arg1, 'error')
+
 		req.fire(name, arg1, ...rest)
 		if (req[name])
 			req[name](arg1, ...rest)

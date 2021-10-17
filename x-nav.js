@@ -2338,6 +2338,8 @@ function nav_widget(e) {
 	function validate_row(row, purpose) {
 		if (row.has_errors == false)
 			return true
+		if (!row.modified)
+			return true
 		let has_errors = false
 		let can_exit_row = true
 		for (let field of e.all_fields) {
@@ -4433,8 +4435,8 @@ component('x-lookup-dropdown', function(e) {
 	timestamp.to_time   = return_arg
 	timestamp.from_time = return_arg
 
-	datetime.to_num   = return_arg
-	datetime.from_num = return_arg
+	timestamp.to_num   = return_arg
+	timestamp.from_num = return_arg
 
 	timestamp.to_text = function(t) {
 		let s = datetime.from_time(t)

@@ -20,6 +20,9 @@
 		pagenav
 		richtext
 
+	Globals
+		notify(text, ['search'|'info'|'error'], [timeout])
+
 */
 
 DEBUG_ATTACH_TIME = false
@@ -1150,7 +1153,7 @@ component('x-tooltip', function(e) {
 	e.prop('icon_visible', {store: 'var', type: 'bool'})
 	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
 	e.prop('align'       , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center', attr: true})
-	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'info', 'error'], default: 'default', attr: true})
+	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'search', 'info', 'error', 'cursor'], default: 'default', attr: true})
 	e.prop('px'          , {store: 'var', type: 'number'})
 	e.prop('py'          , {store: 'var', type: 'number'})
 	e.prop('pw'          , {store: 'var', type: 'number'})
