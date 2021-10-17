@@ -54,10 +54,6 @@
 		- `pos_col` and `parent_col` are set to hidden by default.
 		- on client-side, `id_col` is set to pk if pk is single-column.
 
-	Field defaults based on field's name or type:
-		field_name_attrs = {col->field}
-		field_type_attrs = {type->field}
-
 ]]
 
 require'webb_action'
@@ -79,9 +75,6 @@ rowset = {}
 action['rowset.json'] = function(name)
 	return checkfound(rowset[name])()
 end
-
-field_type_attrs = {}
-field_name_attrs = {}
 
 local client_field_attrs = {
 	internal=1, hidden=1, editable=1,
@@ -113,11 +106,7 @@ function virtual_rowset(init, ...)
 			if ro_cols[f.name] then
 				f.editable = false
 			end
-			update(f,
-				field_type_attrs[f.type],
-				field_name_attrs[f.name],
-				rs.field_attrs and rs.field_attrs[f.name]
-			)
+			update(f, rs.field_attrs and rs.field_attrs[f.name])
 
 			local client_field = {}
 			for k in pairs(f) do

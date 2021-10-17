@@ -273,10 +273,3 @@ function sql_rowset(...)
 
 	end, ...)
 end
-
-field_type_attrs.bool = {
-	from_server = function(self, v)
-		if v == nil then return nil end
-		return v ~= 0
-	end,
-}

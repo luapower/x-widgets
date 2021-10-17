@@ -1192,10 +1192,11 @@ function url(t) {
 
 	let path, args, fragment
 
-	if (t.segments) {
+	let segments = isarray(t) ? t : t.segments
+	if (segments) {
 		let a = []
-		for (let i = 0; i < t.segments.length; i++)
-			a[i] = encodeURIComponent(t.segments[i])
+		for (let i = 0; i < segments.length; i++)
+			a[i] = encodeURIComponent(segments[i])
 		path = a.join('/')
 	} else
 		path = t.path
@@ -1261,7 +1262,7 @@ function ajax(req) {
 	let method = req.method || (req.upload ? 'POST' : 'GET')
 	let async = req.async !== false // NOTE: this is deprecated but that's ok.
 
-	xhr.open(method, req.url, async, req.user, req.pass)
+	xhr.open(method, url(req.url), async, req.user, req.pass)
 
 	let upload = req.upload
 	if (isobj(upload)) {
