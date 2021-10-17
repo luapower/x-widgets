@@ -480,9 +480,12 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 	}
 
 	e.do_update_cell_val = function(cell, row, field, input_val) {
-		let v = e.cell_display_val_for(row, field, input_val)
+		if (cell.input_val === input_val)
+			return
+		let v = e.cell_display_val_for(row, field, input_val, cell.data_val)
 		if (cell.data_val === v)
 			return
+		cell.input_val = input_val
 		cell.data_val = v
 		let node = cell.childNodes[cell.indent ? 1 : 0]
 		if (cell.qs_div) { // value is wrapped
@@ -1835,10 +1838,22 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		if (key == 'Enter') {
 			if (e.quicksearch_text) {
 				e.quicksearch(e.quicksearch_text, e.focused_row, shift ? -1 : 1)
+				return false
 			} else if (e.hasclass('picker')) {
 				e.pick_val()
+				return false
 			} else if (!e.editor) {
-				e.enter_edit('toggle')
+				// TODO: this feels hackish. Can we find a more agnostic protocol?
+				let ri = e.focused_row_index
+				let fi = e.focused_field_index
+				if (ri != null && fi != null && e.focused_field.type == 'button') {
+					let cell = e.cells.at[cell_index(ri, fi)]
+					if (cell && cell.at[0] && cell.at[0].hasclass('x-button'))
+						cell.at[0].activate()
+					return false
+				}
+				if (e.enter_edit('toggle'))
+					return false
 			} else if (!e.exit_edit_on_enter || e.exit_edit()) {
 				if (e.advance_on_enter == 'next_row')
 					e.focus_cell(true, true, 1, 0, {
@@ -1854,8 +1869,8 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 						editor_state: 'select_all',
 						must_move: true,
 					})
+				return false
 			}
-			return false
 		}
 
 		// Esc: exit edit mode.

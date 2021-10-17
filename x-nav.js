@@ -542,7 +542,7 @@ function nav_widget(e) {
 		let pt = e.prop_col_attrs && e.prop_col_attrs[name]
 		let ct = e.col_attrs && e.col_attrs[name]
 		let rt = e.rowset_name && rowset_field_attrs[e.rowset_name+'.'+name]
-		let type = f.type || (ct && ct.type)
+		let type = f.type || (ct && ct.type) || (rt && rt.type)
 		let tt = field_types[type]
 		let att = all_field_types
 
@@ -561,7 +561,7 @@ function nav_widget(e) {
 
 			let ct = e.col_attrs && e.col_attrs[field.name]
 			let rt = e.rowset_name && rowset_field_attrs[e.rowset_name+'.'+field.name]
-			let type = f.type || (ct && ct.type)
+			let type = f.type || (ct && ct.type) || (rt && rt.type)
 			let tt = type && field_types[type]
 			let att = all_field_types
 
@@ -2733,7 +2733,7 @@ function nav_widget(e) {
 		return ln.cell_display_val(ln_row, df)
 	}
 
-	e.cell_display_val_for = function(row, field, v) {
+	e.cell_display_val_for = function(row, field, v, v0) {
 		if (v == null)
 			return null_display_val(row, field)
 		if (v === '')
@@ -3050,7 +3050,7 @@ function nav_widget(e) {
 		for (let fi = 0; fi < rs.fields.length; fi++) {
 			let f1 = rs.fields[fi]
 			let f0 = e.all_fields[fi]
-			if (f1.name !== f0.name || f1.type !== f0.type)
+			if (f1.name !== f0.name)
 				return false
 		}
 		let rs_pk = isarray(rs.pk) ? rs.pk.join(' ') : rs.pk
@@ -4610,6 +4610,11 @@ component('x-lookup-dropdown', function(e) {
 	email.validator_email = function() {
 
 	}
+
+	// button
+
+	let btn = {align: 'center'}
+	field_types.button = btn
 
 }
 
