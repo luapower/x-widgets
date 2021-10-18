@@ -585,7 +585,7 @@ function nav_widget(e) {
 	function init_field(f, fi) {
 
 		// disambiguate field name.
-		let name = (f.name || 'f'+fi).replaceAll(' ', '_')
+		let name = (f.name || 'f'+fi)
 		if (name in e.all_fields) {
 			let suffix = 2
 			while (name+suffix in e.all_fields)
