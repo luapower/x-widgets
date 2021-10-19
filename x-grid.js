@@ -1800,7 +1800,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			if (e.is_last_row_focused()) {
 				let row = e.focused_row
 				if (row.is_new && !e.row_is_user_modified(row)) {
-					if (e.remove_selected_rows({refocus: true}))
+					if (e.remove_selected_rows({input: e, refocus: true}))
 						return false
 				}
 			}
@@ -1898,14 +1898,14 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 		// insert key: insert row
 		if (key == 'Insert')
-			if (e.focus_cell(false, false))
+			if (e.exit_focused_row())
 				if (e.insert_rows(1, {input: e, at_focused_row: true, focus_it: true}))
 					return false
 
 		if (!e.editor && key == 'Delete') {
 
 			// delete: toggle-delete active row
-			if (!ctrl && e.remove_selected_rows({refocus: true, toggle: true}))
+			if (!ctrl && e.remove_selected_rows({input: e, refocus: true, toggle: true}))
 				return false
 
 			// ctrl_delete: set selected cells to null.
@@ -2004,7 +2004,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			icon: 'fa fa-trash',
 			disabled: !(e.selected_rows.size && e.can_remove_row()),
 			action: function() {
-				e.remove_selected_rows({refocus: true})
+				e.remove_selected_rows({input: e, refocus: true})
 			},
 		})
 

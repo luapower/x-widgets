@@ -660,10 +660,9 @@ function nav_widget(e) {
 
 		// not creating fields and rows unless bound because we don't get
 		// events while not attached to DOM so the nav might get stale.
-		if (e.bound)
-			if (rs.fields)
-				for (let fi = 0; fi < rs.fields.length; fi++)
-					init_field(rs.fields[fi], fi)
+		if (e.bound && rs.fields)
+			for (let fi = 0; fi < rs.fields.length; fi++)
+				init_field(rs.fields[fi], fi)
 
 		e.pk = e.bound ? (isarray(rs.pk) ? rs.pk.join(' ') : rs.pk) : null
 		e.pk_fields = flds(e.pk)
@@ -677,8 +676,8 @@ function nav_widget(e) {
 		e.val_field = e.all_fields[e.val_col]
 		e.pos_field = e.all_fields[rs.pos_col]
 
-		if (rs.pos_col && !e.pos_field)
-			warn('pos col "'+rs.pos_col+'" not selected')
+		if (e.bound && rs.pos_col && !e.pos_field)
+			warn('pos col "'+rs.pos_col+'" not selected for rowset '+e.rowset_name)
 
 		for (let field of e.all_fields)
 			init_field_validators(field)
@@ -3070,8 +3069,8 @@ function nav_widget(e) {
 		e.remove_rows(rm_rows, {from_server: true})
 
 		e.update({
-			rows: !!(rows_added || rm_rows.length),
-			vals: !!rows_updated,
+			rows: rows_added || rm_rows.length || undefined,
+			vals: rows_updated || undefined,
 		})
 
 		e.end_update()
@@ -3348,7 +3347,6 @@ function nav_widget(e) {
 	}
 
 	function load_slow(show) {
-		print('load_slow', show)
 		e.do_update_load_slow(show)
 		e.fire('load_slow', show)
 	}
