@@ -150,21 +150,19 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 	e.do_update_val = noop
 
-	function cell_state_changed(field, key, val, ev) {
+	function cell_state_changed(row, field, key, val, ev) {
 		if (e.updating)
 			return
 		bind_field(true)
 		if (key == 'input_val') {
 			e.do_update_val(val, ev)
+			e.class('modified', row && field && e.nav.cell_modified(row, field))
 			e.fire('input_val_changed', val, ev)
 		} else if (key == 'val') {
 			e.fire('val_changed', val, ev)
 		} else if (key == 'errors') {
-			e.invalid = val != null && !val.passed
-			e.class('invalid', e.invalid)
+			e.class('invalid', row && field && !e.nav.cell_valid(row, field))
 			e.do_update_errors(val, ev)
-		} else if (key == 'modified') {
-			e.class('modified', val)
 		}
 	}
 
@@ -300,14 +298,15 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 	// view -------------------------------------------------------------------
 
 	e.do_update = function() {
+		let row = e.row
+		let field = e.field
 		let disabled = !(enabled_without_nav
-			|| (e.row && e.field && e.nav.can_change_val(e.row, e.field)))
+			|| (row && field && e.nav.can_change_val(row, field)))
 		e.bool_attr('disabled', disabled || null) // for non-focusables
 		e.disabled = disabled
-		cell_state_changed(e.field, 'input_val', e.input_val)
-		cell_state_changed(e.field, 'val', e.val)
-		cell_state_changed(e.field, 'errors', e.errors)
-		cell_state_changed(e.field, 'modified', e.modified)
+		cell_state_changed(row, field, 'input_val', e.input_val)
+		cell_state_changed(row, field, 'val', e.val)
+		cell_state_changed(row, field, 'errors', e.errors)
 	}
 
 	e.do_error_tooltip_check = function() {

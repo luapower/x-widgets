@@ -812,12 +812,14 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		let cell = e.cells.at[cell_index(ri, fi)]
 		if (!cell)
 			return
-		if (prop == 'input_val')
-			e.do_update_cell_val(cell, e.rows[ri], e.fields[fi], val)
-		else if (prop == 'errors')
+		if (prop == 'input_val') {
+			let row = e.rows[ri]
+			let field = e.fields[fi]
+			e.do_update_cell_val(cell, row, field, val)
+			cell.class('modified', e.cell_modified(row, field))
+		} else if (prop == 'errors') {
 			e.do_update_cell_errors(cell, e.rows[ri], e.fields[fi], val)
-		else if (prop == 'modified')
-			cell.class('modified', val)
+		}
 	}
 
 	e.do_update_row_state = function(ri, prop, val, ev) {
@@ -2179,16 +2181,16 @@ component('x-row-form', function(e) {
 		e.update({vals: true})
 	}
 
-	function cell_state_changed(nav_field, key, val) {
+	function cell_state_changed(row, nav_field, key, val) {
 		if (e.updating)
 			return
 		let field = e.all_fields[nav_field.val_index]
 		if (key == 'input_val')
-			e.set_cell_val(e.row, field, val)
+			e.set_cell_val(row, field, val)
 		else if (key == 'val')
-			e.reset_cell_val(e.row, field, val)
+			e.reset_cell_val(row, field, val)
 		else if (key == 'error')
-			e.set_cell_error(e.row, field, val)
+			e.set_cell_error(row, field, val)
 	}
 
 	function col_attr_changed(col, attr, val) {

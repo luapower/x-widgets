@@ -6,6 +6,7 @@
 	What must be specified manually:
 		- select          : select without where clause.
 		- where_all       : where clause for all rows (without the word "where").
+		- order_by        : order-by clause.
 		- pk              : 'foo bar ...', required as it can't be inferred reliably.
 		- db              : optional, connection alias to query on.
 
@@ -116,7 +117,7 @@ local function lookup_rowset(tbl)
 		local tdef = table_def(tbl)
 		local name_col = guess_name_col(tdef)
 		local t = glue.extend({name_col}, tdef.pk)
-		local cols = concat(glue.map(t, sqlname), ', ')
+		local cols = concat(glue.imap(t, sqlname), ', ')
 		rowset[rs] = sql_rowset{
 			select = format('select %s from %s', cols, tbl),
 			pk = concat(tdef.pk, ' '),
@@ -149,6 +150,7 @@ function sql_rowset(...)
 		if not rs.select_all and rs.select then
 			rs.select_all = outdent(rs.select)
 				.. (rs.where_all and '\nwhere '..rs.where_all or '')
+				.. (rs.order_by and '\norder by '..rs.order_by or '')
 		end
 
 		if not rs.select_row and rs.select and rs.where_row then
@@ -248,8 +250,8 @@ function sql_rowset(...)
 				local where_row = where_row_sql()
 				function rs:load_row(vals)
 					local sql = outdent(rs.select) .. (where_all
-						and format('\nwhere ({%s}) and ({%s})', where_all, where_row)
-						 or format('\nwhere {%s}', where_row))
+						and format('\nwhere (%s) and (%s)', where_all, where_row)
+						 or format('\nwhere %s', where_row))
 					return query(load_opt, sql, vals)
 				end
 			end

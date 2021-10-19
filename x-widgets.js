@@ -131,22 +131,23 @@ function component(tag, category, cons) {
 		e.begin_update() // bind(true) calls end_update().
 		e.update() // ...deferred on first call to bind().
 
-		e.debug_name = function(prefix) {
-			prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
-			let p = this; do { p = p.popup_target || p.parent } while (p && !p.debug_name)
-			if (!(p && p.debug_name))
-				return prefix
-			return p.debug_name(prefix)
-		}
+		if (DEBUG_ATTACH_TIME)
+			e.debug_name = function(prefix) {
+				prefix = (prefix && prefix + ' < ' || '') + this.type + (this.id ? ' ' + this.id : '')
+				let p = this; do { p = p.popup_target || p.parent } while (p && !p.debug_name)
+				if (!(p && p.debug_name))
+					return prefix
+				return p.debug_name(prefix)
+			}
 
 		e.initialized = null // for log_add_event().
 
 		// combine initial prop values from multiple sources, in overriding order:
 		// - html attributes.
-		// - constructor return value,
-		// - constructor args,
-		let opt = assign_opt({}, ...args)
-		component_props(e, opt && opt.props)
+		// - constructor return value.
+		// - constructor args.
+		let opt = assign_opt(obj(), ...args)
+		component_props(e, opt.props)
 		e.isinstance = true   // because you can have non-widget instances.
 		e.iswidget = true     // to diff from normal html elements.
 		e.type = type         // for serialization.
@@ -1466,7 +1467,6 @@ component('x-button', 'Input', function(e) {
 
 	e.on('load', function(ev, ...args) {
 		e.disabled = ev == 'start'
-		e.icon_box.class('fa-spin', e.disabled)
 	})
 
 	e.load = function(url, success, fail, opt) {

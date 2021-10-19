@@ -88,18 +88,16 @@ rowset field attributes:
 		compare_values : f(v1, v2) -> -1|0|1  (for sorting)
 
 rowset cell attributes:
-	row[i]             : current cell value (always valid).
-	row[input_val_i]   : currently set cell value, whether valid or not.
+	row[i]             : cell value as last seen on the server (always valid).
+	row[input_val_i]   : modified cell value, valid or not.
 	row[errors_i]      : cell errors array; errors.passed indicates valid input value.
 	row[modified_i]    : value was modified, change not on server yet.
-	row[old_val_i]     : initial value before modifying.
-	row[prev_val_i]    : value before last change.
 
 rowset row attributes:
 	row.focusable      : row can be focused (true).
 	row.editable       : allow modifying (true).
 	row.can_remove     : allow removing (true).
-	row.nosave         : skip saving.
+	row.nosave         : row is not to be saved.
 	row.is_new         : new row, not added on server yet.
 	row.modified       : one or more row cells were modified.
 	row.removed        : removed row, not removed on server yet.
@@ -236,9 +234,8 @@ cell values & state:
 		e.cell_state()
 		e.cell_val()
 		e.cell_input_val()
-		e.cell_old_val()
-		e.cell_prev_val()
 		e.cell_errors()
+		e.cell_valid()
 		e.cell_modified()
 		e.cell_vals()
 
@@ -252,17 +249,17 @@ updating cells:
 		e.validate_val()
 		e.do_update_cell_state(ri, fi, key, val, ev)
 		e.do_update_cell_editing(ri, [fi], editing)
-		^cell_state_changed(row, field, key, val, ev)
-		^cell_state_changed_for_COL(row, field, key, val, ev)
-		^cell_STATE_changed(row, field, val, ev)
-		^cell_STATE_changed_for_COL(row, field, val, ev)
-		^row_state_changed(row, key, val, ev)
-		^row_STATE_changed(row, val, ev)
-		^focused_row_cell_state_changed(field, key, val, ev)
-		^focused_row_cell_state_changed_for_COL(field, key, val, ev)
-		^focused_row_cell_STATE_changed_for_COL(field, val, ev)
-		^focused_row_state_changed(key, val, ev)
-		^focused_row_STATE_changed(val, ev)
+		^cell_state_changed(row, field, key, val, old_val, ev)
+		^cell_state_changed_for_COL(row, field, key, val, old_val, ev)
+		^cell_STATE_changed(row, field, val, old_val, ev)
+		^cell_STATE_changed_for_COL(row, field, val, old_val, ev)
+		^row_state_changed(row, key, val, old_val, ev)
+		^row_STATE_changed(row, val, old_val, ev)
+		^focused_row_cell_state_changed(row, field, key, val, old_val, ev)
+		^focused_row_cell_state_changed_for_COL(row, field, key, val, old_val, ev)
+		^focused_row_cell_STATE_changed_for_COL(row, field, val, old_val, ev)
+		^focused_row_state_changed(row, key, val, old_val, ev)
+		^focused_row_STATE_changed(row, val, old_val, ev)
 
 row state:
 	publishes:
@@ -903,14 +900,12 @@ function nav_widget(e) {
 			e.reload()
 	}
 
-	function param_nav_val_changed(master_row, master_field, val, ev) {
+	function param_nav_val_changed(master_row, master_field, val, old_val, ev) {
 		if (!e.rowset_url && (e.row_vals || e.row_states)) {
-			// detail nav with client-side rowset: cascade-update forein keys.
-			let prev_val = this.cell_prev_val(master_row, master_field)
-			let col = param_map(e.params).get(master_field.name)
-			let field = e.all_fields[col]
+			// detail nav with client-side rowset: cascade-update foreign keys.
+			let field = fld(param_map(e.params).get(master_field.name))
 			for (let row of e.all_rows)
-				if (e.cell_val(row, field) === prev_val)
+				if (e.cell_val(row, field) === old_val)
 					e.set_cell_val(row, field, val)
 		} else
 			e.reload()
@@ -2205,7 +2200,7 @@ function nav_widget(e) {
 			return false
 		row[vi] = val
 		if (fire_change_event !== false)
-			cell_state_changed(row, field, key, val, ev)
+			cell_state_changed(row, field, key, val, old_val, ev)
 		return true
 	}
 
@@ -2224,44 +2219,42 @@ function nav_widget(e) {
 	e.do_update_cell_state = noop
 	e.do_update_row_state = noop
 
-	function cell_state_changed(row, field, key, val, ev) {
+	function cell_state_changed(row, field, key, val, old_val, ev) {
 		if (ev && ev.fire_changed_events === false)
 			return
-		e.fire('cell_state_changed', row, field, key, val, ev)
-		e.fire('cell_state_changed_for_'+field.name, row, field, key, val, ev)
-		e.fire('cell_'+key+'_changed', row, field, val, ev)
-		e.fire('cell_'+key+'_changed_for_'+field.name, row, field, val, ev)
+		e.fire('cell_state_changed', row, field, key, val, old_val, ev)
+		e.fire('cell_state_changed_for_'+field.name, row, field, key, val, old_val, ev)
+		e.fire('cell_'+key+'_changed', row, field, val, old_val, ev)
+		e.fire('cell_'+key+'_changed_for_'+field.name, row, field, val, old_val, ev)
 
 		let ri = e.row_index(row)
 		let fi = e.field_index(field)
 		e.do_update_cell_state(ri, fi, key, val, ev)
 		if (row == e.focused_row) {
-			e.fire('focused_row_cell_state_changed', field, key, val, ev)
-			e.fire('focused_row_cell_state_changed_for_'+field.name, field, key, val, ev)
-			e.fire('focused_row_cell_'+key+'_changed_for_'+field.name, field, val, ev)
+			e.fire('focused_row_cell_state_changed', row, field, key, val, old_val, ev)
+			e.fire('focused_row_cell_state_changed_for_'+field.name, row, field, key, val, old_val, ev)
+			e.fire('focused_row_cell_'+key+'_changed_for_'+field.name, row, field, val, old_val, ev)
 		}
 	}
 
-	function row_state_changed(row, key, val, ev) {
-
+	function row_state_changed(row, key, val, old_val, ev) {
 		let ri = e.row_index(row, ev && ev.row_index)
 		e.do_update_row_state(ri, key, val, ev)
 		if (row == e.focused_row) {
-			e.fire('focused_row_state_changed', key, val, ev)
-			e.fire('focused_row_'+key+'_changed', val, ev)
+			e.fire('focused_row_state_changed', row, key, val, old_val, ev)
+			e.fire('focused_row_'+key+'_changed', row, val, old_val, ev)
 		}
-		e.fire('row_state_changed', row, key, val, ev)
-		e.fire('row_'+key+'_changed', row, val, ev)
+		e.fire('row_state_changed', row, key, val, old_val, ev)
+		e.fire('row_'+key+'_changed', row, val, old_val, ev)
 	}
 
 	// get/set cell vals and cell & row state ---------------------------------
 
 	e.cell_val       = (row, col) => row[fld(col).val_index]
-	e.cell_input_val = (row, col) => e.cell_state(row, fld(col), 'input_val'   , row[fld(col).val_index])
-	e.cell_old_val   = (row, col) => e.cell_state(row, fld(col), 'old_val'     , row[fld(col).val_index])
-	e.cell_prev_val  = (row, col) => e.cell_state(row, fld(col), 'prev_val'    , row[fld(col).val_index])
+	e.cell_input_val = (row, col) => e.cell_state(row, fld(col), 'input_val', e.cell_val(row, col))
 	e.cell_errors    = (row, col) => e.cell_state(row, fld(col), 'errors')
-	e.cell_modified  = (row, col) => e.cell_state(row, fld(col), 'modified', false)
+	e.cell_valid     = (row, col) => { let err = e.cell_errors(row, col); return err && err.passed; }
+	e.cell_modified  = (row, col) => e.cell_input_val(row, col) !== e.cell_val(row, col)
 
 	e.cell_vals = function(row, cols) {
 		let fields = flds(cols)
@@ -2337,8 +2330,8 @@ function nav_widget(e) {
 	}
 
 	e.set_row_is_new = function(row, ev) {
-		e.set_row_state(row, 'is_new'  , true, false, ev)
-		e.set_row_state(row, 'modified', true, false, ev)
+		e.set_row_state(row, 'is_new'  , true, false, true, ev)
+		e.set_row_state(row, 'modified', true, false, true, ev)
 		row_changed(row)
 	}
 
@@ -2350,7 +2343,7 @@ function nav_widget(e) {
 		let has_errors = false
 		let can_exit_row = true
 		for (let field of e.all_fields) {
-			let errors = e.cell_state(row, field, 'errors')
+			let errors = e.cell_errors(row, field)
 			if (!errors) { // not validated
 				let val = e.cell_input_val(row, field)
 				errors = e.validate_val(field, val, row)
@@ -2372,7 +2365,7 @@ function nav_widget(e) {
 
 	function cells_modified(row) {
 		for (let field of e.all_fields)
-			if (e.cell_state(row, field, 'modified'))
+			if (e.cell_modified(row, field))
 				return true
 	}
 
@@ -2382,9 +2375,16 @@ function nav_widget(e) {
 		if (!e.pos_field)
 			return true
 		for (let field of e.all_fields)
-			if (e.cell_state(row, field, 'modified') && field !== e.pos_field)
+			if (e.cell_modified(row, field) && field !== e.pos_field)
 				return true
 		return false
+	}
+
+	function must_save(when) {
+		let row = e.focused_row
+		if (!row) return
+		let opt = row.is_new ? e.save_new_row_on : e.save_row_on
+		return opt == when
 	}
 
 	e.set_cell_val = function(row, col, val, ev) {
@@ -2400,55 +2400,44 @@ function nav_widget(e) {
 			val = null
 		val = e.convert_val(field, val, row, ev)
 
-		let cur_val = row[field.val_index]
+		let server_val = e.cell_val(row, field)
+		let prev_input_val = e.cell_input_val(row, field)
+
+		// update state fully without firing change events.
 
 		// some validators use `input_val` directly instead of the supplied `val`,
 		// which is why we're setting it before validating it!
-		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
-
-		if (!input_val_changed)
+		if (!e.set_cell_state(row, field, 'input_val', val, server_val, false))
 			return
 
 		let errors = e.validate_val(field, val, row, ev)
 		let invalid = !errors.passed
-		let val_changed = !invalid && val !== cur_val
 		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
-		let has_errors = invalid ? true : undefined
-		let has_errors_changed = e.set_row_state(row, 'has_errors', has_errors, undefined, false)
 
-		if (val_changed) {
+		let row_has_errors = invalid ? true : undefined
+		let row_has_errors_changed = e.set_row_state(row, 'has_errors', row_has_errors, undefined, false)
 
-			let was_modified = e.cell_modified(row, field)
-			let modified = val !== e.cell_old_val(row, field)
+		let row_modified = val !== server_val || cells_modified(row)
+		let row_modified_changed = (!(ev && ev.row_not_modified))
+			&& e.set_row_state(row, 'modified', row_modified, false, false)
 
-			row[field.val_index] = val
-			e.set_cell_state(row, field, 'prev_val', cur_val, null, false)
-			if (!was_modified)
-				e.set_cell_state(row, field, 'old_val', cur_val, null, false)
-			let cell_modified_changed = e.set_cell_state(row, field, 'modified', modified, false, false)
-			let row_modified = modified || cells_modified(row)
-			let row_modified_changed = (!(ev && ev.row_not_modified))
-				&& e.set_row_state(row, 'modified', row_modified, false, false)
+		// fire change events in no particular order, now that the state is fully updated.
 
-			update_indices('val_changed', row, field, val)
+		cell_state_changed(row, field, 'input_val', val, undefined, ev)
 
-			cell_state_changed(row, field, 'val', val, ev)
-			if (cell_modified_changed) cell_state_changed(row, field, 'modified', modified, ev)
-			if (row_modified_changed) row_state_changed(row, 'modified', true, ev)
+		if (cell_errors_changed    ) cell_state_changed(row, field, 'errors', errors, undefined, ev)
+		if (row_has_errors_changed ) row_state_changed(row, 'has_errors', row_has_errors, undefined, ev)
+		if (row_modified_changed   ) row_state_changed(row, 'modified', row_modified, undefined, ev)
 
+		// save rowset if necessary.
+
+		if (!invalid) {
 			row_changed(row)
-
+			if (ev && ev.input) // from UI
+				if (must_save(e.editor ? 'input' : 'exit_edit'))
+					e.save()
 		}
 
-		if (input_val_changed  ) cell_state_changed(row, field, 'input_val', val, ev)
-		if (cell_errors_changed) cell_state_changed(row, field, 'errors'   , errors, ev)
-
-		if (has_errors_changed) row_state_changed(row, 'has_errors', has_errors, ev)
-
-		if (val_changed)
-			save_rows([row], 'input')
-
-		return !invalid
 	}
 
 	e.reset_cell_val = function(row, col, val, ev) {
@@ -2459,40 +2448,33 @@ function nav_widget(e) {
 			val = null
 		val = e.convert_val(field, val, row, ev)
 
-		let cur_val = row[field.val_index]
+		let input_val = e.cell_input_val(row, field)
+		let cur_val = e.cell_val(row, field)
+		let val_changed = val !== cur_val
 
 		// some validators use `input_val` directly instead of the supplied `val`,
 		// which is why we're setting it before validating it!
-		let input_val_changed     = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
+		let input_val_changed = e.set_cell_state(row, field, 'input_val', val, cur_val, false)
 
 		let errors = ev && ev.validate ? e.validate_val(field, val, row, ev) : undefined
 		let invalid = errors && !errors.passed
-		let val_changed = val !== cur_val
-		let old_val = e.cell_old_val(row, field)
 
-		let cell_errors_changed   = e.set_cell_state(row, field, 'errors'   , errors, undefined, false)
-		let old_val_changed       = e.set_cell_state(row, field, 'old_val'  , val, old_val, false)
-		let cell_modified_changed = e.set_cell_state(row, field, 'modified' , false, false, false)
-		let row_is_new_changed    = e.set_row_state(row, 'is_new', false, false, false)
-		let prev_val_changed
-		if (val_changed) {
+		let cell_errors_changed = e.set_cell_state(row, field, 'errors', errors, undefined, false)
+		let row_is_new_changed  = e.set_row_state(row, 'is_new', false, false, false)
+		if (val_changed)
 			row[field.val_index] = val
-			prev_val_changed = e.set_cell_state(row, field, 'prev_val', cur_val, null, false)
-		}
 		let has_errors = invalid ? true : undefined
 		let has_errors_changed = e.set_row_state(row, 'has_errors', has_errors, undefined, false)
 
-		if (val_changed          ) cell_state_changed(row, field, 'val'      , val    , ev)
-		if (input_val_changed    ) cell_state_changed(row, field, 'input_val', val    , ev)
-		if (cell_errors_changed  ) cell_state_changed(row, field, 'errors'   , errors , ev)
-		if (old_val_changed      ) cell_state_changed(row, field, 'old_val'  , val    , ev)
-		if (cell_modified_changed) cell_state_changed(row, field, 'modified' , false  , ev)
-		if (prev_val_changed     ) cell_state_changed(row, field, 'prev_val' , cur_val, ev)
+		update_indices('val_changed', row, field, val)
 
-		if (row_is_new_changed) row_state_changed(row, 'is_new'    , false     , ev)
-		if (has_errors_changed) row_state_changed(row, 'has_errors', has_errors, ev)
+		if (val_changed         ) cell_state_changed(row, field, 'val'      , val   , cur_val, ev)
+		if (input_val_changed   ) cell_state_changed(row, field, 'input_val', val   , undefined, ev)
+		if (cell_errors_changed ) cell_state_changed(row, field, 'errors'   , errors, undefined, ev)
 
-		return !invalid
+		if (row_is_new_changed) row_state_changed(row, 'is_new'    , false     , undefined, ev)
+		if (has_errors_changed) row_state_changed(row, 'has_errors', has_errors, undefined, ev)
+
 	}
 
 	e.set_cell_errors = function(row, col, errors, ev) {
@@ -2552,8 +2534,7 @@ function nav_widget(e) {
 
 		if (editor_state == 'toggle' && field.type == 'bool') {
 			let val = e.cell_val(row, field)
-			if (e.set_cell_val(row, field, !val, {input: e}))
-				save_rows([row], 'exit_edit')
+			e.set_cell_val(row, field, !val, {input: e})
 			return false
 		}
 		if (editor_state == 'toggle')
@@ -2610,8 +2591,9 @@ function nav_widget(e) {
 		if (had_focus)
 			e.focus()
 
-		if (!force)
-			save_rows([row], 'exit_edit')
+		if (!force) // from UI
+			if (must_save('exit_edit'))
+				e.save()
 
 		return true
 	}
@@ -2629,10 +2611,11 @@ function nav_widget(e) {
 			return true
 		if (!e.exit_edit(force))
 			return false
-		if (!force) {
+		if (!force) { // from UI
 			if (!validate_row(row, 'exit_row'))
 				return false
-			save_rows([row], 'exit_row')
+			if (must_save('exit_row'))
+				e.save()
 		}
 		return true
 	}
@@ -2790,7 +2773,7 @@ function nav_widget(e) {
 		e.begin_update()
 
 		let rows_added, rows_updated
-		let added_rows = []
+		let added_rows = set()
 
 		let has_rows = e.all_rows.length > 0
 
@@ -2846,7 +2829,7 @@ function nav_widget(e) {
 					row.is_new = true
 				e.all_rows.push(row)
 				assign(row, ev.row_state)
-				added_rows.push(row)
+				added_rows.add(row)
 				rows_added = true
 
 				if (e.parent_field) {
@@ -2907,7 +2890,9 @@ function nav_widget(e) {
 			e.focus_cell(ri1, true, 0, 0, ev)
 
 		if (rows_added && !from_server)
-			save_rows(added_rows, 'insert')
+			if (ev.input) // from UI
+				if (e.save_new_row_on == 'insert')
+					e.save()
 
 		e.end_update()
 
@@ -2932,7 +2917,7 @@ function nav_widget(e) {
 			if (ev && ev.input)
 				e.notify('error',
 					S('error_remove_row_while_saving',
-						'Cannot remove a row that is in the process of being added to the server'))
+						'Cannot remove a row that is being added to the server'))
 			return false
 		}
 		return true
@@ -2941,7 +2926,7 @@ function nav_widget(e) {
 	e.remove_rows = function(rows_to_remove, ev) {
 
 		ev = ev || empty
-		let forever = ev.forever || !e.can_save_changes()
+		let from_server = ev.from_server || !e.can_save_changes()
 
 		e.begin_update()
 
@@ -2952,10 +2937,10 @@ function nav_widget(e) {
 
 		for (let row of rows_to_remove) {
 
-			if (!ev.from_server && !e.can_remove_row(row, ev))
+			if (!from_server && !e.can_remove_row(row, ev))
 				continue
 
-			if (forever || row.is_new) {
+			if (from_server || row.is_new) {
 
 				if (ev.refocus) {
 					let row_index = e.row_index(row)
@@ -2983,12 +2968,12 @@ function nav_widget(e) {
 
 				e.row_and_each_child_row(row, function(row) {
 					row.removed = !ev.toggle || !row.removed
-					if (row.removed)
+					if (row.removed) {
 						marked_rows.add(row)
-					if (!row.removed && !row.is_new && !row.modified && validate_row(row))
-						row_unchanged(row)
-					else
 						row_changed(row)
+					} else if (!row.modified) {
+						row_unchanged(row)
+					}
 					rows_changed = true
 				})
 
@@ -3029,7 +3014,8 @@ function nav_widget(e) {
 			e.update({state: rows_changed, rows: !!removed_rows.size})
 
 		if (marked_rows.size)
-			save_rows(Array.from(marked_rows), 'remove')
+			if (e.save_row_remove_on == 'input')
+				e.save()
 
 		e.end_update()
 
@@ -3078,7 +3064,7 @@ function nav_widget(e) {
 				rm_rows.push(row)
 		}
 
-		e.remove_rows(rm_rows, {from_server: true, forever: true})
+		e.remove_rows(rm_rows, {from_server: true})
 
 		e.update({
 			rows: !!(rows_added || rm_rows.length),
@@ -3134,7 +3120,7 @@ function nav_widget(e) {
 	}
 
 	e.rows_moved = noop // stub
-	let rows_moved // flag
+	let rows_moved // flag in case there's no pos col and thus no e.changed_rows.
 
 	function move_rows_state(focused_ri, selected_ri, ev) {
 
@@ -3416,45 +3402,41 @@ function nav_widget(e) {
 		}
 	}
 
-	function pack_changes(rows) {
+	function pack_changes() {
 
 		let packed_rows = []
 		let source_rows = []
 		let changes = {rows: packed_rows}
 
-		for (let row of rows) {
+		for (let row of e.changed_rows) {
 			if (row.save_request)
 				continue // currently saving this row.
-			if (!validate_row(row))
+			if (row.has_errors)
 				continue
 			if (row.is_new) {
 				let t = {type: 'new', values: obj()}
-				for (let fi = 0; fi < e.all_fields.length; fi++) {
-					let field = e.all_fields[fi]
-					let val = row[fi]
-					if (val !== field.default && !field.nosave)
-						t.values[field.name] = val
-				}
+				for (let field of e.all_fields)
+					if (!field.nosave && e.cell_modified(row, field) && e.cell_valid(row, field))
+						t.values[field.name] = e.cell_input_val(row, field)
 				packed_rows.push(t)
 				source_rows.push(row)
 			} else if (row.removed) {
 				let t = {type: 'remove', values: obj()}
 				for (let f of e.pk_fields)
-					t.values[f.name+':old'] = e.cell_old_val(row, f)
+					t.values[f.name+':old'] = e.cell_val(row, f)
 				packed_rows.push(t)
 				source_rows.push(row)
 			} else if (row.modified) {
 				let t = {type: 'update', values: obj()}
 				let has_values
-				for (let field of e.all_fields) {
-					if (e.cell_modified(row, field) && !field.nosave) {
-						t.values[field.name] = row[field.val_index]
+				for (let field of e.all_fields)
+					if (!field.nosave && e.cell_modified(row, field) && e.cell_valid(row, field)) {
+						t.values[field.name] = e.cell_input_val(row, field)
 						has_values = true
 					}
-				}
 				if (has_values) {
 					for (let f of e.pk_fields)
-						t.values[f.name+':old'] = e.cell_old_val(row, f)
+						t.values[f.name+':old'] = e.cell_val(row, f)
 					packed_rows.push(t)
 					source_rows.push(row)
 				}
@@ -3474,6 +3456,8 @@ function nav_widget(e) {
 
 			let err = isstr(rt.error) ? rt.error : undefined
 			let row_failed = rt.error != null
+			if (row_failed)
+				notify(err, 'error')
 			//TODO: e.set_row_errors(row, [{message: err, passed: false}])
 
 			if (rt.remove) {
@@ -3503,7 +3487,7 @@ function nav_widget(e) {
 				}
 			}
 		}
-		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
+		e.remove_rows(rows_to_remove, {from_server: true, refocus: true})
 
 		if (result.sql_trace && result.sql_trace.length)
 			debug(result.sql_trace.join('\n'))
@@ -3516,8 +3500,8 @@ function nav_widget(e) {
 			row.save_request = req
 	}
 
-	function save_to_server(rows) {
-		let [changes, added_rows] = pack_changes(rows)
+	function save_to_server() {
+		let [changes, added_rows] = pack_changes()
 		if (!added_rows.length)
 			return
 		let req = ajax({
@@ -3542,23 +3526,9 @@ function nav_widget(e) {
 
 	e.validate_row = validate_row
 
-	function save_rows(rows, event) {
-		if (e.save_row_on == 'manual')
-			return
-		if (event == 'insert' && !e.save_new_row_on == 'input')
-			return
-		if (event == 'remove' && !e.save_row_remove_on == 'input')
-			return
-		if (e.save_row_on != event)
-			return
-
-	}
-
 	e.save = function() {
-		save_rows(e.changed_rows)
 		if (!e.changed_rows && !rows_moved)
 			return
-
 		let some_valid
 		for (let row of e.changed_rows)
 			if (!row.save_request)
@@ -3566,7 +3536,7 @@ function nav_widget(e) {
 					some_valid = true
 
 		if (!some_valid) {
-			notify(S('save_nothing', 'No valid rows'))
+			notify(S('save_nothing', 'No valid rows to save'))
 			return
 		}
 
@@ -3624,14 +3594,13 @@ function nav_widget(e) {
 			if (row.is_new)
 				rows_to_remove.push(row)
 			else if (row.removed)
-				e.set_row_state(row, 'removed', false)
+				e.set_row_state(row, 'removed', false, false)
 			else if (row.modified) {
-				e.set_row_state(row, 'modified', false)
 				for (let field of e.all_fields)
-					e.reset_cell_val(row, field, e.cell_old_val(row, field))
+					e.reset_cell_val(row, field, e.cell_val(row, field))
 			}
 		}
-		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
+		e.remove_rows(rows_to_remove, {from_server: true, refocus: true})
 
 		e.changed_rows = null
 		rows_moved = false
@@ -3663,7 +3632,7 @@ function nav_widget(e) {
 					e.reset_cell_val(row, field, e.cell_val(row, field))
 			}
 		}
-		e.remove_rows(rows_to_remove, {forever: true, refocus: true})
+		e.remove_rows(rows_to_remove, {from_server: true, refocus: true})
 
 		e.changed_rows = null
 		rows_moved = false
@@ -3748,20 +3717,6 @@ function nav_widget(e) {
 				if (row.removed)
 					state.removed = true
 				state.vals = e.serialize_row_vals(row)
-				for (let field of e.all_fields) {
-					if (!field.nosave) {
-						let modified = e.cell_state(row, field, 'modified')
-						if (modified) {
-							let t = attr(state, 'cell')
-							let old_val = e.cell_state(row, field, 'old_val')
-							if (old_val != null)
-								t.old_val = old_val
-							let prev_val = e.cell_state(row, field, 'prev_val')
-							if (prev_val != null)
-								t.prev_val = prev_val
-						}
-					}
-				}
 				rows.push(state)
 			}
 		}
