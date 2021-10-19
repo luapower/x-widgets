@@ -817,6 +817,10 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			let field = e.fields[fi]
 			e.do_update_cell_val(cell, row, field, val)
 			cell.class('modified', e.cell_modified(row, field))
+		} else if (prop == 'val') {
+			let row = e.rows[ri]
+			let field = e.fields[fi]
+			cell.class('modified', e.cell_modified(row, field))
 		} else if (prop == 'errors') {
 			e.do_update_cell_errors(cell, e.rows[ri], e.fields[fi], val)
 		}
@@ -976,8 +980,11 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		if (!cell)
 			return
 
+		let row = e.rows[cell.ri]
+		let field = e.fields[cell.fi]
+
 		if (over_indent)
-			e.toggle_collapsed(e.rows[cell.ri], shift)
+			e.toggle_collapsed(row, shift)
 
 		let already_on_it =
 			cell.ri == e.focused_row_index &&
@@ -992,11 +999,12 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		return e.focus_cell(cell.ri, cell.fi, 0, 0, {
 			must_not_move_col: toggle,
 			must_not_move_row: true,
-			enter_edit: !over_indent && e.can_edit
+			enter_edit: !over_indent
 				&& !ctrl && !shift
 				&& ((e.enter_edit_on_click || toggle)
 					|| (e.enter_edit_on_click_focused && already_on_it)),
 			focus_editor: true,
+			focus_non_editable_if_not_found: true,
 			editor_state: toggle ? 'toggle' : 'select_all',
 			expand_selection: shift,
 			invert_selection: ctrl,

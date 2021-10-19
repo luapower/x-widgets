@@ -159,9 +159,10 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 			e.class('modified', row && field && e.nav.cell_modified(row, field))
 			e.fire('input_val_changed', val, ev)
 		} else if (key == 'val') {
+			e.class('modified', row && field && e.nav.cell_modified(row, field))
 			e.fire('val_changed', val, ev)
 		} else if (key == 'errors') {
-			e.class('invalid', row && field && !e.nav.cell_valid(row, field))
+			e.class('invalid', row && field && e.nav.cell_has_errors(row, field))
 			e.do_update_errors(val, ev)
 		}
 	}

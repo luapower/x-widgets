@@ -235,7 +235,7 @@ cell values & state:
 		e.cell_val()
 		e.cell_input_val()
 		e.cell_errors()
-		e.cell_valid()
+		e.cell_has_errors()
 		e.cell_modified()
 		e.cell_vals()
 
@@ -676,6 +676,9 @@ function nav_widget(e) {
 
 		e.val_field = e.all_fields[e.val_col]
 		e.pos_field = e.all_fields[rs.pos_col]
+
+		if (rs.pos_col && !e.pos_field)
+			warn('pos col "'+rs.pos_col+'" not selected')
 
 		for (let field of e.all_fields)
 			init_field_validators(field)
@@ -1226,7 +1229,7 @@ function nav_widget(e) {
 		let was_editing = ev.was_editing || !!e.editor
 		let focus_editor = ev.focus_editor || (e.editor && e.editor.hasfocus)
 		let enter_edit = ev.enter_edit || (was_editing && e.stay_in_edit_mode)
-		let editable = ev.editable || enter_edit
+		let editable = (ev.editable || enter_edit) && !ev.focus_non_editable_if_not_found
 		let expand_selection = ev.expand_selection && e.can_select_multiple
 		let invert_selection = ev.invert_selection && e.can_select_multiple
 
@@ -2250,11 +2253,11 @@ function nav_widget(e) {
 
 	// get/set cell vals and cell & row state ---------------------------------
 
-	e.cell_val       = (row, col) => row[fld(col).val_index]
-	e.cell_input_val = (row, col) => e.cell_state(row, fld(col), 'input_val', e.cell_val(row, col))
-	e.cell_errors    = (row, col) => e.cell_state(row, fld(col), 'errors')
-	e.cell_valid     = (row, col) => { let err = e.cell_errors(row, col); return err && err.passed; }
-	e.cell_modified  = (row, col) => e.cell_input_val(row, col) !== e.cell_val(row, col)
+	e.cell_val        = (row, col) => row[fld(col).val_index]
+	e.cell_input_val  = (row, col) => e.cell_state(row, fld(col), 'input_val', e.cell_val(row, col))
+	e.cell_errors     = (row, col) => e.cell_state(row, fld(col), 'errors')
+	e.cell_has_errors = (row, col) => { let err = e.cell_errors(row, col); return err && !err.passed; }
+	e.cell_modified   = (row, col) => e.cell_input_val(row, col) !== e.cell_val(row, col)
 
 	e.cell_vals = function(row, cols) {
 		let fields = flds(cols)
@@ -2468,7 +2471,7 @@ function nav_widget(e) {
 
 		update_indices('val_changed', row, field, val)
 
-		if (val_changed         ) cell_state_changed(row, field, 'val'      , val   , cur_val, ev)
+		if (val_changed         ) cell_state_changed(row, field, 'val'      , val   , cur_val  , ev)
 		if (input_val_changed   ) cell_state_changed(row, field, 'input_val', val   , undefined, ev)
 		if (cell_errors_changed ) cell_state_changed(row, field, 'errors'   , errors, undefined, ev)
 
@@ -3416,7 +3419,7 @@ function nav_widget(e) {
 			if (row.is_new) {
 				let t = {type: 'new', values: obj()}
 				for (let field of e.all_fields)
-					if (!field.nosave && e.cell_modified(row, field) && e.cell_valid(row, field))
+					if (!field.nosave && e.cell_modified(row, field) && !e.cell_has_errors(row, field))
 						t.values[field.name] = e.cell_input_val(row, field)
 				packed_rows.push(t)
 				source_rows.push(row)
@@ -3430,7 +3433,7 @@ function nav_widget(e) {
 				let t = {type: 'update', values: obj()}
 				let has_values
 				for (let field of e.all_fields)
-					if (!field.nosave && e.cell_modified(row, field) && e.cell_valid(row, field)) {
+					if (!field.nosave && e.cell_modified(row, field) && !e.cell_has_errors(row, field)) {
 						t.values[field.name] = e.cell_input_val(row, field)
 						has_values = true
 					}
@@ -3467,10 +3470,8 @@ function nav_widget(e) {
 				if (!row_failed) {
 					let is_new_changed   = e.set_row_state(row, 'is_new'  , false, false, false)
 					let modified_changed = e.set_row_state(row, 'modified', false, false, false)
-					if (is_new_changed)
-						row_state_changed(row, 'is_new', false)
-					if (modified_changed)
-						row_state_changed(row, 'modified', false)
+					if (is_new_changed  ) row_state_changed(row, 'is_new'  , false)
+					if (modified_changed) row_state_changed(row, 'modified', false)
 					row_unchanged(row)
 				}
 				if (rt.field_errors) {
@@ -3529,15 +3530,17 @@ function nav_widget(e) {
 	e.save = function() {
 		if (!e.changed_rows && !rows_moved)
 			return
-		let some_valid
-		for (let row of e.changed_rows)
-			if (!row.save_request)
-				if (validate_row(row))
-					some_valid = true
 
-		if (!some_valid) {
-			notify(S('save_nothing', 'No valid rows to save'))
-			return
+		if (e.changed_rows) {
+			let some_valid
+			for (let row of e.changed_rows)
+				if (!row.save_request)
+					if (validate_row(row))
+						some_valid = true
+			if (!some_valid) {
+				notify(S('save_nothing', 'No valid rows to save'))
+				return
+			}
 		}
 
 		if (e.static_rowset) {
@@ -3547,7 +3550,8 @@ function nav_widget(e) {
 				save_to_row_vals()
 			e.fire('saved')
 		} else if (e.rowset_url) {
-			save_to_server()
+			if (e.changed_rows)
+				save_to_server()
 		} else  {
 			e.commit_changes()
 		}

@@ -95,6 +95,16 @@ function virtual_rowset(init, ...)
 		local hide_cols = index(names(rs.hide_cols) or empty)
 		local   ro_cols = index(names(rs.  ro_cols) or empty)
 
+		if rs.pos_col == nil and rs.fields.pos then
+			rs.pos_col = 'pos'
+		end
+		if rs.pos_col then
+			local pos_field = assert(rs.fields[rs.pos_col])
+			if not pos_field.w then
+				pos_field.w = 40
+			end
+		end
+
 		rs.client_fields = {}
 
 		for i,f in ipairs(rs.fields) do
@@ -136,7 +146,7 @@ function virtual_rowset(init, ...)
 			can_change_rows = rs.can_change_rows,
 			fields = rs.client_fields,
 			pk = rs.pk,
-			pos_col = rs.pos_col == nil and 'pos' or rs.pos_col or nil,
+			pos_col = rs.pos_col,
 			cols = rs.cols,
 			params = rs.params,
 			id_col = rs.id_col,
