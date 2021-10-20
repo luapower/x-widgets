@@ -374,12 +374,12 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	outline-offset: -2px;
 }
 
-.x-button.empty { /* icon-only */
+.x-button.text-empty { /* icon-only */
 	padding-left  : var(--x-padding-x-button-icon);
 	padding-right : var(--x-padding-x-button-icon);
 }
 
-.x-button:not(.empty) > .x-button-icon {
+.x-button:not(.text-empty) > .x-button-icon {
 	margin-right: .5em;
 }
 

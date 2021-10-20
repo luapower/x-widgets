@@ -19,9 +19,8 @@ uses:
 implements:
 	nav widget protocol.
 calls:
-	e.do_update_cell_val(cell, row, field, input_val)
+	e.do_update_cell_val(cell, row, field, input_val, display_val)
 	e.do_update_cell_errors(cell, row, field, errors)
-	e.do_update_row_state(ri, prop, val, ev)
 --------------------------------------------------------------------------- */
 
 component('x-grid', 'Input', function(e, is_val_widget) {
@@ -479,23 +478,14 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		e.empty_rt.show(!e.rows.length)
 	}
 
-	e.do_update_cell_val = function(cell, row, field, input_val) {
-		if (cell.data_input_val === input_val)
-			return
-		let v = e.cell_display_val_for(row, field, input_val, cell.data_val)
-		if (cell.data_val === v)
-			return
-		cell.data_input_val = input_val
-		cell.data_val = v
+	e.do_update_cell_val = function(cell, row, field, input_val, display_val) {
 		let node = cell.childNodes[cell.indent ? 1 : 0]
 		if (cell.qs_div) { // value is wrapped
-			node.replace(node.childNodes[0], v)
+			node.replace(node.childNodes[0], display_val)
 			cell.qs_div.clear()
 		} else {
-			cell.replace(node, v)
+			cell.replace(node, display_val)
 		}
-		cell.class('null', input_val == null)
-		cell.class('empty', input_val === '')
 	}
 
 	e.do_update_cell_errors = function(cell, row, field, errors) {
@@ -514,6 +504,19 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	function set_cell_indent(cell_indent, indent) {
 		cell_indent.style['padding-left'] = (indent_offset(indent) - 4)+'px'
+	}
+
+	function update_cell_val(cell, row, field, input_val) {
+		if (cell.data_input_val === input_val)
+			return
+		cell.data_input_val = input_val
+		let display_val = e.cell_display_val_for(row, field, input_val, cell.data_display_val)
+		if (cell.data_display_val !== display_val) {
+			cell.data_display_val = display_val
+			e.do_update_cell_val(cell, row, field, input_val, display_val)
+		}
+		cell.class('null', input_val == null)
+		cell.class('empty', input_val === '')
 	}
 
 	function update_cell_content(cell, row, ri, fi, row_focused, indent) {
@@ -555,7 +558,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			cell.indent = null
 		}
 
-		e.do_update_cell_val(cell, row, field, e.cell_input_val(row, field))
+		update_cell_val(cell, row, field, e.cell_input_val(row, field))
 		e.do_update_cell_errors(cell, row, field, e.cell_errors(row, field))
 
 		row_focused = or(row_focused, e.focused_row == row)
@@ -769,6 +772,28 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		let cell = e.cells.at[cell_index(ri, fi)]
 		if (cell)
 			cell.class('editing', editing)
+	}
+
+	e.do_cell_click = function(ri, fi) {
+		let cell = e.cells.at[cell_index(ri, fi)]
+		if (!cell)
+			return
+
+		let row = e.rows[ri]
+		let field = e.fields[fi]
+
+		// TODO: make clickability a feature of field type.
+
+		if (field.type == 'button') {
+			cell.at[0].activate()
+			return true
+		}
+
+		 if (field.type == 'bool') {
+			let val = e.cell_val(row, field)
+			e.set_cell_val(row, field, !val, {input: e})
+			return true
+		}
 	}
 
 	// responding to rowset changes -------------------------------------------
@@ -990,22 +1015,22 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			cell.ri == e.focused_row_index &&
 			cell.fi == e.focused_field_index
 
-		let toggle =
+		let click =
 			!e.enter_edit_on_click
 			&& !e.stay_in_edit_mode
 			&& !e.editor
-			&& e.fields[cell.fi].type == 'bool'
+			&& e.cell_clickable(row, field)
 
 		return e.focus_cell(cell.ri, cell.fi, 0, 0, {
-			must_not_move_col: toggle,
+			must_not_move_col: true,
 			must_not_move_row: true,
 			enter_edit: !over_indent
 				&& !ctrl && !shift
-				&& ((e.enter_edit_on_click || toggle)
+				&& ((e.enter_edit_on_click || click)
 					|| (e.enter_edit_on_click_focused && already_on_it)),
 			focus_editor: true,
 			focus_non_editable_if_not_found: true,
-			editor_state: toggle ? 'toggle' : 'select_all',
+			editor_state: click ? 'click' : 'select_all',
 			expand_selection: shift,
 			invert_selection: ctrl,
 			input: e,
@@ -1853,17 +1878,8 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 				e.pick_val()
 				return false
 			} else if (!e.editor) {
-				// TODO: this feels hackish. Can we find a more agnostic protocol?
-				let ri = e.focused_row_index
-				let fi = e.focused_field_index
-				if (ri != null && fi != null && e.focused_field.type == 'button') {
-					let cell = e.cells.at[cell_index(ri, fi)]
-					if (cell && cell.at[0] && cell.at[0].hasclass('x-button'))
-						cell.at[0].activate()
-					return false
-				}
-				if (e.enter_edit('toggle'))
-					return false
+				e.enter_edit('click')
+				return false
 			} else if (!e.exit_edit_on_enter || e.exit_edit()) {
 				if (e.advance_on_enter == 'next_row')
 					e.focus_cell(true, true, 1, 0, {
@@ -1919,8 +1935,8 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		if (!e.editor && key == ' ' && !e.quicksearch_text) {
 			if (e.focused_row && (!e.can_focus_cells || e.focused_field == e.tree_field))
 				e.toggle_collapsed(e.focused_row, shift)
-			else if (e.focused_field && e.focused_field.type == 'bool')
-				e.enter_edit('toggle')
+			else if (e.focused_row && e.focused_field && e.cell_clickable(e.focused_row && e.focused_field))
+				e.enter_edit('click')
 			return false
 		}
 

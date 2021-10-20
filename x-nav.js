@@ -298,6 +298,7 @@ editing:
 	calls:
 		e.create_editor()
 		^exit_edit(ri, fi, force)
+		e.do_cell_click(ri, fi)
 
 loading from server:
 	needs:
@@ -2503,6 +2504,8 @@ function nav_widget(e) {
 
 	e.editor = null
 
+	e.do_cell_click = noop
+
 	e.create_editor = function(field, ...opt) {
 		if (!field.editor_instance) {
 			e.editor = field.editor({
@@ -2524,23 +2527,31 @@ function nav_widget(e) {
 		}
 	}
 
-	e.enter_edit = function(editor_state, focus) {
+	e.cell_clickable = function(row, field) {
+		if (field.type == 'bool')
+			return true
+		if (field.type == 'button')
+			return true
+		return false
+	}
+
+	e.enter_edit = function(editor_state, focus, cell) {
 		let row = e.focused_row
 		let field = e.focused_field
-		if (!field)
+		if (!row || !field)
 			return
 		if (e.editor)
 			return true
+
+		if (editor_state == 'click')
+			if (e.do_cell_click(e.focused_row_index, e.focused_field_index))
+				return false
+
+		if (editor_state == 'click')
+			editor_state = 'select_all'
+
 		if (!e.can_focus_cell(row, field, true))
 			return false
-
-		if (editor_state == 'toggle' && field.type == 'bool') {
-			let val = e.cell_val(row, field)
-			e.set_cell_val(row, field, !val, {input: e})
-			return false
-		}
-		if (editor_state == 'toggle')
-			editor_state = 'select_all'
 
 		e.create_editor(field)
 		if (!e.editor)
@@ -2732,7 +2743,7 @@ function nav_widget(e) {
 			}
 			return field.lookup_failed_display_val(v)
 		} else
-			return field.format(v, row)
+			return field.format(v, row, v0)
 	}
 
 	e.cell_display_val = function(row, field) {
@@ -4572,6 +4583,16 @@ component('x-lookup-dropdown', function(e) {
 
 	let btn = {align: 'center'}
 	field_types.button = btn
+
+	btn.format = function(val, row) {
+		let field = this
+		return button(assign_opt({
+			tabindex: null, // don't steal focus from the grid when clicking.
+			action: function() {
+				field.action.call(this, val, row, field)
+			},
+		}, this.button_options))
+	}
 
 }
 

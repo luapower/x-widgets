@@ -1350,7 +1350,7 @@ component('x-button', 'Input', function(e) {
 
 	e.set_text = function(s) {
 		e.text_box.set(s, 'pre-wrap')
-		e.class('empty', !s)
+		e.class('text-empty', !s)
 		if (e.link)
 			e.link.set(TC(e.text))
 	}
@@ -1467,6 +1467,8 @@ component('x-button', 'Input', function(e) {
 
 	e.on('load', function(ev, ...args) {
 		e.disabled = ev == 'start'
+		if (e.load_spin)
+			e.icon_box.class('fa-spin', ev == 'start')
 	})
 
 	e.load = function(url, success, fail, opt) {
