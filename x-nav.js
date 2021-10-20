@@ -298,7 +298,7 @@ editing:
 	publishes:
 		e.editor
 		e.enter_edit()
-		e.exit_edit([force])
+		e.exit_edit([cancel])
 		e.exit_focused_row()
 	calls:
 		e.create_editor()
@@ -1246,7 +1246,7 @@ function nav_widget(e) {
 		if (ri == null && !ev.unfocus_if_not_found)
 			return false
 
-		let row_changed   = e.focused_row != e.rows[ri]
+		let row_changed   = e.focused_row   != e.rows[ri]
 		let field_changed = e.focused_field != e.fields[fi]
 
 		if (row_changed) {
@@ -2274,6 +2274,10 @@ function nav_widget(e) {
 		return fields ? fields.map(field => e.cell_input_val(row, field)) : null
 	}
 
+	e.focused_row_cell_val = function(col) {
+		return e.focused_row && e.cell_val(e.focused_row, col)
+	}
+
 	e.convert_val = function(field, val, row, ev) {
 		return field.convert ? field.convert.call(e, val, field, row) : val
 	}
@@ -2346,8 +2350,6 @@ function nav_widget(e) {
 	function validate_row(row, purpose) {
 		if (row.has_errors == false)
 			return true
-		if (!row.modified)
-			return true
 		let has_errors = false
 		let can_exit_row = true
 		for (let field of e.all_fields) {
@@ -2373,7 +2375,7 @@ function nav_widget(e) {
 
 	function cells_modified(row) {
 		for (let field of e.all_fields)
-			if (e.cell_modified(row, field))
+			if (e.cell_modified(row, field) && !e.cell_has_errors(row, field))
 				return true
 	}
 
@@ -2409,7 +2411,6 @@ function nav_widget(e) {
 		val = e.convert_val(field, val, row, ev)
 
 		let server_val = e.cell_val(row, field)
-		let prev_input_val = e.cell_input_val(row, field)
 
 		// update state fully without firing change events.
 
@@ -2425,7 +2426,7 @@ function nav_widget(e) {
 		let row_has_errors = invalid ? true : undefined
 		let row_has_errors_changed = e.set_row_state(row, 'has_errors', row_has_errors, undefined, false)
 
-		let row_modified = val !== server_val || cells_modified(row)
+		let row_modified = (!invalid && val !== server_val) || cells_modified(row)
 		let row_modified_changed = (!(ev && ev.row_not_modified))
 			&& e.set_row_state(row, 'modified', row_modified, false, false)
 
@@ -2440,7 +2441,10 @@ function nav_widget(e) {
 		// save rowset if necessary.
 
 		if (!invalid) {
-			row_changed(row)
+			if (row_modified)
+				row_changed(row)
+			else if (!row.is_new)
+				row_unchanged(row)
 			if (ev && ev.input) // from UI
 				if (must_save(e.editor ? 'input' : 'exit_edit'))
 					e.save()
@@ -2585,18 +2589,21 @@ function nav_widget(e) {
 			return errors.must_allow_exit_edit
 	}
 
-	e.exit_edit = function(force) {
+	e.exit_edit = function(cancel) {
 		if (!e.editor)
 			return true
 
 		let row = e.focused_row
+		let field = e.focused_field
 
-		if (!force)
-			if (!can_exit_edit(row, e.focused_field))
+		if (cancel)
+			e.reset_cell_val(row, field, e.cell_val(row, field))
+		else
+			if (!can_exit_edit(row, field))
 				return false
 
-		if (!e.fire('exit_edit', e.focused_row_index, e.focused_field_index, force))
-			if (!force)
+		if (!e.fire('exit_edit', e.focused_row_index, e.focused_field_index, cancel))
+			if (!cancel)
 				return false
 
 		let had_focus = e.hasfocus
@@ -2609,7 +2616,7 @@ function nav_widget(e) {
 		if (had_focus)
 			e.focus()
 
-		if (!force) // from UI
+		if (!cancel) // from UI
 			if (must_save('exit_edit'))
 				e.save()
 

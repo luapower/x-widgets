@@ -22,6 +22,8 @@
 		image
 		sql_editor
 		chart
+		mu
+		switcher
 		input
 		form
 
@@ -3096,6 +3098,218 @@ component('x-chart', 'Input', function(e) {
 		enum_values: ['pie', 'stack', 'line', 'area', 'column', 'bar', 'stackbar', 'bubble', 'scatter'],
 		default: 'pie', attr: true,
 	})
+
+})
+
+// ---------------------------------------------------------------------------
+// mustache widget mixin
+// ---------------------------------------------------------------------------
+
+// TODO: convert this into a row_widget
+
+component('x-mu', function(e) {
+
+	assert(e.at[0] && e.at[0].tag == 'script',
+		'mustache widget is missing the <script> tag')
+
+	e.template_string = e.at[0].html
+
+	e.class('x-mu')
+
+	e.on('bind', function(on) {
+		if (on)
+			e.reload()
+	})
+
+	// loading ----------------------------------------------------------------
+
+	let load_req
+
+	function load_event(name, ...args) {
+
+		if (name == 'success')
+			e.render(args[0], this)
+
+		if (name == 'done')
+			load_req = null
+
+		let ev = 'load_'+name
+		e.fire(ev, ...args)
+		if (e[ev])
+			e[ev](...args)
+
+	}
+
+	// function progress()
+
+
+	let last_data_url, placeholder_set
+
+	e.reload = function(req) {
+
+		let data_url = req && req.url || e.computed_data_url()
+		if (data_url == last_data_url)
+			return
+		last_data_url = data_url
+
+		if (load_req)
+			load_req.abort()
+
+		if (!data_url) {
+			e.clear()
+			placeholder_set =  false
+			return
+		}
+
+		load_req = ajax(assign({
+			dont_send: true,
+			event: load_event,
+			url: data_url,
+		}, req))
+
+		load_req.send()
+
+		return load_req
+	}
+
+	// nav & params binding ---------------------------------------------------
+
+	e.computed_data_url = function() {
+		if (e.nav && e.nav.focused_row && e.data_url)
+			return e.data_url.subst(e.nav.serialize_row_vals(e.nav.focused_row))
+		else
+			return e.data_url
+	}
+
+	e.do_update = function() {
+		e.reload()
+	}
+
+	e.on('bind', function(on) {
+		bind_nav(e.param_nav, e.data_url, on)
+		if (on && !placeholder_set) {
+			e.render({loading: true})
+			placeholder_set = true
+		}
+	})
+
+	function update() {
+		e.update()
+	}
+	function bind_nav(nav, url, on, reload) {
+		if (on && !e.bound)
+			return
+		if (nav) {
+			nav.on('focused_row_changed'     , update, on)
+			nav.on('focused_row_val_changed' , update, on)
+			nav.on('cell_val_changed'        , update, on)
+			nav.on('reset'                   , update, on)
+		}
+		if (reload !== false)
+			e.update()
+	}
+
+	e.set_param_nav = function(nav1, nav0) {
+		bind_nav(nav0, e.data_url, false, false)
+		bind_nav(nav1, e.data_url, true)
+	}
+	e.prop('param_nav', {store: 'var', private: true})
+	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav',
+			text: 'Param Nav', attr: true})
+
+	e.set_data_url = function(url1, url0) {
+		bind_nav(e.param_nav, url0, false, false)
+		bind_nav(e.param_nav, url1, true)
+	}
+	e.prop('data_url', {store: 'var', attr: true})
+
+})
+
+// ---------------------------------------------------------------------------
+// widget switcher
+// ---------------------------------------------------------------------------
+
+// TODO: convert this into a row_widget
+
+component('x-switcher', 'Containers', function(e) {
+
+	e.class('x-stretched x-container')
+
+	serializable_widget(e)
+	selectable_widget(e)
+	contained_widget(e)
+	let html_items = widget_items_widget(e)
+
+	// nav dynamic binding ----------------------------------------------------
+
+	function update() {
+		e.update()
+	}
+
+	function bind_nav(nav, on) {
+		if (!nav)
+			return
+		if (!e.bound)
+			return
+		nav.on('focused_row_changed'     , update, on)
+		nav.on('focused_row_val_changed' , update, on)
+		nav.on('reset'                   , update, on)
+	}
+
+	e.on('bind', function(on) {
+		bind_nav(e.nav, on)
+	})
+
+	e.set_nav = function(nav1, nav0) {
+		assert(nav1 != e)
+		bind_nav(nav0, false)
+		bind_nav(nav1, true)
+	}
+	e.prop('nav', {store: 'var', private: true})
+	e.prop('nav_id', {store: 'var', bind_id: 'nav', type: 'nav'})
+
+	// view -------------------------------------------------------------------
+
+	// widget-items widget protocol.
+	e.do_init_items = function() {
+		e.clear()
+	}
+
+	e.prop('item_id_format', {store: 'var', attr: true, default: ''})
+
+	e.format_item_id = function(vals) {
+		return ('_').cat(e.module, e.item_id_format.subst(vals))
+	}
+
+	e.match_item = function(item, vals) { // stub
+		// special case: listbox with html elements with "action" attr
+		// and the switcher's items also have the "action" attr, so match those.
+		if (item.hasattr('action') && vals.f0 && iselem(vals.f0) && vals.f0.hasattr('action'))
+			return item.attr('action') == vals.f0.attr('action')
+		return item.id == e.format_item_id(vals)
+	}
+
+	e.find_item = function(vals) {
+		for (let item of e.items)
+			if (e.match_item(item, vals))
+				return item
+	}
+
+	e.item_create_options = noop // stub
+
+	e.create_item = function(vals) {
+		let id = e.format_item_id(vals)
+		let item = id && component.create(assign_opt({id: id}, e.item_create_options(vals))) || null
+	}
+
+	e.do_update = function() {
+		let row = e.nav && e.nav.focused_row
+		let vals = row && e.nav.serialize_row_vals(row)
+		let item = vals && (e.find_item(vals) || e.create_item(vals))
+		e.set(item)
+	}
+
+	return {items: html_items}
 
 })
 

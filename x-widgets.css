@@ -55,8 +55,8 @@
 	--x-bg-search       : #ff9;  /* bg for quicksearch text */
 	--x-bg-info         : #069;  /* bg & fg for info bubbles */
 	--x-fg-info         : var(--x-fg-inverted);
-	--x-bg-error        : var(--x-bg); //#a33; /* bg & fg for invalid inputs and error bubbles */
-	--x-fg-error        : #a33; //var(--x-fg-inverted);
+	--x-bg-error        : #a33; /* bg & fg for invalid inputs and error bubbles */
+	--x-fg-error        : var(--x-fg-inverted);
 	--x-bg-tooltip      : #ffffcc; /* bg for cursor-kind tooltips */
 	--x-bg-today        : #f33;
 	--x-fg-today        : var(--x-fg-inverted);
