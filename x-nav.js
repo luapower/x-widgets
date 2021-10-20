@@ -169,8 +169,10 @@ focusing and selection:
 			ev.focus_editor
 			ev.enter_edit
 			ev.editable
+			ev.focus_non_editable_if_not_found
 			ev.expand_selection
 			ev.invert_selection
+			ev.quicksearch_text
 		e.focus_next_cell()
 		e.focus_find_cell()
 		e.select_all_cells()
@@ -206,7 +208,9 @@ sorting:
 		e.compare_vals(v1, v2)
 
 quicksearch:
-	e.quicksearch()
+	publishes:
+		e.quicksearch_col
+		e.quicksearch()
 
 tree node collapsing:
 	e.set_collapsed()

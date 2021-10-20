@@ -507,12 +507,12 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 	}
 
 	function update_cell_val(cell, row, field, input_val) {
-		if (cell.data_input_val === input_val)
+		if (cell.input_val === input_val)
 			return
-		cell.data_input_val = input_val
-		let display_val = e.cell_display_val_for(row, field, input_val, cell.data_display_val)
-		if (cell.data_display_val !== display_val) {
-			cell.data_display_val = display_val
+		cell.input_val = input_val
+		let display_val = e.cell_display_val_for(row, field, input_val, cell.display_val)
+		if (cell.display_val !== display_val) {
+			cell.display_val = display_val
 			e.do_update_cell_val(cell, row, field, input_val, display_val)
 		}
 		cell.class('null', input_val == null)
@@ -616,7 +616,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		let cell = e.cells.at[cell_index(e.row_index(row), field.index)]
 		if (!cell)
 			return
-		if (!isstr(cell.data_val))
+		if (!isstr(cell.display_val))
 			return
 		if (!cell.qs_div) {
 			if (s) {
@@ -840,7 +840,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		if (prop == 'input_val') {
 			let row = e.rows[ri]
 			let field = e.fields[fi]
-			e.do_update_cell_val(cell, row, field, val)
+			update_cell_val(cell, row, field, val)
 			cell.class('modified', e.cell_modified(row, field))
 		} else if (prop == 'val') {
 			let row = e.rows[ri]
