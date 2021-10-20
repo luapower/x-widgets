@@ -468,7 +468,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		let n = vrn * (moving ? 2 : 1)
 		for (let i = 0; i < n; i++) {
 			for (let fi = 0; fi < e.fields.length; fi++) {
-				let classes = 'x-grid-cell x-item'
+				let classes = 'x-grid-cell x-item x-container'
 				if (moving && i >= vrn)
 					classes += ' row-moving'
 				let cell = div({class: classes})
@@ -607,7 +607,10 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	// quicksearch highlight --------------------------------------------------
 
+	let qs_div
 	function update_quicksearch_cell() {
+		if (qs_div)
+			qs_div.clear()
 		let row = e.focused_row
 		let field = e.quicksearch_field
 		let s = e.quicksearch_text
@@ -618,21 +621,17 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			return
 		if (!isstr(cell.display_val))
 			return
-		if (!cell.qs_div) {
-			if (s) {
-				cell.qs_div = div({class: 'x-grid-qs-text'}, s)
-				let val_node = cell.childNodes[cell.indent ? 1 : 0]
-				val_node.remove()
-				cell.add(div({style: 'position: relative'}, val_node, cell.qs_div))
-			}
-		} else {
-			if (s) {
-				let prefix = e.cell_input_val(row, field).slice(0, s.length)
-				cell.qs_div.set(prefix)
-			} else {
-				cell.qs_div.clear()
-			}
+		let prefix = s ? e.cell_input_val(row, field).slice(0, s.length) : null
+		if (prefix && !cell.qs_div) {
+			cell.qs_div = div({class: 'x-grid-qs-text'})
+			let val_node = cell.childNodes[cell.indent ? 1 : 0]
+			val_node.remove()
+			let wrapper = div({style: 'position: relative'}, val_node, cell.qs_div)
+			cell.add(wrapper)
 		}
+		if (cell.qs_div)
+			cell.qs_div.set(prefix)
+		qs_div = cell.qs_div
 	}
 
 	// resize guides ----------------------------------------------------------
@@ -755,18 +754,14 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	}
 
-	let create_editor = e.create_editor
-	e.create_editor = function(field, ...opt) {
-		create_editor(field, {
-			grid_editor_for: e,
-		}, ...opt)
+	e.do_after('create_editor', function(field, ...opt) {
 		if (!e.editor)
 			return
 		e.editor.class('grid-editor')
 		if (!e.editor.parent)
 			e.cells_ct.add(e.editor)
 		update_editor()
-	}
+	})
 
 	e.do_update_cell_editing = function(ri, fi, editing) {
 		let cell = e.cells.at[cell_index(ri, fi)]
@@ -1935,7 +1930,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		if (!e.editor && key == ' ' && !e.quicksearch_text) {
 			if (e.focused_row && (!e.can_focus_cells || e.focused_field == e.tree_field))
 				e.toggle_collapsed(e.focused_row, shift)
-			else if (e.focused_row && e.focused_field && e.cell_clickable(e.focused_row && e.focused_field))
+			else if (e.focused_row && e.focused_field && e.cell_clickable(e.focused_row, e.focused_field))
 				e.enter_edit('click')
 			return false
 		}

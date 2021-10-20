@@ -208,8 +208,9 @@ sorting:
 		e.compare_vals(v1, v2)
 
 quicksearch:
-	publishes:
+	config:
 		e.quicksearch_col
+	publishes:
 		e.quicksearch()
 
 tree node collapsing:
@@ -4585,13 +4586,14 @@ component('x-lookup-dropdown', function(e) {
 
 	// button
 
-	let btn = {align: 'center'}
+	let btn = {align: 'center', editable: false}
 	field_types.button = btn
 
 	btn.format = function(val, row) {
 		let field = this
 		return button(assign_opt({
 			tabindex: null, // don't steal focus from the grid when clicking.
+			style: 'flex: 1', // TODO: what we want is class `x-stretched`.
 			action: function() {
 				field.action.call(this, val, row, field)
 			},
