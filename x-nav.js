@@ -2353,16 +2353,18 @@ function nav_widget(e) {
 		let has_errors = false
 		let can_exit_row = true
 		for (let field of e.all_fields) {
-			let errors = e.cell_errors(row, field)
-			if (!errors) { // not validated
-				let val = e.cell_input_val(row, field)
-				errors = e.validate_val(field, val, row)
-				e.set_cell_state(row, field, 'errors', errors)
-			}
-			if (!errors.passed) {
-				has_errors = true
-				if (errors.must_not_allow_exit_row)
-					can_exit_row = false
+			if (field.editable && e.cell_modified(row, field)) {
+				let errors = e.cell_errors(row, field)
+				if (!errors) { // not validated
+					let val = e.cell_input_val(row, field)
+					errors = e.validate_val(field, val, row)
+					e.set_cell_state(row, field, 'errors', errors)
+				}
+				if (!errors.passed) {
+					has_errors = true
+					if (errors.must_not_allow_exit_row)
+						can_exit_row = false
+				}
 			}
 		}
 		e.set_row_state(row, 'has_errors', has_errors)

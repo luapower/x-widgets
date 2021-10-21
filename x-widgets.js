@@ -1997,7 +1997,7 @@ component('x-pagelist', 'Containers', function(e) {
 	e.selection_bar = div({class: 'x-pagelist-selection-bar'})
 	e.add_button = div({class: 'x-pagelist-tab x-pagelist-add-button fa fa-plus', tabindex: 0})
 	e.header = div({class: 'x-pagelist-header'}, e.selection_bar, e.add_button)
-	e.content = div({class: 'x-pagelist-content x-container'})
+	e.content = div({class: 'x-pagelist-content x-container x-flex'})
 	e.add(e.header, e.content)
 
 	function add_item(item) {
@@ -2214,7 +2214,7 @@ component('x-pagelist', 'Containers', function(e) {
 	}
 
 	function url_path_tab() {
-		let p = url(location.pathname).segments.splice(2)
+		let p = url_arg(location.pathname).segments.splice(2)
 		let slug = p[url_path_level()]
 		for (let item of e.items) {
 			if (slug == item_slug(item))
@@ -2383,8 +2383,8 @@ component('x-split', 'Containers', function(e) {
 	let html_item2 = e.at[1]
 	e.clear()
 
-	e.pane1 = div({class: 'x-split-pane x-container'})
-	e.pane2 = div({class: 'x-split-pane x-container'})
+	e.pane1 = div({class: 'x-split-pane x-container x-flex'})
+	e.pane2 = div({class: 'x-split-pane x-container x-flex'})
 	e.sizer = div({class: 'x-split-sizer'})
 	e.add(e.pane1, e.sizer, e.pane2)
 
