@@ -642,6 +642,10 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	flex-flow: column;
 }
 
+.x-input-widget[readonly] {
+	opacity: .8;
+}
+
 .x-focus-box {
 	flex: 1; /* stretch vertically */
 	border-width: 1px;

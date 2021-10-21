@@ -10,14 +10,13 @@
 		field_attrs      : {col->field}  extra field attributes
 		cols             : 'col1 ...'    default visible columns list
 		hide_cols        : 'col1 ...'    columns hidden by default
-		ro_cols          : 'col1 ...'    read-only (i.e. non-editable) columns
+		ro_cols          : 'col1 ...'    read-only columns
 		pos_col          : 'col'         pos column for manual ordering of rows
 		id_col           : 'col'         id column for tree-building
 		parent_col       : 'col'         parent column for tree-building
 		name_col         : 'col'         default display_col in lookup rowsets
 		tree_col         : 'col'         tree column (the one with [+] icons)
 		params           : 'par1 ...'    detail param names for master-detail
-		can_edit         : f             allow editing of any kind (true)
 		can_add_rows     : f             allow adding new rows
 		can_remove_rows  : f             allow removing rows
 		can_change_rows  : f             allow editing existing rows
@@ -30,7 +29,7 @@
 		default          : val           default value (if it's a constant)
 		internal         : t             cannot be made visible
 		hidden           : t             not visible by default
-		editable         : f             can be changed
+		readonly         : f             cannot be changed
 		enum_values      : ['foo',...]   enum values
 		not_null         : t             can't be null
 		min              : n             min allowed value
@@ -77,7 +76,7 @@ action['rowset.json'] = function(name)
 end
 
 local client_field_attrs = {
-	internal=1, hidden=1, editable=1,
+	internal=1, hidden=1, readonly=1,
 	name=1, type=1, text=1, hint=1, default=1,
 	enum_values=1, not_null=1, min=1, max=1, decimals=1, maxlen=1,
 	lookup_rowset_name=1, lookup_col=1, display_col=1, name_col=1,
@@ -115,7 +114,7 @@ function virtual_rowset(init, ...)
 				f.hidden = true
 			end
 			if ro_cols[f.name] then
-				f.editable = false
+				f.readonly = true
 			end
 			update(f, rs.field_attrs and rs.field_attrs[f.name])
 
@@ -140,7 +139,6 @@ function virtual_rowset(init, ...)
 		local res = {}
 		rs:load_rows(res, param_values)
 		merge(res, {
-			can_edit = rs.can_edit,
 			can_add_rows = rs.can_add_rows,
 			can_remove_rows = rs.can_remove_rows,
 			can_change_rows = rs.can_change_rows,
@@ -214,19 +212,16 @@ function virtual_rowset(init, ...)
 					local ok, err = catch('db', rs.insert_row, rs, row.values)
 					if ok then
 						if rs.load_row then
-							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							local ok, row = catch('db', rs.load_row, rs, row.values)
 							if ok then
-								if #rows == 0 then
+								if not row then
 									rt.error = S('inserted_row_not_found',
 										'inserted row could not be loaded back')
-								elseif #rows > 1 then
-									rt.error = S('inserted_row_multiple_rows',
-										'loaded back multiple rows for one inserted row')
 								else
-									rt.values = rows[1]
+									rt.values = row
 								end
 							else
-								local err = rows
+								local err = row
 								rt.error = db_error(err,
 									S('load_inserted_row_error',
 										'error on loading back inserted row'))
@@ -253,17 +248,14 @@ function virtual_rowset(init, ...)
 									row.values[k1] = v
 								end
 							end
-							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							local ok, row = catch('db', rs.load_row, rs, row.values)
 							if ok then
-								if #rows == 0 then
+								if not row then
 									rt.remove = true
 									rt.error = S('updated_row_not_found',
 										'updated row could not be loaded back')
-								elseif #rows > 1 then
-									rt.error = S('updated_row_multiple_rows',
-										'loaded back multiple rows for one updated row')
 								else
-									rt.values = rows[1]
+									rt.values = row
 								end
 							else
 								local err = rows

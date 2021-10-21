@@ -41,18 +41,25 @@ fires:
 	^document.'ID.bind' (on)
 --------------------------------------------------------------------------- */
 
-function set_attr_func(e, k, opt) {
-	let to_attr
-	return function(v) {
-		if (to_attr)
-			v = to_attr(v)
-		else if (isobject(v) && v.to_attr)
-			v = v.to_attr()
-		e.attr(k, v)
-	}
+{
+
+let set_attr_func = function(e, k, opt) {
+	if (opt.to_attr)
+		return (v) => e.attr(k, v)
+	if (opt.type == 'bool')
+		return (v) => e.bool_attr(k, v || null)
+	return (v) => e.attr(k, v)
 }
 
-function attr_val_opt(e) {
+let from_bool_attr = v => repl(repl(v, '', true), 'false', false)
+
+let from_attr_func = function(opt) {
+	return opt.from_attr
+			|| (opt.type == 'bool'   && from_bool_attr)
+			|| (opt.type == 'number' && num)
+}
+
+let attr_val_opt = function(e) {
 	let opt = obj()
 	for (let attr of e.attrs) {
 		let k = attr.name
@@ -297,7 +304,7 @@ fires:
 	document.'prop_changed' (e, prop, v1, v0, slot)
 --------------------------------------------------------------------------- */
 
-function component_props(e, iprops) {
+let component_props = function(e, iprops) {
 
 	e.xon  = function() { e.xmodule_noupdate = false }
 	e.xoff = function() { e.xmodule_noupdate = true  }
@@ -308,7 +315,7 @@ function component_props(e, iprops) {
 
 	function resolve_widget_id(id) {
 		let e = window[id]
-		return isobject(e) && e.iswidget && e.bound && e.can_select_widget ? e : null
+		return isobject(e) && e.iswidget && e.bound && e.can_select_widget != false ? e : null
 	}
 
 	e.props = {}
@@ -329,11 +336,11 @@ function component_props(e, iprops) {
 		let slot = opt.slot
 		let dv = opt.default
 
-		let attr = opt.attr
-		opt.from_attr = attr && opt.from_attr
-			|| opt.type == 'bool' && (v => repl(repl(v, '', true), 'false', false))
-			|| opt.type == 'number' && num
-		let set_attr = attr && set_attr_func(e, prop, opt)
+		let set_attr
+		if (opt.attr) {
+			opt.from_attr = from_attr_func(opt)
+			set_attr = set_attr_func(e, prop, opt)
+		}
 
 		if (opt.store == 'var') {
 			let v = dv
@@ -348,14 +355,14 @@ function component_props(e, iprops) {
 				v = v1
 				e.begin_update()
 				e[setter](v1, v0)
-				if (attr)
+				if (set_attr)
 					set_attr(v1)
 				if (!priv)
 					prop_changed(e, prop, v1, v0, slot)
 				e.update()
 				e.end_update()
 			}
-			if (attr && !e.hasattr(prop))
+			if (set_attr && !e.hasattr(prop))
 				set_attr(dv)
 		} else if (opt.style) {
 			let style = opt.style
@@ -455,6 +462,8 @@ function component_props(e, iprops) {
 			v = v.serialize()
 		return v
 	}
+
+}
 
 }
 
@@ -3318,4 +3327,3 @@ function richtext_widget_editing(e) {
 }
 
 }
-

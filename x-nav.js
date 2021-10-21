@@ -24,7 +24,6 @@ rowset attributes:
 	id_col     : 'col'         : id column for tree-forming along with parent_col.
 	parent_col : 'col'         : parent colum for tree-forming.
 	pos_col    : 'col'         : position column for manual reordering of rows.
-	can_edit
 	can_add_rows
 	can_remove_rows
 	can_change_rows
@@ -49,7 +48,7 @@ rowset field attributes:
 	editing:
 		client_default : default value/generator that new rows are initialized with.
 		default        : default value that the server sets for new rows.
-		editable       : allow modifying (true).
+		readonly       : prevent editing.
 		editor         : f({nav:, col:}, ...opt) -> editor instance
 		from_text      : f(s) -> v
 		to_text        : f(v) -> s
@@ -95,7 +94,7 @@ rowset cell attributes:
 
 rowset row attributes:
 	row.focusable      : row can be focused (true).
-	row.editable       : allow modifying (true).
+	row.can_change     : allow changing (true).
 	row.can_remove     : allow removing (true).
 	row.nosave         : row is not to be saved.
 	row.is_new         : new row, not added on server yet.
@@ -286,7 +285,6 @@ updating rowset:
 
 editing:
 	config:
-		can_edit
 		can_add_rows
 		can_remove_rows
 		can_change_rows
@@ -398,7 +396,6 @@ function nav_widget(e) {
 
 	e.isnav = true // for resolver
 
-	e.prop('can_edit'                , {store: 'var', type: 'bool', default: true, hint: 'can change anything at all'})
 	e.prop('can_add_rows'            , {store: 'var', type: 'bool', default: true})
 	e.prop('can_remove_rows'         , {store: 'var', type: 'bool', default: true})
 	e.prop('can_change_rows'         , {store: 'var', type: 'bool', default: true})
@@ -1073,36 +1070,25 @@ function nav_widget(e) {
 
 	// editing utils ----------------------------------------------------------
 
-	function can_edit() {
-		return e.can_edit && (!e.rowset || e.rowset.can_edit != false)
-	}
-
 	function can_add_rows() {
-		return can_edit()
-			&& e.can_add_rows
+		return e.can_add_rows
 			&& (!e.rowset || e.rowset.can_add_rows != false)
 	}
 
 	function can_remove_rows() {
-		return can_edit()
-			&& e.can_remove_rows
+		return e.can_remove_rows
 			&& (!e.rowset || e.rowset.can_remove_rows != false)
 	}
 
 	function can_change_rows() {
-		return can_edit()
-			&& e.can_change_rows
+		return e.can_change_rows
 			&& (!e.rowset || e.rowset.can_change_rows != false)
 	}
 
-	function can_change_val(row, field) {
-		return can_change_rows()
-			&& (!row || (row.editable != false && !row.removed))
-			&& (!field || field.editable)
-	}
-
 	e.can_change_val = function(row, field) {
-		return can_change_val(row, field) && e.can_focus_cell(row, field)
+		return can_change_rows()
+			&& (!row || (row.can_change != false && !row.removed))
+			&& (!field || !field.readonly)
 	}
 
 	e.can_actually_add_rows = can_add_rows
@@ -1117,7 +1103,7 @@ function nav_widget(e) {
 	e.can_focus_cell = function(row, field, for_editing) {
 		return (!row || row.focusable != false)
 			&& (field == null || !e.can_focus_cells || field.focusable != false)
-			&& (!for_editing || can_change_val(row, field))
+			&& (!for_editing || e.can_change_val(row, field))
 	}
 
 	e.is_cell_disabled = function(row, field) {
@@ -1814,7 +1800,7 @@ function nav_widget(e) {
 
 	// row moving -------------------------------------------------------------
 
-	function change_row_parent(row, parent_row, ev) {
+	function change_row_parent(row, parent_row) {
 		if (!e.parent_field)
 			return
 		if (parent_row == row.parent_row)
@@ -1823,7 +1809,7 @@ function nav_widget(e) {
 		assert(!parent_row || !parent_row.parent_rows.includes(row))
 
 		let parent_id = parent_row ? e.cell_val(parent_row, e.id_field) : null
-		e.set_cell_val(row, e.parent_field, parent_id, ev)
+		e.set_cell_val(row, e.parent_field, parent_id)
 
 		remove_row_from_tree(row)
 		add_row_to_tree(row, parent_row)
@@ -2228,8 +2214,6 @@ function nav_widget(e) {
 	e.do_update_row_state = noop
 
 	function cell_state_changed(row, field, key, val, old_val, ev) {
-		if (ev && ev.fire_changed_events === false)
-			return
 		e.fire('cell_state_changed', row, field, key, val, old_val, ev)
 		e.fire('cell_state_changed_for_'+field.name, row, field, key, val, old_val, ev)
 		e.fire('cell_'+key+'_changed', row, field, val, old_val, ev)
@@ -2353,7 +2337,7 @@ function nav_widget(e) {
 		let has_errors = false
 		let can_exit_row = true
 		for (let field of e.all_fields) {
-			if (field.editable && e.cell_modified(row, field)) {
+			if (!field.readonly && e.cell_modified(row, field)) {
 				let errors = e.cell_errors(row, field)
 				if (!errors) { // not validated
 					let val = e.cell_input_val(row, field)
@@ -2448,7 +2432,7 @@ function nav_widget(e) {
 			else if (!row.is_new)
 				row_unchanged(row)
 			if (ev && ev.input) // from UI
-				if (must_save(e.editor ? 'input' : 'exit_edit'))
+				if (must_save('input'))
 					e.save()
 		}
 
@@ -2647,11 +2631,10 @@ function nav_widget(e) {
 		return true
 	}
 
-	e.set_null_selected_cells = function() {
+	e.set_null_selected_cells = function(ev) {
 		for (let [row, sel_fields] of e.selected_rows)
 			for (let field of (isobject(sel_fields) ? sel_fields : e.fields))
-				if (e.can_change_val(row, field))
-					e.set_cell_val(row, field, null)
+				e.set_cell_val(row, field, null, ev)
 	}
 
 	// get/set cell display val -----------------------------------------------
@@ -2834,7 +2817,7 @@ function nav_widget(e) {
 				for (let fi = 0; fi < e.all_fields.length; fi++) {
 					let field = e.all_fields[fi]
 					if (row[fi] !== undefined)
-						set_cell_val(row0, field, row[fi])
+						set_cell_val(row0, field, row[fi], ev)
 				}
 
 				assign(row0, ev.row_state)
@@ -2864,10 +2847,9 @@ function nav_widget(e) {
 					row.parent_row = parent_row || null
 					;(row.parent_row || e).child_rows.push(row)
 					if (row.parent_row) {
-						// silently set parent id to be the id of the parent row.
+						// set parent id to be the id of the parent row.
 						let parent_id = e.cell_val(row.parent_row, e.id_field)
-						set_cell_val(row, e.parent_field, parent_id,
-							assign({fire_changed_events: false}, ev))
+						set_cell_val(row, e.parent_field, parent_id, ev)
 					}
 					assert(init_parent_rows_for_row(row))
 				}
@@ -2935,7 +2917,7 @@ function nav_widget(e) {
 			return false
 		if (!row)
 			return true
-		if (row.can_remove === false) {
+		if (row.can_remove == false) {
 			if (ev && ev.input)
 				e.notify('error', S('error_row_not_removable', 'Row not removable'))
 			return false
@@ -3649,14 +3631,12 @@ function nav_widget(e) {
 			if (row.removed) {
 				rows_to_remove.push(row)
 			} else {
+				for (let field of e.all_fields)
+					e.reset_cell_val(row, field, e.cell_input_val(row, field))
 				let is_new_changed   = e.set_row_state(row, 'is_new'  , false, false, false)
 				let modified_changed = e.set_row_state(row, 'modified', false, false, false)
-				if (is_new_changed)
-					row_state_changed(row, 'is_new', false)
-				if (modified_changed)
-					row_state_changed(row, 'modified', false)
-				for (let field of e.all_fields)
-					e.reset_cell_val(row, field, e.cell_val(row, field))
+				if (is_new_changed  ) row_state_changed(row, 'is_new', false)
+				if (modified_changed) row_state_changed(row, 'modified', false)
 			}
 		}
 		e.remove_rows(rows_to_remove, {from_server: true, refocus: true})
@@ -4196,7 +4176,6 @@ component('x-lookup-dropdown', function(e) {
 		max_w: 2000,
 		align: 'left',
 		not_null: false,
-		editable: true,
 		sortable: true,
 		maxlen: 256,
 		null_text: S('null_text', ''),
@@ -4595,7 +4574,7 @@ component('x-lookup-dropdown', function(e) {
 
 	// button
 
-	let btn = {align: 'center', editable: false}
+	let btn = {align: 'center', readonly: true}
 	field_types.button = btn
 
 	btn.format = function(val, row) {

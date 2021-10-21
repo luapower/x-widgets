@@ -874,7 +874,9 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	e.init_as_picker = function() {
 		e.xmodule_noupdate = true
-		e.can_edit = false
+		e.can_add_rows = false
+		e.can_remove_rows = false
+		e.can_change_rows = false
 		e.can_focus_cells = false
 		e.auto_focus_first_cell = false
 		e.enable_context_menu = false
@@ -1921,7 +1923,8 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 			// ctrl_delete: set selected cells to null.
 			if (ctrl) {
-				e.set_null_selected_cells()
+				if (e.can_change_val(row, field))
+					e.set_null_selected_cells({input: e})
 				return false
 			}
 

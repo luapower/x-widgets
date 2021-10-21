@@ -1948,7 +1948,7 @@ component('x-modeleditor', function(e) {
 
 			rowset: {
 				fields: [
-					{name: 'thumbnail', max_w: 50, format: format_material, type: 'thumbnail', editable: false},
+					{name: 'thumbnail', max_w: 50, format: format_material, type: 'thumbnail', readonly: true},
 					{name: 'name', w: 50},
 				],
 				rows: rows,

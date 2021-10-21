@@ -52,7 +52,8 @@ function row_widget(e, enabled_without_nav) {
 
 	e.do_update = function() {
 		let row = e.row
-		e.disabled = !(enabled_without_nav || e.nav.can_change_val(row))
+		e.disabled = !enabled_without_nav
+		e.readonly = !e.nav.can_change_val(row)
 		e.do_update_row(row)
 	}
 
@@ -300,13 +301,16 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 	// view -------------------------------------------------------------------
 
+	e.prop('readonly', {store: 'var', type: 'bool', attr: true, default: false})
+
 	e.do_update = function() {
 		let row = e.row
 		let field = e.field
-		let disabled = !(enabled_without_nav
-			|| (row && field && e.nav.can_change_val(row, field)))
+		let disabled = !(enabled_without_nav || (row && field))
+		let readonly = !e.nav.can_change_val(row, field)
 		e.bool_attr('disabled', disabled || null) // for non-focusables
 		e.disabled = disabled
+		e.readonly = readonly
 		cell_state_changed(row, field, 'input_val', e.input_val)
 		cell_state_changed(row, field, 'val', e.val)
 		cell_state_changed(row, field, 'errors', e.errors)
@@ -708,6 +712,10 @@ function editbox_widget(e, opt) {
 	}
 
 	if (e.input) {
+
+		e.set_readonly = function(v) {
+			e.input.bool_attr('readonly', v || null)
+		}
 
 		e.input.on('input', function() {
 			let v = e.input.value

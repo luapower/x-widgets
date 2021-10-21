@@ -34,8 +34,8 @@
 		ref_table        : reference table (foreign key).
 		ref_col          : column name in reference table (single-column fk).
 
-	Fields without an origin table (SQL expressions) are made non-editable.
-	Auto-increment fields are made non-editable.
+	Fields without an origin table (SQL expressions) are made readonly.
+	Auto-increment fields are made readonly.
 
 	How to use rowset param values in queries:
 		- in where_all:
@@ -171,7 +171,9 @@ function sql_rowset(...)
 
 		if not rs.load_row and rs.select_row then
 			function rs:load_row(vals)
-				return query(rs.select_row, vals)
+				local rows = query(rs.select_row, vals)
+				assert(#rows < 2, 'loaded back multiple rows for one inserted row')
+				return rows[1]
 			end
 		end
 
@@ -224,7 +226,7 @@ function sql_rowset(...)
 					f.type = 'bool'
 				end
 				if not f.col or f.auto_increment then
-					f.editable = false
+					f.readonly = true
 				end
 				if f.ref_table then
 					f.lookup_rowset_name, f.display_col = lookup_rowset(f.ref_table)
