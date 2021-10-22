@@ -1,10 +1,15 @@
-
 /* ---------------------------------------------------------------------------
-//	nav widget mixin
-// ---------------------------------------------------------------------------
+
+	Nav widget mixin.
+	Written by Cosmin Apreutesei. Public Domain.
 
 implements:
 	val widget mixin.
+		So any nav_widget (grid, listbox) can also act like a val_widget
+		(editbox), setting its cell value when navigating the rows. This is how
+		dropdowns work: the grid or listbox picker is bound to the same field
+		as the dropdown and it changes the dropdown's cell value by itself
+		without the need to coordinate with the dropdown.
 
 typing:
 	isnav: t

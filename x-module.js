@@ -1,3 +1,9 @@
+/*
+
+	Persistence for widget-based self-editing UIs.
+	Written by Cosmin Apreutesei. Public Domain.
+
+*/
 
 // ---------------------------------------------------------------------------
 // prop layers
@@ -286,7 +292,7 @@ function init_xmodule(opt) {
 					success: function(props1) {
 						props = props1
 					},
-					fail: function(how, status) {
+					fail: function(err, how, status) {
 						assert(how == 'http' && status == 404)
 					},
 				})

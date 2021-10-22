@@ -107,7 +107,6 @@
 	--x-item-border-focused-invalid    : #f338;
 	--x-item-border-unselected         : #8888;
 	--x-item-border-selected           : #69c8;
-	--x-row-border-focused             : #eee8;
 
 	--x-bg-grid-editor             : var(--x-bg-popup);
 
@@ -257,7 +256,6 @@ body > .x-stretched:not(.popup)
 }
 
 .x-item.row-focused:not(.selected):not(.invalid) {
-	border-color: var(--x-row-border-focused);
 	background-color: var(--x-row-bg-focused);
 }
 
@@ -3178,6 +3176,10 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 body:not([theme=dark]) [theme=dark] {
 	--x-bg: var(--x-bg-popup);
 	background-color: var(--x-bg);
+}
+
+[theme=dark] .x-focus-box {
+	background-color: #060606;
 }
 
 [theme=dark]::-webkit-scrollbar,

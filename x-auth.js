@@ -1,3 +1,10 @@
+/*
+
+	User settings dropdown and sign-in dialog.
+	Written by Cosmin Apreutesei. Public Domain.
+
+*/
+
 {
 
 function set_night_mode(v) {
@@ -221,6 +228,8 @@ let call_login = function(upload, notify_widget, success, fail) {
 			usr = usr1
 			print('usr_changed', usr)
 			broadcast('usr_changed', usr)
+			if (window.xmodule)
+				xmodule.set_layer(config('app_name'), 'user', 'mm-user-'+usr.usr)
 			if (success) success()
 		},
 		fail: function(err) {

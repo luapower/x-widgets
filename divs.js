@@ -1,6 +1,6 @@
 /*
 
-	DOM manipulation & extensions.
+	DOM API & web components.
 	Written by Cosmin Apreutesei. Public domain.
 
 	Dependencies:
