@@ -402,11 +402,11 @@ function listbox_widget(e) {
 	// picker protocol --------------------------------------------------------
 
 	e.init_as_picker = function() {
-		e.xmodule_noupdate = true
+		e.xoff()
 		e.auto_focus_first_cell = false
 		e.can_select_multiple = false
 		e.can_move_items = false
-		e.xmodule_noupdate = false
+		e.xon()
 	}
 
 	return {items: html_items, row_display_val_template: item_template}

@@ -309,7 +309,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		let disabled = !(enabled_without_nav || (row && field))
 		let readonly = e.nav && !e.nav.can_change_val(row, field)
 		e.bool_attr('disabled', disabled || null) // for non-focusables
-		e.disabled = disabled
+		e.disabled = disabled || (readonly && !e.set_readonly)
 		e.readonly = readonly
 		cell_state_changed(row, field, 'input_val', e.input_val)
 		cell_state_changed(row, field, 'val', e.val)

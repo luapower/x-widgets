@@ -873,7 +873,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 	}
 
 	e.init_as_picker = function() {
-		e.xmodule_noupdate = true
+		e.xoff()
 		e.can_add_rows = false
 		e.can_remove_rows = false
 		e.can_change_rows = false
@@ -882,7 +882,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		e.enable_context_menu = false
 		e.auto_w = true
 		e.auto_h = true
-		e.xmodule_noupdate = false
+		e.xon()
 	}
 
 	// vgrid header resizing --------------------------------------------------

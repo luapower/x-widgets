@@ -3812,9 +3812,9 @@ function nav_widget(e) {
 			oe.remove()
 			oe = null
 		}
-		e.xmodule_noupdate = true
+		e.xoff()
 		e.disabled = on
-		e.xmodule_noupdate = false
+		e.xon()
 		if (!on)
 			return
 		oe = overlay({class: 'x-loading-overlay'})
