@@ -67,6 +67,8 @@
 	--x-fg-button-primary         : var(--x-fg-inverted);
 	--x-bg-button-primary-hover   : #199134;
 	--x-bg-button-primary-pressed : #147a2b;
+	--x-bg-button-danger          : var(--x-bg-button);
+	--x-fg-button-danger          : #a33;
 
 	--x-bg-select-button: var(--x-bg-button);
 
@@ -172,6 +174,7 @@ body[opensans] {
 	flex: 1;
 }
 
+/* seamless fitting of stretched widgets inside containers */
 .x-container > .x-stretched,
 body > .x-stretched:not(.popup)
 {
@@ -390,6 +393,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	border-style: solid;
 	border-color: var(--x-faint);
 	background-color: var(--x-bg-button);
+	border-radius: var(--x-border-radius);
 }
 
 .x-button {
@@ -399,6 +403,16 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-button[primary] {
 	background-color: var(--x-bg-button-primary);
 	color: var(--x-fg-button-primary);
+}
+
+.x-button[primary] {
+	background-color: var(--x-bg-button-primary);
+	color: var(--x-fg-button-primary);
+}
+
+.x-button[danger] {
+	background-color: var(--x-bg-button-danger);
+	color: var(--x-fg-button-danger);
 }
 
 .x-button:focus {
@@ -1215,7 +1229,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 }
 
 .x-flex > .x-slider,
-.x-flex > .x-input > .x-slider,
+.x-flex > .x-input > .x-slider
 {
 	width: auto;
 	min-width: 1em;
@@ -3110,10 +3124,10 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-fg                   : #fff;
 	--x-fg-inverted          : #fff;
 	--x-p                    : #bbb;
-	--x-bg                   : #151519;
+	--x-bg                   : #0d1117;
 	--x-fg-info              : var(--x-fg-inverted);
 	--x-bg-error             : var(--x-bg);
-	--x-bg-popup             : #26262c;
+	--x-bg-popup             : #1d2532;
 	--x-fg-disabled          : #ffffff66;
 	--x-fg-disabled-inverted : var(--x-fg-disabled);
 	--x-border-light         : #ffffff22;
@@ -3127,7 +3141,9 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 
 	--x-markbox-icon-color: #75b7fa;
 
-	--x-bg-button: #565e62;
+	--x-bg-button                 : #21262d;
+	--x-bg-button-danger          : var(--x-bg-button);
+	--x-fg-button-danger          : #a33;
 
 	--x-bg-select-button: var(--x-faint);
 

@@ -2112,7 +2112,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			})
 		}
 
-		e.fire('init_context_menu_items', e, items)
+		e.fire('init_context_menu_items', items)
 
 		e.context_menu = menu({
 			items: items,

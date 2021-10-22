@@ -336,11 +336,8 @@ let component_props = function(e, iprops) {
 		let slot = opt.slot
 		let dv = opt.default
 
-		let set_attr
-		if (opt.attr) {
-			opt.from_attr = from_attr_func(opt)
-			set_attr = set_attr_func(e, prop, opt)
-		}
+		opt.from_attr = from_attr_func(opt)
+		let set_attr = opt.attr && set_attr_func(e, prop, opt)
 
 		if (opt.store == 'var') {
 			let v = dv
@@ -1382,6 +1379,7 @@ component('x-button', 'Input', function(e) {
 
 	e.prop('primary', {store: 'var', type: 'bool', attr: true})
 	e.prop('bare'   , {store: 'var', type: 'bool', attr: true})
+	e.prop('danger' , {store: 'var', type: 'bool', attr: true})
 
 	e.activate = function() {
 		if (e.effectively_hidden || e.effectively_disabled)
@@ -1392,6 +1390,10 @@ component('x-button', 'Input', function(e) {
 		}
 		if (e.action)
 			e.action()
+		let action_name = e.action_name || (e.id && e.id+'_action')
+		let action = window[action_name]
+		if (action)
+			action.call(e)
 		e.fire('activate')
 	}
 

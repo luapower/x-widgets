@@ -53,7 +53,7 @@ function row_widget(e, enabled_without_nav) {
 	e.do_update = function() {
 		let row = e.row
 		e.disabled = !enabled_without_nav
-		e.readonly = !e.nav.can_change_val(row)
+		e.readonly = e.nav && !e.nav.can_change_val(row)
 		e.do_update_row(row)
 	}
 
@@ -307,7 +307,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		let row = e.row
 		let field = e.field
 		let disabled = !(enabled_without_nav || (row && field))
-		let readonly = !e.nav.can_change_val(row, field)
+		let readonly = e.nav && !e.nav.can_change_val(row, field)
 		e.bool_attr('disabled', disabled || null) // for non-focusables
 		e.disabled = disabled
 		e.readonly = readonly
@@ -369,7 +369,7 @@ function input_widget(e) {
 	e.prop('nolabel' , {store: 'var', type: 'bool'})
 	e.prop('align'   , {store: 'var', type: 'enum', enum_values: ['left', 'right'], default: 'left', attr: true})
 	e.prop('mode'    , {store: 'var', type: 'enum', enum_values: ['default', 'inline'], default: 'default', attr: true})
-	e.prop('info'    , {store: 'var', slot: 'lang'})
+	e.prop('info'    , {store: 'var', slot: 'lang', attr: true})
 	e.prop('infomode', {store: 'var', slot: 'lang', type: 'enum', enum_values: ['under', 'button', 'hidden'], attr: true, default: 'under'})
 	e.prop('field_type', {store: 'var', attr: true, internal: true})
 
@@ -377,7 +377,7 @@ function input_widget(e) {
 	e.add_info_box = e.add // stub
 
 	function update_info() {
-		let info = e.field && e.field.info
+		let info = e.info || (e.field && e.field.info)
 
 		if (info && e.infomode == 'button' && !e.info_button) {
 			e.info_button = button({
@@ -492,7 +492,7 @@ component('x-checkbox', 'Input', function(e) {
 	// model
 
 	e.get_checked = function() {
-		return e.val === e.checked_val
+		return e.input_val === e.checked_val
 	}
 	e.set_checked = function(v, ev) {
 		e.set_val(v ? e.checked_val : e.unchecked_val, ev)
