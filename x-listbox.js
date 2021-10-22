@@ -28,12 +28,13 @@ function listbox_widget(e) {
 	e.class('x-focusable-items')
 	stylable_widget(e)
 
+	e.xoff()
 	e.can_focus_cells = false
+	e.display_col = 0
+	e.xon()
 
 	e.prop('orientation'   , {store: 'var', type: 'enum', enum_values: ['vertical', 'horizontal'], default: 'vertical', attr: true})
 	e.prop('can_move_items', {store: 'var', type: 'bool', default: true})
-
-	e.display_col = 0
 
 	// embedded template: doesn't work if the listbox itself is declared in a template.
 	let item_template = e.$('script[type="text/x-mustache"]')[0]

@@ -2336,7 +2336,7 @@ function nav_widget(e) {
 		row_changed(row)
 	}
 
-	function validate_row(row, purpose) {
+	e.validate_row = function(row, purpose) {
 		if (row.has_errors == false)
 			return true
 		let has_errors = false
@@ -2628,7 +2628,7 @@ function nav_widget(e) {
 		if (!e.exit_edit(force))
 			return false
 		if (!force) { // from UI
-			if (!validate_row(row, 'exit_row'))
+			if (!e.validate_row(row, 'exit_row'))
 				return false
 			if (must_save('exit_row'))
 				e.save()
@@ -3535,8 +3535,6 @@ function nav_widget(e) {
 		return !!(e.rowset_url || e.static_rowset)
 	}
 
-	e.validate_row = validate_row
-
 	e.save = function() {
 		if (!e.changed_rows && !rows_moved)
 			return
@@ -3544,9 +3542,8 @@ function nav_widget(e) {
 		if (e.changed_rows) {
 			let some_valid
 			for (let row of e.changed_rows)
-				if (!row.save_request)
-					if (validate_row(row))
-						some_valid = true
+				if (e.validate_row(row))
+					some_valid = true
 			if (!some_valid) {
 				notify(S('save_nothing', 'No valid rows to save'))
 				return

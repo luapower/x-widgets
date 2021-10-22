@@ -60,9 +60,11 @@ require'xauth'
 
 return function(app)
 
-	config('app_name', app_name)
-
 	--config ------------------------------------------------------------------
+
+	config('app_name', app_name)
+	config('var_dir' , var_dir)
+	config('tmp_dir' , tmp_dir)
 
 	Sfile((config'app_name')..'.lua')
 

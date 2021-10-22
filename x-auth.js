@@ -12,7 +12,9 @@ function set_night_mode(v) {
 	document.fire('theme_changed', v ? 'dark' : null)
 }
 
-function init_user_settings_nav(module) {
+let init_settings_nav = function() {
+
+	init_settings_nav = noop
 
 	let set = {}
 
@@ -21,8 +23,7 @@ function init_user_settings_nav(module) {
 	}
 
 	let nav = bare_nav({
-		id: module+'_user_settings_nav',
-		module: module,
+		id: 'user_settings_nav',
 		static_rowset: {
 			fields: [
 				{
@@ -57,16 +58,7 @@ function init_user_settings_nav(module) {
 	})
 
 	set_all()
-
-	return nav
 }
-
-let settings_nav
-
-window.on('load', function() {
-	let module = $1('x-settings-button').module
-	settings_nav = init_user_settings_nav(module)
-})
 
 component('x-settings-button', function(e) {
 
@@ -89,7 +81,7 @@ component('x-settings-button', function(e) {
 		} else {
 
 			let night_mode = checkbox({
-				nav: settings_nav,
+				nav_id: 'user_settings_nav',
 				col: 'night_mode',
 				button_style: 'toggle',
 				autoclose: true,
@@ -229,7 +221,7 @@ let call_login = function(upload, notify_widget, success, fail) {
 			print('usr_changed', usr)
 			broadcast('usr_changed', usr)
 			if (window.xmodule)
-				xmodule.set_layer(config('app_name'), 'user', 'mm-user-'+usr.usr)
+				xmodule.set_layer('user', 'user', 'mm-user-'+usr.usr)
 			if (success) success()
 		},
 		fail: function(err) {
@@ -239,7 +231,10 @@ let call_login = function(upload, notify_widget, success, fail) {
 	})
 }
 
-init_auth = call_login
+function init_auth() {
+	init_settings_nav()
+	call_login()
+}
 
 let sign_out = function() {
 	call_login({type: 'logout'})

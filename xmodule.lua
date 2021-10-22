@@ -37,20 +37,21 @@ function action.xmodule_next_id(module)
 	local file = varpath(_('x-%s-next-id', module))
 	local id = tonumber(assert(readfile(file) or '1'))
 	if method'post' then
-		assert(writefile(file, tostring(id + 1), nil, file..'.tmp'))
+		writefile(file, tostring(id + 1))
 	end
 	setmime'txt'
-	out(module..id)
+	outall(module..id)
 end
 
+
 action['xmodule_layer.json'] = function(layer)
-	layer = checkfound(str_arg(layer))
+	layer = checkarg(str_arg(layer))
 	checkarg(layer:find'^[%w_%-]+$')
 	local file = xmodule_layer_file(layer)
 	if method'post' then
-		writefile(file, post(), nil, file..'.tmp')
+		writefile(file, json(post(), '\t'))
 	else
-		out(readfile(file) or '{}')
+		outall(readfile(file) or '{}')
 	end
 end
 
@@ -64,6 +65,6 @@ action['sql_rowset.json'] = function(id, ...)
 			rs[k:sub(5)] = v
 		end
 	end
-	out(sql_rowset(rs):respond())
+	outall(sql_rowset(rs):respond())
 end
 
