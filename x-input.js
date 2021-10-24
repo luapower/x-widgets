@@ -1231,6 +1231,10 @@ component('x-textedit', 'Input', function(e) {
 
 component('x-textarea', 'Input', function(e) {
 	editbox_widget(e, {input_tag: 'textarea'})
+	e.do_after('init', function() {
+		e.input.rows = e.rows
+		e.input.cols = e.cols
+	})
 })
 
 // ---------------------------------------------------------------------------

@@ -2622,6 +2622,7 @@ component('x-toaster', function(e) {
 	function notify(...args) {
 		t = t || toaster({classes: 'x-notify-toaster'})
 		t.post(...args)
+		print('NOTIFY', args[0])
 	}
 }
 

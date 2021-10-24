@@ -221,7 +221,7 @@ let call_login = function(upload, notify_widget, success, fail) {
 			print('usr_changed', usr)
 			broadcast('usr_changed', usr)
 			if (window.xmodule)
-				xmodule.set_layer('user', 'user', 'mm-user-'+usr.usr)
+				xmodule.set_layer('user', 'user', 'user-'+usr.usr)
 			if (success) success()
 		},
 		fail: function(err) {

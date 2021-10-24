@@ -75,19 +75,6 @@ return function(app)
 		fontfile'OpenSansCondensed-Bold.ttf'
 	end
 
-	--schema ------------------------------------------------------------------
-
-	function cmd.install()
-		webb.run(function()
-			local schema = config('db_schema', app_name)
-			with_config({db_schema = false}, function()
-				create_schema(schema)
-				use_schema(schema)
-				app.install()
-			end)
-		end)
-	end
-
 	--website -----------------------------------------------------------------
 
 	app.respond = glue.noop
@@ -110,12 +97,27 @@ return function(app)
 
 	--cmdline -----------------------------------------------------------------
 
+	function cmd.install()
+		webb.run(function()
+			local schema = config('db_schema', app_name)
+			with_config({db_schema = false}, function()
+				create_schema(schema)
+				use_schema(schema)
+				app.install()
+			end)
+		end)
+	end
+
 	function cmd.start()
 		if app.quiet == nil then
 			logging.quiet = false
 		end
 		local server = webb.server(app.server_options)
 		server.start()
+	end
+
+	function app:run_cmd(f, ...)
+		return webb.run(f, ...)
 	end
 
 	return app

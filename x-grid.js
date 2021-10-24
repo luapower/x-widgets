@@ -1819,7 +1819,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 		// remove last row with the arrow up key if not edited.
 		if (key == up_arrow) {
-			if (e.is_last_row_focused()) {
+			if (e.is_last_row_focused() && e.focused_row) {
 				let row = e.focused_row
 				if (row.is_new && !e.row_is_user_modified(row)) {
 					if (e.remove_selected_rows({input: e, refocus: true}))
