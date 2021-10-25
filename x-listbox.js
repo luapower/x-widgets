@@ -253,7 +253,7 @@ function listbox_widget(e) {
 					drag_my = down_my + e.scrollTop  - e.at[move_ri1].oy
 					mx0 = mx
 					my0 = my
-					scroll_timer = every(.1, item_pointermove)
+					scroll_timer = runevery(.1, item_pointermove)
 				}
 			} else {
 				mx = or(mx, mx0)

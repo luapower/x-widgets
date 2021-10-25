@@ -112,8 +112,8 @@
 	geometry:
 		point_around(cx, cy, r, angle) -> [x, y]
 	timers:
-		after(t, f)
-		every(t, f)
+		runafter(t, f)
+		runevery(t, f)
 		clock()
 		timer(f)
 	serialization:
@@ -1076,8 +1076,8 @@ function point_around(cx, cy, r, angle) {
 
 // timers --------------------------------------------------------------------
 
-function after(t, f) { return setTimeout(f, t * 1000) }
-function every(t, f) { return setInterval(f, t * 1000) }
+function runafter(t, f) { return setTimeout(f, t * 1000) }
+function runevery(t, f) { return setInterval(f, t * 1000) }
 
 function clock() { return performance.now() / 1000 }
 
@@ -1093,7 +1093,7 @@ function timer(f) {
 			timer_id = null
 		}
 		if (t != null && t !== false)
-			timer_id = after(t, wrapper)
+			timer_id = runafter(t, wrapper)
 	}
 }
 
@@ -1280,7 +1280,7 @@ function ajax(req) {
 
 	req.send = function() {
 		fire('start')
-		slow_watch = after(req.slow_timeout, slow_expired)
+		slow_watch = runafter(req.slow_timeout, slow_expired)
 		xhr.send(upload)
 		return req
 	}

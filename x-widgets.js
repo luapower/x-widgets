@@ -3296,9 +3296,9 @@ function richtext_widget_editing(e) {
 	e.content_box.on('keydown', function(key, shift, ctrl, alt, ev) {
 		if (key === 'Enter')
 			if (document.queryCommandValue('formatBlock') == 'blockquote')
-				after(0, function() { exec('formatBlock', '<p>') })
+				runafter(0, function() { exec('formatBlock', '<p>') })
 			else if (document.queryCommandValue('formatBlock') == 'pre')
-				after(0, function() { exec('formatBlock', '<br>') })
+				runafter(0, function() { exec('formatBlock', '<br>') })
 		ev.stopPropagation()
 	})
 

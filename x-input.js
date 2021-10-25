@@ -1262,7 +1262,7 @@ component('x-passedit', 'Input', function(e) {
 		e.input.attr('type', on ? null : 'password')
 		this.icon = 'far fa-eye' + (on ? '' : '-slash')
 		if (!on) {
-			after(0, function() {
+			runafter(0, function() {
 				e.input.selectionStart = s1
 				e.input.selectionEnd   = s2
 			})
@@ -1367,7 +1367,7 @@ component('x-spinedit', 'Input', function(e) {
 			e.input.focus()
 			increment = multiple() * sign
 			increment_val_again()
-			start_incrementing_timer = after(.5, start_incrementing)
+			start_incrementing_timer = runafter(.5, start_incrementing)
 			return this.capture_pointer(ev, null, function() {
 				clearTimeout(start_incrementing_timer)
 				clearInterval(increment_timer)

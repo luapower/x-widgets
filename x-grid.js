@@ -1375,7 +1375,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 		create_cells(true)
 
-		let scroll_timer = every(.1, mm_row_move)
+		let scroll_timer = runevery(.1, mm_row_move)
 
 	}
 
