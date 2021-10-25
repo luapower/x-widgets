@@ -1361,7 +1361,7 @@ component('x-button', 'Input', function(e) {
 	}
 	e.prop('text', {store: 'var', default: 'OK', slot: 'lang'})
 
-	e.do_after('init', function() {
+	e.after('init', function() {
 		if (html_text != null && html_text != e.text)
 			e.text = html_text
 		else
