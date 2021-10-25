@@ -431,7 +431,7 @@ function input_widget(e) {
 		return div({class: 'x-input-placeholder'})
 	}
 
-	e.after('do_update', function() {
+	e.do_after('do_update', function() {
 		update_info()
 		let s = !e.nolabel && (e.label || (e.field && e.field.text)) || null
 		e.class('with-label', !!s)
@@ -982,7 +982,7 @@ function editbox_widget(e, opt) {
 
 		e.prop('picker_w', {store: 'var', type: 'number', text: 'Picker Width'})
 
-		e.after('init', function() {
+		e.do_after('init', function() {
 			if (e.create_dropdown_button) {
 				e.dropdown_button = e.create_dropdown_button()
 			} else {
@@ -1231,7 +1231,7 @@ component('x-textedit', 'Input', function(e) {
 
 component('x-textarea', 'Input', function(e) {
 	editbox_widget(e, {input_tag: 'textarea'})
-	e.after('init', function() {
+	e.do_after('init', function() {
 		e.input.rows = e.rows
 		e.input.cols = e.cols
 	})

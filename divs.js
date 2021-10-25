@@ -64,8 +64,8 @@
 		e.bound -> t|f
 		e.property(name, [get],[set] | descriptor)
 		e.override(method, f)
-		e.before(method, f)
-		e.after(method, f)
+		e.do_before(method, f)
+		e.do_after(method, f)
 	events:
 		event(name|ev, [bubbles], ...args) -> ev
 		e.on   (name|ev, f, [enable], [capture])
@@ -563,7 +563,7 @@ method(Element, 'override', function(method, func) {
 	}
 })
 
-method(Element, 'before', function(method, func) {
+method(Element, 'do_before', function(method, func) {
 	let inherited = this[method]
 	this[method] = inherited && function(...args) {
 		func.call(this, ...args)
@@ -571,7 +571,7 @@ method(Element, 'before', function(method, func) {
 	} || func
 })
 
-method(Element, 'after', function(method, func) {
+method(Element, 'do_after', function(method, func) {
 	let inherited = this[method]
 	this[method] = inherited && function(...args) {
 		inherited.call(this, ...args)
