@@ -754,7 +754,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 
 	}
 
-	e.do_after('create_editor', function(field, ...opt) {
+	e.after('create_editor', function(field, ...opt) {
 		if (!e.editor)
 			return
 		e.editor.class('grid-editor')
