@@ -363,6 +363,7 @@ end
 
 action['xrowset.events'] = function()
 	setheader('cache-control', 'no-cache')
+	http_close()
 	local waiting_thread
 	thread(function()
 		--hack to wait for client to close the connection so we can wake up
