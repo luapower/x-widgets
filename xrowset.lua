@@ -349,31 +349,59 @@ end
 
 --reload push-notifications --------------------------------------------------
 
-local events_thread
+local waiting_events_threads = {}
 local changed_rowsets = {}
+
 function rowset_changed(rowset_name)
-	changed_rowsets[rowset_name] = true
-	if events_thread then
-		resume(events_thread)
+	for _, rowsets in pairs(changed_rowsets) do
+		rowsets[rowset_name] = true
+	end
+	for thread in pairs(waiting_events_threads) do
+		resume(thread)
 	end
 end
 
 action['xrowset.events'] = function()
 	setheader('cache-control', 'no-cache')
+	local waiting_thread
+	thread(function()
+		--hack to wait for client to close the connection so we can wake up
+		--the sending thread if suspended and finish it so the server can
+		--clean up the accept thread. this works because the client shouldn't
+		--send anything anymore so recv() should only return on close.
+		local tcp = cx().req.http.tcp
+		local buf = glue.u8a(1)
+		local sz, err = assert(tcp:recv(buf, 1) == 0) --clean close
+		if waiting_thread then
+			transfer(waiting_thread, 'closed')
+		end
+	end)
+	local rowsets = {}
+	local key = cx()
+	changed_rowsets[key] = rowsets
+	onrequestfinish(function()
+		changed_rowsets[key] = nil
+	end)
 	while true do
-		if not next(changed_rowsets) then
-			events_thread = currentthread()
-			suspend()
-			assert(events_thread == currentthread())
-			events_thread = nil
+		if not next(rowsets) then
+			local thread = currentthread()
+			waiting_events_threads[thread] = true
+			waiting_thread = thread
+			local action = suspend()
+			waiting_events_threads[thread] = nil
+			waiting_thread = nil
+			if action == 'closed' then
+				break
+			end
 		end
 		local t = {}
-		for rowset_name in pairs(changed_rowsets) do
+		for rowset_name in pairs(rowsets) do
 			t[#t+1] = 'data: '..rowset_name..'\n\n'
-			changed_rowsets[rowset_name] = nil
+			rowsets[rowset_name] = nil
 		end
+		local events = table.concat(t)
 		assert(not out_buffering())
-		out(table.concat(t))
+		out(events)
 	end
 end
 
