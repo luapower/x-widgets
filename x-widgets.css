@@ -57,9 +57,13 @@
 	--x-fg-info         : var(--x-fg-inverted);
 	--x-bg-error        : #a33; /* bg & fg for invalid inputs and error bubbles */
 	--x-fg-error        : var(--x-fg-inverted);
+	--x-bg-warn         : #ffa500;
+	--x-fg-warn         : var(--x-fg);
 	--x-bg-tooltip      : #ffffcc; /* bg for cursor-kind tooltips */
 	--x-bg-today        : #f33;
 	--x-fg-today        : var(--x-fg-inverted);
+	--x-fg-link         : var(--x-fg);
+	--x-fg-link-visited : var(--x-fg);
 
 	--x-bg-button                 : #eff3f6;
 	--x-fg-button                 : var(--x-fg-inverted);
@@ -110,6 +114,14 @@
 
 	--x-bg-grid-editor             : var(--x-bg-popup);
 
+}
+
+a {
+	color: var(--x-fg-link);
+}
+
+a:visited {
+	color: var(--x-fg-link-visited);
 }
 
 /* default fonts ---------------------------------------------------------- */
@@ -618,6 +630,11 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-tooltip[kind=error] > .x-tooltip-tip { color: var(--x-bg-error); }
 .x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
 .x-tooltip[kind=error] > .x-tooltip-body > .x-tooltip-xbutton:hover { color: var(--x-fg-error); }
+
+.x-tooltip[kind=warn] > .x-tooltip-body { background-color: var(--x-bg-warn); color: var(--x-fg-warn); }
+.x-tooltip[kind=warn] > .x-tooltip-tip { color: var(--x-bg-warn); }
+.x-tooltip[kind=warn] > .x-tooltip-body > .x-tooltip-xbutton { color: var(--x-fg-disabled-inverted); border-color: var(--x-fg-disabled-inverted); }
+.x-tooltip[kind=warn] > .x-tooltip-body > .x-tooltip-xbutton:hover { color: var(--x-fg-warn); }
 
 .x-tooltip[kind=cursor] {
 	margin-left: .75em;
@@ -3131,11 +3148,13 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-border-light         : #ffffff22;
 	--x-smoke                : #ffffff22;
 	--x-faint                : #ffffff11;
-	--x-fg-label        : #aaa;
-	--x-bg-new          : #2c2c5c;
-	--x-bg-modified     : #196119;
-	--x-bg-new-modified : #293b34;
-	--x-fg-error        : #f66;
+	--x-fg-label             : #aaa;
+	--x-bg-new               : #2c2c5c;
+	--x-bg-modified          : #196119;
+	--x-bg-new-modified      : #293b34;
+	--x-fg-error             : #f66;
+	--x-fg-link              : var(--x-fg);
+	--x-fg-link-visited      : var(--x-fg);
 
 	--x-markbox-icon-color: #75b7fa;
 

@@ -1747,11 +1747,24 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		e.fire('cell_click', hit.cell.ri, hit.cell.fi, ev)
 	})
 
+	let cell_val_node = function(cell) {
+		let node = cell.childNodes[cell.indent ? 1 : 0]
+		return cell.qs_div ? node.childNodes[0] : node
+	}
+
 	e.on('dblclick', function(ev) {
-		if (!hit.cell) return
+		if (!hit.cell)
+			return
+		let field = e.fields[hit.cell.fi]
+		if (field.cell_dblclick) {
+			let row = e.rows[hit.cell.ri]
+			if (field.cell_dblclick.call(e, cell_val_node(hit.cell), row, field) == false)
+				return
+		}
+		if (!e.fire('cell_dblclick', hit.cell.ri, hit.cell.fi, ev))
+			return
 		if (e.enter_edit_on_dblclick)
 			e.enter_edit('select_all')
-		e.fire('cell_dblclick', hit.cell.ri, hit.cell.fi, ev)
 	})
 
 	// keyboard bindings ------------------------------------------------------

@@ -64,6 +64,7 @@
 	arrays:
 		empty_array
 		a.extend(a1)
+		a.set(a1)
 		a.insert(i, v)
 		a.remove(i) -> v
 		a.remove_value(v) -> i
@@ -434,6 +435,11 @@ method(Array, 'remove_values', function(cond) {
 		i++
 	}
 	this.length = j
+})
+
+method(Array, 'clear', function() {
+	this.length = 0
+	return this
 })
 
 // move the n elements at i1 to a new position which is an index in the

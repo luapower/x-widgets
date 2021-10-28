@@ -86,6 +86,7 @@ function qmacro.filter(expr, filter)
 end
 
 local rowset_type = {
+	bool        = 'bool',
 	tinyint     = 'number',
 	smallint    = 'number',
 	mediumint   = 'number',

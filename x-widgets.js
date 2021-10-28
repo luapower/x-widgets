@@ -1159,7 +1159,7 @@ component('x-tooltip', function(e) {
 	e.prop('icon_visible', {store: 'var', type: 'bool'})
 	e.prop('side'        , {store: 'var', type: 'enum', enum_values: ['top', 'bottom', 'left', 'right', 'inner-top', 'inner-bottom', 'inner-left', 'inner-right', 'inner-center'], default: 'top'})
 	e.prop('align'       , {store: 'var', type: 'enum', enum_values: ['center', 'start', 'end'], default: 'center', attr: true})
-	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'search', 'info', 'error', 'cursor'], default: 'default', attr: true})
+	e.prop('kind'        , {store: 'var', type: 'enum', enum_values: ['default', 'search', 'info', 'warn', 'error', 'cursor'], default: 'default', attr: true})
 	e.prop('px'          , {store: 'var', type: 'number'})
 	e.prop('py'          , {store: 'var', type: 'number'})
 	e.prop('pw'          , {store: 'var', type: 'number'})
@@ -1313,7 +1313,8 @@ tooltip.reading_speed = 800 // letters-per-minute.
 
 tooltip.icon_classes = {
 	info   : 'fa fa-info-circle',
-	error  : 'fa fa-exclamation-triangle',
+	error  : 'fa fa-exclamation-circle',
+	warn   : 'fa fa-exclamation-triangle',
 }
 
 // ---------------------------------------------------------------------------

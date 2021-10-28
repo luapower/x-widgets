@@ -2543,15 +2543,15 @@ function nav_widget(e) {
 		if (e.editor)
 			return true
 
+		if (!e.can_focus_cell(row, field, true))
+			return false
+
 		if (editor_state == 'click')
 			if (e.do_cell_click(e.focused_row_index, e.focused_field_index))
 				return false
 
 		if (editor_state == 'click')
 			editor_state = 'select_all'
-
-		if (!e.can_focus_cell(row, field, true))
-			return false
 
 		e.create_editor(field)
 		if (!e.editor)
@@ -4553,6 +4553,21 @@ component('x-lookup-dropdown', function(e) {
 
 	place.editor = function(...opt) {
 		return placeedit(...opt)
+	}
+
+	// url
+
+	let url = {}
+	field_types.url = url
+
+	url.format = function(v) {
+		let a = tag('a', {href: v, target: '_blank'}, v)
+		return a
+	}
+
+	url.cell_dblclick = function(cell) {
+		window.open(cell.href, '_blank')
+		return false // prevent enter edit
 	}
 
 	// phone
