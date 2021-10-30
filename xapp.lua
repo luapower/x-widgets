@@ -97,14 +97,6 @@ return function(app)
 
 	--cmdline -----------------------------------------------------------------
 
-	function app.create_db_schema()
-		local schema = config('db_schema', app_name)
-		with_config({db_schema = false}, function()
-			create_schema(schema)
-			use_schema(schema)
-		end)
-	end
-
 	function cmd.start()
 		if app.quiet == nil then
 			logging.quiet = false
