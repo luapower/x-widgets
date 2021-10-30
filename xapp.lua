@@ -97,14 +97,11 @@ return function(app)
 
 	--cmdline -----------------------------------------------------------------
 
-	function cmd.install()
-		webb.run(function()
-			local schema = config('db_schema', app_name)
-			with_config({db_schema = false}, function()
-				create_schema(schema)
-				use_schema(schema)
-				app.install()
-			end)
+	function app.create_db_schema()
+		local schema = config('db_schema', app_name)
+		with_config({db_schema = false}, function()
+			create_schema(schema)
+			use_schema(schema)
 		end)
 	end
 
