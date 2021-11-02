@@ -840,8 +840,8 @@ function editbox_widget(e, opt) {
 
 	e.set_copy_to_clipboard_button = function(v) {
 		if (v && !e.clipboard_button) {
-			function copy_to_clipboard() {
-				copy_text(e.to_text(e.input_val), function() {
+			function copy_to_clipboard_action() {
+				copy_to_clipboard(e.to_text(e.input_val), function() {
 					notify(S('copied_to_clipboard', 'Copied to clipboard'), 'info')
 				})
 			}
@@ -852,16 +852,16 @@ function editbox_widget(e, opt) {
 				bare: true,
 				focusable: false,
 				title: S('copy_to_clipboard', 'Copy to clipboard'),
-				action: copy_to_clipboard,
+				action: copy_to_clipboard_action,
 			})
-			e.add(e.clipboard_button)
+			e.focus_box.add(e.clipboard_button)
 		} else if (!v && e.clipboard_button) {
 			e.clipboard_button.remove()
 			e.clipboard_button = null
 		}
 	}
 
-	e.prop('copy_to_clipboard_button', {store: 'var', type: 'bool'})
+	e.prop('copy_to_clipboard_button', {store: 'var', type: 'bool', attr: true})
 
 	// more button ------------------------------------------------------------
 

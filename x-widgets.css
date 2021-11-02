@@ -124,6 +124,10 @@ a:visited {
 	color: var(--x-fg-link-visited);
 }
 
+hr {
+	color: var(--x-border-light);
+}
+
 /* default fonts ---------------------------------------------------------- */
 
 @font-face {
@@ -2123,6 +2127,13 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 
 	/* this enables scrolling within children (it's like Harry Potter in here) */
 	overflow: auto;
+}
+
+.x-form h1, h2, h3 {
+	font-weight: normal;
+	margin-left: .2em;
+	margin-top: 1.2em;
+	margin-bottom: .2em;
 }
 
 .x-form > .x-widget,
