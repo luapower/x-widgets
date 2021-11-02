@@ -2129,7 +2129,10 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	overflow: auto;
 }
 
-.x-form h1, h2, h3 {
+.x-form h1,
+.x-form h2,
+.x-form h3
+{
 	font-weight: normal;
 	margin-left: .2em;
 	margin-top: 1.2em;
