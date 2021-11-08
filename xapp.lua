@@ -67,7 +67,7 @@ return function(app)
 	config('tmp_dir' , tmp_dir)
 
 	if app.conf then
-		for k,v in pairs(app.conf)
+		for k,v in pairs(app.conf) do
 			config(k, v)
 		end
 	end
