@@ -104,9 +104,6 @@ return function(app)
 	--cmdline -----------------------------------------------------------------
 
 	function cmd.start()
-		if logging and app.quiet == nil then
-			logging.quiet = false
-		end
 		local server = webb.server(app.server_options)
 		server.start()
 	end
