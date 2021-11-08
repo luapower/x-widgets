@@ -66,6 +66,12 @@ return function(app)
 	config('var_dir' , var_dir)
 	config('tmp_dir' , tmp_dir)
 
+	if app.conf then
+		for k,v in pairs(app.conf)
+			config(k, v)
+		end
+	end
+
 	Sfile((config'app_name')..'.lua')
 
 	if app.font == 'opensans' then
@@ -98,7 +104,7 @@ return function(app)
 	--cmdline -----------------------------------------------------------------
 
 	function cmd.start()
-		if app.quiet == nil then
+		if logging and app.quiet == nil then
 			logging.quiet = false
 		end
 		local server = webb.server(app.server_options)
