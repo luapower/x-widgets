@@ -1627,8 +1627,10 @@ function nav_widget(e) {
 	let find_row
 	function init_find_row() {
 		let pk = e.pk_fields
-		if (!pk)
-			return return_false
+		if (!pk) {
+			find_row = return_false
+			return
+		}
 		let lookup = e.lookup
 		let pk_vs = []
 		let pk_fi = pk.map(f => f.val_index)
