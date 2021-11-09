@@ -987,11 +987,11 @@ function nav_widget(e) {
 		return m
 	}
 
-	function init_param_vals(param_vals) {
+	function init_param_vals() {
 		if (!e.params) {
 			e.param_vals = null
 		} else if (!(e.param_nav && e.param_nav.focused_row && !e.param_nav.focused_row.is_new)) {
-			e.param_vals = param_vals || false
+			e.param_vals = false
 		} else {
 			e.param_vals = []
 			let pmap = param_map(e.params)
@@ -3309,12 +3309,12 @@ function nav_widget(e) {
 		return s
 	}
 
-	e.reload = function(param_vals) {
+	e.reload = function() {
 		if (!e.bound) {
 			e.update({reload: true})
 			return
 		}
-		init_param_vals(param_vals)
+		init_param_vals()
 		if (!e.rowset_url || e.param_vals === false) {
 			// client-side rowset or param vals not available: reset it.
 			e.reset()
