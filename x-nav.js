@@ -445,6 +445,7 @@ function nav_widget(e) {
 		bind_linked_lookup_navs(on)
 		bind_rowset_name(e.rowset_name, on)
 		if (on) {
+			init_param_vals()
 			e.update({reload: true})
 		} else {
 			abort_all_requests()
@@ -664,15 +665,15 @@ function nav_widget(e) {
 
 		e.all_fields = [] // fields in row value order.
 
-		let rs = e.rowset || empty
-
 		// not creating fields and rows unless bound because we don't get
 		// events while not attached to DOM so the nav might get stale.
-		if (e.bound && rs.fields)
+		let rs = e.bound && e.rowset || empty
+
+		if (rs.fields)
 			for (let fi = 0; fi < rs.fields.length; fi++)
 				init_field(rs.fields[fi], fi)
 
-		e.pk = e.bound ? (isarray(rs.pk) ? rs.pk.join(' ') : rs.pk) : null
+		e.pk = isarray(rs.pk) ? rs.pk.join(' ') : rs.pk
 		e.pk_fields = flds(e.pk)
 		init_find_row()
 		e.id_field = rs.id_col
@@ -684,7 +685,7 @@ function nav_widget(e) {
 		e.val_field = e.all_fields[e.val_col]
 		e.pos_field = e.all_fields[rs.pos_col]
 
-		if (e.bound && rs.pos_col && !e.pos_field)
+		if (rs.pos_col && !e.pos_field)
 			warn('pos col "'+rs.pos_col+'" not selected for rowset '+e.rowset_name)
 
 		for (let field of e.all_fields)
@@ -896,29 +897,70 @@ function nav_widget(e) {
 
 	// param nav --------------------------------------------------------------
 
+	function init_param_vals() {
+		let pv0 = e.param_vals
+		let pv1
+		if (!e.params) {
+			pv1 = null
+		} else if (!(e.param_nav && e.param_nav.focused_row && !e.param_nav.focused_row.is_new)) {
+			pv1 = false
+		} else {
+			pv1 = []
+			let pmap = param_map(e.params)
+			for (let [row] of e.param_nav.selected_rows) {
+				let vals = obj()
+				for (let [col, param] of pmap) {
+					let field = e.param_nav.all_fields[col]
+					if (!field)
+						warn('param nav is missing col', col)
+					let v = field && row ? e.param_nav.cell_val(row, field) : null
+					vals[param] = v
+				}
+				pv1.push(vals)
+			}
+		}
+		// check if new param vals are the same as the old ones to avoid
+		// reloading the rowset if the params didn't really change.
+		if (pv1 === pv0)
+			return
+		if (isarray(pv1) && isarray(pv0) && json(pv1) == json(pv0))
+			return
+		e.param_vals = pv1
+		return true
+	}
+
+	// A client_nav doesn't have a rowset binding. Instead, changes are saved
+	// to either row_vals or row_states. Also, if it's a detail nav, it filters
+	// itself based on param_vals since there's no server to ask for filtered rows.
+	let is_client_nav = function() {
+		return !e.rowset_url && (e.row_vals || e.row_states)
+	}
+
 	function params_changed() {
-		if (!e.rowset_url && (e.row_vals || e.row_states)) {
-			// client-side detail: just re-filter and re-focus.
+		if (!init_param_vals())
+			return
+		if (is_client_nav()) { // re-filter and re-focus.
 			force_unfocus_focused_cell()
-			init_param_vals()
 			init_rows()
 			e.begin_update()
 			e.update({rows: true})
 			e.focus_cell()
 			e.end_update()
-		} else
+		} else {
 			e.reload()
+		}
 	}
 
 	function param_nav_val_changed(master_row, master_field, val, old_val, ev) {
-		if (!e.rowset_url && (e.row_vals || e.row_states)) {
-			// detail nav with client-side rowset: cascade-update foreign keys.
+		if (is_client_nav()) { // cascade-update foreign keys.
 			let field = fld(param_map(e.params).get(master_field.name))
 			for (let row of e.all_rows)
 				if (e.cell_val(row, field) === old_val)
 					e.set_cell_val(row, field, val)
-		} else
-			e.reload()
+		} else {
+			if (init_param_vals())
+				e.reload()
+		}
 	}
 
 	function param_vals_match(master_nav, e, params, master_row, row) {
@@ -934,8 +976,7 @@ function nav_widget(e) {
 	}
 
 	function param_nav_row_removed_changed(master_row, removed) {
-		if (!e.rowset_url && (e.row_vals || e.row_states)) {
-			// detail nav with client-side rowset: cascade-remove detail rows.
+		if (is_client_nav()) { // cascade-remove detail rows.
 			let params = param_map(e.params)
 			for (let row of e.all_rows)
 				if (param_vals_match(this, e, params, master_row, row)) {
@@ -963,7 +1004,8 @@ function nav_widget(e) {
 	e.set_param_nav = function(nav1, nav0) {
 		bind_param_nav_cols(nav0, e.params, false)
 		bind_param_nav_cols(nav1, e.params, true)
-		e.reload()
+		if (init_param_vals())
+			e.reload()
 	}
 	e.prop('param_nav', {store: 'var', private: true})
 	e.prop('param_nav_id', {store: 'var', bind_id: 'param_nav', type: 'nav',
@@ -972,7 +1014,8 @@ function nav_widget(e) {
 	e.set_params = function(params1, params0) {
 		bind_param_nav_cols(e.param_nav, params0, false)
 		bind_param_nav_cols(e.param_nav, params1, true)
-		e.reload()
+		if (init_param_vals())
+			e.reload()
 	}
 	e.prop('params', {store: 'var', attr: true})
 
@@ -985,28 +1028,6 @@ function nav_widget(e) {
 			m.set(col, param)
 		}
 		return m
-	}
-
-	function init_param_vals() {
-		if (!e.params) {
-			e.param_vals = null
-		} else if (!(e.param_nav && e.param_nav.focused_row && !e.param_nav.focused_row.is_new)) {
-			e.param_vals = false
-		} else {
-			e.param_vals = []
-			let pmap = param_map(e.params)
-			for (let [row] of e.param_nav.selected_rows) {
-				let vals = obj()
-				for (let [col, param] of pmap) {
-					let field = e.param_nav.all_fields[col]
-					if (!field)
-						warn('param nav is missing col', col)
-					let v = field && row ? e.param_nav.cell_val(row, field) : null
-					vals[param] = v
-				}
-				e.param_vals.push(vals)
-			}
-		}
 	}
 
 	// all rows in load order -------------------------------------------------
@@ -1023,7 +1044,7 @@ function nav_widget(e) {
 		e.do_update_load_fail(false)
 		update_indices('invalidate')
 		e.all_rows = e.bound && e.rowset && (
-				e.deserialize_all_row_states(e.row_states)
+				   e.deserialize_all_row_states(e.row_states)
 				|| e.deserialize_all_row_vals(e.row_vals)
 				|| e.rowset.rows
 			) || []
@@ -2092,6 +2113,7 @@ function nav_widget(e) {
 		}
 		let expr = ['&&']
 		if (e.param_vals && !e.rowset_url && e.all_fields.length) {
+			// this is a detail nav that must filter itself based on param_vals.
 			if (e.param_vals.length == 1) {
 				for (let k in e.param_vals[0])
 					expr.push(['===', k, e.param_vals[0][k]])
@@ -2666,7 +2688,7 @@ function nav_widget(e) {
 			let ln_id = field.lookup_nav_id
 			if (ln_id) {
 				ln = component.create(ln_id)
-				ln.id = null // not saving into the original.
+				ln.id = null // not saving prop vals into the original.
 			}
 		}
 		if (ln) {
@@ -3190,10 +3212,10 @@ function nav_widget(e) {
 
 			e.focused_row_index = insert_ri + (move_ri1 == focused_ri ? 0 : move_n - 1)
 
-			if (!e.rowset_url && (e.row_states || e.row_vals) && e.param_vals) {
-				// detail nav with client-side rowset: move visible rows to index 0
-				// in the unfiltered rows array so that move_ri1, move_ri2 and insert_ri
-				// point to the same rows in both unfiltered and filtered arrays.
+			if (is_client_nav() && e.param_vals) {
+				// move visible rows to index 0 in the unfiltered rows array
+				// so that move_ri1, move_ri2 and insert_ri point to the same rows
+				// in both unfiltered and filtered arrays.
 				let r1 = []
 				let r2 = []
 				for (let ri = 0; ri < e.all_rows.length; ri++) {
@@ -3309,12 +3331,11 @@ function nav_widget(e) {
 		return s
 	}
 
-	e.reload = function() {
+	e.reload = function(allow_diff_merge) {
 		if (!e.bound) {
 			e.update({reload: true})
 			return
 		}
-		init_param_vals()
 		if (!e.rowset_url || e.param_vals === false) {
 			// client-side rowset or param vals not available: reset it.
 			e.reset()
@@ -3342,6 +3363,7 @@ function nav_widget(e) {
 			slow_timeout: e.slow_timeout,
 		})
 		add_request(req)
+		req.allow_diff_merge = allow_diff_merge
 		e.load_request = req
 		e.load_request_start_clock = clock()
 		e.loading = true
@@ -3379,10 +3401,10 @@ function nav_widget(e) {
 		e.fire('load_fail', err, type, status, message, body)
 	}
 
-	e.prop('focus_state', {store: 'var'})
+	e.prop('focus_state', {store: 'var', slot: 'user'})
 
 	function load_success(rs) {
-		if (e.diff_merge(rs))
+		if (this.allow_diff_merge && e.diff_merge(rs))
 			return
 		e.rowset = rs
 		e.reset()
@@ -4622,7 +4644,7 @@ function init_rowset_events() {
 		if (navs)
 			for (let nav of navs)
 				if (!nav.load_request)
-					nav.reload()
+					nav.reload(true)
 	}
 }
 }
