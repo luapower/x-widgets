@@ -442,7 +442,6 @@ function nav_widget(e) {
 
 	e.on('bind', function(on) {
 		bind_param_nav(on)
-		bind_linked_lookup_navs(on)
 		bind_rowset_name(e.rowset_name, on)
 		if (on) {
 			init_param_vals()
@@ -611,6 +610,7 @@ function nav_widget(e) {
 		e.all_fields[name] = field
 
 		init_field_own_lookup_nav(field)
+		bind_lookup_nav(field, true)
 
 		return field
 	}
@@ -618,6 +618,7 @@ function nav_widget(e) {
 	function free_field(field) {
 		if (field.editor_instance)
 			field.editor_instance.remove()
+		bind_lookup_nav(field, false)
 		free_field_own_lookup_nav(field)
 	}
 
@@ -2695,15 +2696,15 @@ function nav_widget(e) {
 			field.lookup_nav = ln
 			field.own_lookup_nav = true
 			e.add(ln)
-			bind_lookup_nav(field, true)
 		}
 	}
 
 	function free_field_own_lookup_nav(field) {
 		if (!field.own_lookup_nav)
 			return
-		bind_lookup_nav(field, false)
 		field.lookup_nav.remove()
+		field.lookup_nav = null
+		field.own_lookup_nav = null
 	}
 
 	function bind_lookup_nav(field, on) {
@@ -2733,13 +2734,6 @@ function nav_widget(e) {
 			ln.on('cell_val_changed_for_'+(field.display_col || ln.name_col),
 				field.lookup_nav_display_vals_changed, on)
 		}
-	}
-
-	function bind_linked_lookup_navs(on) {
-		if (e.all_fields)
-			for (let field of e.all_fields)
-				if (!field.own_lookup_nav)
-					bind_lookup_nav(field, on)
 	}
 
 	function null_display_val(row, field) {
