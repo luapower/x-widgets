@@ -933,14 +933,14 @@ function nav_widget(e) {
 	// A client_nav doesn't have a rowset binding. Instead, changes are saved
 	// to either row_vals or row_states. Also, if it's a detail nav, it filters
 	// itself based on param_vals since there's no server to ask for filtered rows.
-	let is_client_nav = function() {
+	function is_client_nav() {
 		return !e.rowset_url && (e.row_vals || e.row_states)
 	}
 
 	function params_changed() {
 		if (!init_param_vals())
 			return
-		if (is_client_nav()) { // re-filter and re-focus.
+		if (!e.rowset_url) { // re-filter and re-focus.
 			force_unfocus_focused_cell()
 			init_rows()
 			e.begin_update()
@@ -2367,7 +2367,7 @@ function nav_widget(e) {
 		let has_errors = false
 		let can_exit_row = true
 		for (let field of e.all_fields) {
-			if (!field.readonly && e.cell_modified(row, field)) {
+			if (!field.readonly && (row.is_new || e.cell_modified(row, field))) {
 				let errors = e.cell_errors(row, field)
 				if (!errors) { // not validated
 					let val = e.cell_input_val(row, field)
@@ -2398,11 +2398,10 @@ function nav_widget(e) {
 	e.row_is_user_modified = function(row) {
 		if (!row.modified)
 			return false
-		if (!e.pos_field)
-			return true
 		for (let field of e.all_fields)
-			if (e.cell_modified(row, field) && field !== e.pos_field)
-				return true
+			if (field !== e.pos_field && field !== e.parent_field)
+				if (e.cell_modified(row, field))
+					return true
 		return false
 	}
 

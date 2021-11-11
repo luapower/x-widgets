@@ -3155,7 +3155,6 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-p                    : #bbb;
 	--x-bg                   : #0d1117;
 	--x-fg-info              : var(--x-fg-inverted);
-	--x-bg-error             : var(--x-bg);
 	--x-bg-popup             : #1d2532;
 	--x-fg-disabled          : #ffffff66;
 	--x-fg-disabled-inverted : var(--x-fg-disabled);
@@ -3166,7 +3165,6 @@ x-prop-inspector .x-grid-cell:not(.modified) {
 	--x-bg-new               : #2c2c5c;
 	--x-bg-modified          : #196119;
 	--x-bg-new-modified      : #293b34;
-	--x-fg-error             : #f66;
 	--x-fg-link              : var(--x-fg);
 	--x-fg-link-visited      : var(--x-fg);
 
