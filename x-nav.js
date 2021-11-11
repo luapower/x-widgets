@@ -3484,10 +3484,11 @@ function nav_widget(e) {
 			let rt = result.rows[i]
 			let row = source_rows[i]
 
-			let err = isstr(rt.error) ? rt.error : undefined
-			let row_failed = rt.error != null
-			if (row_failed)
-				notify(err, 'error')
+			let row_failed = rt.error || rt.field_errors
+
+			if (isstr(rt.error)) // can be `true` because we only have field_errors.
+				notify(rt.error, 'error')
+
 			//TODO: e.set_row_errors(row, [{message: err, passed: false}])
 
 			if (rt.remove) {

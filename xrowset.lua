@@ -120,11 +120,12 @@ function virtual_rowset(init, ...)
 
 			local client_field = {}
 			for k in pairs(f) do
-				if type(f[k]) == 'function' then
-					f[k] = f[k]()
+				local v = f[k]
+				if type(v) == 'function' then
+					v = v()
 				end
 				if client_field_attrs[k] then
-					client_field[k] = f[k]
+					client_field[k] = v
 				end
 			end
 			rs.client_fields[i] = client_field
@@ -175,7 +176,7 @@ function virtual_rowset(init, ...)
 	end
 
 	local function db_error(err, s)
-		return config'hide_errors' and s or s..(err and err.message and '\n'..err.message or '')
+		return config'hide_errors' and s or s..(err and err.message and ':\n'..err.message or '')
 	end
 
 	function rs:can_add_row(values)
@@ -216,7 +217,7 @@ function virtual_rowset(init, ...)
 							if ok then
 								if not row then
 									rt.error = S('inserted_row_not_found',
-										'inserted row could not be loaded back')
+										'Inserted row could not be loaded back')
 								else
 									rt.values = row
 								end
@@ -224,12 +225,14 @@ function virtual_rowset(init, ...)
 								local err = row
 								rt.error = db_error(err,
 									S('load_inserted_row_error',
-										'error on loading back inserted row'))
+										'Error on loading back inserted row'))
 							end
 						end
 					else
-						rt.error = db_error(err,
-							S('insert_error', 'error on inserting row'))
+						rt.error = db_error(err, S('insert_error', 'Error on inserting row'))
+						if err.col then
+							rt.field_errors = {[err.col] = err.message}
+						end
 					end
 				else
 					rt.error = err or true
@@ -253,7 +256,7 @@ function virtual_rowset(init, ...)
 								if not row then
 									rt.remove = true
 									rt.error = S('updated_row_not_found',
-										'updated row could not be loaded back')
+										'Updated row could not be loaded back')
 								else
 									rt.values = row
 								end
@@ -261,11 +264,14 @@ function virtual_rowset(init, ...)
 								local err = rows
 								rt.error = db_error(err,
 									S('load_updated_row_error',
-										'error on loading back updated row'))
+										'Error on loading back updated row'))
 							end
 						end
 					else
-						rt.error = db_error(err, S('update_error', 'error on updating row'))
+						rt.error = db_error(err, S('update_error', 'Error on updating row'))
+						if err.col then
+							rt.field_errors = {[err.col] = err.message}
+						end
 					end
 				else
 					rt.error = err or true
@@ -281,21 +287,21 @@ function virtual_rowset(init, ...)
 							if ok then
 								if #rows == 1 then
 									rt.error = S('removed_row_found',
-										'removed row is still in db')
+										'Removed row is still in db')
 								elseif #rows > 1 then
 									rt.error = S('removed_row_multiple_rows',
-										'loaded back multiple rows for one removed row')
+										'Loaded back multiple rows for one removed row')
 								end
 							else
 								local err = rows
 								rt.error = db_error(err,
 									S('load_removed_row_error',
-										'error on loading back removed row'))
+										'Error on loading back removed row'))
 							end
 						end
 					else
 						rt.error = db_error(err,
-							S('delete_error', 'error on removing row'))
+							S('delete_error', 'Error on removing row'))
 					end
 				else
 					rt.error = err or true
