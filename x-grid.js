@@ -467,10 +467,14 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		e.cells.clear()
 		let n = vrn * (moving ? 2 : 1)
 		for (let i = 0; i < n; i++) {
-			for (let fi = 0; fi < e.fields.length; fi++) {
+			for (let fi = 0, n = e.fields.length; fi < n; fi++) {
 				let classes = 'x-grid-cell x-item x-container'
 				if (moving && i >= vrn)
 					classes += ' row-moving'
+				if (fi == 0)
+					classes += ' x-grid-cell-first'
+				if (fi == n-1)
+					classes += ' x-grid-cell-last'
 				let cell = div({class: classes})
 				e.cells.add(cell)
 			}
@@ -541,6 +545,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		cell.class('disabled', e.is_cell_disabled(row, field))
 		cell.class('new', row.is_new)
 		cell.class('removed', row.removed)
+		cell.class('row-has-errors', row.has_errors)
 		cell.class('modified', e.cell_modified(row, field))
 
 		if (field_has_indent(field)) {
@@ -733,7 +738,7 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 		e.editor.min_w = w
 
 		e.editor.y = y
-		e.editor.h = e.cell_h - bh
+		e.editor.h = e.cell_h
 
 		// set min inner width to cell's unclipped text width.
 		if (e.editor.set_text_min_w) {
@@ -855,6 +860,8 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 			cls = 'new'
 		else if (prop == 'removed')
 			cls = 'removed'
+		else if (prop == 'has_errors')
+			cls = 'row-has-errors'
 		if (cls)
 			each_cell_of_row(ri, function(cell, fi, cls, val) {
 				cell.class(cls, val)

@@ -155,14 +155,13 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 	e.do_update_val = noop
 
-	function cell_state_changed(row, field, key, val, ev) {
+	function cell_state_changed(row, field, key, val, old_val, ev) {
 		if (e.updating)
 			return
 		bind_field(true)
 		if (key == 'input_val') {
 			e.do_update_val(val, ev)
 			e.class('modified', row && field && e.nav.cell_modified(row, field))
-			e.fire('input_val_changed', val, ev)
 		} else if (key == 'val') {
 			e.class('modified', row && field && e.nav.cell_modified(row, field))
 			e.fire('val_changed', val, ev)
@@ -204,7 +203,6 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		if (e.owns_field) {
 			if (on) {
 				let nav = global_val_nav()
-				//print(e.tag, e.id, field_opt)
 				let field = nav.add_field(field_opt)
 				if (initial_val !== undefined)
 					nav.reset_cell_val(nav.all_rows[0], field, initial_val, {validate: true})

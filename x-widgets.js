@@ -1478,7 +1478,7 @@ component('x-button', 'Input', function(e) {
 	// ajax notifications -----------------------------------------------------
 
 	e.on('load', function(ev, ...args) {
-		e.disabled = ev == 'start'
+		e.disabled = ev != 'done'
 		if (e.load_spin)
 			e.icon_box.class('fa-spin', ev == 'start')
 	})
@@ -2655,7 +2655,8 @@ component('x-action-band', 'Input', function(e) {
 			s = s.split(':')
 			let name = s.shift()
 			let spec = new Set(s)
-			let btn = e.buttons && e.buttons[name.replaceAll('-', '_').replace(/[^\w]/g, '')]
+			let bname = name.replaceAll('-', '_').replace(/[^\w]/g, '')
+			let btn = e.buttons && e.buttons[bname]
 			let btn_sets_text
 			if (!(isnode(btn))) {
 				if (typeof btn == 'function')
@@ -2666,11 +2667,12 @@ component('x-action-band', 'Input', function(e) {
 					btn.primary = true
 				btn_sets_text = btn.text != null
 				btn = button(btn)
+				e.buttons[bname] = btn
 			}
 			btn.class('x-dialog-button-'+name)
 			btn.dialog = e
 			if (!btn_sets_text) {
-				btn.text = S(name.replaceAll('-', '_'), name.replace(/[_\-]/g, ' '))
+				btn.text = S(bname, name.replace(/[_\-]/g, ' '))
 				btn.style['text-transform'] = 'capitalize'
 			}
 			if (name == 'ok' || spec.has('ok')) {

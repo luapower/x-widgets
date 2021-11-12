@@ -229,9 +229,10 @@ function virtual_rowset(init, ...)
 							end
 						end
 					else
-						rt.error = db_error(err, S('insert_error', 'Error on inserting row'))
 						if err.col then
 							rt.field_errors = {[err.col] = err.message}
+						else
+							rt.error = db_error(err, S('insert_error', 'Error on inserting row'))
 						end
 					end
 				else
@@ -268,9 +269,10 @@ function virtual_rowset(init, ...)
 							end
 						end
 					else
-						rt.error = db_error(err, S('update_error', 'Error on updating row'))
 						if err.col then
 							rt.field_errors = {[err.col] = err.message}
+						else
+							rt.error = db_error(err, S('update_error', 'Error on updating row'))
 						end
 					end
 				else

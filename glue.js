@@ -1336,8 +1336,12 @@ function ajax(req) {
 		if (req.event)
 			req.event(name, arg1, ...rest)
 
-		if (req.notify)
+		if (req.notify instanceof EventTarget)
 			req.notify.fire('load', name, arg1, ...rest)
+		else if (isarray(req.notify)) // multiple targets
+			for (target of req.notify)
+				target.fire('load', name, arg1, ...rest)
+
 	}
 
 	req.xhr = xhr

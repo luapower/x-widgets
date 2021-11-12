@@ -104,15 +104,9 @@
 	--x-item-fg-selected           : var(--x-fg-inverted);
 	--x-row-bg-focused             : #eee;
 
-	--x-item-border-unfocused          : #9998;
-	--x-item-border-focused            : #ddd8;
-	--x-item-border-unfocused-selected : #3338;
-	--x-item-border-focused-selected   : #2588;
-	--x-item-border-focused-invalid    : #f338;
-	--x-item-border-unselected         : #8888;
-	--x-item-border-selected           : #69c8;
-
 	--x-bg-grid-editor             : var(--x-bg-popup);
+
+	--x-item-border-width          : 1px; /* needed to show rows with errors */
 
 }
 
@@ -232,6 +226,9 @@ body > .x-stretched:not(.popup)
 
 /* item states ------------------------------------------------------------ */
 
+.x-item a, .x-item a:visited { color: inherit; }
+/* ^^ unless you want to set specific colors for dark backgrounds too. */
+
 .x-item.disabled { color: var(--x-fg-disabled); }
 .x-item.disabled.focused { color: var(--x-fg-disabled-focused); }
 .x-item.null      { color: var(--x-fg-disabled); }
@@ -255,18 +252,27 @@ body > .x-stretched:not(.popup)
 	background-color: var(--x-bg-new-modified);
 }
 
+.x-item.row-has-errors {
+	border-top-color: var(--x-bg-error);
+	border-bottom-color: var(--x-bg-error);
+}
+.x-item.row-has-errors.x-grid-cell-first {
+	border-left-color: var(--x-bg-error);
+}
+.x-item.row-has-errors.x-grid-cell-last {
+	border-right-color: var(--x-bg-error);
+}
+
 .x-focusable-items:focus {
 	outline: none;
 }
 
 .x-focusable-items .x-item:not(.focused).selected:not(.invalid) {
-	border-color: var(--x-item-border-unselected);
 	background-color: var(--x-item-bg-unselected);
 	color: var(--x-fg-unselected);
 }
 
 .x-focusable-items:focus-within .x-item.selected:not(.invalid) {
-	border-color: var(--x-item-border-selected);
 	background-color: var(--x-item-bg-selected);
 	color: var(--x-item-fg-selected);
 }
@@ -276,28 +282,23 @@ body > .x-stretched:not(.popup)
 }
 
 .x-focusable-items .x-item.focused:not(.invalid) {
-	border-color: var(--x-item-border-unfocused);
 	background-color: var(--x-item-bg-unfocused);
 }
 
 .x-focusable-items:focus-within .x-item.focused:not(.invalid) {
-	border-color: var(--x-item-border-focused);
 	background-color: var(--x-item-bg-focused);
 }
 
 .x-focusable-items .x-item.focused.selected:not(.invalid) {
-	border-color: var(--x-item-border-unfocused-selected);
 	background-color: var(--x-item-bg-unfocused-selected);
 	color: var(--x-item-fg-unfocused-selected);
 }
 
 .x-focusable-items:focus-within .x-item.focused.selected:not(.invalid) {
-	border-color: var(--x-item-border-focused-selected);
 	background-color: var(--x-item-bg-focused-selected);
 }
 
 .x-focusable-items:focus-within .x-item.focused.invalid {
-	border-color: var(--x-item-border-focused-invalid);
 	background-color: var(--x-item-bg-focused-invalid);
 }
 
@@ -2472,7 +2473,8 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	padding-right  : var(--x-padding-x-input);
 	padding-top    : var(--x-padding-y-input);
 	padding-bottom : var(--x-padding-y-input);
-	border-right: 1px solid var(--x-faint);
+	border: var(--x-item-border-width) solid #00000000;
+	border-right-color: var(--x-faint);
 	min-width: 20px;
 }
 
@@ -2551,7 +2553,6 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 	overflow: hidden;
 	display: flex;       /* because vertical-align doesn't work with `position: absolute` */
 	align-items: center; /* works as `vertical-align: middle` */
-	border-bottom: 0px solid #eee;
 	background-color: var(--x-bg); /* make opaque because it overflows other cells on hover */
 }
 
@@ -2684,6 +2685,7 @@ Only setting custom scrollbars for the dark theme as it's the only way to darken
 .x-widget.grid-editor > .x-focus-box {
 	border-radius: 0;
 	border: 0;
+	padding: var(--x-item-border-width);
 	background-color: var(--x-bg-grid-editor);
 }
 
