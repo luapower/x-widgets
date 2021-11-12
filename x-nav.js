@@ -2213,6 +2213,8 @@ function nav_widget(e) {
 	}
 
 	function cell_state_val_index(key, field) {
+		if (key == 'val')
+			return field.val_index
 		let fn = e.all_fields.length
 		return fn + 1 + cell_state_key_index(key) * fn + field.val_index
 	}
@@ -2255,10 +2257,12 @@ function nav_widget(e) {
 	let csc, rsc, sc_row, sc_ev
 
 	e.begin_set_state = function(row, ev) {
+		if (sc_row) return
 		csc = []
 		rsc = []
 		sc_row = row
 		sc_ev = ev
+		return true
 	}
 
 	e.end_set_state = function() {
@@ -2507,32 +2511,30 @@ function nav_widget(e) {
 			val = null
 		val = e.convert_val(field, val, row, ev)
 
-		// update state fully without firing change events.
-		e.begin_set_state(row, ev)
-
-		let server_val = e.cell_val(row, field)
-
-		// some validators use `input_val` directly instead of the supplied `val`,
-		// which is why we're setting it before validating it!
-		if (!e.set_cell_state(row, field, 'input_val', val, server_val)) {
-			e.end_set_state()
+		let input_val = e.cell_input_val(row, field)
+		if (val === input_val)
 			return
-		}
 
+		let cur_val = e.cell_val(row, field)
 		let errors = e.validate_val(field, val, row, ev)
 		let invalid = !errors.passed
 		let row_has_errors = invalid ? true : undefined
-		let row_modified = (!invalid && val !== server_val) || cells_modified(row)
+		let cell_modified = !invalid && val !== cur_val
+		let row_modified = cell_modified || cells_modified(row)
 
-		e.set_cell_state(row, field, 'errors', errors)
+		// update state fully without firing change events.
+		let end_set_state = e.begin_set_state(row, ev)
+
+		e.set_cell_state(row, field, 'input_val', val, cur_val)
+		e.set_cell_state(row, field, 'errors'   , errors)
 		e.set_row_state(row, 'has_errors', row_has_errors)
 		e.set_row_state(row, 'modified'  , row_modified, false)
 
 		// fire change events in no particular order, now that the state is fully updated.
-		e.end_set_state()
+		if (end_set_state)
+			e.end_set_state()
 
 		// save rowset if necessary.
-
 		if (!invalid) {
 			if (row_modified)
 				row_changed(row)
@@ -2553,30 +2555,20 @@ function nav_widget(e) {
 			val = null
 		val = e.convert_val(field, val, row, ev)
 
-		let input_val = e.cell_input_val(row, field)
 		let cur_val = e.cell_val(row, field)
-		let val_changed = val !== cur_val
 
-		e.begin_set_state(row, ev)
+		let end_set_state = e.begin_set_state(row, ev)
 
-		// some validators use `input_val` directly instead of the supplied `val`,
-		// which is why we're setting it before validating it!
 		e.set_cell_state(row, field, 'input_val', val, cur_val)
+		e.set_cell_state(row, field, 'val'      , val)
+		e.set_cell_state(row, field, 'errors'   , undefined)
+		e.set_row_state(row, 'has_errors', undefined)
 
-		let errors = ev && ev.validate ? e.validate_val(field, val, row, ev) : undefined
-		let invalid = errors && !errors.passed
-		let row_has_errors = invalid ? true : undefined
+		if (val !== cur_val)
+			update_indices('val_changed', row, field, val)
 
-		if (val_changed)
-			row[field.val_index] = val
-
-		e.set_cell_state(row, field, 'errors', errors)
-		e.set_row_state(row, 'is_new', false, false)
-		e.set_row_state(row, 'has_errors', row_has_errors)
-
-		update_indices('val_changed', row, field, val)
-
-		e.end_set_state()
+		if (end_set_state)
+			e.end_set_state()
 	}
 
 	e.set_cell_errors = function(row, col, errors, ev) {

@@ -205,7 +205,7 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 				let nav = global_val_nav()
 				let field = nav.add_field(field_opt)
 				if (initial_val !== undefined)
-					nav.reset_cell_val(nav.all_rows[0], field, initial_val, {validate: true})
+					nav.set_cell_val(nav.all_rows[0], field, initial_val)
 				initial_val = undefined
 				e.xoff()
 				e.nav = nav

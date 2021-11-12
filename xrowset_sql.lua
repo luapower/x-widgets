@@ -255,7 +255,7 @@ function sql_rowset(...)
 					local sql = outdent(rs.select) .. (where_all
 						and format('\nwhere (%s) and (%s)', where_all, where_row)
 						 or format('\nwhere %s', where_row))
-					return query(load_opt, sql, vals)
+					return first_row(load_opt, sql, vals)
 				end
 			end
 
