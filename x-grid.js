@@ -833,39 +833,38 @@ component('x-grid', 'Input', function(e, is_val_widget) {
 				e.scroll_to_cell(...opt.scroll_to_cell)
 	}
 
-	e.do_update_cell_state = function(ri, fi, prop, val) {
+	e.do_update_cell_state = function(ri, fi, changes) {
 		let cell = e.cells.at[cell_index(ri, fi)]
 		if (!cell)
 			return
-		if (prop == 'input_val') {
-			let row = e.rows[ri]
-			let field = e.fields[fi]
-			update_cell_val(cell, row, field, val)
+		let row = e.rows[ri]
+		let field = e.fields[fi]
+		if (changes.input_val) {
+			update_cell_val(cell, row, field, changes.input_val[0])
 			cell.class('modified', e.cell_modified(row, field))
-		} else if (prop == 'val') {
-			let row = e.rows[ri]
-			let field = e.fields[fi]
+		}
+		if (changes.val) {
 			cell.class('modified', e.cell_modified(row, field))
-		} else if (prop == 'errors') {
-			e.do_update_cell_errors(cell, e.rows[ri], e.fields[fi], val)
+		}
+		if (changes.errors) {
+			e.do_update_cell_errors(cell, row, field, changes.errors[0])
 		}
 	}
 
-	e.do_update_row_state = function(ri, prop, val, ev) {
+	e.do_update_row_state = function(ri, changes, ev) {
 		let ci = cell_index(ri, 0)
 		if (ci == null)
 			return
-		let cls
-		if (prop == 'is_new')
-			cls = 'new'
-		else if (prop == 'removed')
-			cls = 'removed'
-		else if (prop == 'has_errors')
-			cls = 'row-has-errors'
-		if (cls)
-			each_cell_of_row(ri, function(cell, fi, cls, val) {
-				cell.class(cls, val)
-			}, cls, val)
+		let add_cls = []
+		let rem_cls = []
+		if (changes.is_new    ) { (changes.is_new     [0] ? add_cls : rem_cls).push('new')        }
+		if (changes.removed   ) { (changes.removed    [0] ? add_cls : rem_cls).push('removed')    }
+		if (changes.has_errors) { (changes.has_errors [0] ? add_cls : rem_cls).push('has-errors') }
+		if (add_cls || rem_cls)
+			each_cell_of_row(ri, function(cell) {
+				for (let k of add_cls) cell.classList.add(k)
+				for (let k of rem_cls) cell.classList.remove(k)
+			})
 	}
 
 	e.do_update_load_progress = function(p) {
@@ -2186,7 +2185,7 @@ component('x-row-form', function(e) {
 		nav.on('reset'                          , reset, on)
 		nav.on('focused_row_changed'            , row_changed, on)
 		nav.on('display_vals_changed'           , display_vals_changed, on)
-		nav.on('focused_row_cell_state_changed' , cell_state_changed, on)
+		nav.on('focused_row_cell_state_changed' , focused_row_cell_state_changed, on)
 		nav.on('col_attr_changed'               , col_attr_changed, on)
 	}
 
@@ -2223,16 +2222,16 @@ component('x-row-form', function(e) {
 		e.update({vals: true})
 	}
 
-	function cell_state_changed(row, nav_field, key, val) {
+	function focused_row_cell_state_changed(row, nav_field, changes) {
 		if (e.updating)
 			return
 		let field = e.all_fields[nav_field.val_index]
-		if (key == 'input_val')
-			e.set_cell_val(row, field, val)
-		else if (key == 'val')
-			e.reset_cell_val(row, field, val)
-		else if (key == 'error')
-			e.set_cell_error(row, field, val)
+		if (changes.val)
+			e.reset_cell_val(row, field, changes.val[0])
+		else if (changes.input_val)
+			e.set_cell_val(row, field, changes.input_val[0])
+		if (changes.error)
+			e.set_cell_error(row, field, changes.error[0])
 	}
 
 	function col_attr_changed(col, attr, val) {
@@ -2240,10 +2239,12 @@ component('x-row-form', function(e) {
 			e.set_prop('col.'+col+'.'+attr, val)
 	}
 
-	e.on('cell_input_val_changed', function(row, field, v) {
-		let nav_row = e.nav.all_rows[e.row_index(row)]
-		let nav_field = e.nav.all_fields[e.field_index(field)]
-		e.nav.set_cell_val(nav_row, nav_field, v)
+	e.on('cell_state_changed', function(row, field, changes) {
+		if (changes.input_val) {
+			let nav_row = e.nav.all_rows[e.row_index(row)]
+			let nav_field = e.nav.all_fields[e.field_index(field)]
+			e.nav.set_cell_val(nav_row, nav_field, changes.input_val[0])
+		}
 	})
 
 

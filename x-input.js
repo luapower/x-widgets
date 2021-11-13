@@ -155,20 +155,22 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 
 	e.do_update_val = noop
 
-	function cell_state_changed(row, field, key, val, old_val, ev) {
+	function cell_state_changed(row, field, changes, ev) {
 		if (e.updating)
 			return
 		bind_field(true)
-		if (key == 'input_val') {
-			e.do_update_val(val, ev)
-			e.class('modified', row && field && e.nav.cell_modified(row, field))
-		} else if (key == 'val') {
-			e.class('modified', row && field && e.nav.cell_modified(row, field))
-			e.fire('val_changed', val, ev)
-		} else if (key == 'errors') {
-			e.invalid = row && field && e.nav.cell_has_errors(row, field)
+		if (changes.input_val) {
+			e.do_update_val(changes.input_val[0], ev)
+			e.class('modified', e.nav.cell_modified(row, field))
+		}
+		if (changes.val) {
+			e.class('modified', e.nav.cell_modified(row, field))
+			e.fire('val_changed', changes.val[0], ev)
+		}
+		if (changes.errors) {
+			e.invalid = e.nav.cell_has_errors(row, field)
 			e.class('invalid', e.invalid)
-			e.do_update_errors(val, ev)
+			e.do_update_errors(changes.errors[0], ev)
 		}
 	}
 
@@ -284,8 +286,11 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 			return row && e.field ? e.nav.cell_errors(row, e.field) : undefined
 		},
 		function(errors) {
-			if (e.row && e.field)
-				e.nav.set_cell_errors(e.row, e.field, errors)
+			if (e.row && e.field) {
+				e.begin_set_state(row)
+				e.set_cell_state(col, 'errors', errors)
+				e.end_set_state()
+			}
 		},
 	)
 
@@ -318,9 +323,13 @@ function val_widget(e, enabled_without_nav, show_error_tooltip) {
 		e.disabled = disabled || (readonly && !e.set_readonly)
 		e.readonly = readonly
 		e.xon()
-		cell_state_changed(row, field, 'input_val', e.input_val)
-		cell_state_changed(row, field, 'val', e.val)
-		cell_state_changed(row, field, 'errors', e.errors)
+
+		bind_field(true)
+		e.do_update_val(e.input_val)
+		e.class('modified', e.nav && row && field && e.nav.cell_modified(row, field))
+		e.invalid = e.nav && row && field && e.nav.cell_has_errors(row, field)
+		e.class('invalid', e.invalid)
+		e.do_update_errors(e.errors)
 	}
 
 	e.do_error_tooltip_check = function() {
