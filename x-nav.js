@@ -3455,8 +3455,6 @@ function nav_widget(e) {
 	}
 
 	function load_fail(err, type, status, message, body) {
-		if (err)
-			e.notify('error', err, body)
 		e.do_update_load_fail(true, err, type, status, message, body)
 		e.fire('load_fail', err, type, status, message, body)
 	}

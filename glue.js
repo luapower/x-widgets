@@ -1289,7 +1289,7 @@ function ajax(req) {
 
 	xhr.onabort = function() {
 		req.failtype = 'abort'
-		fire('done', 'fail', req.error_message('abort'), 'abort')
+		fire('done', 'fail', null, 'abort')
 	}
 
 	xhr.onreadystatechange = function(ev) {
@@ -1325,7 +1325,7 @@ function ajax(req) {
 		if (name == 'done')
 			fire(arg1, ...rest)
 
-		if (name == 'fail' && window.notify)
+		if (name == 'fail' && arg1 && window.notify)
 			window.notify(arg1, 'error')
 
 		req.fire(name, arg1, ...rest)
