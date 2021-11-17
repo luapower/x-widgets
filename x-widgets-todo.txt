@@ -6,26 +6,18 @@ FINISH
 - GRID_DROPDOWN null element.
 - DATE_DROPDOWN null element.
 
-- ROWSET quicksearch bugs.
-
 - GRID saving per-row, all, revert per-row, revert all.
 - GRID show row-level errors.
 - ROWSET_WIDGET review operations that create a rowmap.
-
-- ROWSET FK introspection to get lookup_rowset, lookup_field, display_field = lookup_field.
-- ROWSET error messages on FK errors & check constraint violations.
--
+- ROWSET map error messages on check constraint violations.
 
 
 NEW
 ------------------------------------------------------------------------------
-- rowform widget
 - contenteditable-based auto-growing inline input box
-- textarea
 - checklistbox
 - global shortcuts
 - file upload with progress
--
 
 
 FEATURES
