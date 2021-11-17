@@ -109,7 +109,11 @@ return function(app)
 	end
 
 	function app:run_cmd(f, ...)
-		return webb.run(f, ...)
+		return webb.run(function(...)
+			local exit_code = f(...)
+			self:finish()
+			return exit_code
+		end, ...)
 	end
 
 	return app

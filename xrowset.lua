@@ -262,7 +262,7 @@ function virtual_rowset(init, ...)
 									rt.values = row
 								end
 							else
-								local err = rows
+								local err = row
 								rt.error = db_error(err,
 									S('load_updated_row_error',
 										'Error on loading back updated row'))
@@ -285,17 +285,14 @@ function virtual_rowset(init, ...)
 					local ok, err = catch('db', rs.delete_row, rs, row.values)
 					if ok then
 						if rs.load_row then
-							local ok, rows = catch('db', rs.load_row, rs, row.values)
+							local ok, row = catch('db', rs.load_row, rs, row.values)
 							if ok then
-								if #rows == 1 then
+								if row then
 									rt.error = S('removed_row_found',
 										'Removed row is still in db')
-								elseif #rows > 1 then
-									rt.error = S('removed_row_multiple_rows',
-										'Loaded back multiple rows for one removed row')
 								end
 							else
-								local err = rows
+								local err = row
 								rt.error = db_error(err,
 									S('load_removed_row_error',
 										'Error on loading back removed row'))

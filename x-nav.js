@@ -2860,7 +2860,13 @@ function nav_widget(e) {
 		let from_server = ev.from_server
 		if (!from_server && !can_add_rows())
 			return 0
-		let row_num = isarray(row_vals) ? row_vals.length : row_vals // arg#1 is row_num.
+		let row_num
+		if (isarray(row_vals)) {
+			row_num = row_vals.length
+		} else { // arg#1 is row_num
+			row_num = row_vals
+			row_vals = null
+		}
 		if (row_num <= 0)
 			return 0
 		let at_row = ev.row_index != null
@@ -2875,39 +2881,36 @@ function nav_widget(e) {
 		let rows_added, rows_updated
 		let added_rows = set()
 
-		let has_rows = e.all_rows.length > 0
+		// TODO: move row to different parent.
+		assert(!e.parent_field || !from_server, 'NYI')
 
 		for (let i = 0, ri = ri1; i < row_num; i++) {
 
-			let row
-			if (from_server) {
-				row = row_vals[i]
-			} else {
-				row = []
-				let vals = row_vals && row_vals[i]
-				for (let fi = 0; fi < e.all_fields.length; fi++) {
-					let field = e.all_fields[fi]
-					// row vals can be [val1,...] or {col->val}.
-					// `undefined` allows for partial updates on specific fields only
-					// and allows for setting the field's default value on insert.
-					let val = isobject(vals) ? vals[field.name] : (vals ? vals[fi] : undefined)
-					// update with current param values if it's a detail rowset.
-					if (val === undefined && e.param_vals)
-						val = e.param_vals[0][field.name]
-					row[fi] = val
+			let row = row_vals && row_vals[i]
+			if (row && !isarray(row)) // {col->val} format
+				row = e.deserialize_row_vals(row)
+
+			// set current param values into the row.
+			if (e.param_vals) {
+				row = row || []
+				for (let k in e.param_vals[0]) {
+					let fi = e.all_fields[k].val_index
+					if (row[fi] === undefined)
+						row[fi] = e.param_vals[0][k]
 				}
 			}
 
 			// check pk to perform an "insert or update" op.
-			let row0 = has_rows && find_row(row)
+			let row0 = row && e.all_rows.length > 0 && find_row(row)
 
 			if (row0) {
 
-				// update values that are not `undefined`.
-				for (let fi = 0; fi < e.all_fields.length; fi++) {
-					let field = e.all_fields[fi]
-					if (row[fi] !== undefined)
-						set_cell_val(row0, field, row[fi], ev)
+				// update row values that are not `undefined`.
+				let fi = 0
+				for (let field of e.all_fields) {
+					let val = row[fi++]
+					if (val !== undefined)
+						set_cell_val(row0, field, val, ev)
 				}
 
 				assign(row0, ev.row_state)
@@ -2915,11 +2918,22 @@ function nav_widget(e) {
 
 			} else {
 
-				// set server default value for `undefined` values only.
-				for (let fi = 0; fi < e.all_fields.length; fi++) {
-					let field = e.all_fields[fi]
-					if (row[fi] === undefined)
-						row[fi] = field.default
+				row = row || []
+
+				// set default values into the row.
+				if (!from_server) {
+					let fi = 0
+					for (let field of e.all_fields) {
+						let val = row[fi++]
+						if (val === undefined) {
+							val = field.client_default
+							if (isfunc(val)) // name generator etc.
+								val = val()
+							if (val === undefined)
+								val = field.default
+							row[fi] = val
+						}
+					}
 				}
 
 				if (e.init_row)
@@ -2939,7 +2953,7 @@ function nav_widget(e) {
 					if (row.parent_row) {
 						// set parent id to be the id of the parent row.
 						let parent_id = e.cell_val(row.parent_row, e.id_field)
-						set_cell_val(row, e.parent_field, parent_id, ev)
+						row[e.parent_field.val_index] = parent_id
 					}
 					assert(init_parent_rows_for_row(row))
 				}
@@ -2953,21 +2967,8 @@ function nav_widget(e) {
 					ri++
 				}
 
-				if (!from_server) {
-					// set default client values as if they were typed in by the user.
-					let fi = 0
-					for (let field of e.all_fields) {
-						if (row[fi++] == null) {
-							let val = field.client_default
-							if (val != null) {
-								if (isfunc(val)) // name generator etc.
-									val = val()
-								set_cell_val(row, field, val, ev)
-							}
-						}
-					}
+				if (row.is_new)
 					row_changed(row)
-				}
 
 			}
 
@@ -3147,6 +3148,10 @@ function nav_widget(e) {
 
 		// abort the merge if the fields are not exactly the same as before.
 		if (!same_fields(rs))
+			return false
+
+		// TODO: diff_merge trees.
+		if (e.parent_field)
 			return false
 
 		e.begin_update()
@@ -3511,8 +3516,11 @@ function nav_widget(e) {
 			if (row.is_new) {
 				let t = {type: 'new', values: obj()}
 				for (let field of e.all_fields)
-					if (!field.nosave && e.cell_modified(row, field) && !e.cell_has_errors(row, field))
-						t.values[field.name] = e.cell_input_val(row, field)
+					if (!field.nosave && !e.cell_has_errors(row, field)) {
+						let val = e.cell_input_val(row, field)
+						if (val !== field.default)
+							t.values[field.name] = val
+					}
 				packed_rows.push(t)
 				source_rows.push(row)
 			} else if (row.removed) {
