@@ -4,10 +4,9 @@ Model-driven live-editable web components in pure JavaScript.
 ## Overview
 
 [Check out the demo](http://luapower.com/x-widgets-demo.html) before anything
-(but note that it may be broken in some days until the first stable version
-is released.)
+(but note that it may be broken until the first stable version is released.)
 
-Also see the [TODO list](https://trello.com/b/xde8hdAZ/luapower)
+See the [TODO list](https://trello.com/b/xde8hdAZ/luapower)
 because this is still in active development.
 
 This library is designed for data-dense business-type apps with a focus
@@ -70,7 +69,7 @@ license forever but it will be developed as part of a commercial product.
 ## Browser Compatibility
 
 This will probably only work on desktop Firefox and Chrome/Edge for the
-forseeable future. Something might be done for Safari (if it doesn't catch
+foreseeable future. Something might be done for Safari (if it doesn't catch
 up all by itself, or better yet, dies and spares us all some grief) and
 maybe mobile Chrome and Firefox too. Anything else is out.
 
@@ -78,7 +77,7 @@ maybe mobile Chrome and Firefox too. Anything else is out.
 
 To install the library you need docker, kubernetes, webpack, redis, memcached
 (because RAM is cheap) four medium AWS instances and an Apple developer
-account. Look, Jesus F Crist it's just a bunch of .js files and one big .css
+account. Look, Jesus Christ it's just a bunch of .js files and one big .css
 file. Load them as they are, dependencies first, using simple html tags.
 
 The dependencies are `glue.js` and `divs.js` (included).
@@ -130,7 +129,7 @@ If you're still not sure, here's a list to
 * this lib uses synchronous ajax requests that some smart-ass condescending
 w3c people found that it's in our best interest to deprecate.
 * this lib uses a deployment system whereby you open up your file explorer
-and then you copy-paste a bunch of .css and .js files to your goddam www folder.
+and then you copy-paste a bunch of .css and .js files to your goddamn www folder.
 * this lib was not written by Google so it must have a lot of security vulnerabilities.
 * this libs uses tabs, not spaces.
 * look, it's not even a framework, it's a library. don't you wanna use a framework?
