@@ -4300,7 +4300,7 @@ component('x-lookup-dropdown', function(e) {
 	}
 
 	all_field_types.validator_not_null = field => (field.not_null && {
-		validate : v => v != null,
+		validate : v => v != null || field.default != null,
 		message  : S('validation_empty', 'Value cannot be empty'),
 	})
 

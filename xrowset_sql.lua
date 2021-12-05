@@ -240,7 +240,7 @@ function sql_rowset(...)
 				local t = {}
 				for i, as_col in ipairs(rs.pk) do
 					local f = fields[as_col]
-					local tbl = f.schema..'.'..f.table
+					local tbl = f.db..'.'..f.table
 					local where_col = (f.table_alias or tbl)..'.'..f.col
 					if i > 1 then add(t, ' and ') end
 					add(t, where_col..' = :'..as_col)
