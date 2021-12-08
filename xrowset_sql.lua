@@ -190,6 +190,7 @@ function sql_rowset(...)
 			compact = true,
 			null_value = null,
 			get_table_defs = true,
+			field_attrs = rs.field_attrs,
 		}
 
 		if not rs.load_rows then
